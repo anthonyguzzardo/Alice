@@ -7,6 +7,12 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Marrow</title>
+    <script is:inline>
+      (function() {
+        var t = localStorage.getItem('marrow-theme') || 'light';
+        document.documentElement.setAttribute('data-theme', t);
+      })();
+    </script>
     <style is:global>
       @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap');
 
@@ -27,23 +33,21 @@
         --free-hover-bg: rgba(0, 0, 0, 0.03);
       }
 
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --bg: #0a0a0a;
-          --bg-input: #161514;
-          --text: #e8e4df;
-          --text-muted: #5a5550;
-          --text-faint: #3a3530;
-          --border: #333;
-          --border-focus: #555;
-          --btn-bg: #222;
-          --btn-hover: #444;
-          --btn-text: #e8e4df;
-          --done-text: #6a6560;
-          --loading: #3a3530;
-          --free-border: #2a2825;
-          --free-hover-bg: rgba(255, 255, 255, 0.03);
-        }
+      [data-theme="dark"] {
+        --bg: #0a0a0a;
+        --bg-input: #161514;
+        --text: #ffffff;
+        --text-muted: #7a7570;
+        --text-faint: #4a4540;
+        --border: #333;
+        --border-focus: #666;
+        --btn-bg: #222;
+        --btn-hover: #444;
+        --btn-text: #ffffff;
+        --done-text: #8a8580;
+        --loading: #4a4540;
+        --free-border: #3a3530;
+        --free-hover-bg: rgba(255, 255, 255, 0.04);
       }
 
       * {
@@ -67,12 +71,12 @@
       }
 
       .container {
-        max-width: 620px;
+        max-width: 700px;
         width: 100%;
       }
 
       .date {
-        font-size: 1rem;
+        font-size: 1.15rem;
         color: var(--text-muted);
         letter-spacing: 0.08em;
         text-transform: uppercase;
@@ -81,9 +85,9 @@
 
       .question {
         font-family: 'Cormorant Garamond', Georgia, serif;
-        font-size: 2rem;
+        font-size: 2.6rem;
         font-weight: 300;
-        line-height: 1.7;
+        line-height: 1.6;
         letter-spacing: 0.03em;
         color: var(--text);
         margin-bottom: 3rem;
@@ -92,13 +96,13 @@
 
       .response-area {
         width: 100%;
-        min-height: 200px;
+        min-height: 240px;
         background-color: var(--bg-input);
         border: 1px solid var(--border);
         border-radius: 4px;
         color: var(--text);
         font-family: 'EB Garamond', Georgia, serif;
-        font-size: 1.25rem;
+        font-size: 1.45rem;
         line-height: 1.8;
         padding: 1.5rem;
         resize: none;
@@ -128,8 +132,8 @@
         border-radius: 4px;
         color: var(--btn-text);
         font-family: 'EB Garamond', Georgia, serif;
-        font-size: 1.1rem;
-        padding: 0.7rem 2rem;
+        font-size: 1.3rem;
+        padding: 0.8rem 2.2rem;
         cursor: pointer;
         letter-spacing: 0.05em;
         transition: all 0.3s ease;
@@ -151,7 +155,7 @@
 
       .done-message {
         font-family: 'Cormorant Garamond', Georgia, serif;
-        font-size: 1.5rem;
+        font-size: 1.8rem;
         font-weight: 300;
         font-style: italic;
         line-height: 1.8;
@@ -168,7 +172,7 @@
         display: inline-block;
         margin-top: 3rem;
         color: var(--text-muted);
-        font-size: 1.05rem;
+        font-size: 1.25rem;
         letter-spacing: 0.1em;
         text-transform: lowercase;
         cursor: pointer;
@@ -191,7 +195,7 @@
 
       .calibration-prompt {
         font-family: 'Cormorant Garamond', Georgia, serif;
-        font-size: 1.5rem;
+        font-size: 1.8rem;
         font-weight: 300;
         line-height: 1.8;
         letter-spacing: 0.03em;
@@ -199,9 +203,32 @@
         margin-bottom: 2rem;
         font-style: italic;
       }
+      .theme-toggle {
+        position: fixed;
+        top: 2rem;
+        right: 2rem;
+        background: none;
+        border: 1px solid var(--border);
+        border-radius: 50%;
+        width: 36px;
+        height: 36px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s ease;
+        color: var(--text-muted);
+        font-size: 1rem;
+      }
+
+      .theme-toggle:hover {
+        border-color: var(--border-focus);
+        color: var(--text);
+      }
     </style>
   </head>
   <body>
+    <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme"></button>
     <div class="container">
       <div class="date" id="date"></div>
       <div class="question loading" id="question">...</div>
@@ -209,6 +236,20 @@
     </div>
 
     <script>
+      // Theme toggle
+      const themeBtn = document.getElementById('theme-toggle')!;
+      const savedTheme = localStorage.getItem('marrow-theme') || 'light';
+      document.documentElement.setAttribute('data-theme', savedTheme);
+      themeBtn.textContent = savedTheme === 'dark' ? '☀' : '☾';
+
+      themeBtn.addEventListener('click', () => {
+        const current = document.documentElement.getAttribute('data-theme');
+        const next = current === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        localStorage.setItem('marrow-theme', next);
+        themeBtn.textContent = next === 'dark' ? '☀' : '☾';
+      });
+
       const dateEl = document.getElementById('date')!;
       const questionEl = document.getElementById('question')!;
       const inputArea = document.getElementById('input-area')!;
