@@ -25,3 +25,7 @@ data/
 
 # jetbrains setting folder
 .idea/
+
+
+# large media
+*.mov
