@@ -18,6 +18,7 @@ import {
   getRecentFeedback,
   getMaxResponseId,
   saveReflection,
+  savePromptTrace,
 } from './db.ts';
 import { localDateStr } from './date.ts';
 import { retrieveSimilarMulti, retrieveContrarian } from './rag.ts';
@@ -259,4 +260,15 @@ Be concise and direct. This audit is appended to the reflection for future refer
   embedReflection(reflectionId, fullReflection, localDateStr()).catch(err =>
     console.error('[reflect] Embedding error:', err)
   );
+
+  // Log what went into this prompt for future auditability
+  savePromptTrace({
+    type: 'reflection',
+    outputRecordId: reflectionId,
+    recentEntryIds: newEntries.map(r => r.response_id),
+    ragEntryIds: ragOlderEntries.map(e => e.sourceRecordId),
+    contrarianEntryIds: contrarianEntries.map(e => e.sourceRecordId),
+    observationIds: newObservations.map(o => o.ai_observation_id),
+    tokenEstimate: (primaryMessage.usage?.input_tokens ?? 0) + (auditMessage.usage?.input_tokens ?? 0),
+  });
 }

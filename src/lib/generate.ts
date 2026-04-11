@@ -15,6 +15,7 @@ import {
   scheduleQuestion,
   hasQuestionForDate,
   getResponseCount,
+  savePromptTrace,
 } from './db.ts';
 import { localDateStr } from './date.ts';
 import { retrieveSimilarMulti, retrieveContrarian } from './rag.ts';
@@ -220,4 +221,18 @@ Generate tomorrow's question.`;
 
   const questionText = (message.content[0] as { type: 'text'; text: string }).text.trim();
   scheduleQuestion(questionText, tomorrowStr, 'generated');
+
+  // Log what went into this prompt for future auditability
+  savePromptTrace({
+    type: 'generation',
+    recentEntryIds: recentResponses.map(r => r.response_id),
+    ragEntryIds: ragEntries.map(e => e.sourceRecordId),
+    contrarianEntryIds: contrarianEntries.map(e => e.sourceRecordId),
+    reflectionIds: [
+      ...recentReflections.map(r => r.reflection_id),
+      ...ragReflections.map(r => r.sourceRecordId),
+    ],
+    observationIds: recentObservations.map(o => o.ai_observation_id),
+    tokenEstimate: message.usage?.input_tokens,
+  });
 }

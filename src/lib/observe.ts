@@ -16,6 +16,7 @@ import {
   isCalibrationQuestion,
   saveAiObservation,
   saveSuppressedQuestion,
+  savePromptTrace,
 } from './db.ts';
 import { localDateStr } from './date.ts';
 import { retrieveSimilar } from './rag.ts';
@@ -187,6 +188,15 @@ Write tonight's observation and suppressed question.`;
     embedObservation(obsId, observationText, today).catch(err =>
       console.error('[observe] Embedding error:', err)
     );
+
+    // Log what went into this prompt for future auditability
+    savePromptTrace({
+      type: 'observation',
+      outputRecordId: obsId,
+      ragEntryIds: similarEntries.map(e => e.sourceRecordId),
+      observationIds: recentObservations.map(o => o.ai_observation_id),
+      tokenEstimate: message.usage?.input_tokens,
+    });
   }
   if (suppressedText) {
     saveSuppressedQuestion(question.question_id, suppressedText, today);

@@ -273,6 +273,56 @@ db.exec(`
   );
 
   -- --------------------------------------------------------------------------
+  -- te_prompt_trace_type
+  -- --------------------------------------------------------------------------
+  -- PURPOSE: Define what kind of prompt was assembled
+  -- USE CASE: "Was this trace from question generation, observation, or reflection?"
+  -- MUTABILITY: Static
+  -- VALUES: generation (1), observation (2), reflection (3)
+  -- REFERENCED BY: tb_prompt_traces.prompt_trace_type_id
+  -- FOOTER: None
+  -- --------------------------------------------------------------------------
+  CREATE TABLE IF NOT EXISTS te_prompt_trace_type (
+     prompt_trace_type_id  INTEGER PRIMARY KEY
+    ,enum_code             TEXT    UNIQUE NOT NULL
+    ,name                  TEXT    NOT NULL
+  );
+
+  INSERT OR IGNORE INTO te_prompt_trace_type (prompt_trace_type_id, enum_code, name)
+  VALUES
+     (1, 'generation',  'Generation')
+    ,(2, 'observation', 'Observation')
+    ,(3, 'reflection',  'Reflection');
+
+  -- --------------------------------------------------------------------------
+  -- tb_prompt_traces
+  -- --------------------------------------------------------------------------
+  -- PURPOSE: Record what data went into each AI prompt for future auditability
+  -- USE CASE: "What did the model see when it generated this question?"
+  -- MUTABILITY: Mutable (append-only)
+  -- LOGICAL FK: prompt_trace_type_id -> te_prompt_trace_type.prompt_trace_type_id
+  -- LOGICAL FK: output_record_id -> tb_questions.question_id (type=1)
+  --                               -> tb_ai_observations.ai_observation_id (type=2)
+  --                               -> tb_reflections.reflection_id (type=3)
+  -- FOOTER: Minimal (append-only)
+  -- --------------------------------------------------------------------------
+  CREATE TABLE IF NOT EXISTS tb_prompt_traces (
+     prompt_trace_id       INTEGER PRIMARY KEY AUTOINCREMENT
+    ,prompt_trace_type_id  INTEGER NOT NULL
+    ,output_record_id      INTEGER               -- the record produced by this prompt
+    ,recent_entry_ids      TEXT                   -- JSON array of response_ids included verbatim
+    ,rag_entry_ids         TEXT                   -- JSON array of response_ids retrieved by RAG
+    ,contrarian_entry_ids  TEXT                   -- JSON array of response_ids from contrarian retrieval
+    ,reflection_ids        TEXT                   -- JSON array of reflection_ids included
+    ,observation_ids       TEXT                   -- JSON array of observation_ids included
+    ,model_name            TEXT    NOT NULL DEFAULT 'claude-opus-4-6'
+    ,token_estimate        INTEGER                -- rough prompt size for tracking growth
+    -- FOOTER
+    ,dttm_created_utc      TEXT    NOT NULL DEFAULT (datetime('now'))
+    ,created_by            TEXT    NOT NULL DEFAULT 'system'
+  );
+
+  -- --------------------------------------------------------------------------
   -- te_embedding_source
   -- --------------------------------------------------------------------------
   -- PURPOSE: Define the origin type of an embedded text chunk
@@ -885,6 +935,44 @@ export function searchVecEmbeddings(queryVector: Buffer, k: number): Array<{
     embedding_id: number; distance: number; embedding_source_id: number;
     source_record_id: number; embedded_text: string; source_date: string | null;
   }>;
+}
+
+// ----------------------------------------------------------------------------
+// PROMPT TRACES
+// ----------------------------------------------------------------------------
+
+export interface PromptTraceInput {
+  type: 'generation' | 'observation' | 'reflection';
+  outputRecordId?: number;
+  recentEntryIds?: number[];
+  ragEntryIds?: number[];
+  contrarianEntryIds?: number[];
+  reflectionIds?: number[];
+  observationIds?: number[];
+  modelName?: string;
+  tokenEstimate?: number;
+}
+
+export function savePromptTrace(trace: PromptTraceInput): void {
+  const typeId = trace.type === 'generation' ? 1 : trace.type === 'observation' ? 2 : 3;
+  db.prepare(`
+    INSERT INTO tb_prompt_traces (
+       prompt_trace_type_id, output_record_id,
+       recent_entry_ids, rag_entry_ids, contrarian_entry_ids,
+       reflection_ids, observation_ids,
+       model_name, token_estimate
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    typeId,
+    trace.outputRecordId ?? null,
+    trace.recentEntryIds ? JSON.stringify(trace.recentEntryIds) : null,
+    trace.ragEntryIds ? JSON.stringify(trace.ragEntryIds) : null,
+    trace.contrarianEntryIds ? JSON.stringify(trace.contrarianEntryIds) : null,
+    trace.reflectionIds ? JSON.stringify(trace.reflectionIds) : null,
+    trace.observationIds ? JSON.stringify(trace.observationIds) : null,
+    trace.modelName ?? 'claude-opus-4-6',
+    trace.tokenEstimate ?? null,
+  );
 }
 
 export default db;

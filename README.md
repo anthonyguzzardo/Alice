@@ -254,6 +254,7 @@ It generates tomorrow's question. Not from a single confident narrative. From a 
 - Context-matched baselines with confidence scoring
 - Multi-model audit (Opus + Sonnet) on weekly reflections
 - Reflection coverage tracking — each reflection records which entries it digested
+- Prompt tracing — every AI call logs which entries, reflections, and observations went into the prompt, for future auditability
 - "Did it land?" feedback every 5th submission
 - Graceful degradation — if Voyage AI is unavailable, falls back to recency-only retrieval
 - All analysis triggered on submit — no cron, no scheduler
@@ -269,6 +270,26 @@ It generates tomorrow's question. Not from a single confident narrative. From a 
 | `npm run generate` | Manually trigger question generation |
 | `npm run reflect` | Manually trigger weekly reflection |
 | `npm run backfill` | Embed all existing entries for RAG retrieval |
+
+## Future: Einstein Lab
+
+The system currently has no way to evaluate whether it is getting better. It generates questions but never audits whether the sequence of questions is producing depth over time. A future addition — **Einstein Lab** — would address this as a sealed, isolated metacognitive layer.
+
+### Design Principles (Not Yet Implemented)
+
+- **Separate database.** The Lab reads from `marrow.db` but writes to its own `einstein-lab.db`. Nothing in Marrow's pipeline ever opens the Lab's database. The isolation is physical, not just logical.
+- **Advisory, not executive.** The Lab can flag problems — "questions are converging on one theme" — but cannot directly influence question generation. The human is the only bridge.
+- **Evidence-backed findings.** Every Lab output follows a structured format: claim, evidence, confidence, expiry, falsifier. No vibes, no narrative.
+
+### Planned Modes
+
+1. **Question audit** — reviews generated questions for thematic diversity, presupposition load, feedback correlation, whether suppressed questions are consistently sharper than actual questions, and whether contrarian retrieval is changing output.
+2. **Discrepancy scan** — searches for contradictions across raw entries, reflections, observations, and self-critiques. Flags where the system's claims don't fit the data.
+3. **System audit** — inspects architecture, retrieval patterns, and confidence language. Evaluates whether philosophy and implementation have diverged.
+
+### Why Not Now
+
+At 30 entries there is nothing meaningful to audit. No question-generation history, no retrieval bias to detect, no narrative drift to catch. The Lab becomes valuable at day 60-120, when real patterns exist. The prompt tracing infrastructure (`tb_prompt_traces`) is already recording what goes into every AI call, so when the Lab is built, the evidence trail is waiting.
 
 ## Philosophy
 
