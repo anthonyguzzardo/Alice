@@ -15,26 +15,26 @@
     </script>
     <style is:global>
       :root { --bg: #f5f2ed; }
-      [data-theme="dark"] { --bg: #0a0a0a; }
+      [data-theme="dark"] { --bg: #020208; }
       * { margin: 0; padding: 0; box-sizing: border-box; }
       html, body { height: 100%; background: var(--bg); overflow: hidden; }
       canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; }
       .back-btn {
         position: fixed; top: 2rem; right: 2rem;
-        background: none; border: 1px solid rgba(255,255,255,0.15);
+        background: none; border: 1px solid rgba(255,255,255,0.08);
         border-radius: 50%; width: 36px; height: 36px; cursor: pointer;
         display: flex; align-items: center; justify-content: center;
-        color: rgba(255,255,255,0.3); font-size: 1rem;
+        color: rgba(255,255,255,0.2); font-size: 1rem;
         text-decoration: none; z-index: 10; transition: all 0.3s ease;
       }
       [data-theme="light"] .back-btn {
-        border-color: rgba(0,0,0,0.15); color: rgba(0,0,0,0.3);
+        border-color: rgba(0,0,0,0.1); color: rgba(0,0,0,0.25);
       }
       .back-btn:hover {
-        border-color: rgba(255,255,255,0.4); color: rgba(255,255,255,0.6);
+        border-color: rgba(255,255,255,0.3); color: rgba(255,255,255,0.5);
       }
       [data-theme="light"] .back-btn:hover {
-        border-color: rgba(0,0,0,0.4); color: rgba(0,0,0,0.6);
+        border-color: rgba(0,0,0,0.3); color: rgba(0,0,0,0.5);
       }
     </style>
   </head>
@@ -43,517 +43,1112 @@
     <canvas id="canvas"></canvas>
     <script>
       // =====================================================================
-      // THE BLACK BOX — Emergent Cellular Automaton with Symbiote Particles
+      // THE BLACK BOX — Artificial Life Engine
       //
-      // Your journal data is the DNA. You don't control what evolves.
+      // Your journal data is the physics. Everything else evolves.
       //
-      // DATA → RULES:
-      // avgCommitment    → cell survival breadth (stable vs fragile)
-      // avgHesitation    → simulation speed (contemplative vs rapid)
-      // deletionIntensity → spontaneous cell death (self-editing = entropy)
-      // pauseFrequency   → birth threshold (pauses = generative chaos)
-      // sessionCount     → initial density + grid resolution
-      // observationCount → number of symbiote particles
-      // reflectionCount  → rule mutation frequency (evolution pressure)
-      // suppressedCount  → particle reproduction rate (pressure building)
-      // latestConfidence → species count (ecosystem complexity)
-      // thematicDensity  → color temperature (repetitive=amber, diverse=blue)
-      // landedRatio      → particle deposit strength (impact on substrate)
-      // feedbackCount    → toroidal vs bounded grid
-      // embeddingCount   → particle sense radius
+      // Organisms carry genomes that encode behavior. They sense chemical
+      // fields, deposit chemicals, consume energy, hunt, flee, reproduce
+      // with mutation, and die. Species emerge from genomic divergence.
+      // Chemical fields undergo reaction-diffusion, creating spatial
+      // structure that organisms exploit and modify. Data from your journal
+      // sets the environmental parameters — selection pressures shift with
+      // every new signal. What survives is not designed. It evolves.
       // =====================================================================
 
-      const canvas = document.getElementById('canvas') as HTMLCanvasElement;
-      const ctx = canvas.getContext('2d')!;
+      const C = document.getElementById('canvas');
+      const X = C.getContext('2d');
+      const PI2 = Math.PI * 2;
+      const abs = Math.abs, min = Math.min, max = Math.max, floor = Math.floor;
+      const sqrt = Math.sqrt, sin = Math.sin, cos = Math.cos, atan2 = Math.atan2;
+      const rng = () => Math.random();
 
-      // --- Signal & Rules ---
-      interface Signal {
-        avgCommitment: number; avgHesitation: number; deletionIntensity: number;
-        pauseFrequency: number; sessionCount: number; observationCount: number;
-        reflectionCount: number; suppressedCount: number; embeddingCount: number;
-        latestConfidence: string | null; thematicDensity: number;
-        landedRatio: number; feedbackCount: number;
-      }
+      // ===== CONSTANTS =====
+      const CELL = 5;
+      const GENOME_LEN = 24;
+      const MAX_POP = 800;
+      const MIN_POP = 40;
+      const CHEM_CH = 3;
+      const MEM_SIZE = 4;
+      const TRAIL_LEN = 10;
+      const HASH_CELL = 32;
+      const FOOD_PER_CELL_MAX = 2.0;
+      const SENSE_ANGLES = 5;
+      const SENSE_DIST = 20;
 
-      interface Rules {
-        surviveMin: number; surviveMax: number;
-        birthMin: number; birthMax: number;
-        tickInterval: number; deathChance: number;
-        initialDensity: number; cellSize: number;
-        particleCount: number; mutationInterval: number;
-        reproThreshold: number; speciesCount: number;
-        depositStrength: number; toroidal: boolean;
-        senseRadius: number; thematicDensity: number;
-        fadeAlpha: number;
-      }
+      // Gene indices
+      const G = {
+        SPEED: 0, TURN: 1,
+        CHEM_A_ATTR: 2, CHEM_B_ATTR: 3, CHEM_C_ATTR: 4,
+        DEP_A: 5, DEP_B: 6, DEP_C: 7,
+        EAT_A: 8, EAT_B: 9, EAT_C: 10,
+        AGGRESSION: 11, SOCIALITY: 12, FEAR: 13,
+        METABOLISM: 14, REPRO_THRESH: 15, MUT_RATE: 16,
+        SENSE_RANGE: 17, BODY_SIZE: 18,
+        HUE: 19, SAT: 20, LUM: 21,
+        MEM_WEIGHT: 22, PHOTOTROPISM: 23
+      };
 
-      function computeRules(s: Signal): Rules {
+      // ===== DATA SIGNAL & ENVIRONMENT =====
+      let env = {
+        foodRate: 0.15,
+        foodCluster: 0.5,
+        viscosity: 0.02,
+        hazard: 0.001,
+        mutMod: 1.0,
+        diffuseA: 0.18,
+        diffuseB: 0.12,
+        diffuseC: 0.08,
+        feedA: 0.037,
+        killA: 0.06,
+        predPressure: 0.3,
+        stability: 0.5,
+        symbiosisBonus: 0.5,
+        toroidal: false,
+        densityGrad: 0.5,
+        evolSpeed: 1.0,
+      };
+
+      let envTarget = null;
+      let envLerp = 1;
+
+      function computeEnv(s) {
         return {
-          surviveMin: 2,
-          surviveMax: 2 + Math.floor(s.avgCommitment * 2),
-          birthMin: Math.max(2, 3 - Math.floor(s.pauseFrequency)),
-          birthMax: 3,
-          tickInterval: 1 + Math.floor(s.avgHesitation * 5),
-          deathChance: s.deletionIntensity * 0.02,
-          initialDensity: Math.min(0.4, 0.08 + s.sessionCount * 0.01),
-          cellSize: Math.max(4, 8 - Math.floor(s.sessionCount / 20)),
-          particleCount: Math.min(200, 20 + s.observationCount * 3),
-          mutationInterval: Math.max(300, 1800 - s.reflectionCount * 60),
-          reproThreshold: Math.max(50, 200 - s.suppressedCount * 5),
-          speciesCount: s.latestConfidence === 'HIGH' ? 3
-            : s.latestConfidence === 'MODERATE' ? 2 : 1,
-          depositStrength: 0.3 + s.landedRatio * 0.7,
+          foodRate: 0.05 + s.avgCommitment * 0.25,
+          foodCluster: s.thematicDensity,
+          viscosity: 0.005 + s.avgHesitation * 0.04,
+          hazard: s.deletionIntensity * 0.003,
+          mutMod: 0.5 + s.pauseFrequency * 1.5,
+          diffuseA: 0.1 + (s.embeddingCount / 200) * 0.15,
+          diffuseB: 0.08 + (1 - s.avgCommitment) * 0.1,
+          diffuseC: 0.05 + s.pauseFrequency * 0.1,
+          feedA: 0.02 + s.observationCount * 0.0005,
+          killA: 0.04 + s.reflectionCount * 0.001,
+          predPressure: min(1, s.suppressedCount * 0.05),
+          stability: s.latestConfidence === 'HIGH' ? 0.9 : s.latestConfidence === 'MODERATE' ? 0.6 : 0.3,
+          symbiosisBonus: s.landedRatio,
           toroidal: s.feedbackCount >= 5,
-          senseRadius: Math.min(6, 2 + Math.floor(s.embeddingCount / 20)),
-          thematicDensity: s.thematicDensity,
-          fadeAlpha: 0.03 + s.avgCommitment * 0.04,
+          densityGrad: s.thematicDensity,
+          evolSpeed: 0.5 + min(2, s.reflectionCount * 0.05),
         };
       }
 
-      function defaultRules(): Rules {
-        return computeRules({
-          avgCommitment: 0.5, avgHesitation: 0.5, deletionIntensity: 0.1,
-          pauseFrequency: 0.2, sessionCount: 5, observationCount: 5,
-          reflectionCount: 0, suppressedCount: 0, embeddingCount: 0,
-          latestConfidence: null, thematicDensity: 0.5,
-          landedRatio: 0.5, feedbackCount: 0,
-        });
+      function lerpEnv(a, b, t) {
+        const r = {};
+        for (const k in a) {
+          if (typeof a[k] === 'number') r[k] = a[k] + (b[k] - a[k]) * t;
+          else r[k] = t > 0.5 ? b[k] : a[k];
+        }
+        return r;
       }
 
-      function lerpRules(a: Rules, b: Rules, t: number): Rules {
-        const l = (x: number, y: number) => x + (y - x) * t;
-        return {
-          surviveMin: Math.round(l(a.surviveMin, b.surviveMin)),
-          surviveMax: Math.round(l(a.surviveMax, b.surviveMax)),
-          birthMin: Math.round(l(a.birthMin, b.birthMin)),
-          birthMax: Math.round(l(a.birthMax, b.birthMax)),
-          tickInterval: Math.round(l(a.tickInterval, b.tickInterval)),
-          deathChance: l(a.deathChance, b.deathChance),
-          initialDensity: l(a.initialDensity, b.initialDensity),
-          cellSize: Math.round(l(a.cellSize, b.cellSize)),
-          particleCount: Math.round(l(a.particleCount, b.particleCount)),
-          mutationInterval: Math.round(l(a.mutationInterval, b.mutationInterval)),
-          reproThreshold: Math.round(l(a.reproThreshold, b.reproThreshold)),
-          speciesCount: Math.round(l(a.speciesCount, b.speciesCount)),
-          depositStrength: l(a.depositStrength, b.depositStrength),
-          toroidal: b.toroidal,
-          senseRadius: Math.round(l(a.senseRadius, b.senseRadius)),
-          thematicDensity: l(a.thematicDensity, b.thematicDensity),
-          fadeAlpha: l(a.fadeAlpha, b.fadeAlpha),
-        };
-      }
+      // ===== CHEMICAL GRID =====
+      let gw = 0, gh = 0;
+      let chem, chemNext; // Float32Array per channel
+      let food; // Float32Array — energy available on grid
 
-      // --- Grid ---
-      let gridW = 0, gridH = 0;
-      let gridA: Uint8Array; // current
-      let gridB: Uint8Array; // next
-      let gridAge: Uint16Array; // cell age for visual brightness
+      function initChem() {
+        gw = floor(C.width / CELL);
+        gh = floor(C.height / CELL);
+        const sz = gw * gh;
+        chem = [new Float32Array(sz), new Float32Array(sz), new Float32Array(sz)];
+        chemNext = [new Float32Array(sz), new Float32Array(sz), new Float32Array(sz)];
+        food = new Float32Array(sz);
 
-      function initGrid(rules: Rules) {
-        gridW = Math.floor(canvas.width / rules.cellSize);
-        gridH = Math.floor(canvas.height / rules.cellSize);
-        const size = gridW * gridH;
-        gridA = new Uint8Array(size);
-        gridB = new Uint8Array(size);
-        gridAge = new Uint16Array(size);
-
-        for (let i = 0; i < size; i++) {
-          if (Math.random() < rules.initialDensity) {
-            gridA[i] = 1 + Math.floor(Math.random() * rules.speciesCount);
-            gridAge[i] = 1;
-          }
+        // Seed chemical A everywhere, B as spots
+        for (let i = 0; i < sz; i++) {
+          chem[0][i] = 1.0;
+          chem[1][i] = rng() < 0.05 ? 0.5 + rng() * 0.5 : 0;
+          chem[2][i] = 0;
+          food[i] = rng() * 0.5;
         }
       }
 
-      function getCell(x: number, y: number, rules: Rules): number {
-        if (rules.toroidal) {
-          x = ((x % gridW) + gridW) % gridW;
-          y = ((y % gridH) + gridH) % gridH;
+      function chemIdx(x, y) {
+        if (env.toroidal) {
+          x = ((x % gw) + gw) % gw;
+          y = ((y % gh) + gh) % gh;
         } else {
-          if (x < 0 || x >= gridW || y < 0 || y >= gridH) return 0;
+          if (x < 0 || x >= gw || y < 0 || y >= gh) return -1;
         }
-        return gridA[y * gridW + x];
+        return y * gw + x;
       }
 
-      function tickGrid(rules: Rules) {
-        for (let y = 0; y < gridH; y++) {
-          for (let x = 0; x < gridW; x++) {
-            const idx = y * gridW + x;
-            const cell = gridA[idx];
-            let totalNeighbors = 0;
-            let sameNeighbors = 0;
+      function laplacian(ch, x, y) {
+        const c = chemIdx(x, y);
+        if (c < 0) return 0;
+        const v = ch[c];
+        let sum = 0;
+        const t = chemIdx(x, y-1), b = chemIdx(x, y+1);
+        const l = chemIdx(x-1, y), r = chemIdx(x+1, y);
+        sum += (t >= 0 ? ch[t] : v) + (b >= 0 ? ch[b] : v);
+        sum += (l >= 0 ? ch[l] : v) + (r >= 0 ? ch[r] : v);
+        return sum - 4 * v;
+      }
 
-            for (let dy = -1; dy <= 1; dy++) {
-              for (let dx = -1; dx <= 1; dx++) {
-                if (dx === 0 && dy === 0) continue;
-                const n = getCell(x + dx, y + dy, rules);
-                if (n > 0) {
-                  totalNeighbors++;
-                  if (n === cell) sameNeighbors++;
-                }
-              }
-            }
+      function diffuseChem() {
+        const sz = gw * gh;
+        const dA = env.diffuseA, dB = env.diffuseB, dC = env.diffuseC;
+        const f = env.feedA, k = env.killA;
 
-            if (cell > 0) {
-              // Alive: survive based on same-species neighbors
-              const survives = sameNeighbors >= rules.surviveMin && sameNeighbors <= rules.surviveMax;
-              const spontaneousDeath = Math.random() < rules.deathChance;
-              if (survives && !spontaneousDeath) {
-                gridB[idx] = cell;
-                gridAge[idx] = Math.min(gridAge[idx] + 1, 500);
-              } else {
-                gridB[idx] = 0;
-                gridAge[idx] = 0;
-              }
-            } else {
-              // Dead: birth based on total neighbors
-              if (totalNeighbors >= rules.birthMin && totalNeighbors <= rules.birthMax) {
-                // Born as the majority species among neighbors
-                const speciesCounts = new Array(rules.speciesCount + 1).fill(0);
-                for (let dy = -1; dy <= 1; dy++) {
-                  for (let dx = -1; dx <= 1; dx++) {
-                    if (dx === 0 && dy === 0) continue;
-                    const n = getCell(x + dx, y + dy, rules);
-                    if (n > 0) speciesCounts[n]++;
-                  }
-                }
-                let maxSpecies = 1, maxCount = 0;
-                for (let s = 1; s <= rules.speciesCount; s++) {
-                  if (speciesCounts[s] > maxCount) { maxCount = speciesCounts[s]; maxSpecies = s; }
-                }
-                gridB[idx] = maxSpecies;
-                gridAge[idx] = 1;
-              } else {
-                gridB[idx] = 0;
+        for (let y = 0; y < gh; y++) {
+          for (let x = 0; x < gw; x++) {
+            const i = y * gw + x;
+            const a = chem[0][i], b = chem[1][i], c = chem[2][i];
+            const abb = a * b * b;
+
+            // Gray-Scott reaction-diffusion for A and B
+            chemNext[0][i] = max(0, min(1, a + dA * laplacian(chem[0], x, y) - abb + f * (1 - a)));
+            chemNext[1][i] = max(0, min(1, b + dB * laplacian(chem[1], x, y) + abb - (f + k) * b));
+            // Channel C: simple diffusion + decay (organism signaling channel)
+            chemNext[2][i] = max(0, min(1, c + dC * laplacian(chem[2], x, y) - 0.02 * c));
+          }
+        }
+
+        // Swap
+        const tmp = chem;
+        chem = chemNext;
+        chemNext = tmp;
+      }
+
+      function spawnFood() {
+        const rate = env.foodRate * 0.02;
+        const cluster = env.foodCluster;
+        const sz = gw * gh;
+
+        // Cluster-based food spawning
+        const spots = max(1, floor(3 + cluster * 8));
+        for (let s = 0; s < spots; s++) {
+          if (rng() > rate) continue;
+          const cx = floor(rng() * gw);
+          const cy = floor(rng() * gh);
+          const rad = floor(2 + (1 - cluster) * 6);
+          for (let dy = -rad; dy <= rad; dy++) {
+            for (let dx = -rad; dx <= rad; dx++) {
+              if (dx*dx + dy*dy > rad*rad) continue;
+              const idx = chemIdx(cx + dx, cy + dy);
+              if (idx >= 0) {
+                food[idx] = min(FOOD_PER_CELL_MAX, food[idx] + 0.1 + rng() * 0.2);
               }
             }
           }
         }
-        // Swap buffers
-        const tmp = gridA;
-        gridA = gridB;
-        gridB = tmp;
+
+        // Decay food slightly
+        for (let i = 0; i < sz; i++) {
+          food[i] = max(0, food[i] - 0.0005);
+        }
       }
 
-      // --- Particles ---
-      interface Particle {
-        x: number; y: number; vx: number; vy: number;
-        species: number; energy: number; alive: boolean;
-        trail: Array<{ x: number; y: number }>;
+      // ===== SPATIAL HASH =====
+      let hashW, hashH, hashGrid;
+
+      function initHash() {
+        hashW = Math.ceil(C.width / HASH_CELL);
+        hashH = Math.ceil(C.height / HASH_CELL);
+        hashGrid = new Array(hashW * hashH);
       }
 
-      let particles: Particle[] = [];
+      function clearHash() {
+        for (let i = 0; i < hashGrid.length; i++) hashGrid[i] = null;
+      }
 
-      function spawnParticle(rules: Rules): Particle {
+      function hashInsert(org) {
+        const hx = floor(org.x / HASH_CELL);
+        const hy = floor(org.y / HASH_CELL);
+        if (hx < 0 || hx >= hashW || hy < 0 || hy >= hashH) return;
+        const i = hy * hashW + hx;
+        org._hn = hashGrid[i];
+        hashGrid[i] = org;
+      }
+
+      function* hashQuery(cx, cy, radius) {
+        const r = Math.ceil(radius / HASH_CELL);
+        const hcx = floor(cx / HASH_CELL);
+        const hcy = floor(cy / HASH_CELL);
+        const r2 = radius * radius;
+        for (let dy = -r; dy <= r; dy++) {
+          for (let dx = -r; dx <= r; dx++) {
+            let hx = hcx + dx, hy = hcy + dy;
+            if (env.toroidal) {
+              hx = ((hx % hashW) + hashW) % hashW;
+              hy = ((hy % hashH) + hashH) % hashH;
+            } else if (hx < 0 || hx >= hashW || hy < 0 || hy >= hashH) continue;
+            let node = hashGrid[hy * hashW + hx];
+            while (node) {
+              const ddx = node.x - cx, ddy = node.y - cy;
+              if (ddx * ddx + ddy * ddy <= r2) yield node;
+              node = node._hn;
+            }
+          }
+        }
+      }
+
+      // ===== GENOME =====
+      function randomGenome() {
+        const g = new Float32Array(GENOME_LEN);
+        for (let i = 0; i < GENOME_LEN; i++) g[i] = rng();
+        // Normalize specific ranges
+        g[G.CHEM_A_ATTR] = rng() * 2 - 1;
+        g[G.CHEM_B_ATTR] = rng() * 2 - 1;
+        g[G.CHEM_C_ATTR] = rng() * 2 - 1;
+        g[G.AGGRESSION] = rng() * 0.5;
+        g[G.METABOLISM] = 0.3 + rng() * 0.7;
+        g[G.REPRO_THRESH] = 0.3 + rng() * 0.5;
+        g[G.MUT_RATE] = 0.02 + rng() * 0.15;
+        g[G.SENSE_RANGE] = 0.3 + rng() * 0.7;
+        g[G.BODY_SIZE] = 0.3 + rng() * 0.7;
+        g[G.PHOTOTROPISM] = rng() * 2 - 1;
+        return g;
+      }
+
+      function mutateGenome(parent, rateMod) {
+        const g = new Float32Array(parent);
+        const rate = parent[G.MUT_RATE] * rateMod;
+        for (let i = 0; i < GENOME_LEN; i++) {
+          if (rng() < rate) {
+            g[i] += (rng() - 0.5) * 0.3;
+            // Strong mutation chance
+            if (rng() < 0.05) g[i] += (rng() - 0.5) * 1.0;
+          }
+        }
+        // Clamp ranges
+        g[G.SPEED] = max(0, min(1, g[G.SPEED]));
+        g[G.TURN] = max(0, min(1, g[G.TURN]));
+        for (let i = G.CHEM_A_ATTR; i <= G.CHEM_C_ATTR; i++) g[i] = max(-1, min(1, g[i]));
+        for (let i = G.DEP_A; i <= G.EAT_C; i++) g[i] = max(0, min(1, g[i]));
+        g[G.AGGRESSION] = max(0, min(1, g[G.AGGRESSION]));
+        g[G.SOCIALITY] = max(0, min(1, g[G.SOCIALITY]));
+        g[G.FEAR] = max(0, min(1, g[G.FEAR]));
+        g[G.METABOLISM] = max(0.1, min(1, g[G.METABOLISM]));
+        g[G.REPRO_THRESH] = max(0.2, min(0.9, g[G.REPRO_THRESH]));
+        g[G.MUT_RATE] = max(0.005, min(0.3, g[G.MUT_RATE]));
+        g[G.SENSE_RANGE] = max(0.1, min(1, g[G.SENSE_RANGE]));
+        g[G.BODY_SIZE] = max(0.15, min(1, g[G.BODY_SIZE]));
+        g[G.HUE] = ((g[G.HUE] % 1) + 1) % 1;
+        g[G.SAT] = max(0.2, min(1, g[G.SAT]));
+        g[G.LUM] = max(0.2, min(1, g[G.LUM]));
+        g[G.MEM_WEIGHT] = max(0, min(1, g[G.MEM_WEIGHT]));
+        g[G.PHOTOTROPISM] = max(-1, min(1, g[G.PHOTOTROPISM]));
+        return g;
+      }
+
+      function genomeDistance(a, b) {
+        let d = 0;
+        for (let i = 0; i < GENOME_LEN; i++) {
+          const diff = a[i] - b[i];
+          d += diff * diff;
+        }
+        return sqrt(d);
+      }
+
+      // ===== SPECIES SYSTEM =====
+      let speciesList = [];
+      let nextSpeciesId = 0;
+      const SPECIATION_DIST = 2.5;
+
+      function newSpecies(genome) {
+        const id = nextSpeciesId++;
+        const hue = genome[G.HUE] * 360;
+        const sat = 40 + genome[G.SAT] * 50;
+        const lum = 30 + genome[G.LUM] * 35;
+        const sp = {
+          id,
+          centroid: new Float32Array(genome),
+          count: 1,
+          born: tick,
+          peak: 1,
+          color: { h: hue, s: sat, l: lum },
+          totalEver: 1,
+        };
+        speciesList.push(sp);
+        return id;
+      }
+
+      function assignSpecies(genome) {
+        let bestDist = Infinity, bestId = -1;
+        for (const sp of speciesList) {
+          if (sp.count <= 0) continue;
+          const d = genomeDistance(genome, sp.centroid);
+          if (d < bestDist) { bestDist = d; bestId = sp.id; }
+        }
+        if (bestDist > SPECIATION_DIST || bestId < 0) {
+          return newSpecies(genome);
+        }
+        return bestId;
+      }
+
+      function getSpecies(id) {
+        return speciesList.find(s => s.id === id);
+      }
+
+      function updateSpecies() {
+        // Update centroids as running average
+        const counts = new Map();
+        const sums = new Map();
+        for (const org of organisms) {
+          if (!org.alive) continue;
+          if (!counts.has(org.speciesId)) {
+            counts.set(org.speciesId, 0);
+            sums.set(org.speciesId, new Float32Array(GENOME_LEN));
+          }
+          counts.set(org.speciesId, counts.get(org.speciesId) + 1);
+          const s = sums.get(org.speciesId);
+          for (let i = 0; i < GENOME_LEN; i++) s[i] += org.genome[i];
+        }
+        for (const sp of speciesList) {
+          const c = counts.get(sp.id) || 0;
+          sp.count = c;
+          if (c > sp.peak) sp.peak = c;
+          if (c > 0) {
+            const s = sums.get(sp.id);
+            for (let i = 0; i < GENOME_LEN; i++) {
+              sp.centroid[i] = sp.centroid[i] * 0.9 + (s[i] / c) * 0.1;
+            }
+            sp.color.h = sp.centroid[G.HUE] * 360;
+            sp.color.s = 40 + sp.centroid[G.SAT] * 50;
+            sp.color.l = 30 + sp.centroid[G.LUM] * 35;
+          }
+        }
+        // Prune long-dead species from list (keep max 50)
+        if (speciesList.length > 50) {
+          speciesList = speciesList.filter(s => s.count > 0 || tick - s.born < 3000);
+        }
+      }
+
+      // ===== ORGANISMS =====
+      let organisms = [];
+
+      function makeOrganism(x, y, genome, speciesId, parentMemory) {
         return {
-          x: Math.random() * canvas.width,
-          y: Math.random() * canvas.height,
-          vx: (Math.random() - 0.5) * 2,
-          vy: (Math.random() - 0.5) * 2,
-          species: 1 + Math.floor(Math.random() * rules.speciesCount),
-          energy: 100,
+          x, y,
+          heading: rng() * PI2,
+          speed: 0,
+          genome,
+          memory: parentMemory ? new Float32Array(parentMemory) : new Float32Array(MEM_SIZE),
+          energy: 0.5,
+          age: 0,
+          speciesId,
           alive: true,
           trail: [],
+          role: 0, // 0=forager, 1=hunter, 2=builder — emerges from context
+          clusterDensity: 0, // how many same-species neighbors
+          kills: 0,
+          children: 0,
+          _hn: null, // hash next pointer
         };
       }
 
-      function updateParticle(p: Particle, rules: Rules) {
-        if (!p.alive) return;
+      function senseChemAt(px, py) {
+        const gx = floor(px / CELL), gy = floor(py / CELL);
+        const i = chemIdx(gx, gy);
+        if (i < 0) return [0, 0, 0, 0];
+        return [chem[0][i], chem[1][i], chem[2][i], food[i]];
+      }
 
-        const cellX = Math.floor(p.x / rules.cellSize);
-        const cellY = Math.floor(p.y / rules.cellSize);
+      function updateOrganism(org) {
+        if (!org.alive) return;
+        const g = org.genome;
+        org.age++;
 
-        // Sense: look for living cells nearby and steer toward them
-        let bestDx = 0, bestDy = 0, bestCount = 0;
-        const sr = rules.senseRadius;
-        for (let dy = -sr; dy <= sr; dy++) {
-          for (let dx = -sr; dx <= sr; dx++) {
-            if (dx === 0 && dy === 0) continue;
-            const c = getCell(cellX + dx, cellY + dy, rules);
-            if (c > 0) {
-              const weight = c === p.species ? 2 : 1;
-              bestDx += dx * weight;
-              bestDy += dy * weight;
-              bestCount += weight;
+        // === SENSING ===
+        const senseR = 10 + g[G.SENSE_RANGE] * SENSE_DIST;
+        const turnRange = 0.3 + g[G.TURN] * 1.2;
+
+        // Sample chemicals at sense angles (Physarum-style)
+        let bestAngle = 0, bestVal = -Infinity;
+        const angles = SENSE_ANGLES;
+        const spread = turnRange;
+
+        for (let a = 0; a < angles; a++) {
+          const angle = org.heading + (a / (angles - 1) - 0.5) * spread * 2;
+          const sx = org.x + cos(angle) * senseR;
+          const sy = org.y + sin(angle) * senseR;
+          const [ca, cb, cc, fd] = senseChemAt(sx, sy);
+
+          let val = ca * g[G.CHEM_A_ATTR] + cb * g[G.CHEM_B_ATTR] + cc * g[G.CHEM_C_ATTR];
+          val += fd * g[G.PHOTOTROPISM] * 2; // food attraction
+          // Memory influence: bias toward remembered direction
+          val += org.memory[0] * cos(angle) * g[G.MEM_WEIGHT] * 0.5;
+          val += org.memory[1] * sin(angle) * g[G.MEM_WEIGHT] * 0.5;
+
+          if (val > bestVal) { bestVal = val; bestAngle = angle; }
+        }
+
+        // === SOCIAL SENSING ===
+        let socialDx = 0, socialDy = 0, socialCount = 0;
+        let fearDx = 0, fearDy = 0, fearCount = 0;
+        let nearestPrey = null, nearestPreyDist = Infinity;
+        org.clusterDensity = 0;
+
+        const queryR = senseR * 1.5;
+        for (const other of hashQuery(org.x, org.y, queryR)) {
+          if (other === org || !other.alive) continue;
+          const dx = other.x - org.x, dy = other.y - org.y;
+          const dist = sqrt(dx * dx + dy * dy);
+          if (dist < 1) continue;
+
+          if (other.speciesId === org.speciesId) {
+            // Same species: sociality
+            socialDx += dx / dist;
+            socialDy += dy / dist;
+            socialCount++;
+            if (dist < 30) org.clusterDensity++;
+          } else {
+            // Different species
+            const myPower = g[G.BODY_SIZE] * (0.5 + g[G.AGGRESSION]);
+            const theirPower = other.genome[G.BODY_SIZE] * (0.5 + other.genome[G.AGGRESSION]);
+
+            if (myPower > theirPower * 1.2) {
+              // I can hunt this one
+              if (dist < nearestPreyDist) {
+                nearestPreyDist = dist;
+                nearestPrey = other;
+              }
+            } else if (theirPower > myPower * 1.1) {
+              // Flee
+              fearDx -= dx / dist;
+              fearDy -= dy / dist;
+              fearCount++;
             }
           }
         }
 
-        if (bestCount > 0) {
-          const mag = Math.sqrt(bestDx * bestDx + bestDy * bestDy) || 1;
-          p.vx += (bestDx / mag) * 0.3;
-          p.vy += (bestDy / mag) * 0.3;
+        // === DECISION ===
+        let targetAngle = bestAngle;
+
+        // Social influence
+        if (socialCount > 0) {
+          const sa = atan2(socialDy / socialCount, socialDx / socialCount);
+          // Optimal distance: attract if far, repel if too close
+          const attract = socialCount < 5 ? g[G.SOCIALITY] : -0.2;
+          targetAngle += angleDiff(targetAngle, sa) * attract * 0.3;
         }
 
-        // Random perturbation
-        p.vx += (Math.random() - 0.5) * 0.4;
-        p.vy += (Math.random() - 0.5) * 0.4;
+        // Fear influence
+        if (fearCount > 0) {
+          const fa = atan2(fearDy, fearDx);
+          targetAngle += angleDiff(targetAngle, fa) * g[G.FEAR] * 0.5;
+        }
 
-        // Clamp speed
-        const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
-        if (speed > 3) { p.vx = (p.vx / speed) * 3; p.vy = (p.vy / speed) * 3; }
+        // Hunt influence
+        if (nearestPrey && g[G.AGGRESSION] > 0.3) {
+          const pa = atan2(nearestPrey.y - org.y, nearestPrey.x - org.x);
+          targetAngle += angleDiff(targetAngle, pa) * g[G.AGGRESSION] * 0.6;
+        }
 
-        // Move
-        p.x += p.vx;
-        p.y += p.vy;
+        // Turn toward target
+        const diff = angleDiff(org.heading, targetAngle);
+        const maxTurn = turnRange * 0.15;
+        org.heading += max(-maxTurn, min(maxTurn, diff));
+        // Random wobble
+        org.heading += (rng() - 0.5) * 0.1;
+        org.heading = org.heading % PI2;
 
-        // Wrap or bounce
-        if (rules.toroidal) {
-          p.x = ((p.x % canvas.width) + canvas.width) % canvas.width;
-          p.y = ((p.y % canvas.height) + canvas.height) % canvas.height;
+        // === MOVEMENT ===
+        const baseSpeed = 0.5 + g[G.SPEED] * 2.5;
+        const visc = 1 - env.viscosity;
+        org.speed = baseSpeed * visc;
+        // Slow down in clusters (morphogenesis: core cells slow, edge cells fast)
+        if (org.clusterDensity > 3) org.speed *= max(0.2, 1 - org.clusterDensity * 0.08);
+
+        org.x += cos(org.heading) * org.speed;
+        org.y += sin(org.heading) * org.speed;
+
+        // Boundaries
+        if (env.toroidal) {
+          org.x = ((org.x % C.width) + C.width) % C.width;
+          org.y = ((org.y % C.height) + C.height) % C.height;
         } else {
-          if (p.x < 0 || p.x >= canvas.width) { p.vx *= -1; p.x = Math.max(0, Math.min(canvas.width - 1, p.x)); }
-          if (p.y < 0 || p.y >= canvas.height) { p.vy *= -1; p.y = Math.max(0, Math.min(canvas.height - 1, p.y)); }
+          if (org.x < 2) { org.x = 2; org.heading = PI2 - org.heading + (rng()-0.5)*0.5; }
+          if (org.x > C.width - 2) { org.x = C.width - 2; org.heading = PI2 - org.heading + (rng()-0.5)*0.5; }
+          if (org.y < 2) { org.y = 2; org.heading = -org.heading + (rng()-0.5)*0.5; }
+          if (org.y > C.height - 2) { org.y = C.height - 2; org.heading = -org.heading + (rng()-0.5)*0.5; }
         }
 
         // Trail
-        p.trail.push({ x: p.x, y: p.y });
-        if (p.trail.length > 12) p.trail.shift();
+        org.trail.push({ x: org.x, y: org.y });
+        if (org.trail.length > TRAIL_LEN) org.trail.shift();
 
-        // Deposit: flip dead cells to alive
-        const gx = Math.floor(p.x / rules.cellSize);
-        const gy = Math.floor(p.y / rules.cellSize);
-        if (gx >= 0 && gx < gridW && gy >= 0 && gy < gridH) {
-          const gi = gy * gridW + gx;
-          if (gridA[gi] === 0 && Math.random() < rules.depositStrength * 0.1) {
-            gridA[gi] = p.species;
-            gridAge[gi] = 1;
-          }
-          // Energy from living cells
-          if (gridA[gi] > 0) {
-            p.energy += gridA[gi] === p.species ? 2 : 0.5;
-          } else {
-            p.energy -= 0.5;
-          }
+        // === CHEMICAL INTERACTION ===
+        const gx = floor(org.x / CELL), gy = floor(org.y / CELL);
+        const ci = chemIdx(gx, gy);
+        if (ci >= 0) {
+          // Deposit chemicals
+          chem[0][ci] = min(1, chem[0][ci] + g[G.DEP_A] * 0.02);
+          chem[1][ci] = min(1, chem[1][ci] + g[G.DEP_B] * 0.02);
+          chem[2][ci] = min(1, chem[2][ci] + g[G.DEP_C] * 0.03);
+
+          // Consume chemicals for energy
+          const eatA = min(chem[0][ci] * 0.1, g[G.EAT_A] * 0.01);
+          const eatB = min(chem[1][ci] * 0.1, g[G.EAT_B] * 0.01);
+          const eatC = min(chem[2][ci] * 0.1, g[G.EAT_C] * 0.01);
+          chem[0][ci] -= eatA;
+          chem[1][ci] -= eatB;
+          chem[2][ci] -= eatC;
+          org.energy += (eatA + eatB + eatC) * 0.5;
+
+          // Eat food
+          const eatF = min(food[ci] * 0.2, 0.05);
+          food[ci] -= eatF;
+          org.energy += eatF * 2;
         }
 
-        // Death
-        if (p.energy <= 0) p.alive = false;
-      }
-
-      // --- Colors ---
-      function cellColor(species: number, age: number, td: number, isDark: boolean): [number, number, number, number] {
-        const brightness = Math.min(1, age / 60);
-        const alpha = (0.3 + brightness * 0.5) * 255;
-
-        if (isDark) {
-          switch (species) {
-            case 1: return [Math.floor(140 + td * 60), Math.floor(80 + (1 - td) * 30), Math.floor(40 + (1 - td) * 40), alpha]; // amber/rust
-            case 2: return [Math.floor(40 + (1 - td) * 30), Math.floor(120 + (1 - td) * 40), Math.floor(130 + (1 - td) * 50), alpha]; // teal
-            case 3: return [Math.floor(100 + td * 20), Math.floor(70), Math.floor(130 + (1 - td) * 30), alpha]; // violet
-            default: return [60, 55, 50, alpha];
-          }
-        } else {
-          switch (species) {
-            case 1: return [Math.floor(180 + td * 40), Math.floor(120 + (1 - td) * 20), Math.floor(80 + (1 - td) * 30), alpha * 0.7];
-            case 2: return [Math.floor(80 + (1 - td) * 20), Math.floor(150 + (1 - td) * 30), Math.floor(160 + (1 - td) * 40), alpha * 0.7];
-            case 3: return [Math.floor(140 + td * 20), Math.floor(110), Math.floor(160 + (1 - td) * 20), alpha * 0.7];
-            default: return [160, 155, 148, alpha * 0.7];
+        // === PREDATION ===
+        if (nearestPrey && nearestPreyDist < (g[G.BODY_SIZE] + nearestPrey.genome[G.BODY_SIZE]) * 8) {
+          const myPower = g[G.BODY_SIZE] * (0.5 + g[G.AGGRESSION]) * (1 + org.kills * 0.05);
+          const theirPower = nearestPrey.genome[G.BODY_SIZE] * (0.5 + nearestPrey.genome[G.AGGRESSION]);
+          if (myPower > theirPower && rng() < g[G.AGGRESSION] * 0.3) {
+            org.energy += nearestPrey.energy * 0.7;
+            nearestPrey.alive = false;
+            org.kills++;
+            deathEvents.push({ x: nearestPrey.x, y: nearestPrey.y, t: tick, sp: nearestPrey.speciesId, type: 'predation' });
           }
         }
-      }
 
-      // --- Rendering ---
-      let imgData: ImageData;
-
-      function renderGrid(rules: Rules) {
-        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-        const cs = rules.cellSize;
-
-        if (!imgData || imgData.width !== canvas.width || imgData.height !== canvas.height) {
-          imgData = ctx.createImageData(canvas.width, canvas.height);
-        }
-
-        const data = imgData.data;
-
-        // Clear image data with background
-        const bgR = isDark ? 10 : 245;
-        const bgG = isDark ? 10 : 242;
-        const bgB = isDark ? 10 : 237;
-        for (let i = 0; i < data.length; i += 4) {
-          data[i] = bgR; data[i + 1] = bgG; data[i + 2] = bgB; data[i + 3] = 255;
-        }
-
-        // Draw cells
-        for (let gy = 0; gy < gridH; gy++) {
-          for (let gx = 0; gx < gridW; gx++) {
-            const cell = gridA[gy * gridW + gx];
-            if (cell === 0) continue;
-
-            const age = gridAge[gy * gridW + gx];
-            const [r, g, b, a] = cellColor(cell, age, rules.thematicDensity, isDark);
-            const alpha = a / 255;
-
-            const px0 = gx * cs;
-            const py0 = gy * cs;
-            for (let py = py0; py < py0 + cs && py < canvas.height; py++) {
-              for (let px = px0; px < px0 + cs && px < canvas.width; px++) {
-                const i = (py * canvas.width + px) * 4;
-                // Alpha blend
-                data[i] = Math.floor(data[i] * (1 - alpha) + r * alpha);
-                data[i + 1] = Math.floor(data[i + 1] * (1 - alpha) + g * alpha);
-                data[i + 2] = Math.floor(data[i + 2] * (1 - alpha) + b * alpha);
-              }
+        // === SYMBIOSIS ===
+        // Different species near each other both gain a small bonus
+        if (fearCount === 0 && socialCount === 0) {
+          // Check for non-threatening different-species neighbors
+          for (const other of hashQuery(org.x, org.y, 20)) {
+            if (other === org || !other.alive || other.speciesId === org.speciesId) continue;
+            const myAgg = g[G.AGGRESSION], theirAgg = other.genome[G.AGGRESSION];
+            if (myAgg < 0.3 && theirAgg < 0.3) {
+              org.energy += 0.002 * env.symbiosisBonus;
+              break; // Only one symbiosis bonus per tick
             }
           }
         }
 
-        ctx.putImageData(imgData, 0, 0);
+        // === METABOLISM ===
+        const metaCost = g[G.METABOLISM] * 0.008 * (1 + g[G.BODY_SIZE] * 0.5);
+        org.energy -= metaCost;
+
+        // Age cost
+        if (org.age > 3000) org.energy -= 0.001 * (org.age - 3000) / 1000;
+
+        // Hazard
+        if (rng() < env.hazard) org.energy -= 0.1;
+
+        // === MEMORY UPDATE ===
+        // Memory encodes directional food gradient
+        const [ca, cb, cc, fd] = senseChemAt(org.x, org.y);
+        const decay = 0.95;
+        org.memory[0] = org.memory[0] * decay + cos(org.heading) * fd * 0.1;
+        org.memory[1] = org.memory[1] * decay + sin(org.heading) * fd * 0.1;
+        org.memory[2] = org.memory[2] * decay + org.energy * 0.05; // energy trend
+        org.memory[3] = org.memory[3] * decay + org.clusterDensity * 0.02; // social memory
+
+        // === ROLE EMERGENCE ===
+        // Role is not assigned — it emerges from behavior patterns
+        if (org.kills > 2 && g[G.AGGRESSION] > 0.4) org.role = 1; // hunter
+        else if (org.clusterDensity > 5 && g[G.SOCIALITY] > 0.5) org.role = 2; // builder
+        else org.role = 0; // forager
+
+        // === DEATH ===
+        if (org.energy <= 0) {
+          org.alive = false;
+          // Drop nutrients where it dies
+          if (ci >= 0) {
+            food[ci] = min(FOOD_PER_CELL_MAX, food[ci] + 0.3);
+            chem[0][ci] = min(1, chem[0][ci] + 0.1);
+          }
+          deathEvents.push({ x: org.x, y: org.y, t: tick, sp: org.speciesId, type: 'starvation' });
+        }
       }
 
-      function renderParticles(rules: Rules) {
+      function angleDiff(a, b) {
+        let d = b - a;
+        while (d > Math.PI) d -= PI2;
+        while (d < -Math.PI) d += PI2;
+        return d;
+      }
+
+      // ===== REPRODUCTION =====
+      let birthEvents = [];
+      let deathEvents = [];
+
+      function reproduce() {
+        const newOrgs = [];
+        for (const org of organisms) {
+          if (!org.alive) continue;
+          if (org.energy < org.genome[G.REPRO_THRESH] * 1.5) continue;
+          if (organisms.length + newOrgs.length >= MAX_POP) break;
+
+          // Reproduce
+          org.energy *= 0.45; // Parent keeps less than half
+          const childGenome = mutateGenome(org.genome, env.mutMod * env.evolSpeed);
+          const childSpecies = assignSpecies(childGenome);
+          const sp = getSpecies(childSpecies);
+          if (sp) sp.totalEver++;
+
+          const offset = 5 + org.genome[G.BODY_SIZE] * 10;
+          const angle = rng() * PI2;
+          const child = makeOrganism(
+            org.x + cos(angle) * offset,
+            org.y + sin(angle) * offset,
+            childGenome,
+            childSpecies,
+            org.memory // Partial memory inheritance
+          );
+          child.energy = org.energy * 0.9;
+          // Fade inherited memory
+          for (let i = 0; i < MEM_SIZE; i++) child.memory[i] *= 0.5;
+
+          newOrgs.push(child);
+          org.children++;
+          birthEvents.push({ x: child.x, y: child.y, t: tick, sp: childSpecies });
+        }
+        organisms.push(...newOrgs);
+      }
+
+      // ===== SEEDING =====
+      function seedPopulation(count) {
+        for (let i = 0; i < count; i++) {
+          const genome = randomGenome();
+          const sid = assignSpecies(genome);
+          const org = makeOrganism(
+            rng() * C.width,
+            rng() * C.height,
+            genome,
+            sid,
+            null
+          );
+          org.energy = 0.3 + rng() * 0.4;
+          organisms.push(org);
+        }
+      }
+
+      function ensureMinPopulation() {
+        if (organisms.filter(o => o.alive).length < MIN_POP) {
+          // Extinction event — seed new life but influenced by environment
+          const count = floor(MIN_POP * 0.5);
+          for (let i = 0; i < count; i++) {
+            const genome = randomGenome();
+            // Bias genome toward current environment
+            genome[G.PHOTOTROPISM] = env.foodCluster > 0.5 ? 0.5 + rng() * 0.5 : rng() * 2 - 1;
+            genome[G.METABOLISM] = 0.2 + env.foodRate * 0.6 + rng() * 0.2;
+            const sid = assignSpecies(genome);
+            const org = makeOrganism(rng() * C.width, rng() * C.height, genome, sid, null);
+            org.energy = 0.4 + rng() * 0.3;
+            organisms.push(org);
+          }
+        }
+      }
+
+      // ===== RENDERING =====
+      let imgData;
+      let glowCanvas, glowCtx;
+
+      function initRenderer() {
+        imgData = X.createImageData(C.width, C.height);
+        glowCanvas = document.createElement('canvas');
+        glowCanvas.width = C.width;
+        glowCanvas.height = C.height;
+        glowCtx = glowCanvas.getContext('2d');
+      }
+
+      function hsl2rgb(h, s, l) {
+        h = h / 360;
+        s = s / 100;
+        l = l / 100;
+        let r, g, b;
+        if (s === 0) { r = g = b = l; }
+        else {
+          const hue2rgb = (p, q, t) => {
+            if (t < 0) t += 1;
+            if (t > 1) t -= 1;
+            if (t < 1/6) return p + (q - p) * 6 * t;
+            if (t < 1/2) return q;
+            if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+            return p;
+          };
+          const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+          const p = 2 * l - q;
+          r = hue2rgb(p, q, h + 1/3);
+          g = hue2rgb(p, q, h);
+          b = hue2rgb(p, q, h - 1/3);
+        }
+        return [floor(r * 255), floor(g * 255), floor(b * 255)];
+      }
+
+      function renderChemField() {
+        const d = imgData.data;
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        const bgR = isDark ? 2 : 245;
+        const bgG = isDark ? 2 : 242;
+        const bgB = isDark ? 8 : 237;
+
+        for (let py = 0; py < C.height; py++) {
+          const gy = floor(py / CELL);
+          for (let px = 0; px < C.width; px++) {
+            const gx = floor(px / CELL);
+            const ci = gy * gw + gx;
+            if (gx >= gw || gy >= gh) continue;
+
+            const a = chem[0][ci];
+            const b = chem[1][ci];
+            const c = chem[2][ci];
+            const f = food[ci];
+
+            const pi = (py * C.width + px) * 4;
+
+            if (isDark) {
+              // Chemical A: deep amber/orange glow
+              // Chemical B: cool blue/cyan — reaction-diffusion patterns
+              // Chemical C: signal — violet pulses
+              // Food: warm green
+              const ra = a * 15 + b * 120 * b + c * 60 + f * 20;
+              const ga = a * 8 + b * 40 * b + c * 15 + f * 35;
+              const ba = a * 5 + b * 180 * b + c * 80 + f * 8;
+
+              d[pi] = min(255, bgR + floor(ra));
+              d[pi+1] = min(255, bgG + floor(ga));
+              d[pi+2] = min(255, bgB + floor(ba));
+            } else {
+              const intensity = (a * 0.3 + b * 0.5 + c * 0.3 + f * 0.4) * 40;
+              d[pi] = max(0, bgR - floor(intensity * 0.8));
+              d[pi+1] = max(0, bgG - floor(intensity * 0.6));
+              d[pi+2] = max(0, bgB - floor(intensity * 0.4));
+            }
+            d[pi+3] = 255;
+          }
+        }
+
+        X.putImageData(imgData, 0, 0);
+      }
+
+      function renderOrganisms() {
         const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
 
-        for (const p of particles) {
-          if (!p.alive) continue;
+        // Draw to glow canvas first, then composite with blur
+        glowCtx.clearRect(0, 0, C.width, C.height);
+
+        for (const org of organisms) {
+          if (!org.alive) continue;
+          const g = org.genome;
+          const sp = getSpecies(org.speciesId);
+          if (!sp) continue;
+
+          const size = 1.5 + g[G.BODY_SIZE] * 4;
+          const energyGlow = min(1, org.energy * 2);
+          const h = sp.color.h;
+          const s = sp.color.s + (org.role === 1 ? 20 : org.role === 2 ? -10 : 0);
+          const l = sp.color.l * energyGlow;
+          const [r, gc, b] = hsl2rgb(h, min(100, s), min(85, l + 20));
 
           // Trail
-          if (p.trail.length > 1) {
-            ctx.beginPath();
-            ctx.moveTo(p.trail[0].x, p.trail[0].y);
-            for (let t = 1; t < p.trail.length; t++) {
-              ctx.lineTo(p.trail[t].x, p.trail[t].y);
+          if (org.trail.length > 2) {
+            glowCtx.beginPath();
+            glowCtx.moveTo(org.trail[0].x, org.trail[0].y);
+            for (let t = 1; t < org.trail.length; t++) {
+              glowCtx.lineTo(org.trail[t].x, org.trail[t].y);
             }
-            const [r, g, b] = cellColor(p.species, 60, rules.thematicDensity, isDark);
-            ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, 0.15)`;
-            ctx.lineWidth = 1;
-            ctx.stroke();
+            glowCtx.strokeStyle = `rgba(${r},${gc},${b},${0.08 + energyGlow * 0.12})`;
+            glowCtx.lineWidth = size * 0.5;
+            glowCtx.stroke();
           }
 
-          // Head
-          const [r, g, b] = cellColor(p.species, 100, rules.thematicDensity, isDark);
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.8)`;
-          ctx.fill();
+          // Body glow (outer)
+          const glowR = size * (2 + energyGlow * 2);
+          const grad = glowCtx.createRadialGradient(org.x, org.y, size * 0.3, org.x, org.y, glowR);
+          grad.addColorStop(0, `rgba(${r},${gc},${b},${0.3 + energyGlow * 0.4})`);
+          grad.addColorStop(0.4, `rgba(${r},${gc},${b},${0.1 + energyGlow * 0.1})`);
+          grad.addColorStop(1, `rgba(${r},${gc},${b},0)`);
+          glowCtx.fillStyle = grad;
+          glowCtx.beginPath();
+          glowCtx.arc(org.x, org.y, glowR, 0, PI2);
+          glowCtx.fill();
+
+          // Body core
+          glowCtx.fillStyle = `rgba(${min(255, r + 60)},${min(255, gc + 60)},${min(255, b + 60)},${0.7 + energyGlow * 0.3})`;
+          glowCtx.beginPath();
+          glowCtx.arc(org.x, org.y, size * 0.6, 0, PI2);
+          glowCtx.fill();
+
+          // Nucleus (bright center)
+          glowCtx.fillStyle = `rgba(255,255,255,${0.2 + energyGlow * 0.5})`;
+          glowCtx.beginPath();
+          glowCtx.arc(org.x, org.y, size * 0.2, 0, PI2);
+          glowCtx.fill();
+
+          // Direction indicator for hunters
+          if (org.role === 1 && org.kills > 0) {
+            const frontX = org.x + cos(org.heading) * size * 1.5;
+            const frontY = org.y + sin(org.heading) * size * 1.5;
+            glowCtx.fillStyle = `rgba(255,${max(0, 100 - org.kills * 20)},${max(0, 80 - org.kills * 20)},${0.4 + energyGlow * 0.3})`;
+            glowCtx.beginPath();
+            glowCtx.arc(frontX, frontY, size * 0.3, 0, PI2);
+            glowCtx.fill();
+          }
+
+          // Builder tendril effect
+          if (org.role === 2 && org.clusterDensity > 3) {
+            glowCtx.strokeStyle = `rgba(${r},${gc},${b},0.15)`;
+            glowCtx.lineWidth = 0.5;
+            for (const other of hashQuery(org.x, org.y, 25)) {
+              if (other === org || !other.alive || other.speciesId !== org.speciesId) continue;
+              glowCtx.beginPath();
+              glowCtx.moveTo(org.x, org.y);
+              glowCtx.lineTo(other.x, other.y);
+              glowCtx.stroke();
+            }
+          }
         }
+
+        // Composite glow canvas onto main
+        X.drawImage(glowCanvas, 0, 0);
       }
 
-      // --- Main Loop ---
-      let rules: Rules = defaultRules();
-      let targetRules: Rules | null = null;
-      let lerpProgress = 0;
-      let frameCount = 0;
-      let mutationCounter = 0;
+      function renderEvents() {
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        const now = tick;
 
-      function resize() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-        initGrid(rules);
-        imgData = ctx.createImageData(canvas.width, canvas.height);
-      }
+        // Death events: expanding rings
+        for (let i = deathEvents.length - 1; i >= 0; i--) {
+          const ev = deathEvents[i];
+          const age = now - ev.t;
+          if (age > 40) { deathEvents.splice(i, 1); continue; }
+          const sp = getSpecies(ev.sp);
+          const progress = age / 40;
+          const radius = 3 + progress * 20;
+          const alpha = (1 - progress) * 0.4;
 
-      function mutateRules() {
-        const keys: (keyof Rules)[] = ['surviveMin', 'surviveMax', 'birthMin', 'birthMax', 'deathChance'];
-        const key = keys[Math.floor(Math.random() * keys.length)];
-        const val = rules[key] as number;
-        const delta = Math.random() < 0.5 ? 1 : -1;
-
-        switch (key) {
-          case 'surviveMin': rules.surviveMin = Math.max(1, Math.min(4, val + delta)); break;
-          case 'surviveMax': rules.surviveMax = Math.max(rules.surviveMin, Math.min(6, val + delta)); break;
-          case 'birthMin': rules.birthMin = Math.max(1, Math.min(4, val + delta)); break;
-          case 'birthMax': rules.birthMax = Math.max(rules.birthMin, Math.min(5, val + delta)); break;
-          case 'deathChance': rules.deathChance = Math.max(0, Math.min(0.1, val + delta * 0.005)); break;
-        }
-      }
-
-      function frame(timestamp: number) {
-        frameCount++;
-
-        // Lerp rules if transitioning
-        if (targetRules && lerpProgress < 1) {
-          lerpProgress += 1 / 120; // ~2 seconds at 60fps
-          if (lerpProgress >= 1) {
-            rules = targetRules;
-            targetRules = null;
+          if (sp) {
+            const [r, g, b] = hsl2rgb(sp.color.h, sp.color.s * 0.5, sp.color.l);
+            X.strokeStyle = `rgba(${r},${g},${b},${alpha})`;
           } else {
-            rules = lerpRules(rules, targetRules, lerpProgress);
+            X.strokeStyle = `rgba(180,100,80,${alpha})`;
+          }
+          X.lineWidth = 1;
+          X.beginPath();
+          X.arc(ev.x, ev.y, radius, 0, PI2);
+          X.stroke();
+
+          if (ev.type === 'predation') {
+            // Extra burst for predation kills
+            X.strokeStyle = `rgba(255,80,40,${alpha * 0.5})`;
+            X.beginPath();
+            X.arc(ev.x, ev.y, radius * 0.6, 0, PI2);
+            X.stroke();
           }
         }
 
-        // Grid tick (decoupled from render)
-        if (frameCount % rules.tickInterval === 0) {
-          tickGrid(rules);
-        }
+        // Birth events: brief flash
+        for (let i = birthEvents.length - 1; i >= 0; i--) {
+          const ev = birthEvents[i];
+          const age = now - ev.t;
+          if (age > 15) { birthEvents.splice(i, 1); continue; }
+          const sp = getSpecies(ev.sp);
+          const progress = age / 15;
+          const alpha = (1 - progress) * 0.6;
+          const radius = 2 + progress * 5;
 
-        // Particle updates (every frame for smooth movement)
-        for (const p of particles) {
-          updateParticle(p, rules);
+          if (sp) {
+            const [r, g, b] = hsl2rgb(sp.color.h, sp.color.s, min(90, sp.color.l + 30));
+            X.fillStyle = `rgba(${r},${g},${b},${alpha})`;
+          } else {
+            X.fillStyle = `rgba(200,220,255,${alpha})`;
+          }
+          X.beginPath();
+          X.arc(ev.x, ev.y, radius, 0, PI2);
+          X.fill();
         }
+      }
 
-        // Reproduce
-        const newParticles: Particle[] = [];
-        for (const p of particles) {
-          if (p.alive && p.energy > rules.reproThreshold && particles.length + newParticles.length < rules.particleCount) {
-            p.energy /= 2;
-            const child: Particle = {
-              x: p.x + (Math.random() - 0.5) * 10,
-              y: p.y + (Math.random() - 0.5) * 10,
-              vx: p.vx + (Math.random() - 0.5) * 2,
-              vy: p.vy + (Math.random() - 0.5) * 2,
-              species: p.species,
-              energy: p.energy,
-              alive: true,
-              trail: [],
-            };
-            newParticles.push(child);
+      // ===== ENVIRONMENTAL PERTURBATION =====
+      // Periodic events that prevent convergence
+      let lastPerturbation = 0;
+
+      function environmentalEvent() {
+        if (tick - lastPerturbation < 600) return; // Min 10 sec between events
+        if (rng() > 0.002) return;
+        lastPerturbation = tick;
+
+        const event = floor(rng() * 5);
+        switch (event) {
+          case 0: {
+            // Chemical storm: flood a region with one chemical
+            const ch = floor(rng() * CHEM_CH);
+            const cx = floor(rng() * gw), cy = floor(rng() * gh);
+            const r = floor(15 + rng() * 30);
+            for (let dy = -r; dy <= r; dy++) {
+              for (let dx = -r; dx <= r; dx++) {
+                if (dx*dx + dy*dy > r*r) continue;
+                const i = chemIdx(cx + dx, cy + dy);
+                if (i >= 0) chem[ch][i] = min(1, chem[ch][i] + 0.5 + rng() * 0.5);
+              }
+            }
+            break;
+          }
+          case 1: {
+            // Food bloom
+            const cx = rng() * C.width, cy = rng() * C.height;
+            const r = 30 + rng() * 60;
+            const gcx = floor(cx / CELL), gcy = floor(cy / CELL);
+            const gr = floor(r / CELL);
+            for (let dy = -gr; dy <= gr; dy++) {
+              for (let dx = -gr; dx <= gr; dx++) {
+                if (dx*dx + dy*dy > gr*gr) continue;
+                const i = chemIdx(gcx + dx, gcy + dy);
+                if (i >= 0) food[i] = min(FOOD_PER_CELL_MAX, food[i] + 0.5 + rng());
+              }
+            }
+            break;
+          }
+          case 2: {
+            // Famine: deplete food in a region
+            const cx = floor(rng() * gw), cy = floor(rng() * gh);
+            const r = floor(20 + rng() * 40);
+            for (let dy = -r; dy <= r; dy++) {
+              for (let dx = -r; dx <= r; dx++) {
+                if (dx*dx + dy*dy > r*r) continue;
+                const i = chemIdx(cx + dx, cy + dy);
+                if (i >= 0) food[i] *= 0.1;
+              }
+            }
+            break;
+          }
+          case 3: {
+            // Migration pressure: push organisms in a random direction
+            const angle = rng() * PI2;
+            const force = 1 + rng() * 2;
+            for (const org of organisms) {
+              if (!org.alive) continue;
+              if (rng() < 0.3) {
+                org.heading += angleDiff(org.heading, angle) * 0.3;
+              }
+            }
+            break;
+          }
+          case 4: {
+            // Mutagen burst: temporarily increase mutation rates
+            for (const org of organisms) {
+              if (!org.alive || rng() > 0.1) continue;
+              // Mutate genome in-place
+              for (let i = 0; i < GENOME_LEN; i++) {
+                if (rng() < 0.1) org.genome[i] += (rng() - 0.5) * 0.2;
+              }
+            }
+            break;
           }
         }
-        particles.push(...newParticles);
+      }
 
-        // Remove dead particles
-        particles = particles.filter(p => p.alive);
+      // ===== WORLD UPDATE =====
+      let tick = 0;
+      let subTick = 0;
+      const PHYSICS_PER_FRAME = 2; // Run physics multiple times per render
 
-        // Spawn if below target
-        while (particles.length < Math.min(rules.particleCount, 20 + frameCount / 60)) {
-          particles.push(spawnParticle(rules));
+      function worldUpdate() {
+        for (let sub = 0; sub < PHYSICS_PER_FRAME; sub++) {
+          tick++;
+          subTick++;
+
+          // Chemical diffusion every 3rd tick
+          if (subTick % 3 === 0) {
+            diffuseChem();
+          }
+
+          // Food spawning every 5th tick
+          if (subTick % 5 === 0) {
+            spawnFood();
+          }
+
+          // Rebuild spatial hash
+          clearHash();
+          for (const org of organisms) {
+            if (org.alive) hashInsert(org);
+          }
+
+          // Update organisms
+          for (const org of organisms) {
+            updateOrganism(org);
+          }
+
+          // Reproduction every 3rd tick
+          if (subTick % 3 === 0) {
+            reproduce();
+          }
+
+          // Remove dead
+          organisms = organisms.filter(o => o.alive);
+
+          // Ensure minimum population
+          if (subTick % 60 === 0) {
+            ensureMinPopulation();
+          }
+
+          // Update species
+          if (subTick % 30 === 0) {
+            updateSpecies();
+          }
+
+          // Environmental perturbation
+          environmentalEvent();
+
+          // Lerp environment
+          if (envTarget && envLerp < 1) {
+            envLerp += 0.005; // Slow transition over ~200 frames
+            if (envLerp >= 1) {
+              env = envTarget;
+              envTarget = null;
+            } else {
+              env = lerpEnv(env, envTarget, envLerp);
+            }
+          }
         }
+      }
 
-        // Rule mutation
-        mutationCounter++;
-        if (mutationCounter >= rules.mutationInterval) {
-          mutateRules();
-          mutationCounter = 0;
+      // ===== MAIN =====
+      function resize() {
+        C.width = window.innerWidth;
+        C.height = window.innerHeight;
+        initChem();
+        initHash();
+        initRenderer();
+        // Re-seed if organisms exist but grid changed
+        if (organisms.length === 0) {
+          seedPopulation(80);
         }
+      }
 
-        // Render
-        renderGrid(rules);
-        renderParticles(rules);
-
+      function frame() {
+        worldUpdate();
+        renderChemField();
+        renderOrganisms();
+        renderEvents();
         requestAnimationFrame(frame);
       }
 
       async function init() {
         resize();
-        window.addEventListener('resize', resize);
+        window.addEventListener('resize', () => {
+          resize();
+        });
 
-        // Fetch real data
+        // Fetch initial data
         try {
           const res = await fetch('/api/blackbox');
           if (res.ok) {
-            const signal: Signal = await res.json();
-            rules = computeRules(signal);
+            const signal = await res.json();
+            env = computeEnv(signal);
           }
         } catch {}
 
-        initGrid(rules);
-
-        // Seed particles
-        for (let i = 0; i < Math.min(rules.particleCount, 30); i++) {
-          particles.push(spawnParticle(rules));
-        }
+        // Seed initial population
+        seedPopulation(80);
 
         requestAnimationFrame(frame);
 
-        // Refresh signal every 60 seconds — morph, don't reset
+        // Refresh data every 60 seconds — environment shifts, ecosystem adapts
         setInterval(async () => {
           try {
             const res = await fetch('/api/blackbox');
             if (res.ok) {
-              const signal: Signal = await res.json();
-              targetRules = computeRules(signal);
-              lerpProgress = 0;
+              const signal = await res.json();
+              envTarget = computeEnv(signal);
+              envLerp = 0;
             }
           } catch {}
         }, 60000);
