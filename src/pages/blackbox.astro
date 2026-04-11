@@ -7,1881 +7,269 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>The Black Box</title>
-    <script is:inline>
-      (function() {
-        var t = localStorage.getItem('marrow-theme') || 'dark';
-        document.documentElement.setAttribute('data-theme', t);
-      })();
-    </script>
     <style is:global>
-      :root { --bg: #f5f2ed; }
-      [data-theme="dark"] { --bg: #020208; }
       * { margin: 0; padding: 0; box-sizing: border-box; }
-      html, body { height: 100%; background: var(--bg); overflow: hidden; }
+      html, body { height: 100%; background: #000; overflow: hidden; }
       canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; }
       .back-btn {
         position: fixed; top: 2rem; right: 2rem;
-        background: none; border: 1px solid rgba(255,255,255,0.08);
+        background: none; border: 1px solid rgba(255,255,255,0.04);
         border-radius: 50%; width: 36px; height: 36px; cursor: pointer;
         display: flex; align-items: center; justify-content: center;
-        color: rgba(255,255,255,0.2); font-size: 1rem;
+        color: rgba(255,255,255,0.1); font-size: 1rem;
         text-decoration: none; z-index: 10; transition: all 0.3s ease;
+        opacity: 0;
       }
-      [data-theme="light"] .back-btn {
-        border-color: rgba(0,0,0,0.1); color: rgba(0,0,0,0.25);
-      }
+      .back-btn.visible { opacity: 1; }
       .back-btn:hover {
-        border-color: rgba(255,255,255,0.3); color: rgba(255,255,255,0.5);
-      }
-      [data-theme="light"] .back-btn:hover {
-        border-color: rgba(0,0,0,0.3); color: rgba(0,0,0,0.5);
+        border-color: rgba(255,255,255,0.15); color: rgba(255,255,255,0.25);
       }
     </style>
   </head>
   <body>
-    <a href="/" class="back-btn" aria-label="Back to Marrow" title="Back to Marrow">&larr;</a>
-    <canvas id="canvas"></canvas>
+    <a href="/" class="back-btn" id="back" aria-label="Back to journal">&larr;</a>
+    <canvas id="blackbox"></canvas>
+
     <script>
-      // =====================================================================
-      // THE BLACK BOX — God-Mode Artificial Life Engine v2
-      //
-      // 36-gene organisms. Life stages. Pack hunting. Colony differentiation.
-      // Territory pheromones. Parasite mechanics. 5 body morphologies.
-      // Behavioral modes. Dramatic death + birth effects. Emergent trophic
-      // levels. Your journal data is the physics. Everything else evolves.
-      // =====================================================================
+      import * as THREE from 'three';
+      import type { WitnessState } from '../lib/dream/types';
+      import { DEFAULT_WITNESS } from '../lib/dream/types';
 
-      const C = document.getElementById('canvas');
-      const X = C.getContext('2d');
-      const PI2 = Math.PI * 2;
-      const abs = Math.abs, min = Math.min, max = Math.max, floor = Math.floor;
-      const sqrt = Math.sqrt, sin = Math.sin, cos = Math.cos, atan2 = Math.atan2;
-      const rng = () => Math.random();
+      import witnessVert from '../assets/shaders/witness.vert?raw';
+      import witnessFrag from '../assets/shaders/witness.frag?raw';
 
-      // ===== CONSTANTS =====
-      const CELL = 5;
-      const GENOME_LEN = 36;
-      const MAX_POP = 900;
-      const MIN_POP = 50;
-      const CHEM_CH = 4; // 4th channel = territory pheromone
-      const HASH_CELL = 32;
-      const FOOD_PER_CELL_MAX = 2.0;
-      const SENSE_ANGLES = 5;
-      const SENSE_DIST = 22;
-      const SPECIATION_DIST = 2.8;
+      // ─── Setup ──────────────────────────────────────────────────
 
-      // Life stage thresholds
-      const STAGE_EGG = 50;
-      const STAGE_JUV = 300;
-      const STAGE_ADU = 4000;
+      const canvas = document.getElementById('blackbox') as HTMLCanvasElement;
+      const backBtn = document.getElementById('back') as HTMLElement;
+      let W = window.innerWidth;
+      let H = window.innerHeight;
 
-      // Behavioral modes
-      const MODE_FORAGE = 0;
-      const MODE_HUNT   = 1;
-      const MODE_FLEE   = 2;
-      const MODE_COLONY = 3;
-      const MODE_GUARD  = 4;
-      const MODE_AMBUSH = 5;
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+      renderer.setSize(W, H);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setClearColor(0x000000, 1);
 
-      // Body shape ranges
-      const SHAPE_ROUND    = 0; // 0.0 - 0.2
-      const SHAPE_HUNTER   = 1; // 0.2 - 0.4
-      const SHAPE_GRAZER   = 2; // 0.4 - 0.6
-      const SHAPE_DEFENDER = 3; // 0.6 - 0.8
-      const SHAPE_PARASITE = 4; // 0.8 - 1.0
+      const scene = new THREE.Scene();
 
-      // Gene indices (36 total)
-      const G = {
-        SPEED: 0, TURN: 1, BURST_SPEED: 2, BURST_CD: 3,
-        CHEM_A_ATTR: 4, CHEM_B_ATTR: 5, CHEM_C_ATTR: 6,
-        DEP_A: 7, DEP_B: 8, DEP_C: 9,
-        EAT_A: 10, EAT_B: 11, EAT_C: 12,
-        AGGRESSION: 13, SOCIALITY: 14, FEAR: 15,
-        TERRITORIALITY: 16, PACK_DRIVE: 17,
-        METABOLISM: 18, REPRO_THRESH: 19, BODY_SIZE: 20, GROWTH_RATE: 21,
-        MUT_RATE: 22,
-        SENSE_RANGE: 23, MEM_WEIGHT: 24, PHOTOTROPISM: 25,
-        ARMOR: 26, TOXICITY: 27,
-        SIG_FREQ: 28, SIG_RESPONSE: 29,
-        HUE: 30, SAT: 31, LUM: 32,
-        BODY_SHAPE: 33,
-        TROPHIC_FEED: 34, // 0=autotroph tendency, 1=predator tendency
-        RESERVED: 35,
+      // Camera: slightly off-center, creates subtle asymmetry
+      const camera = new THREE.PerspectiveCamera(40, W / H, 0.1, 100);
+      camera.position.set(0, 0.1, 3.5);
+      camera.lookAt(0, 0, 0);
+
+      // ─── Witness State ──────────────────────────────────────────
+
+      let witnessState: WitnessState = { ...DEFAULT_WITNESS };
+      let stateLoaded = false;
+
+      // ─── Witness Mesh ───────────────────────────────────────────
+
+      // High-poly sphere as base — displacement does the shaping
+      const baseGeometry = new THREE.IcosahedronGeometry(1, 64);
+      baseGeometry.computeVertexNormals();
+
+      const witnessMaterial = new THREE.ShaderMaterial({
+        vertexShader: witnessVert,
+        fragmentShader: witnessFrag,
+        uniforms: {
+          uTime: { value: 0 },
+          uDensity: { value: 0.1 },
+          uCoherence: { value: 0.5 },
+          uAsymmetry: { value: 0 },
+          uConcavity: { value: 0 },
+          uErosion: { value: 0.8 },
+          uMass: { value: 0.1 },
+          uBreathRate: { value: 25 },
+          uBreathDepth: { value: 0.02 },
+          uReveal: { value: 0 },
+          uCameraPos: { value: camera.position },
+        },
+        transparent: true,
+        depthWrite: true,
+        side: THREE.DoubleSide,
+      });
+
+      const witnessMesh = new THREE.Mesh(baseGeometry, witnessMaterial);
+      witnessMesh.position.set(0, -0.1, 0); // slightly below center
+      scene.add(witnessMesh);
+
+      // ─── Threshold System ───────────────────────────────────────
+
+      let thresholdStartTime = 0;
+      let thresholdDuration = 8; // seconds, updated from state
+      let thresholdComplete = false;
+      let revealValue = 0;
+
+      // Threshold character affects the reveal curve
+      let thresholdCharacter: WitnessState['thresholdCharacter'] = 'normal';
+
+      function getRevealCurve(progress: number): number {
+        // progress: 0 (start) to 1 (fully revealed)
+        switch (thresholdCharacter) {
+          case 'slow':
+            // Very gradual — cubic ease-in
+            return progress * progress * progress;
+          case 'misaligned':
+            // Stuttered — two-step reveal with a pause
+            if (progress < 0.4) return progress / 0.4 * 0.3;
+            if (progress < 0.6) return 0.3; // pause
+            return 0.3 + ((progress - 0.6) / 0.4) * 0.7;
+          case 'abrupt':
+            // Quick snap after brief darkness
+            if (progress < 0.3) return 0;
+            return Math.min(1, (progress - 0.3) / 0.3);
+          default:
+            // Smooth ease-in-out
+            return progress < 0.5
+              ? 2 * progress * progress
+              : 1 - 2 * (1 - progress) * (1 - progress);
+        }
+      }
+
+      // ─── Camera Drift ───────────────────────────────────────────
+      // Slow, dream-like camera movement. Not controllable.
+
+      const cameraDrift = {
+        basePos: new THREE.Vector3(0, 0.1, 3.5),
+        // Irrational frequencies for non-repeating orbits
+        freqX: 0.017,   // ~59s period
+        freqY: 0.013,   // ~77s period
+        freqZ: 0.0091,  // ~110s period
+        ampX: 0.15,
+        ampY: 0.08,
+        ampZ: 0.1,
       };
 
-      // ===== DATA SIGNAL & ENVIRONMENT =====
-      let env = {
-        foodRate: 0.15,
-        foodCluster: 0.5,
-        viscosity: 0.02,
-        hazard: 0.001,
-        mutMod: 1.0,
-        diffuseA: 0.18,
-        diffuseB: 0.12,
-        diffuseC: 0.08,
-        diffuseD: 0.04,
-        feedA: 0.037,
-        killA: 0.06,
-        predPressure: 0.3,
-        stability: 0.5,
-        symbiosisBonus: 0.5,
-        toroidal: false,
-        densityGrad: 0.5,
-        evolSpeed: 1.0,
-        territoryDecay: 0.003,
-        packBonus: 1.5,
-        colonyShare: 0.05,
+      function updateCamera(time: number): void {
+        const d = cameraDrift;
+        camera.position.set(
+          d.basePos.x + Math.sin(time * d.freqX * Math.PI * 2) * d.ampX,
+          d.basePos.y + Math.sin(time * d.freqY * Math.PI * 2) * d.ampY,
+          d.basePos.z + Math.sin(time * d.freqZ * Math.PI * 2) * d.ampZ,
+        );
+        camera.lookAt(0, -0.05, 0);
+      }
+
+      // ─── Uniform Sync ──────────────────────────────────────────
+
+      // Current displayed values — lerp toward target for smooth transitions
+      const displayed = {
+        density: 0.1,
+        coherence: 0.5,
+        asymmetry: 0,
+        concavity: 0,
+        erosion: 0.8,
+        mass: 0.1,
+        breathRate: 25,
+        breathDepth: 0.02,
       };
 
-      let envTarget = null;
-      let envLerp = 1;
+      function lerpUniforms(dt: number): void {
+        const rate = 0.3 * dt; // slow convergence
+        displayed.density += (witnessState.density - displayed.density) * rate;
+        displayed.coherence += (witnessState.coherence - displayed.coherence) * rate;
+        displayed.asymmetry += (witnessState.asymmetry - displayed.asymmetry) * rate;
+        displayed.concavity += (witnessState.concavity - displayed.concavity) * rate;
+        displayed.erosion += (witnessState.erosion - displayed.erosion) * rate;
+        displayed.mass += (witnessState.mass - displayed.mass) * rate;
+        displayed.breathRate += (witnessState.breathRate - displayed.breathRate) * rate;
+        displayed.breathDepth += (witnessState.breathDepth - displayed.breathDepth) * rate;
 
-      function computeEnv(s) {
-        return {
-          foodRate: 0.05 + s.avgCommitment * 0.25,
-          foodCluster: s.thematicDensity,
-          viscosity: 0.005 + s.avgHesitation * 0.04,
-          hazard: s.deletionIntensity * 0.003,
-          mutMod: 0.5 + s.pauseFrequency * 1.5,
-          diffuseA: 0.1 + (s.embeddingCount / 200) * 0.15,
-          diffuseB: 0.08 + (1 - s.avgCommitment) * 0.1,
-          diffuseC: 0.05 + s.pauseFrequency * 0.1,
-          diffuseD: 0.02 + s.thematicDensity * 0.04,
-          feedA: 0.02 + s.observationCount * 0.0005,
-          killA: 0.04 + s.reflectionCount * 0.001,
-          predPressure: min(1, s.suppressedCount * 0.05),
-          stability: s.latestConfidence === 'HIGH' ? 0.9 : s.latestConfidence === 'MODERATE' ? 0.6 : 0.3,
-          symbiosisBonus: s.landedRatio,
-          toroidal: s.feedbackCount >= 5,
-          densityGrad: s.thematicDensity,
-          evolSpeed: 0.5 + min(2, s.reflectionCount * 0.05),
-          territoryDecay: 0.002 + (1 - s.stability) * 0.005,
-          packBonus: 1.2 + s.avgCommitment * 0.8,
-          colonyShare: 0.03 + s.landedRatio * 0.07,
-        };
+        const u = witnessMaterial.uniforms;
+        u.uDensity.value = displayed.density;
+        u.uCoherence.value = displayed.coherence;
+        u.uAsymmetry.value = displayed.asymmetry;
+        u.uConcavity.value = displayed.concavity;
+        u.uErosion.value = displayed.erosion;
+        u.uMass.value = displayed.mass;
+        u.uBreathRate.value = displayed.breathRate;
+        u.uBreathDepth.value = displayed.breathDepth;
       }
 
-      function lerpEnv(a, b, t) {
-        const r = {};
-        for (const k in a) {
-          if (typeof a[k] === 'number') r[k] = a[k] + (b[k] - a[k]) * t;
-          else r[k] = t > 0.5 ? b[k] : a[k];
-        }
-        return r;
-      }
+      // ─── Data Fetch ─────────────────────────────────────────────
 
-      // ===== CHEMICAL GRID =====
-      let gw = 0, gh = 0;
-      let chem, chemNext;
-      let food;
-      let territoryGrid; // per-cell: [speciesId, strength]
-
-      function initChem() {
-        gw = floor(C.width / CELL);
-        gh = floor(C.height / CELL);
-        const sz = gw * gh;
-        chem = [new Float32Array(sz), new Float32Array(sz), new Float32Array(sz), new Float32Array(sz)];
-        chemNext = [new Float32Array(sz), new Float32Array(sz), new Float32Array(sz), new Float32Array(sz)];
-        food = new Float32Array(sz);
-        territoryGrid = new Int16Array(sz); // species id, -1 = unclaimed
-
-        for (let i = 0; i < sz; i++) {
-          chem[0][i] = 1.0;
-          chem[1][i] = rng() < 0.05 ? 0.5 + rng() * 0.5 : 0;
-          chem[2][i] = 0;
-          chem[3][i] = 0;
-          food[i] = rng() * 0.5;
-          territoryGrid[i] = -1;
-        }
-      }
-
-      function chemIdx(x, y) {
-        if (env.toroidal) {
-          x = ((x % gw) + gw) % gw;
-          y = ((y % gh) + gh) % gh;
-        } else {
-          if (x < 0 || x >= gw || y < 0 || y >= gh) return -1;
-        }
-        return y * gw + x;
-      }
-
-      function laplacian(ch, x, y) {
-        const c = chemIdx(x, y);
-        if (c < 0) return 0;
-        const v = ch[c];
-        let sum = 0;
-        const t = chemIdx(x, y-1), b = chemIdx(x, y+1);
-        const l = chemIdx(x-1, y), r = chemIdx(x+1, y);
-        sum += (t >= 0 ? ch[t] : v) + (b >= 0 ? ch[b] : v);
-        sum += (l >= 0 ? ch[l] : v) + (r >= 0 ? ch[r] : v);
-        return sum - 4 * v;
-      }
-
-      function diffuseChem() {
-        const dA = env.diffuseA, dB = env.diffuseB, dC = env.diffuseC, dD = env.diffuseD;
-        const f = env.feedA, k = env.killA;
-
-        for (let y = 0; y < gh; y++) {
-          for (let x = 0; x < gw; x++) {
-            const i = y * gw + x;
-            const a = chem[0][i], b = chem[1][i], c = chem[2][i], d = chem[3][i];
-            const abb = a * b * b;
-            chemNext[0][i] = max(0, min(1, a + dA * laplacian(chem[0], x, y) - abb + f * (1 - a)));
-            chemNext[1][i] = max(0, min(1, b + dB * laplacian(chem[1], x, y) + abb - (f + k) * b));
-            chemNext[2][i] = max(0, min(1, c + dC * laplacian(chem[2], x, y) - 0.02 * c));
-            // Territory pheromone: diffuse & decay
-            chemNext[3][i] = max(0, min(1, d + dD * laplacian(chem[3], x, y) - env.territoryDecay * d));
-          }
-        }
-        const tmp = chem; chem = chemNext; chemNext = tmp;
-      }
-
-      function spawnFood() {
-        const rate = env.foodRate * 0.02;
-        const cluster = env.foodCluster;
-        const spots = max(1, floor(3 + cluster * 8));
-        for (let s = 0; s < spots; s++) {
-          if (rng() > rate) continue;
-          const cx = floor(rng() * gw), cy = floor(rng() * gh);
-          const rad = floor(2 + (1 - cluster) * 6);
-          for (let dy = -rad; dy <= rad; dy++) {
-            for (let dx = -rad; dx <= rad; dx++) {
-              if (dx*dx + dy*dy > rad*rad) continue;
-              const idx = chemIdx(cx + dx, cy + dy);
-              if (idx >= 0) food[idx] = min(FOOD_PER_CELL_MAX, food[idx] + 0.1 + rng() * 0.2);
-            }
-          }
-        }
-        const sz = gw * gh;
-        for (let i = 0; i < sz; i++) food[i] = max(0, food[i] - 0.0005);
-      }
-
-      // ===== SPATIAL HASH =====
-      let hashW, hashH, hashGrid;
-
-      function initHash() {
-        hashW = Math.ceil(C.width / HASH_CELL);
-        hashH = Math.ceil(C.height / HASH_CELL);
-        hashGrid = new Array(hashW * hashH);
-      }
-
-      function clearHash() {
-        for (let i = 0; i < hashGrid.length; i++) hashGrid[i] = null;
-      }
-
-      function hashInsert(org) {
-        const hx = floor(org.x / HASH_CELL);
-        const hy = floor(org.y / HASH_CELL);
-        if (hx < 0 || hx >= hashW || hy < 0 || hy >= hashH) return;
-        const i = hy * hashW + hx;
-        org._hn = hashGrid[i];
-        hashGrid[i] = org;
-      }
-
-      function* hashQuery(cx, cy, radius) {
-        const r = Math.ceil(radius / HASH_CELL);
-        const hcx = floor(cx / HASH_CELL);
-        const hcy = floor(cy / HASH_CELL);
-        const r2 = radius * radius;
-        for (let dy = -r; dy <= r; dy++) {
-          for (let dx = -r; dx <= r; dx++) {
-            let hx = hcx + dx, hy = hcy + dy;
-            if (env.toroidal) {
-              hx = ((hx % hashW) + hashW) % hashW;
-              hy = ((hy % hashH) + hashH) % hashH;
-            } else if (hx < 0 || hx >= hashW || hy < 0 || hy >= hashH) continue;
-            let node = hashGrid[hy * hashW + hx];
-            while (node) {
-              const ddx = node.x - cx, ddy = node.y - cy;
-              if (ddx * ddx + ddy * ddy <= r2) yield node;
-              node = node._hn;
-            }
-          }
-        }
-      }
-
-      // ===== GENOME =====
-      function randomGenome() {
-        const g = new Float32Array(GENOME_LEN);
-        for (let i = 0; i < GENOME_LEN; i++) g[i] = rng();
-        g[G.CHEM_A_ATTR] = rng() * 2 - 1;
-        g[G.CHEM_B_ATTR] = rng() * 2 - 1;
-        g[G.CHEM_C_ATTR] = rng() * 2 - 1;
-        g[G.AGGRESSION] = rng() * 0.5;
-        g[G.FEAR] = rng() * 0.7;
-        g[G.METABOLISM] = 0.3 + rng() * 0.7;
-        g[G.REPRO_THRESH] = 0.3 + rng() * 0.5;
-        g[G.MUT_RATE] = 0.02 + rng() * 0.15;
-        g[G.SENSE_RANGE] = 0.3 + rng() * 0.7;
-        g[G.BODY_SIZE] = 0.3 + rng() * 0.7;
-        g[G.PHOTOTROPISM] = rng() * 2 - 1;
-        g[G.ARMOR] = rng() * 0.5;
-        g[G.TOXICITY] = rng() * 0.3;
-        g[G.PACK_DRIVE] = rng() * 0.6;
-        g[G.TERRITORIALITY] = rng() * 0.5;
-        g[G.BURST_SPEED] = 0.5 + rng() * 0.5;
-        g[G.BURST_CD] = rng();
-        g[G.TROPHIC_FEED] = rng();
-        return g;
-      }
-
-      function genomeToBiasedShape(bodyShapeTarget) {
-        const g = randomGenome();
-        g[G.BODY_SHAPE] = bodyShapeTarget;
-        if (bodyShapeTarget < 0.2) {
-          // Colony
-          g[G.SOCIALITY] = 0.5 + rng() * 0.5;
-          g[G.AGGRESSION] = rng() * 0.2;
-          g[G.SPEED] = rng() * 0.3;
-          g[G.TROPHIC_FEED] = rng() * 0.3;
-        } else if (bodyShapeTarget < 0.4) {
-          // Hunter
-          g[G.AGGRESSION] = 0.4 + rng() * 0.6;
-          g[G.SPEED] = 0.5 + rng() * 0.5;
-          g[G.PACK_DRIVE] = 0.2 + rng() * 0.6;
-          g[G.TROPHIC_FEED] = 0.5 + rng() * 0.5;
-        } else if (bodyShapeTarget < 0.6) {
-          // Grazer
-          g[G.AGGRESSION] = rng() * 0.2;
-          g[G.SOCIALITY] = 0.3 + rng() * 0.5;
-          g[G.TROPHIC_FEED] = 0.2 + rng() * 0.4;
-        } else if (bodyShapeTarget < 0.8) {
-          // Defender
-          g[G.ARMOR] = 0.5 + rng() * 0.5;
-          g[G.TERRITORIALITY] = 0.4 + rng() * 0.6;
-          g[G.TROPHIC_FEED] = 0.2 + rng() * 0.3;
-        } else {
-          // Parasite
-          g[G.AGGRESSION] = 0.2 + rng() * 0.4;
-          g[G.SPEED] = 0.4 + rng() * 0.4;
-          g[G.BODY_SIZE] = 0.15 + rng() * 0.2;
-          g[G.TROPHIC_FEED] = 0.4 + rng() * 0.4;
-        }
-        return g;
-      }
-
-      function mutateGenome(parent, rateMod) {
-        const g = new Float32Array(parent);
-        const rate = parent[G.MUT_RATE] * rateMod;
-        for (let i = 0; i < GENOME_LEN; i++) {
-          if (rng() < rate) {
-            g[i] += (rng() - 0.5) * 0.3;
-            if (rng() < 0.05) g[i] += (rng() - 0.5) * 1.0;
-          }
-        }
-        g[G.SPEED] = max(0, min(1, g[G.SPEED]));
-        g[G.TURN] = max(0, min(1, g[G.TURN]));
-        g[G.BURST_SPEED] = max(0, min(1, g[G.BURST_SPEED]));
-        g[G.BURST_CD] = max(0, min(1, g[G.BURST_CD]));
-        for (let i = G.CHEM_A_ATTR; i <= G.CHEM_C_ATTR; i++) g[i] = max(-1, min(1, g[i]));
-        for (let i = G.DEP_A; i <= G.EAT_C; i++) g[i] = max(0, min(1, g[i]));
-        g[G.AGGRESSION] = max(0, min(1, g[G.AGGRESSION]));
-        g[G.SOCIALITY] = max(0, min(1, g[G.SOCIALITY]));
-        g[G.FEAR] = max(0, min(1, g[G.FEAR]));
-        g[G.TERRITORIALITY] = max(0, min(1, g[G.TERRITORIALITY]));
-        g[G.PACK_DRIVE] = max(0, min(1, g[G.PACK_DRIVE]));
-        g[G.METABOLISM] = max(0.1, min(1, g[G.METABOLISM]));
-        g[G.REPRO_THRESH] = max(0.2, min(0.9, g[G.REPRO_THRESH]));
-        g[G.BODY_SIZE] = max(0.1, min(1, g[G.BODY_SIZE]));
-        g[G.GROWTH_RATE] = max(0, min(1, g[G.GROWTH_RATE]));
-        g[G.MUT_RATE] = max(0.005, min(0.3, g[G.MUT_RATE]));
-        g[G.SENSE_RANGE] = max(0.1, min(1, g[G.SENSE_RANGE]));
-        g[G.MEM_WEIGHT] = max(0, min(1, g[G.MEM_WEIGHT]));
-        g[G.PHOTOTROPISM] = max(-1, min(1, g[G.PHOTOTROPISM]));
-        g[G.ARMOR] = max(0, min(1, g[G.ARMOR]));
-        g[G.TOXICITY] = max(0, min(1, g[G.TOXICITY]));
-        g[G.SIG_FREQ] = max(0, min(1, g[G.SIG_FREQ]));
-        g[G.SIG_RESPONSE] = max(0, min(1, g[G.SIG_RESPONSE]));
-        g[G.HUE] = ((g[G.HUE] % 1) + 1) % 1;
-        g[G.SAT] = max(0.2, min(1, g[G.SAT]));
-        g[G.LUM] = max(0.2, min(1, g[G.LUM]));
-        g[G.BODY_SHAPE] = max(0, min(1, g[G.BODY_SHAPE]));
-        g[G.TROPHIC_FEED] = max(0, min(1, g[G.TROPHIC_FEED]));
-        return g;
-      }
-
-      function genomeDistance(a, b) {
-        let d = 0;
-        for (let i = 0; i < GENOME_LEN; i++) { const diff = a[i] - b[i]; d += diff * diff; }
-        return sqrt(d);
-      }
-
-      function getBodyShape(g) {
-        const bs = g[G.BODY_SHAPE];
-        if (bs < 0.2) return SHAPE_ROUND;
-        if (bs < 0.4) return SHAPE_HUNTER;
-        if (bs < 0.6) return SHAPE_GRAZER;
-        if (bs < 0.8) return SHAPE_DEFENDER;
-        return SHAPE_PARASITE;
-      }
-
-      // ===== SPECIES SYSTEM =====
-      let speciesList = [];
-      let nextSpeciesId = 0;
-
-      function newSpecies(genome) {
-        const id = nextSpeciesId++;
-        const hue = genome[G.HUE] * 360;
-        const sat = 40 + genome[G.SAT] * 50;
-        const lum = 30 + genome[G.LUM] * 35;
-        const sp = {
-          id, centroid: new Float32Array(genome), count: 1,
-          born: tick, peak: 1, color: { h: hue, s: sat, l: lum },
-          totalEver: 1, kills: 0,
-        };
-        speciesList.push(sp);
-        return id;
-      }
-
-      function assignSpecies(genome) {
-        let bestDist = Infinity, bestId = -1;
-        for (const sp of speciesList) {
-          if (sp.count <= 0) continue;
-          const d = genomeDistance(genome, sp.centroid);
-          if (d < bestDist) { bestDist = d; bestId = sp.id; }
-        }
-        if (bestDist > SPECIATION_DIST || bestId < 0) return newSpecies(genome);
-        return bestId;
-      }
-
-      function getSpecies(id) {
-        return speciesList.find(s => s.id === id);
-      }
-
-      function updateSpecies() {
-        const counts = new Map(), sums = new Map();
-        for (const org of organisms) {
-          if (!org.alive) continue;
-          if (!counts.has(org.speciesId)) {
-            counts.set(org.speciesId, 0);
-            sums.set(org.speciesId, new Float32Array(GENOME_LEN));
-          }
-          counts.set(org.speciesId, counts.get(org.speciesId) + 1);
-          const s = sums.get(org.speciesId);
-          for (let i = 0; i < GENOME_LEN; i++) s[i] += org.genome[i];
-        }
-        for (const sp of speciesList) {
-          const c = counts.get(sp.id) || 0;
-          sp.count = c;
-          if (c > sp.peak) sp.peak = c;
-          if (c > 0) {
-            const s = sums.get(sp.id);
-            for (let i = 0; i < GENOME_LEN; i++) sp.centroid[i] = s[i] / c;
-            sp.color.h = sp.centroid[G.HUE] * 360;
-            sp.color.s = 40 + sp.centroid[G.SAT] * 50;
-            sp.color.l = 30 + sp.centroid[G.LUM] * 35;
-          }
-        }
-        speciesList = speciesList.filter(sp => sp.count > 0 || tick - sp.born < 300);
-      }
-
-      // ===== COLONY SYSTEM =====
-      let colonies = [];
-      let nextColonyId = 0;
-
-      function updateColonies() {
-        // Dissolve old colonies
-        colonies = colonies.filter(col => {
-          const members = organisms.filter(o => o.alive && o.colonyId === col.id);
-          if (members.length < 3) {
-            members.forEach(o => o.colonyId = -1);
-            return false;
-          }
-          col.members = members;
-          // Update centroid
-          col.cx = members.reduce((s, o) => s + o.x, 0) / members.length;
-          col.cy = members.reduce((s, o) => s + o.y, 0) / members.length;
-          // Differentiate roles
-          members.sort((a, b) => b.energy - a.energy);
-          const queenCount = max(1, floor(members.length * 0.1));
-          const soldierCount = floor(members.length * 0.3);
-          for (let i = 0; i < members.length; i++) {
-            if (i < queenCount) members[i].colonyRole = 'queen';
-            else if (i < queenCount + soldierCount) members[i].colonyRole = 'soldier';
-            else members[i].colonyRole = 'worker';
-          }
-          return true;
-        });
-
-        // Detect new colonies: 5+ same-species within 40px for 100+ ticks
-        const speciesGroups = new Map();
-        for (const org of organisms) {
-          if (!org.alive || org.colonyId >= 0) continue;
-          if (!speciesGroups.has(org.speciesId)) speciesGroups.set(org.speciesId, []);
-          speciesGroups.get(org.speciesId).push(org);
-        }
-
-        for (const [spId, group] of speciesGroups) {
-          const sp = getSpecies(spId);
-          if (!sp || sp.centroid[G.SOCIALITY] < 0.5) continue;
-          if (group.length < 5) continue;
-          // Check if clustered
-          const cx = group.reduce((s, o) => s + o.x, 0) / group.length;
-          const cy = group.reduce((s, o) => s + o.y, 0) / group.length;
-          const clustered = group.filter(o => {
-            const dx = o.x - cx, dy = o.y - cy;
-            return dx*dx + dy*dy < 40*40;
-          });
-          if (clustered.length >= 5) {
-            const colonyId = nextColonyId++;
-            clustered.forEach(o => {
-              o.colonyId = colonyId;
-              o.mode = MODE_COLONY;
-            });
-            colonies.push({
-              id: colonyId, speciesId: spId,
-              cx, cy, members: clustered,
-              born: tick,
-            });
-          }
-        }
-      }
-
-      // ===== PACK SYSTEM =====
-      let packs = [];
-
-      function updatePacks() {
-        packs = [];
-        const speciesGroups = new Map();
-        for (const org of organisms) {
-          if (!org.alive) continue;
-          if (org.genome[G.AGGRESSION] < 0.4 || org.genome[G.PACK_DRIVE] < 0.3) continue;
-          if (!speciesGroups.has(org.speciesId)) speciesGroups.set(org.speciesId, []);
-          speciesGroups.get(org.speciesId).push(org);
-        }
-
-        for (const [spId, group] of speciesGroups) {
-          if (group.length < 3) continue;
-          // Find clusters of 3+ within 50px
-          const visited = new Set();
-          for (const org of group) {
-            if (visited.has(org)) continue;
-            const nearby = group.filter(o => {
-              if (o === org || visited.has(o)) return false;
-              const dx = o.x - org.x, dy = o.y - org.y;
-              return dx*dx + dy*dy < 50*50;
-            });
-            if (nearby.length >= 2) {
-              const members = [org, ...nearby.slice(0, 5)];
-              members.forEach(o => visited.add(o));
-              const leader = members.reduce((best, o) => o.kills > best.kills ? o : best, members[0]);
-              packs.push({ speciesId: spId, members, leader, target: null, formed: tick });
-            }
-          }
-        }
-      }
-
-      // ===== ORGANISM =====
-      let organisms = [];
-      let deathEvents = [];
-      let birthEvents = [];
-      let envEvents = [];
-      let tick = 0;
-      let subTick = 0;
-
-      function createOrganism(x, y, genome, parentEnergy) {
-        const speciesId = assignSpecies(genome);
-        const g = genome;
-        const bodyShape = getBodyShape(g);
-        return {
-          x, y,
-          heading: rng() * PI2,
-          genome: g,
-          energy: parentEnergy || (0.3 + rng() * 0.3),
-          age: 0,
-          alive: true,
-          speciesId,
-          kills: 0,
-          _hn: null,
-          mode: MODE_FORAGE,
-          burstTimer: 0,
-          colonyId: -1,
-          colonyRole: null,
-          hostId: -1, // for parasites
-          parasiteIds: [],
-          trophicLevel: 1,
-          memory: 0,
-          clusterDensity: 0,
-          bodyShape,
-          // Visual
-          animPhase: rng() * PI2,
-          trailDots: [], // pheromone trail dots
-          lastTrailTick: 0,
-          flickerPhase: rng() * PI2,
-        };
-      }
-
-      function seedPopulation(n) {
-        organisms = [];
-        speciesList = [];
-        nextSpeciesId = 0;
-        colonies = [];
-        nextColonyId = 0;
-        packs = [];
-        // Ensure some of each body shape
-        const shapeCenters = [0.1, 0.3, 0.5, 0.7, 0.9];
-        const perShape = floor(n / shapeCenters.length);
-        for (const shapeVal of shapeCenters) {
-          for (let i = 0; i < perShape; i++) {
-            const x = 20 + rng() * (C.width - 40);
-            const y = 20 + rng() * (C.height - 40);
-            const g = genomeToBiasedShape(shapeVal + (rng() - 0.5) * 0.15);
-            organisms.push(createOrganism(x, y, g, 0.5));
-          }
-        }
-        // Fill rest with random
-        const remaining = n - organisms.length;
-        for (let i = 0; i < remaining; i++) {
-          const x = 20 + rng() * (C.width - 40);
-          const y = 20 + rng() * (C.height - 40);
-          organisms.push(createOrganism(x, y, randomGenome(), 0.5));
-        }
-      }
-
-      function reproduce() {
-        const newborns = [];
-        for (const org of organisms) {
-          if (!org.alive) continue;
-          const g = org.genome;
-          const stage = getStage(org.age);
-          if (stage < 2) continue; // Only adults and elders reproduce
-          const threshold = g[G.REPRO_THRESH] * (stage === 3 ? 0.85 : 1);
-          if (org.energy < threshold + 0.2) continue;
-          if (organisms.length + newborns.length >= MAX_POP) break;
-          if (rng() > 0.002 * env.evolSpeed) continue;
-
-          const mutRate = stage === 3 ? g[G.MUT_RATE] * 0.6 : g[G.MUT_RATE]; // elders = less mutation
-          const childGenome = mutateGenome(g, env.mutMod * mutRate / g[G.MUT_RATE]);
-          const offset = 3 + g[G.BODY_SIZE] * 8;
-          const cx = org.x + (rng() - 0.5) * offset * 2;
-          const cy = org.y + (rng() - 0.5) * offset * 2;
-          const child = createOrganism(
-            max(2, min(C.width - 2, cx)),
-            max(2, min(C.height - 2, cy)),
-            childGenome,
-            org.energy * 0.35
-          );
-          org.energy -= org.energy * 0.35;
-          newborns.push(child);
-          const sp = getSpecies(child.speciesId);
-          const isNewSp = !speciesList.find(s => s.id === child.speciesId && s.totalEver > 1);
-          birthEvents.push({ x: cx, y: cy, t: tick, sp: child.speciesId, isNew: isNewSp });
-        }
-        organisms.push(...newborns);
-      }
-
-      function ensureMinPopulation() {
-        let alive = organisms.filter(o => o.alive).length;
-        while (alive < MIN_POP) {
-          const x = 20 + rng() * (C.width - 40);
-          const y = 20 + rng() * (C.height - 40);
-          const shapeVal = Math.floor(rng() * 5) * 0.2 + 0.1;
-          organisms.push(createOrganism(x, y, genomeToBiasedShape(shapeVal), 0.5));
-          alive++;
-        }
-      }
-
-      function getStage(age) {
-        if (age < STAGE_EGG) return 0; // egg
-        if (age < STAGE_JUV) return 1; // juvenile
-        if (age < STAGE_ADU) return 2; // adult
-        return 3;                       // elder
-      }
-
-      function getStageSizeMultiplier(stage) {
-        switch (stage) {
-          case 0: return 0.3;
-          case 1: return 0.6;
-          case 2: return 1.0;
-          case 3: return 1.2;
-        }
-        return 1.0;
-      }
-
-      function angleDiff(a, b) {
-        let d = b - a;
-        while (d > Math.PI) d -= PI2;
-        while (d < -Math.PI) d += PI2;
-        return d;
-      }
-
-      function senseChemGradient(org, angles) {
-        const g = org.genome;
-        const senseRange = 12 + g[G.SENSE_RANGE] * SENSE_DIST;
-        let bestScore = -Infinity, bestAngle = org.heading;
-
-        for (const dAngle of angles) {
-          const angle = org.heading + dAngle;
-          const sx = org.x + cos(angle) * senseRange;
-          const sy = org.y + sin(angle) * senseRange;
-          const gx = floor(sx / CELL), gy = floor(sy / CELL);
-          const ci = chemIdx(gx, gy);
-          if (ci < 0) continue;
-
-          const a = chem[0][ci], b = chem[1][ci], c = chem[2][ci], d = chem[3][ci];
-          const f = food[ci];
-
-          let score = 0;
-          score += a * g[G.CHEM_A_ATTR];
-          score += b * g[G.CHEM_B_ATTR];
-          score += c * g[G.CHEM_C_ATTR];
-          score += f * 2.0;
-          // Phototropism
-          const lightVal = 0.5 + 0.5 * sin((sx / C.width) * Math.PI);
-          score += lightVal * g[G.PHOTOTROPISM] * 0.5;
-          // Territory response
-          if (territoryGrid[ci] >= 0 && territoryGrid[ci] !== org.speciesId) {
-            score -= g[G.FEAR] * d * 2;
-          }
-
-          if (score > bestScore) { bestScore = score; bestAngle = angle; }
-        }
-        return bestAngle;
-      }
-
-      const SENSE_OFFSETS = [-0.7, -0.3, 0, 0.3, 0.7];
-
-      function updateOrganism(org) {
-        if (!org.alive) return;
-        const g = org.genome;
-        org.age++;
-
-        const stage = getStage(org.age);
-        const stageSize = getStageSizeMultiplier(stage);
-
-        // Eggs don't move
-        if (stage === 0) {
-          org.energy -= g[G.METABOLISM] * 0.0003;
-          if (org.energy <= 0) { org.alive = false; deathEvents.push({ x: org.x, y: org.y, t: tick, sp: org.speciesId, type: 'starvation' }); }
-          return;
-        }
-
-        // Metabolic cost
-        const metaCost = g[G.METABOLISM] * 0.0008 * (stage === 3 ? 0.8 : 1);
-        org.energy -= metaCost;
-
-        // Hazard
-        if (rng() < env.hazard * (1 - g[G.ARMOR] * 0.7)) {
-          org.energy -= 0.02;
-        }
-
-        if (org.energy <= 0) {
-          org.alive = false;
-          deathEvents.push({ x: org.x, y: org.y, t: tick, sp: org.speciesId,
-            type: 'starvation', size: g[G.BODY_SIZE], isElder: stage === 3 });
-          return;
-        }
-
-        // --- NEARBY SCAN ---
-        const senseRange = 10 + g[G.SENSE_RANGE] * 45;
-        let nearestPrey = null, nearestPreyDist = Infinity;
-        let nearestPredator = null, nearestPredDist = Infinity;
-        let socialCount = 0;
-        let packMates = [];
-
-        for (const other of hashQuery(org.x, org.y, senseRange)) {
-          if (other === org || !other.alive) continue;
-          const dx = other.x - org.x, dy = other.y - org.y;
-          const dist2 = dx*dx + dy*dy;
-          const dist = sqrt(dist2);
-
-          if (other.speciesId !== org.speciesId) {
-            // Is it prey or predator?
-            const mySize = g[G.BODY_SIZE] * stageSize;
-            const theirSize = other.genome[G.BODY_SIZE] * getStageSizeMultiplier(getStage(other.age));
-            if (mySize > theirSize * 1.2 && g[G.AGGRESSION] > 0.2 && g[G.TROPHIC_FEED] > 0.3) {
-              if (dist < nearestPreyDist) { nearestPreyDist = dist; nearestPrey = other; }
-            }
-            if (theirSize > mySize * 1.2 && other.genome[G.AGGRESSION] > 0.3) {
-              if (dist < nearestPredDist) { nearestPredDist = dist; nearestPredator = other; }
-            }
-          } else {
-            // Same species = social interaction
-            socialCount++;
-            if (g[G.AGGRESSION] > 0.4 && g[G.PACK_DRIVE] > 0.3 && dist < 50) {
-              packMates.push(other);
-            }
-          }
-        }
-
-        org.clusterDensity = socialCount;
-
-        // --- BEHAVIORAL MODE ---
-        if (nearestPredator && nearestPredDist < senseRange * 0.7 && g[G.FEAR] > 0.2) {
-          org.mode = MODE_FLEE;
-        } else if (nearestPrey && nearestPreyDist < senseRange * 0.8 && org.energy > 0.3 && g[G.AGGRESSION] > 0.4) {
-          org.mode = MODE_HUNT;
-        } else if (org.colonyId >= 0) {
-          org.mode = MODE_COLONY;
-        } else if (g[G.TERRITORIALITY] > 0.3 && g[G.AGGRESSION] < 0.4) {
-          org.mode = MODE_GUARD;
-        } else if (g[G.AGGRESSION] > 0.6 && g[G.SPEED] < 0.35 && stage >= 2) {
-          org.mode = MODE_AMBUSH;
-        } else {
-          org.mode = MODE_FORAGE;
-        }
-
-        // --- MOVEMENT ---
-        let targetAngle = org.heading;
-        let speedMult = 1.0;
-        let turnRate = 0.05 + g[G.TURN] * 0.4;
-        const baseSpeed = (0.3 + g[G.SPEED] * 2.5) * (stage === 3 ? 0.7 : 1) * (1 - env.viscosity * 3);
-
-        switch (org.mode) {
-          case MODE_FLEE: {
-            // Run away from predator
-            const dx = org.x - nearestPredator.x, dy = org.y - nearestPredator.y;
-            targetAngle = atan2(dy, dx) + (rng() - 0.5) * 0.8;
-            speedMult = 1.5 + g[G.FEAR] * 0.8;
-            turnRate *= 2;
-            break;
-          }
-          case MODE_HUNT: {
-            // Chase prey
-            const dx = nearestPrey.x - org.x, dy = nearestPrey.y - org.y;
-            targetAngle = atan2(dy, dx);
-            speedMult = 1.3 + g[G.AGGRESSION] * 0.5;
-            // Pack coordination
-            if (packMates.length >= 2) {
-              // Flank: spread around target
-              const packAngle = atan2(nearestPrey.y - org.y, nearestPrey.x - org.x);
-              const flankOffset = (packMates.indexOf(org) - packMates.length * 0.5) * 0.4;
-              targetAngle = packAngle + flankOffset;
-            }
-            break;
-          }
-          case MODE_COLONY: {
-            const col = colonies.find(c => c.id === org.colonyId);
-            if (col) {
-              if (org.colonyRole === 'queen') {
-                // Stay near center
-                const dx = col.cx - org.x, dy = col.cy - org.y;
-                targetAngle = atan2(dy, dx);
-                speedMult = 0.3;
-              } else if (org.colonyRole === 'worker') {
-                // Forage outward then return
-                targetAngle = senseChemGradient(org, SENSE_OFFSETS);
-                speedMult = 1.1;
-              } else {
-                // Soldier: patrol perimeter
-                const angle = (org.age * 0.01) % PI2;
-                const px = col.cx + cos(angle) * 45, py = col.cy + sin(angle) * 45;
-                const dx = px - org.x, dy = py - org.y;
-                targetAngle = atan2(dy, dx);
-                speedMult = 0.9;
-              }
-            } else {
-              org.colonyId = -1; org.mode = MODE_FORAGE;
-              targetAngle = senseChemGradient(org, SENSE_OFFSETS);
-            }
-            break;
-          }
-          case MODE_GUARD: {
-            // Patrol territory border
-            targetAngle = org.heading + (rng() - 0.5) * 0.3;
-            speedMult = 0.8;
-            break;
-          }
-          case MODE_AMBUSH: {
-            // Mostly still, burst when prey is close
-            speedMult = 0.05;
-            if (nearestPrey && nearestPreyDist < 30) {
-              // BURST
-              if (org.burstTimer <= 0) {
-                const dx = nearestPrey.x - org.x, dy = nearestPrey.y - org.y;
-                targetAngle = atan2(dy, dx);
-                speedMult = 3.0 + g[G.BURST_SPEED] * 2;
-                org.burstTimer = floor(20 + g[G.BURST_CD] * 60);
-              }
-            }
-            break;
-          }
-          default: { // FORAGE
-            targetAngle = senseChemGradient(org, SENSE_OFFSETS);
-            // Memory: blend toward past good direction
-            if (g[G.MEM_WEIGHT] > 0.3) {
-              org.memory = org.memory * g[G.MEM_WEIGHT] + targetAngle * (1 - g[G.MEM_WEIGHT]);
-              targetAngle = org.memory;
-            }
-          }
-        }
-
-        // Parasite: if latched to host, orbit it
-        if (getBodyShape(g) === SHAPE_PARASITE && org.hostId >= 0) {
-          const host = organisms.find(o => o.alive && o === org._host);
-          if (host) {
-            const orbitAngle = atan2(org.y - host.y, org.x - host.x) + 0.05;
-            const orbitDist = (host.genome[G.BODY_SIZE] * 8 + 5);
-            org.x = host.x + cos(orbitAngle) * orbitDist;
-            org.y = host.y + sin(orbitAngle) * orbitDist;
-            // Drain host
-            const drain = 0.003;
-            host.energy -= drain;
-            org.energy += drain * 0.7;
-            // Host shakes parasite
-            if (rng() < host.genome[G.SPEED] * 0.01) {
-              org.hostId = -1; org._host = null;
-            }
-            if (org.energy <= 0) { org.alive = false; return; }
-            return; // Skip normal movement
-          } else {
-            org.hostId = -1; org._host = null;
-          }
-        }
-
-        if (org.burstTimer > 0) org.burstTimer--;
-
-        // Apply turning
-        const dAngle = angleDiff(org.heading, targetAngle);
-        org.heading += max(-turnRate, min(turnRate, dAngle));
-
-        // Burst
-        let speed = baseSpeed * speedMult;
-        if (org.mode === MODE_FLEE || org.mode === MODE_HUNT) {
-          speed = min(speed, baseSpeed * 3.5);
-        }
-
-        org.x += cos(org.heading) * speed;
-        org.y += sin(org.heading) * speed;
-
-        // Boundary
-        if (env.toroidal) {
-          org.x = ((org.x % C.width) + C.width) % C.width;
-          org.y = ((org.y % C.height) + C.height) % C.height;
-        } else {
-          if (org.x < 2) { org.x = 2; org.heading = PI2 - org.heading + (rng()-0.5)*0.3; }
-          if (org.x > C.width - 2) { org.x = C.width - 2; org.heading = PI2 - org.heading + (rng()-0.5)*0.3; }
-          if (org.y < 2) { org.y = 2; org.heading = -org.heading + (rng()-0.5)*0.3; }
-          if (org.y > C.height - 2) { org.y = C.height - 2; org.heading = -org.heading + (rng()-0.5)*0.3; }
-        }
-
-        // --- TRAIL PHEROMONE DOTS ---
-        if (tick - org.lastTrailTick >= 3 + floor((1 - g[G.SIG_FREQ]) * 5)) {
-          org.lastTrailTick = tick;
-          const sp = getSpecies(org.speciesId);
-          const opacity = org.mode === MODE_HUNT ? 0.5 : org.colonyId >= 0 ? 0.4 : 0.15;
-          org.trailDots.push({ x: org.x, y: org.y, birth: tick, opacity });
-          if (org.trailDots.length > 12) org.trailDots.shift();
-        }
-
-        // --- CHEMICAL INTERACTION ---
-        const gx = floor(org.x / CELL), gy = floor(org.y / CELL);
-        const ci = chemIdx(gx, gy);
-        if (ci >= 0) {
-          chem[0][ci] = min(1, chem[0][ci] + g[G.DEP_A] * 0.015);
-          chem[1][ci] = min(1, chem[1][ci] + g[G.DEP_B] * 0.015);
-          chem[2][ci] = min(1, chem[2][ci] + g[G.DEP_C] * 0.02);
-
-          // Territory deposit
-          if (g[G.TERRITORIALITY] > 0.3) {
-            chem[3][ci] = min(1, chem[3][ci] + g[G.TERRITORIALITY] * 0.03);
-            if (rng() < 0.1) territoryGrid[ci] = org.speciesId;
-          }
-
-          const eatA = min(chem[0][ci] * 0.1, g[G.EAT_A] * 0.01);
-          const eatB = min(chem[1][ci] * 0.1, g[G.EAT_B] * 0.01);
-          const eatC = min(chem[2][ci] * 0.1, g[G.EAT_C] * 0.01);
-          chem[0][ci] -= eatA; chem[1][ci] -= eatB; chem[2][ci] -= eatC;
-          org.energy += (eatA + eatB + eatC) * 0.5;
-
-          const eatF = min(food[ci] * 0.2, 0.05);
-          food[ci] -= eatF;
-          org.energy += eatF * 2;
-
-          // Colony worker shares with queen
-          if (org.colonyRole === 'worker' && eatF > 0) {
-            const col = colonies.find(c => c.id === org.colonyId);
-            if (col) {
-              const queen = col.members.find(m => m.colonyRole === 'queen' && m.alive);
-              if (queen) {
-                const share = eatF * env.colonyShare;
-                queen.energy += share;
-                org.energy -= share * 0.5;
-              }
-            }
-          }
-        }
-
-        // --- PREDATION ---
-        if (nearestPrey && nearestPreyDist < (g[G.BODY_SIZE] + nearestPrey.genome[G.BODY_SIZE]) * 8 * stageSize) {
-          const myPower = g[G.BODY_SIZE] * stageSize * (0.5 + g[G.AGGRESSION]) * (1 + org.kills * 0.04);
-          const theirPower = nearestPrey.genome[G.BODY_SIZE] * getStageSizeMultiplier(getStage(nearestPrey.age)) *
-            (0.5 + nearestPrey.genome[G.AGGRESSION]) * (1 + nearestPrey.genome[G.ARMOR] * 0.8);
-          if (myPower > theirPower && rng() < g[G.AGGRESSION] * 0.35) {
-            const energyGain = nearestPrey.energy * 0.7;
-            org.energy += energyGain;
-            nearestPrey.alive = false;
-            org.kills++;
-            const sp = getSpecies(org.speciesId);
-            if (sp) sp.kills++;
-            // Pack bonus
-            if (packMates.length >= 2) {
-              packMates.forEach(pm => { if (pm.alive) pm.energy += energyGain * 0.2 * env.packBonus; });
-            }
-            deathEvents.push({ x: nearestPrey.x, y: nearestPrey.y, t: tick, sp: nearestPrey.speciesId, type: 'predation',
-              size: nearestPrey.genome[G.BODY_SIZE], killerX: org.x, killerY: org.y });
-          }
-        }
-
-        // Parasite latching
-        if (getBodyShape(g) === SHAPE_PARASITE && org.hostId < 0 && stage >= 1) {
-          for (const other of hashQuery(org.x, org.y, 5)) {
-            if (other === org || !other.alive || other.speciesId === org.speciesId) continue;
-            if (other.genome[G.BODY_SIZE] / g[G.BODY_SIZE] > 2) {
-              if (rng() < 0.02) {
-                org.hostId = other.speciesId;
-                org._host = other;
-                break;
-              }
-            }
-          }
-        }
-
-        // Cap energy
-        org.energy = min(1.5, org.energy);
-      }
-
-      // ===== RENDERING =====
-      let glowCanvas, glowCtx;
-      let imgData;
-      let starField = [];
-
-      function initRenderer() {
-        glowCanvas = document.createElement('canvas');
-        glowCanvas.width = C.width;
-        glowCanvas.height = C.height;
-        glowCtx = glowCanvas.getContext('2d');
-        imgData = X.createImageData(C.width, C.height);
-        // Star field (dark theme)
-        starField = [];
-        for (let i = 0; i < 200; i++) {
-          starField.push({
-            x: rng() * C.width,
-            y: rng() * C.height,
-            r: rng() * 0.8 + 0.2,
-            brightness: rng() * 0.3 + 0.05,
-          });
-        }
-      }
-
-      function hsl2rgb(h, s, l) {
-        h = h / 360; s = s / 100; l = l / 100;
-        let r, g, b;
-        if (s === 0) { r = g = b = l; }
-        else {
-          const hue2rgb = (p, q, t) => {
-            if (t < 0) t += 1; if (t > 1) t -= 1;
-            if (t < 1/6) return p + (q - p) * 6 * t;
-            if (t < 1/2) return q;
-            if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
-            return p;
-          };
-          const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-          const p = 2 * l - q;
-          r = hue2rgb(p, q, h + 1/3);
-          g = hue2rgb(p, q, h);
-          b = hue2rgb(p, q, h - 1/3);
-        }
-        return [floor(r * 255), floor(g * 255), floor(b * 255)];
-      }
-
-      function renderChemField() {
-        const d = imgData.data;
-        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-        const bgR = isDark ? 2 : 245;
-        const bgG = isDark ? 2 : 242;
-        const bgB = isDark ? 8 : 237;
-
-        for (let py = 0; py < C.height; py++) {
-          const gy = floor(py / CELL);
-          for (let px = 0; px < C.width; px++) {
-            const gx = floor(px / CELL);
-            if (gx >= gw || gy >= gh) continue;
-            const ci = gy * gw + gx;
-            const a = chem[0][ci], b = chem[1][ci], c = chem[2][ci], ter = chem[3][ci];
-            const f = food[ci];
-            const pi = (py * C.width + px) * 4;
-
-            if (isDark) {
-              // Nebula-style: deep blue/cyan reaction-diffusion, amber food patches
-              const bSq = b * b;
-              const ra = floor(a * 8 + bSq * 140 + c * 55 + f * 28);
-              const ga = floor(a * 4 + bSq * 45 + c * 12 + f * 42);
-              const ba = floor(a * 3 + bSq * 210 + c * 90 + f * 10);
-              // Territory overlay
-              const tInt = floor(ter * 18);
-              const tspId = territoryGrid[ci];
-              let tr = 0, tg = 0, tb = 0;
-              if (tspId >= 0 && ter > 0.05) {
-                const tsp = getSpecies(tspId);
-                if (tsp) {
-                  const [rr, rg, rb] = hsl2rgb(tsp.color.h, 30, 25);
-                  tr = rr; tg = rg; tb = rb;
-                }
-              }
-              d[pi]   = min(255, bgR + ra + floor(tr * ter * 0.4));
-              d[pi+1] = min(255, bgG + ga + floor(tg * ter * 0.4));
-              d[pi+2] = min(255, bgB + ba + floor(tb * ter * 0.4));
-            } else {
-              const intensity = (a * 0.2 + b * b * 0.6 + c * 0.2 + f * 0.3) * 35;
-              d[pi]   = max(0, bgR - floor(intensity * 0.7));
-              d[pi+1] = max(0, bgG - floor(intensity * 0.5));
-              d[pi+2] = max(0, bgB - floor(intensity * 0.3));
-            }
-            d[pi+3] = 255;
-          }
-        }
-        X.putImageData(imgData, 0, 0);
-
-        // Star field overlay (dark only)
-        if (isDark) {
-          for (const star of starField) {
-            X.fillStyle = `rgba(200,220,255,${star.brightness})`;
-            X.beginPath();
-            X.arc(star.x, star.y, star.r, 0, PI2);
-            X.fill();
-          }
-        }
-      }
-
-      // Draw a body shape on glowCtx
-      function drawBodyShape(ctx, org, size, r, gc, b, energyGlow) {
-        const g = org.genome;
-        const shape = org.bodyShape;
-        const h = org.heading;
-        const x = org.x, y = org.y;
-        const phase = org.animPhase + tick * 0.03;
-
-        ctx.save();
-        ctx.translate(x, y);
-
-        switch (shape) {
-          case SHAPE_ROUND: {
-            // Soft circle with internal radial organelle pattern
-            const metaPulse = 0.85 + 0.15 * sin(phase * g[G.METABOLISM] * 3);
-            const sr = size * metaPulse;
-            // Outer glow
-            const og = ctx.createRadialGradient(0, 0, sr * 0.2, 0, 0, sr * 2.5);
-            og.addColorStop(0, `rgba(${r},${gc},${b},${0.35 + energyGlow * 0.35})`);
-            og.addColorStop(0.5, `rgba(${r},${gc},${b},${0.08})`);
-            og.addColorStop(1, `rgba(${r},${gc},${b},0)`);
-            ctx.fillStyle = og;
-            ctx.beginPath(); ctx.arc(0, 0, sr * 2.5, 0, PI2); ctx.fill();
-            // Body
-            ctx.fillStyle = `rgba(${r},${gc},${b},0.7)`;
-            ctx.beginPath(); ctx.arc(0, 0, sr, 0, PI2); ctx.fill();
-            // Inner rings
-            for (let i = 1; i <= 2; i++) {
-              ctx.strokeStyle = `rgba(${min(255,r+40)},${min(255,gc+40)},${min(255,b+40)},${0.2 + i * 0.1})`;
-              ctx.lineWidth = 0.5;
-              ctx.beginPath(); ctx.arc(0, 0, sr * (0.4 + i * 0.25), 0, PI2); ctx.stroke();
-            }
-            // Nucleus
-            ctx.fillStyle = `rgba(255,255,255,${0.3 + energyGlow * 0.5})`;
-            ctx.beginPath(); ctx.arc(0, 0, sr * 0.2, 0, PI2); ctx.fill();
-            break;
-          }
-
-          case SHAPE_HUNTER: {
-            // Elongated pill, aligned to heading
-            ctx.rotate(h + Math.PI / 2);
-            const stretch = 1 + (org.mode === MODE_HUNT ? 0.3 : 0);
-            const aw = size * 0.6, ah = size * (1.5 + stretch);
-            // Outer glow
-            const og2 = ctx.createRadialGradient(0, 0, aw * 0.3, 0, 0, ah * 2);
-            og2.addColorStop(0, `rgba(${r},${gc},${b},${0.4 + energyGlow * 0.3})`);
-            og2.addColorStop(1, `rgba(${r},${gc},${b},0)`);
-            ctx.fillStyle = og2;
-            ctx.beginPath(); ctx.ellipse(0, 0, aw * 2, ah * 2, 0, 0, PI2); ctx.fill();
-            // Body
-            ctx.fillStyle = `rgba(${r},${gc},${b},0.75)`;
-            ctx.beginPath(); ctx.ellipse(0, 0, aw, ah, 0, 0, PI2); ctx.fill();
-            // "Jaw" arcs at top (front)
-            if (org.mode === MODE_HUNT || g[G.AGGRESSION] > 0.5) {
-              ctx.strokeStyle = `rgba(255,${max(0,160-org.kills*15)},${max(0,120-org.kills*15)},0.7)`;
-              ctx.lineWidth = 1;
-              ctx.beginPath(); ctx.arc(-aw * 0.4, -ah * 0.85, aw * 0.3, 0.5, Math.PI - 0.5); ctx.stroke();
-              ctx.beginPath(); ctx.arc( aw * 0.4, -ah * 0.85, aw * 0.3, 0.5, Math.PI - 0.5); ctx.stroke();
-            }
-            // Speed lines
-            if (org.mode === MODE_HUNT || org.mode === MODE_FLEE) {
-              ctx.strokeStyle = `rgba(${r},${gc},${b},0.2)`;
-              ctx.lineWidth = 1;
-              for (let i = 0; i < 3; i++) {
-                const lx = (i - 1) * aw * 0.5;
-                ctx.beginPath();
-                ctx.moveTo(lx, ah);
-                ctx.lineTo(lx, ah + size * (0.8 + rng() * 0.5));
-                ctx.stroke();
-              }
-            }
-            break;
-          }
-
-          case SHAPE_GRAZER: {
-            // Flat disc with cilia fringe and semi-transparency
-            const wobble = 0.95 + 0.05 * sin(phase * 2);
-            const dr = size * wobble;
-            // Outer glow
-            const og3 = ctx.createRadialGradient(0, 0, dr * 0.3, 0, 0, dr * 2.8);
-            og3.addColorStop(0, `rgba(${r},${gc},${b},${0.25 + energyGlow * 0.25})`);
-            og3.addColorStop(1, `rgba(${r},${gc},${b},0)`);
-            ctx.fillStyle = og3;
-            ctx.beginPath(); ctx.ellipse(0, 0, dr * 2.8, dr * 1.8, 0, 0, PI2); ctx.fill();
-            // Body (semi-transparent)
-            ctx.fillStyle = `rgba(${r},${gc},${b},0.45)`;
-            ctx.beginPath(); ctx.ellipse(0, 0, dr, dr * 0.65, 0, 0, PI2); ctx.fill();
-            // Cilia fringe
-            const ciliaCount = 12;
-            ctx.strokeStyle = `rgba(${r},${gc},${b},0.5)`;
-            ctx.lineWidth = 0.6;
-            for (let i = 0; i < ciliaCount; i++) {
-              const angle = (i / ciliaCount) * PI2 + phase * 0.5;
-              const len = dr * (0.3 + 0.15 * sin(phase * 3 + i));
-              ctx.beginPath();
-              ctx.moveTo(cos(angle) * dr, sin(angle) * dr * 0.65);
-              ctx.lineTo(cos(angle) * (dr + len), sin(angle) * (dr * 0.65 + len * 0.5));
-              ctx.stroke();
-            }
-            break;
-          }
-
-          case SHAPE_DEFENDER: {
-            // Star / spiky shape
-            const points = 5 + floor(g[G.ARMOR] * 5);
-            const threatened = org.mode === MODE_FLEE || nearbyThreat(org);
-            const spikeLen = threatened ? 1.6 : 1.3;
-            const innerR = size * 0.5, outerR = size * spikeLen;
-            // Glow at spike tips
-            const og4 = ctx.createRadialGradient(0, 0, innerR, 0, 0, outerR * 1.8);
-            og4.addColorStop(0, `rgba(${r},${gc},${b},${0.35 + energyGlow * 0.3})`);
-            og4.addColorStop(0.6, `rgba(${r},${gc},${b},0.08)`);
-            og4.addColorStop(1, `rgba(${r},${gc},${b},0)`);
-            ctx.fillStyle = og4;
-            ctx.beginPath(); ctx.arc(0, 0, outerR * 1.8, 0, PI2); ctx.fill();
-            // Star body
-            ctx.fillStyle = `rgba(${r},${gc},${b},0.8)`;
-            ctx.beginPath();
-            for (let i = 0; i < points * 2; i++) {
-              const angle = (i / (points * 2)) * PI2 + h;
-              const rad = i % 2 === 0 ? outerR : innerR;
-              const spikePhase = threatened ? 0.1 * sin(phase * 5 + i) : 0;
-              if (i === 0) ctx.moveTo(cos(angle) * (rad + spikePhase), sin(angle) * (rad + spikePhase));
-              else ctx.lineTo(cos(angle) * (rad + spikePhase), sin(angle) * (rad + spikePhase));
-            }
-            ctx.closePath(); ctx.fill();
-            // Bright spike tips
-            for (let i = 0; i < points; i++) {
-              const angle = (i / points) * PI2 + h;
-              const tipX = cos(angle) * outerR, tipY = sin(angle) * outerR;
-              const tipGlow = ctx.createRadialGradient(tipX, tipY, 0, tipX, tipY, size * 0.4);
-              tipGlow.addColorStop(0, `rgba(255,255,255,${0.4 + energyGlow * 0.4})`);
-              tipGlow.addColorStop(1, `rgba(${r},${gc},${b},0)`);
-              ctx.fillStyle = tipGlow;
-              ctx.beginPath(); ctx.arc(tipX, tipY, size * 0.4, 0, PI2); ctx.fill();
-            }
-            break;
-          }
-
-          case SHAPE_PARASITE: {
-            // Blobby, shifty amorphous shape with tentacles
-            const blobPoints = 8;
-            const baseR = size * 0.8;
-            const phaseOff = tick * 0.04;
-            // Body
-            const pg = ctx.createRadialGradient(0, 0, 0, 0, 0, baseR * 2.5);
-            pg.addColorStop(0, `rgba(${r},${gc},${b},${0.5 + energyGlow * 0.3})`);
-            pg.addColorStop(0.5, `rgba(${r},${gc},${b},0.15)`);
-            pg.addColorStop(1, `rgba(${r},${gc},${b},0)`);
-            ctx.fillStyle = pg;
-            ctx.beginPath();
-            for (let i = 0; i <= blobPoints; i++) {
-              const angle = (i / blobPoints) * PI2;
-              const radiusVariation = 0.7 + 0.3 * sin(phaseOff * 2.3 + i * 1.7) + 0.15 * sin(phaseOff * 4.1 + i * 3.3);
-              const pr = baseR * radiusVariation;
-              if (i === 0) ctx.moveTo(cos(angle) * pr, sin(angle) * pr);
-              else ctx.lineTo(cos(angle) * pr, sin(angle) * pr);
-            }
-            ctx.closePath(); ctx.fill();
-            // Tentacles reaching toward nearby organisms
-            ctx.strokeStyle = `rgba(${r},${gc},${b},0.4)`;
-            ctx.lineWidth = 0.8;
-            for (let i = 0; i < 3; i++) {
-              const tentAngle = h + (i - 1) * 0.6 + sin(phaseOff + i) * 0.3;
-              ctx.beginPath();
-              ctx.moveTo(cos(tentAngle) * baseR * 0.8, sin(tentAngle) * baseR * 0.8);
-              ctx.quadraticCurveTo(
-                cos(tentAngle + 0.3) * baseR * 1.8, sin(tentAngle + 0.3) * baseR * 1.8,
-                cos(tentAngle) * baseR * 2.5, sin(tentAngle) * baseR * 2.5
-              );
-              ctx.stroke();
-            }
-            break;
-          }
-        }
-
-        ctx.restore();
-      }
-
-      function nearbyThreat(org) {
-        const senseRange = 30;
-        for (const other of hashQuery(org.x, org.y, senseRange)) {
-          if (other === org || !other.alive) continue;
-          if (other.genome[G.AGGRESSION] > 0.5 && other.speciesId !== org.speciesId) return true;
-        }
-        return false;
-      }
-
-      function renderOrganisms() {
-        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-        glowCtx.clearRect(0, 0, C.width, C.height);
-
-        // --- TRAIL DOTS ---
-        for (const org of organisms) {
-          if (!org.alive) continue;
-          const sp = getSpecies(org.speciesId);
-          if (!sp) continue;
-          const g = org.genome;
-          const [r, gc, b] = hsl2rgb(sp.color.h, sp.color.s, sp.color.l);
-
-          for (const dot of org.trailDots) {
-            const age = tick - dot.birth;
-            const maxAge = 30 + floor(g[G.SIG_FREQ] * 40);
-            if (age >= maxAge) continue;
-            const fade = 1 - age / maxAge;
-            const isHunter = org.mode === MODE_HUNT;
-            const dr = isDark ? (isHunter ? 255 : r) : r;
-            const dg = isDark ? (isHunter ? 80 : gc) : gc;
-            const db = isDark ? (isHunter ? 60 : b) : b;
-            const trailR = org.colonyId >= 0 ? 2.5 : 1.2;
-            glowCtx.fillStyle = `rgba(${dr},${dg},${db},${dot.opacity * fade * (isDark ? 0.6 : 0.3)})`;
-            glowCtx.beginPath();
-            glowCtx.arc(dot.x, dot.y, trailR, 0, PI2);
-            glowCtx.fill();
-          }
-        }
-
-        // --- COLONY WEBS ---
-        for (const col of colonies) {
-          const sp = getSpecies(col.speciesId);
-          if (!sp) continue;
-          const [r, gc, b] = hsl2rgb(sp.color.h, sp.color.s, sp.color.l * 0.7);
-          const members = col.members.filter(m => m.alive);
-          if (members.length < 2) continue;
-          // Draw web between nearest neighbors (max 15 members for perf)
-          const drawMembers = members.slice(0, 15);
-          glowCtx.strokeStyle = `rgba(${r},${gc},${b},0.18)`;
-          glowCtx.lineWidth = 0.8;
-          for (let i = 0; i < drawMembers.length; i++) {
-            for (let j = i + 1; j < drawMembers.length; j++) {
-              const dx = drawMembers[j].x - drawMembers[i].x;
-              const dy = drawMembers[j].y - drawMembers[i].y;
-              if (dx*dx + dy*dy > 60*60) continue;
-              glowCtx.beginPath();
-              glowCtx.moveTo(drawMembers[i].x, drawMembers[i].y);
-              glowCtx.lineTo(drawMembers[j].x, drawMembers[j].y);
-              glowCtx.stroke();
-            }
-          }
-        }
-
-        // --- PACK FORMATION LINES ---
-        for (const pack of packs) {
-          if (!pack.leader || !pack.leader.alive) continue;
-          const sp = getSpecies(pack.speciesId);
-          if (!sp) continue;
-          const isHunting = pack.members.some(m => m.mode === MODE_HUNT);
-          const alpha = isHunting ? 0.45 : 0.2;
-          const [r, gc, b] = hsl2rgb(sp.color.h + 20, sp.color.s, sp.color.l * 0.8);
-          glowCtx.strokeStyle = `rgba(${min(255,r+80)},${gc},${b},${alpha})`;
-          glowCtx.lineWidth = isHunting ? 1.2 : 0.7;
-          glowCtx.setLineDash(isHunting ? [] : [3, 3]);
-          for (const member of pack.members) {
-            if (!member.alive || member === pack.leader) continue;
-            glowCtx.beginPath();
-            glowCtx.moveTo(pack.leader.x, pack.leader.y);
-            glowCtx.lineTo(member.x, member.y);
-            glowCtx.stroke();
-          }
-          glowCtx.setLineDash([]);
-        }
-
-        // --- ORGANISMS ---
-        for (const org of organisms) {
-          if (!org.alive) continue;
-          const g = org.genome;
-          const sp = getSpecies(org.speciesId);
-          if (!sp) continue;
-
-          const stage = getStage(org.age);
-          const stageM = getStageSizeMultiplier(stage);
-          const energyGlow = min(1, org.energy * 1.8);
-          const baseSize = 2 + g[G.BODY_SIZE] * 10;
-          const size = baseSize * stageM;
-
-          const h = sp.color.h;
-          const s = sp.color.s;
-          const l = sp.color.l * (0.4 + energyGlow * 0.6);
-          const [r, gc, b] = hsl2rgb(h, min(100, s), min(85, l + 15));
-
-          // Eggs: just a tiny pulsing dot
-          if (stage === 0) {
-            const pulse = 0.5 + 0.5 * sin(tick * 0.15 + org.animPhase);
-            glowCtx.fillStyle = `rgba(${r},${gc},${b},${0.3 + pulse * 0.4})`;
-            glowCtx.beginPath();
-            glowCtx.arc(org.x, org.y, 1.5 * pulse, 0, PI2);
-            glowCtx.fill();
-            continue;
-          }
-
-          // Full body rendering
-          drawBodyShape(glowCtx, org, size, r, gc, b, energyGlow);
-
-          // --- ENERGY STATES ---
-          // Reproduction ready: pulsing gold ring
-          if (org.energy >= g[G.REPRO_THRESH] + 0.15 && stage >= 2) {
-            const ringPulse = 0.6 + 0.4 * sin(tick * 0.08 + org.animPhase);
-            glowCtx.strokeStyle = `rgba(255,210,80,${ringPulse * 0.6})`;
-            glowCtx.lineWidth = 1.2;
-            glowCtx.beginPath();
-            glowCtx.arc(org.x, org.y, size * 1.6 + ringPulse * 2, 0, PI2);
-            glowCtx.stroke();
-          }
-
-          // Toxic: green aura
-          if (g[G.TOXICITY] > 0.4) {
-            const toxAlpha = g[G.TOXICITY] * 0.3 + 0.1 * sin(tick * 0.1 + org.animPhase);
-            glowCtx.fillStyle = `rgba(80,255,120,${toxAlpha})`;
-            glowCtx.beginPath();
-            glowCtx.arc(org.x, org.y, size * (2 + g[G.TOXICITY]), 0, PI2);
-            glowCtx.fill();
-          }
-
-          // Low energy flicker
-          if (org.energy < 0.2) {
-            const flicker = 0.3 + 0.7 * abs(sin(tick * 0.3 + org.flickerPhase));
-            glowCtx.fillStyle = `rgba(${r},${gc},${b},${(1 - flicker) * 0.15})`;
-            glowCtx.beginPath();
-            glowCtx.arc(org.x, org.y, size * 1.5, 0, PI2);
-            glowCtx.fill();
-          }
-
-          // Colony roles: markers
-          if (org.colonyRole === 'queen') {
-            // Crown: extra glow ring
-            glowCtx.strokeStyle = `rgba(255,230,120,0.7)`;
-            glowCtx.lineWidth = 1.5;
-            glowCtx.beginPath();
-            glowCtx.arc(org.x, org.y, size * 1.8, 0, PI2);
-            glowCtx.stroke();
-            glowCtx.strokeStyle = `rgba(255,230,120,0.3)`;
-            glowCtx.lineWidth = 3;
-            glowCtx.beginPath();
-            glowCtx.arc(org.x, org.y, size * 2.2, 0, PI2);
-            glowCtx.stroke();
-          } else if (org.colonyRole === 'soldier') {
-            // Sharp angular indicator at heading
-            const fx = org.x + cos(org.heading) * size * 1.8;
-            const fy = org.y + sin(org.heading) * size * 1.8;
-            glowCtx.strokeStyle = `rgba(255,120,80,0.7)`;
-            glowCtx.lineWidth = 1.5;
-            glowCtx.beginPath();
-            glowCtx.moveTo(org.x, org.y);
-            glowCtx.lineTo(fx, fy);
-            glowCtx.stroke();
-          } else if (org.colonyRole === 'worker') {
-            // Directional dot
-            const fx = org.x + cos(org.heading) * size * 1.5;
-            const fy = org.y + sin(org.heading) * size * 1.5;
-            glowCtx.fillStyle = `rgba(180,255,180,0.5)`;
-            glowCtx.beginPath();
-            glowCtx.arc(fx, fy, 1.5, 0, PI2);
-            glowCtx.fill();
-          }
-
-          // Pack leader: brighter
-          for (const pack of packs) {
-            if (pack.leader === org && pack.leader.alive) {
-              glowCtx.strokeStyle = `rgba(255,200,100,0.5)`;
-              glowCtx.lineWidth = 1;
-              glowCtx.beginPath();
-              glowCtx.arc(org.x, org.y, size * 2, 0, PI2);
-              glowCtx.stroke();
-            }
-          }
-
-          // Elder: soft trailing glow
-          if (stage === 3) {
-            glowCtx.fillStyle = `rgba(${r},${gc},${b},0.08)`;
-            glowCtx.beginPath();
-            glowCtx.arc(org.x, org.y, size * 3, 0, PI2);
-            glowCtx.fill();
-          }
-        }
-
-        X.drawImage(glowCanvas, 0, 0);
-      }
-
-      function renderEvents() {
-        const now = tick;
-        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-
-        // Death events
-        for (let i = deathEvents.length - 1; i >= 0; i--) {
-          const ev = deathEvents[i];
-          const age = now - ev.t;
-          const lifespan = ev.isElder ? 80 : ev.type === 'predation' ? 50 : 35;
-          if (age > lifespan) { deathEvents.splice(i, 1); continue; }
-          const sp = getSpecies(ev.sp);
-          const progress = age / lifespan;
-          const alpha = (1 - progress);
-
-          if (ev.type === 'predation') {
-            // BIG expanding ring + red flash
-            const radius = 4 + progress * (30 + (ev.size || 0.5) * 30);
-            if (sp) {
-              const [r, g, b] = hsl2rgb(sp.color.h, sp.color.s * 0.5, sp.color.l);
-              X.strokeStyle = `rgba(${r},${g},${b},${alpha * 0.5})`;
-            } else {
-              X.strokeStyle = `rgba(200,80,60,${alpha * 0.5})`;
-            }
-            X.lineWidth = 2;
-            X.beginPath(); X.arc(ev.x, ev.y, radius, 0, PI2); X.stroke();
-
-            X.strokeStyle = `rgba(255,60,30,${alpha * 0.7})`;
-            X.lineWidth = 1.5;
-            X.beginPath(); X.arc(ev.x, ev.y, radius * 0.5, 0, PI2); X.stroke();
-
-            // Energy particles flowing to killer
-            if (ev.killerX !== undefined && age < 20) {
-              const partCount = 5;
-              for (let p = 0; p < partCount; p++) {
-                const t = age / 20;
-                const angle = (p / partCount) * PI2 + age * 0.15;
-                const dist = 8 + t * 20;
-                const px = ev.x + cos(angle) * dist * (1 - t);
-                const py = ev.y + sin(angle) * dist * (1 - t);
-                X.fillStyle = `rgba(255,200,80,${alpha * 0.6})`;
-                X.beginPath(); X.arc(px, py, 2 * (1 - t * 0.5), 0, PI2); X.fill();
-              }
-            }
-          } else if (ev.isElder) {
-            // Elder death: slow fade + lingering glow
-            if (sp) {
-              const [r, g, b] = hsl2rgb(sp.color.h, 30, 70);
-              X.fillStyle = `rgba(${r},${g},${b},${alpha * 0.15})`;
-              X.beginPath(); X.arc(ev.x, ev.y, 20 + progress * 10, 0, PI2); X.fill();
-            }
-            X.strokeStyle = `rgba(255,255,255,${alpha * 0.2})`;
-            X.lineWidth = 1;
-            X.beginPath(); X.arc(ev.x, ev.y, 5 + progress * 15, 0, PI2); X.stroke();
-          } else {
-            // Small organism: quick fade + particle burst
-            const radius = 2 + progress * 12;
-            if (sp) {
-              const [r, g, b] = hsl2rgb(sp.color.h, sp.color.s * 0.5, sp.color.l);
-              X.strokeStyle = `rgba(${r},${g},${b},${alpha * 0.4})`;
-            } else {
-              X.strokeStyle = `rgba(150,150,150,${alpha * 0.4})`;
-            }
-            X.lineWidth = 1;
-            X.beginPath(); X.arc(ev.x, ev.y, radius, 0, PI2); X.stroke();
-            // 4-6 particles
-            if (age < 20) {
-              for (let p = 0; p < 5; p++) {
-                const angle = (p / 5) * PI2 + ev.t * 0.1;
-                const dist = progress * 15;
-                const px = ev.x + cos(angle) * dist;
-                const py = ev.y + sin(angle) * dist;
-                X.fillStyle = `rgba(200,180,150,${alpha * 0.5})`;
-                X.beginPath(); X.arc(px, py, 1.5 * (1 - progress), 0, PI2); X.fill();
-              }
-            }
-          }
-        }
-
-        // Check for mass extinction (5+ deaths in same area in 2 sec)
-        const recentDeaths = deathEvents.filter(ev => now - ev.t < 120);
-        if (recentDeaths.length >= 5) {
-          // Find cluster
-          for (let i = 0; i < recentDeaths.length; i++) {
-            let clusterCount = 0;
-            for (let j = 0; j < recentDeaths.length; j++) {
-              const dx = recentDeaths[j].x - recentDeaths[i].x;
-              const dy = recentDeaths[j].y - recentDeaths[i].y;
-              if (dx*dx + dy*dy < 100*100) clusterCount++;
-            }
-            if (clusterCount >= 5) {
-              const age = now - recentDeaths[i].t;
-              if (age < 30) {
-                const radius = age * 4;
-                X.strokeStyle = `rgba(255,100,50,${0.3 * (1 - age / 30)})`;
-                X.lineWidth = 3;
-                X.beginPath();
-                X.arc(recentDeaths[i].x, recentDeaths[i].y, radius, 0, PI2);
-                X.stroke();
-              }
-              break;
-            }
-          }
-        }
-
-        // Birth events
-        for (let i = birthEvents.length - 1; i >= 0; i--) {
-          const ev = birthEvents[i];
-          const age = now - ev.t;
-          const lifespan = ev.isNew ? 30 : 15;
-          if (age > lifespan) { birthEvents.splice(i, 1); continue; }
-          const sp = getSpecies(ev.sp);
-          const progress = age / lifespan;
-          const alpha = (1 - progress) * 0.7;
-          const radius = 2 + progress * (ev.isNew ? 18 : 8);
-
-          if (sp) {
-            const [r, g, b] = hsl2rgb(sp.color.h, sp.color.s, min(90, sp.color.l + 25));
-            X.fillStyle = `rgba(${r},${g},${b},${alpha * 0.5})`;
-          } else {
-            X.fillStyle = `rgba(200,220,255,${alpha * 0.5})`;
-          }
-          X.beginPath(); X.arc(ev.x, ev.y, radius, 0, PI2); X.fill();
-
-          if (ev.isNew) {
-            X.strokeStyle = `rgba(255,230,100,${alpha * 0.8})`;
-            X.lineWidth = 1.5;
-            X.beginPath(); X.arc(ev.x, ev.y, radius * 1.3, 0, PI2); X.stroke();
-          }
-        }
-
-        // Environmental event flash text
-        for (let i = envEvents.length - 1; i >= 0; i--) {
-          const ev = envEvents[i];
-          const age = now - ev.t;
-          if (age > 180) { envEvents.splice(i, 1); continue; }
-          const alpha = age < 30 ? age / 30 : age > 120 ? (180 - age) / 60 : 1;
-          X.fillStyle = `rgba(${ev.color},${alpha * 0.8})`;
-          X.font = '11px monospace';
-          X.textAlign = 'center';
-          X.fillText(ev.label, C.width / 2, C.height / 2 + 30);
-        }
-      }
-
-      // ===== ENVIRONMENTAL PERTURBATION =====
-      let lastPerturbation = 0;
-
-      function environmentalEvent() {
-        if (tick - lastPerturbation < 600) return;
-        if (rng() > 0.002) return;
-        lastPerturbation = tick;
-
-        const event = floor(rng() * 9);
-        switch (event) {
-          case 0: {
-            // Chemical storm
-            const ch = floor(rng() * 3);
-            const cx = floor(rng() * gw), cy = floor(rng() * gh);
-            const r = floor(15 + rng() * 30);
-            for (let dy = -r; dy <= r; dy++) {
-              for (let dx = -r; dx <= r; dx++) {
-                if (dx*dx + dy*dy > r*r) continue;
-                const i = chemIdx(cx + dx, cy + dy);
-                if (i >= 0) chem[ch][i] = min(1, chem[ch][i] + 0.5 + rng() * 0.5);
-              }
-            }
-            envEvents.push({ t: tick, label: '⚡ STORM', color: '140,200,255' });
-            break;
-          }
-          case 1: {
-            // Superstorm: flood HALF the map
-            const ch = floor(rng() * 3);
-            for (let i = 0; i < gw * gh; i++) {
-              if (i % gw < gw / 2) chem[ch][i] = min(1, chem[ch][i] + 0.6);
-            }
-            for (const org of organisms) {
-              if (!org.alive || rng() > 0.5) continue;
-              if (org.x < C.width / 2) org.heading += Math.PI * 0.5 + rng() * 0.5;
-            }
-            envEvents.push({ t: tick, label: '🌪 SUPERSTORM', color: '100,160,255' });
-            break;
-          }
-          case 2: {
-            // Food bloom / Oasis
-            const cx = rng() * C.width, cy = rng() * C.height;
-            const r = 50 + rng() * 80;
-            const gcx = floor(cx / CELL), gcy = floor(cy / CELL);
-            const gr = floor(r / CELL);
-            for (let dy = -gr; dy <= gr; dy++) {
-              for (let dx = -gr; dx <= gr; dx++) {
-                if (dx*dx + dy*dy > gr*gr) continue;
-                const i = chemIdx(gcx + dx, gcy + dy);
-                if (i >= 0) food[i] = min(FOOD_PER_CELL_MAX, food[i] + 0.8 + rng());
-              }
-            }
-            envEvents.push({ t: tick, label: '✨ OASIS', color: '255,220,120' });
-            break;
-          }
-          case 3: {
-            // Famine
-            const cx = floor(rng() * gw), cy = floor(rng() * gh);
-            const r = floor(25 + rng() * 50);
-            for (let dy = -r; dy <= r; dy++) {
-              for (let dx = -r; dx <= r; dx++) {
-                if (dx*dx + dy*dy > r*r) continue;
-                const i = chemIdx(cx + dx, cy + dy);
-                if (i >= 0) food[i] *= 0.05;
-              }
-            }
-            envEvents.push({ t: tick, label: '☠ FAMINE', color: '200,100,60' });
-            break;
-          }
-          case 4: {
-            // Ice age: drop food production 80% for 300 ticks
-            const origRate = env.foodRate;
-            env.foodRate *= 0.2;
-            setTimeout(() => { env.foodRate = origRate; }, 5000);
-            envEvents.push({ t: tick, label: '❄ ICE AGE', color: '160,220,255' });
-            break;
-          }
-          case 5: {
-            // Plague: kills weak organisms near each other
-            let killed = 0;
-            for (const org of organisms) {
-              if (!org.alive) continue;
-              if (org.energy < 0.3 && rng() < 0.4) {
-                for (const neighbor of hashQuery(org.x, org.y, 20)) {
-                  if (neighbor.alive && neighbor !== org && neighbor.energy < 0.4 && rng() < 0.25) {
-                    neighbor.alive = false;
-                    deathEvents.push({ x: neighbor.x, y: neighbor.y, t: tick, sp: neighbor.speciesId, type: 'plague' });
-                    killed++;
-                  }
-                }
-              }
-            }
-            envEvents.push({ t: tick, label: `🦠 PLAGUE (${killed})`, color: '180,255,120' });
-            break;
-          }
-          case 6: {
-            // Radiation burst: mass mutation
-            let mutated = 0;
-            for (const org of organisms) {
-              if (!org.alive || rng() > 0.15) continue;
-              for (let i = 0; i < 4; i++) {
-                const geneIdx = floor(rng() * GENOME_LEN);
-                org.genome[geneIdx] += (rng() - 0.5) * 0.4;
-              }
-              mutated++;
-            }
-            envEvents.push({ t: tick, label: `☢ RADIATION (${mutated})`, color: '200,255,100' });
-            break;
-          }
-          case 7: {
-            // Migration pressure
-            const angle = rng() * PI2;
-            for (const org of organisms) {
-              if (!org.alive || rng() < 0.6) continue;
-              org.heading += angleDiff(org.heading, angle) * 0.4;
-            }
-            envEvents.push({ t: tick, label: '↗ MIGRATION', color: '180,180,255' });
-            break;
-          }
-          case 8: {
-            // Tectonic shift: invert chemical band
-            const bandX = floor(gw * 0.3 + rng() * gw * 0.4);
-            const bandW = floor(gw * 0.1 + rng() * gw * 0.15);
-            for (let y = 0; y < gh; y++) {
-              for (let x = bandX; x < bandX + bandW && x < gw; x++) {
-                const i = y * gw + x;
-                chem[0][i] = 1 - chem[0][i];
-                chem[1][i] = 1 - chem[1][i];
-                food[i] = max(0, FOOD_PER_CELL_MAX - food[i]);
-              }
-            }
-            envEvents.push({ t: tick, label: '⚡ TECTONIC SHIFT', color: '255,160,80' });
-            break;
-          }
-        }
-      }
-
-      // ===== WORLD UPDATE =====
-      const PHYSICS_PER_FRAME = 2;
-
-      function worldUpdate() {
-        for (let sub = 0; sub < PHYSICS_PER_FRAME; sub++) {
-          tick++;
-          subTick++;
-
-          if (subTick % 3 === 0) diffuseChem();
-          if (subTick % 5 === 0) spawnFood();
-
-          clearHash();
-          for (const org of organisms) { if (org.alive) hashInsert(org); }
-
-          for (const org of organisms) updateOrganism(org);
-
-          if (subTick % 3 === 0) reproduce();
-
-          organisms = organisms.filter(o => o.alive);
-
-          if (subTick % 60 === 0) ensureMinPopulation();
-          if (subTick % 30 === 0) updateSpecies();
-          if (subTick % 90 === 0) updateColonies();
-          if (subTick % 45 === 0) updatePacks();
-
-          environmentalEvent();
-
-          if (envTarget && envLerp < 1) {
-            envLerp += 0.005;
-            if (envLerp >= 1) { env = envTarget; envTarget = null; }
-            else env = lerpEnv(env, envTarget, envLerp);
-          }
-        }
-      }
-
-      // ===== MAIN =====
-      function resize() {
-        C.width = window.innerWidth;
-        C.height = window.innerHeight;
-        initChem();
-        initHash();
-        initRenderer();
-        if (organisms.length === 0) seedPopulation(90);
-      }
-
-      function frame() {
-        worldUpdate();
-        renderChemField();
-        renderOrganisms();
-        renderEvents();
-        requestAnimationFrame(frame);
-      }
-
-      async function init() {
-        resize();
-        window.addEventListener('resize', () => { resize(); });
-
+      async function fetchWitnessState(): Promise<void> {
         try {
-          const res = await fetch('/api/blackbox');
+          const res = await fetch('/api/witness');
           if (res.ok) {
-            const signal = await res.json();
-            env = computeEnv(signal);
+            const state: WitnessState = await res.json();
+            witnessState = state;
+            thresholdDuration = state.thresholdDuration;
+            thresholdCharacter = state.thresholdCharacter;
+            stateLoaded = true;
           }
-        } catch {}
-
-        seedPopulation(90);
-        requestAnimationFrame(frame);
-
-        setInterval(async () => {
-          try {
-            const res = await fetch('/api/blackbox');
-            if (res.ok) {
-              const signal = await res.json();
-              envTarget = computeEnv(signal);
-              envLerp = 0;
-            }
-          } catch {}
-        }, 60000);
+        } catch {
+          stateLoaded = true; // proceed with defaults
+        }
       }
 
-      init();
+      // Fetch once on load. No periodic fetching — data only changes
+      // when a journal entry is written, and you're not writing here.
+      fetchWitnessState();
+
+      // ─── Animation Loop ─────────────────────────────────────────
+
+      let startTime = 0;
+      let lastFrame = 0;
+      let backBtnShown = false;
+
+      function frame(now: number): void {
+        if (!startTime) {
+          startTime = now;
+          lastFrame = now;
+          thresholdStartTime = now;
+        }
+
+        const elapsed = (now - startTime) / 1000; // seconds since page open
+        const dt = Math.min((now - lastFrame) / 1000, 0.05); // capped delta
+        lastFrame = now;
+
+        // ─── Threshold ─────────────────────────────
+        if (!thresholdComplete) {
+          const thresholdElapsed = (now - thresholdStartTime) / 1000;
+          const progress = Math.min(1, thresholdElapsed / thresholdDuration);
+          revealValue = getRevealCurve(progress);
+
+          if (progress >= 1) {
+            thresholdComplete = true;
+            revealValue = 1;
+          }
+        }
+
+        witnessMaterial.uniforms.uReveal.value = revealValue;
+        witnessMaterial.uniforms.uTime.value = elapsed;
+
+        // ─── Lerp uniforms toward data state ───────
+        if (stateLoaded) {
+          lerpUniforms(dt);
+        }
+
+        // ─── Camera drift ──────────────────────────
+        updateCamera(elapsed);
+
+        // ─── Render ────────────────────────────────
+        renderer.render(scene, camera);
+
+        // Show back button after threshold completes
+        if (thresholdComplete && !backBtnShown) {
+          backBtn.classList.add('visible');
+          backBtnShown = true;
+        }
+
+        requestAnimationFrame(frame);
+      }
+
+      requestAnimationFrame(frame);
+
+      // ─── Resize ─────────────────────────────────────────────────
+
+      window.addEventListener('resize', () => {
+        W = window.innerWidth;
+        H = window.innerHeight;
+        renderer.setSize(W, H);
+        camera.aspect = W / H;
+        camera.updateProjectionMatrix();
+      });
     </script>
   </body>
 </html>
