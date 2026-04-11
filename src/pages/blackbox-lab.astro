@@ -229,44 +229,9 @@
 
       const slidersDiv = document.getElementById('sliders')!;
       const presetsDiv = document.getElementById('presets')!;
+      const sliderEls: Record<string, { input: HTMLInputElement; valSpan: HTMLElement }> = {};
 
-      const groups: Record<string, string[]> = {
-        'Form': ['topology', 'faceting', 'stretch', 'hollowness', 'symmetry', 'scaleVariation', 'multiplicity', 'fragility'],
-        'Material': ['density', 'translucency', 'surface'],
-        'Light': ['internalLight', 'colorDepth', 'iridescence', 'lightResponse'],
-        'Movement': ['flow', 'rhythm', 'rotation'],
-        'Space': ['edgeCharacter', 'atmosphere', 'magnetism', 'reactivity', 'temperature', 'flexibility', 'storedEnergy', 'creationCost'],
-      };
-
-      // Mass slider first
-      const massHeader = document.createElement('h3');
-      massHeader.textContent = 'Scale';
-      slidersDiv.appendChild(massHeader);
-      const massRow = createSlider('mass', currentMass, (v) => { targetMass = v; });
-      slidersDiv.appendChild(massRow.el);
-
-      for (const [group, keys] of Object.entries(groups)) {
-        const h3 = document.createElement('h3');
-        h3.textContent = group;
-        slidersDiv.appendChild(h3);
-        for (const key of keys) {
-          const row = createSlider(key, currentTraits[key], (v) => { targetTraits[key] = v; });
-          slidersDiv.appendChild(row.el);
-          sliderEls[key] = row;
-        }
-      }
-
-      // Preset buttons
-      for (const [id, preset] of Object.entries(PRESETS)) {
-        const btn = document.createElement('button');
-        btn.textContent = preset.label;
-        btn.onclick = () => applyPreset(preset);
-        presetsDiv.appendChild(btn);
-      }
-
-      const sliderEls: Record<string, { el: HTMLElement; input: HTMLInputElement; valSpan: HTMLElement }> = {};
-
-      function createSlider(name: string, value: number, onChange: (v: number) => void) {
+      function createSlider(container: HTMLElement, name: string, value: number, onChange: (v: number) => void): void {
         const row = document.createElement('div');
         row.className = 'slider-row';
 
@@ -292,14 +257,12 @@
         row.appendChild(label);
         row.appendChild(input);
         row.appendChild(valSpan);
+        container.appendChild(row);
 
-        if (!sliderEls[name]) sliderEls[name] = { el: row, input, valSpan };
-
-        return { el: row, input, valSpan };
+        sliderEls[name] = { input, valSpan };
       }
 
-      function applyPreset(preset: { traits: Partial<WitnessTraits>; mass: number }) {
-        // Set all to 0 first, then apply preset values
+      function applyPreset(preset: { traits: Partial<WitnessTraits>; mass: number }): void {
         for (const key of TRAIT_KEYS) {
           targetTraits[key] = 0;
         }
@@ -308,7 +271,6 @@
         }
         targetMass = preset.mass;
 
-        // Update sliders
         for (const key of TRAIT_KEYS) {
           if (sliderEls[key]) {
             sliderEls[key].input.value = String(Math.round(targetTraits[key] * 100));
@@ -320,6 +282,41 @@
           sliderEls['mass'].valSpan.textContent = targetMass.toFixed(2);
         }
       }
+
+      // Preset buttons
+      for (const [id, preset] of Object.entries(PRESETS)) {
+        const btn = document.createElement('button');
+        btn.textContent = preset.label;
+        btn.onclick = () => applyPreset(preset);
+        presetsDiv.appendChild(btn);
+      }
+
+      // Mass slider
+      const massHeader = document.createElement('h3');
+      massHeader.textContent = 'Scale';
+      slidersDiv.appendChild(massHeader);
+      createSlider(slidersDiv, 'mass', currentMass, (v) => { targetMass = v; });
+
+      // Trait sliders grouped
+      const groups: Record<string, string[]> = {
+        'Form': ['topology', 'faceting', 'stretch', 'hollowness', 'symmetry', 'scaleVariation', 'multiplicity', 'fragility'],
+        'Material': ['density', 'translucency', 'surface'],
+        'Light': ['internalLight', 'colorDepth', 'iridescence', 'lightResponse'],
+        'Movement': ['flow', 'rhythm', 'rotation'],
+        'Space': ['edgeCharacter', 'atmosphere', 'magnetism', 'reactivity', 'temperature', 'flexibility', 'storedEnergy', 'creationCost'],
+      };
+
+      for (const [group, keys] of Object.entries(groups)) {
+        const h3 = document.createElement('h3');
+        h3.textContent = group;
+        slidersDiv.appendChild(h3);
+        for (const key of keys) {
+          createSlider(slidersDiv, key, currentTraits[key], (v) => { targetTraits[key] = v; });
+        }
+      }
+
+      // Start with Solid Stone preset so there's something visible
+      applyPreset(PRESETS.solid);
 
       // ─── Camera Drift ───────────────────────────────────────────
 
