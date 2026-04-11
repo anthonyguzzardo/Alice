@@ -7,8 +7,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Marrow</title>
-    <style>
-      @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap');
+    <style is:global>
+      @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap');
 
       * {
         margin: 0;
@@ -44,65 +44,72 @@
       }
 
       .question {
-        font-size: 1.65rem;
-        font-weight: 400;
-        line-height: 1.45;
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-size: 1.6rem;
+        font-weight: 300;
+        line-height: 1.8;
+        letter-spacing: 0.03em;
         color: #e8e4df;
-        margin-bottom: 2.5rem;
+        margin-bottom: 3rem;
         font-style: italic;
       }
 
       .response-area {
         width: 100%;
-        min-height: 200px;
-        background: transparent;
-        border: 1px solid #2a2520;
-        border-radius: 2px;
+        min-height: 160px;
+        background-color: #161514;
+        border: 1px solid #333;
+        border-radius: 4px;
         color: #e8e4df;
         font-family: 'EB Garamond', Georgia, serif;
         font-size: 1.1rem;
-        line-height: 1.6;
+        line-height: 1.7;
         padding: 1.25rem;
-        resize: vertical;
+        resize: none;
         outline: none;
+        -webkit-appearance: none;
+        appearance: none;
         transition: border-color 0.3s ease;
       }
 
       .response-area:focus {
-        border-color: #5a5550;
+        border-color: #555;
+        outline: none;
       }
 
       .response-area::placeholder {
-        color: #3a3530;
+        color: #5a5550;
         font-style: italic;
       }
 
       .submit-row {
-        display: flex;
-        justify-content: flex-end;
-        margin-top: 1.25rem;
+        margin-top: 1.5rem;
       }
 
       .submit-btn {
-        background: transparent;
-        border: 1px solid #2a2520;
-        color: #5a5550;
+        background: #222;
+        border: 1px solid #444;
+        border-radius: 4px;
+        color: #e8e4df;
         font-family: 'EB Garamond', Georgia, serif;
-        font-size: 0.95rem;
-        padding: 0.6rem 1.5rem;
+        font-size: 1rem;
+        padding: 0.6rem 1.8rem;
         cursor: pointer;
         letter-spacing: 0.05em;
-        transition: all 0.3s ease;
-        border-radius: 2px;
       }
 
-      .submit-btn:hover {
-        color: #e8e4df;
-        border-color: #5a5550;
+      .submit-btn:hover:not(:disabled) {
+        background: #444;
+        border-color: #888;
+        color: #fff;
+      }
+
+      .submit-btn:active:not(:disabled) {
+        background: #555;
       }
 
       .submit-btn:disabled {
-        opacity: 0.3;
+        opacity: 0.4;
         cursor: default;
       }
 
