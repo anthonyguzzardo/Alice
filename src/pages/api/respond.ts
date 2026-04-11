@@ -3,6 +3,8 @@ import { saveResponse, getTodaysQuestion, getTodaysResponse, saveSessionSummary,
 import { runObservation } from '../../lib/observe.ts';
 import { runGeneration } from '../../lib/generate.ts';
 import { runReflection } from '../../lib/reflect.ts';
+import { embedResponse } from '../../lib/embeddings.ts';
+import { localDateStr } from '../../lib/date.ts';
 
 export const POST: APIRoute = async ({ request }) => {
   const body = await request.json();
@@ -31,7 +33,11 @@ export const POST: APIRoute = async ({ request }) => {
     });
   }
 
-  saveResponse(questionId, text.trim());
+  const responseId = saveResponse(questionId, text.trim());
+
+  // Fire-and-forget: embed the new response for RAG retrieval
+  embedResponse(responseId, question.text, text.trim(), localDateStr())
+    .catch(err => console.error('[respond] Embedding error:', err));
 
   if (sessionSummary) {
     saveSessionSummary({

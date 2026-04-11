@@ -12,14 +12,17 @@
     "astro": "astro",
     "generate": "npx tsx src/scripts/generate-question.ts",
     "observe": "npx tsx src/scripts/observe.ts",
-    "reflect": "npx tsx src/scripts/surface-patterns.ts"
+    "reflect": "npx tsx src/scripts/surface-patterns.ts",
+    "backfill": "npx tsx src/scripts/backfill-embeddings.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.88.0",
     "astro": "^6.1.5",
     "better-sqlite3": "^12.8.0",
     "dotenv": "^17.4.1",
-    "tsx": "^4.21.0"
+    "sqlite-vec": "^0.1.9",
+    "tsx": "^4.21.0",
+    "voyageai": "^0.2.1"
   },
   "devDependencies": {
     "@astrojs/node": "^10.0.4",

@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import * as sqliteVec from 'sqlite-vec';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { localDateStr } from './date.ts';
@@ -8,6 +9,7 @@ const DB_PATH = path.resolve(__dirname, '../../data/marrow.db');
 
 const db = new Database(DB_PATH);
 
+sqliteVec.load(db);
 db.pragma('journal_mode = WAL');
 
 // ----------------------------------------------------------------------------
@@ -269,7 +271,75 @@ db.exec(`
     ,dttm_created_utc           TEXT    NOT NULL DEFAULT (datetime('now'))
     ,created_by                 TEXT    NOT NULL DEFAULT 'system'
   );
+
+  -- --------------------------------------------------------------------------
+  -- te_embedding_source
+  -- --------------------------------------------------------------------------
+  -- PURPOSE: Define the origin type of an embedded text chunk
+  -- USE CASE: "Is this embedding from a response, observation, or reflection?"
+  -- MUTABILITY: Static
+  -- VALUES: response (1), observation (2), reflection (3)
+  -- REFERENCED BY: tb_embeddings.embedding_source_id
+  -- FOOTER: None
+  -- --------------------------------------------------------------------------
+  CREATE TABLE IF NOT EXISTS te_embedding_source (
+     embedding_source_id  INTEGER PRIMARY KEY
+    ,enum_code            TEXT    UNIQUE NOT NULL
+    ,name                 TEXT    NOT NULL
+  );
+
+  INSERT OR IGNORE INTO te_embedding_source (embedding_source_id, enum_code, name)
+  VALUES
+     (1, 'response',    'Response')
+    ,(2, 'observation', 'Observation')
+    ,(3, 'reflection',  'Reflection');
+
+  -- --------------------------------------------------------------------------
+  -- tb_embeddings
+  -- --------------------------------------------------------------------------
+  -- PURPOSE: Store metadata for embedded text chunks, linked to vec_embeddings
+  -- USE CASE: "Which entries have been embedded? What text was embedded?"
+  -- MUTABILITY: Mutable (append-only)
+  -- LOGICAL FK: embedding_source_id -> te_embedding_source.embedding_source_id
+  -- LOGICAL FK: source_record_id -> tb_responses.response_id (source=1)
+  --                               -> tb_ai_observations.ai_observation_id (source=2)
+  --                               -> tb_reflections.reflection_id (source=3)
+  -- REFERENCED BY: vec_embeddings.embedding_id
+  -- FOOTER: Minimal (append-only)
+  -- --------------------------------------------------------------------------
+  CREATE TABLE IF NOT EXISTS tb_embeddings (
+     embedding_id         INTEGER PRIMARY KEY AUTOINCREMENT
+    ,embedding_source_id  INTEGER NOT NULL
+    ,source_record_id     INTEGER NOT NULL
+    ,embedded_text        TEXT    NOT NULL
+    ,source_date          TEXT
+    ,model_name           TEXT    NOT NULL DEFAULT 'voyage-3-lite'
+    -- FOOTER
+    ,dttm_created_utc     TEXT    NOT NULL DEFAULT (datetime('now'))
+    ,created_by           TEXT    NOT NULL DEFAULT 'system'
+    ,UNIQUE(embedding_source_id, source_record_id)
+  );
 `);
+
+// sqlite-vec virtual table — created separately since virtual tables use different syntax
+db.exec(`
+  CREATE VIRTUAL TABLE IF NOT EXISTS vec_embeddings USING vec0(
+    embedding_id INTEGER PRIMARY KEY,
+    embedding float[512]
+  );
+`);
+
+// --------------------------------------------------------------------------
+// MIGRATION: Add coverage_through_response_id to tb_reflections
+// --------------------------------------------------------------------------
+try {
+  const cols = db.prepare(`PRAGMA table_info(tb_reflections)`).all() as Array<{ name: string }>;
+  if (!cols.some(c => c.name === 'coverage_through_response_id')) {
+    db.exec(`ALTER TABLE tb_reflections ADD COLUMN coverage_through_response_id INTEGER`);
+  }
+} catch {
+  // Column already exists or table doesn't exist yet — safe to ignore
+}
 
 // ----------------------------------------------------------------------------
 // QUERIES
@@ -292,10 +362,11 @@ export function getTodaysResponse(): { response_id: number; text: string } | nul
   `).get(today) as { response_id: number; text: string } | null;
 }
 
-export function saveResponse(questionId: number, text: string): void {
-  db.prepare(
+export function saveResponse(questionId: number, text: string): number {
+  const result = db.prepare(
     `INSERT INTO tb_responses (question_id, text) VALUES (?, ?)`
   ).run(questionId, text);
+  return Number(result.lastInsertRowid);
 }
 
 export function scheduleQuestion(text: string, date: string, source: 'seed' | 'generated' | 'calibration' = 'seed'): void {
@@ -320,11 +391,12 @@ export function getLatestReflection(): { text: string; dttm_created_utc: string 
   ).get() as { text: string; dttm_created_utc: string } | null;
 }
 
-export function saveReflection(text: string, type: 'weekly' | 'monthly' = 'weekly'): void {
+export function saveReflection(text: string, type: 'weekly' | 'monthly' = 'weekly', coverageThroughResponseId?: number): number {
   const typeId = type === 'monthly' ? 2 : 1;
-  db.prepare(
-    `INSERT INTO tb_reflections (text, reflection_type_id) VALUES (?, ?)`
-  ).run(text, typeId);
+  const result = db.prepare(
+    `INSERT INTO tb_reflections (text, reflection_type_id, coverage_through_response_id) VALUES (?, ?, ?)`
+  ).run(text, typeId, coverageThroughResponseId ?? null);
+  return Number(result.lastInsertRowid);
 }
 
 export function logInteractionEvent(questionId: number, eventType: string, metadata?: string): void {
@@ -498,10 +570,11 @@ export function isCalibrationQuestion(questionId: number): boolean {
 // AI OBSERVATIONS & SUPPRESSED QUESTIONS
 // ----------------------------------------------------------------------------
 
-export function saveAiObservation(questionId: number, text: string, date: string): void {
-  db.prepare(
+export function saveAiObservation(questionId: number, text: string, date: string): number {
+  const result = db.prepare(
     `INSERT OR IGNORE INTO tb_ai_observations (question_id, observation_text, observation_date) VALUES (?, ?, ?)`
   ).run(questionId, text, date);
+  return Number(result.lastInsertRowid);
 }
 
 export function saveSuppressedQuestion(questionId: number, text: string, date: string): void {
@@ -567,6 +640,250 @@ export function getAllQuestionFeedback(): Array<{ date: string; landed: boolean 
     JOIN tb_questions q ON f.question_id = q.question_id
     ORDER BY q.scheduled_for ASC
   `).all().map((r: any) => ({ date: r.date, landed: !!r.landed }));
+}
+
+// ----------------------------------------------------------------------------
+// SCOPED RETRIEVAL (for RAG-augmented prompts)
+// ----------------------------------------------------------------------------
+
+export function getRecentResponses(limit: number): Array<{
+  response_id: number; question_id: number; question: string; response: string; date: string;
+}> {
+  return db.prepare(`
+    SELECT r.response_id, q.question_id, q.text as question, r.text as response, q.scheduled_for as date
+    FROM tb_responses r
+    JOIN tb_questions q ON r.question_id = q.question_id
+    ORDER BY q.scheduled_for DESC
+    LIMIT ?
+  `).all(limit) as Array<{
+    response_id: number; question_id: number; question: string; response: string; date: string;
+  }>;
+}
+
+export function getResponsesSince(sinceDate: string): Array<{
+  response_id: number; question_id: number; question: string; response: string; date: string;
+}> {
+  return db.prepare(`
+    SELECT r.response_id, q.question_id, q.text as question, r.text as response, q.scheduled_for as date
+    FROM tb_responses r
+    JOIN tb_questions q ON r.question_id = q.question_id
+    WHERE q.scheduled_for > ?
+    ORDER BY q.scheduled_for ASC
+  `).all(sinceDate) as Array<{
+    response_id: number; question_id: number; question: string; response: string; date: string;
+  }>;
+}
+
+export function getResponsesSinceId(sinceResponseId: number): Array<{
+  response_id: number; question_id: number; question: string; response: string; date: string;
+}> {
+  return db.prepare(`
+    SELECT r.response_id, q.question_id, q.text as question, r.text as response, q.scheduled_for as date
+    FROM tb_responses r
+    JOIN tb_questions q ON r.question_id = q.question_id
+    WHERE r.response_id > ?
+    ORDER BY q.scheduled_for ASC
+  `).all(sinceResponseId) as Array<{
+    response_id: number; question_id: number; question: string; response: string; date: string;
+  }>;
+}
+
+export function getRecentObservations(limit: number): Array<{
+  ai_observation_id: number; date: string; observation: string;
+}> {
+  return db.prepare(`
+    SELECT ai_observation_id, observation_date as date, observation_text as observation
+    FROM tb_ai_observations
+    ORDER BY observation_date DESC
+    LIMIT ?
+  `).all(limit) as Array<{
+    ai_observation_id: number; date: string; observation: string;
+  }>;
+}
+
+export function getObservationsSinceDate(sinceDate: string): Array<{
+  ai_observation_id: number; date: string; observation: string;
+}> {
+  return db.prepare(`
+    SELECT ai_observation_id, observation_date as date, observation_text as observation
+    FROM tb_ai_observations
+    WHERE observation_date > ?
+    ORDER BY observation_date ASC
+  `).all(sinceDate) as Array<{
+    ai_observation_id: number; date: string; observation: string;
+  }>;
+}
+
+export function getRecentSuppressedQuestions(limit: number): Array<{ date: string; question: string }> {
+  return db.prepare(`
+    SELECT suppressed_date as date, suppressed_text as question
+    FROM tb_ai_suppressed_questions
+    ORDER BY suppressed_date DESC
+    LIMIT ?
+  `).all(limit) as Array<{ date: string; question: string }>;
+}
+
+export function getAllReflections(): Array<{
+  reflection_id: number; text: string; coverage_through_response_id: number | null;
+  dttm_created_utc: string;
+}> {
+  return db.prepare(`
+    SELECT reflection_id, text, coverage_through_response_id, dttm_created_utc
+    FROM tb_reflections
+    ORDER BY dttm_created_utc ASC
+  `).all() as Array<{
+    reflection_id: number; text: string; coverage_through_response_id: number | null;
+    dttm_created_utc: string;
+  }>;
+}
+
+export function getLatestReflectionWithCoverage(): {
+  reflection_id: number; text: string;
+  coverage_through_response_id: number | null;
+  dttm_created_utc: string;
+} | null {
+  return db.prepare(`
+    SELECT reflection_id, text, coverage_through_response_id, dttm_created_utc
+    FROM tb_reflections
+    ORDER BY dttm_created_utc DESC
+    LIMIT 1
+  `).get() as {
+    reflection_id: number; text: string;
+    coverage_through_response_id: number | null;
+    dttm_created_utc: string;
+  } | null;
+}
+
+export function getRecentFeedback(limit: number): Array<{ date: string; landed: boolean }> {
+  return db.prepare(`
+    SELECT q.scheduled_for as date, f.landed
+    FROM tb_question_feedback f
+    JOIN tb_questions q ON f.question_id = q.question_id
+    ORDER BY q.scheduled_for DESC
+    LIMIT ?
+  `).all(limit).map((r: any) => ({ date: r.date, landed: !!r.landed }));
+}
+
+export function getSessionSummariesForQuestions(questionIds: number[]): Array<SessionSummaryInput & { date: string }> {
+  if (questionIds.length === 0) return [];
+  const placeholders = questionIds.map(() => '?').join(',');
+  return db.prepare(`
+    SELECT s.question_id as questionId, q.scheduled_for as date,
+           s.first_keystroke_ms as firstKeystrokeMs,
+           s.total_duration_ms as totalDurationMs, s.total_chars_typed as totalCharsTyped,
+           s.final_char_count as finalCharCount, s.commitment_ratio as commitmentRatio,
+           s.pause_count as pauseCount, s.total_pause_ms as totalPauseMs,
+           s.deletion_count as deletionCount, s.largest_deletion as largestDeletion,
+           s.total_chars_deleted as totalCharsDeleted, s.tab_away_count as tabAwayCount,
+           s.total_tab_away_ms as totalTabAwayMs, s.word_count as wordCount,
+           s.sentence_count as sentenceCount, s.device_type as deviceType,
+           s.user_agent as userAgent, s.hour_of_day as hourOfDay, s.day_of_week as dayOfWeek
+    FROM tb_session_summaries s
+    JOIN tb_questions q ON s.question_id = q.question_id
+    WHERE s.question_id IN (${placeholders})
+    ORDER BY q.scheduled_for ASC
+  `).all(...questionIds) as Array<SessionSummaryInput & { date: string }>;
+}
+
+export function getMaxResponseId(): number {
+  const row = db.prepare(`SELECT MAX(response_id) as max_id FROM tb_responses`).get() as { max_id: number | null };
+  return row.max_id ?? 0;
+}
+
+// ----------------------------------------------------------------------------
+// EMBEDDING METADATA QUERIES
+// ----------------------------------------------------------------------------
+
+export function insertEmbeddingMeta(
+  embeddingSourceId: number,
+  sourceRecordId: number,
+  embeddedText: string,
+  sourceDate: string | null,
+  modelName: string = 'voyage-3-lite'
+): number {
+  const result = db.prepare(`
+    INSERT OR IGNORE INTO tb_embeddings (embedding_source_id, source_record_id, embedded_text, source_date, model_name)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(embeddingSourceId, sourceRecordId, embeddedText, sourceDate, modelName);
+  return Number(result.lastInsertRowid);
+}
+
+export function insertVecEmbedding(embeddingId: number, vector: Buffer): void {
+  db.prepare(`INSERT INTO vec_embeddings (embedding_id, embedding) VALUES (?, ?)`).run(embeddingId, vector);
+}
+
+export function isRecordEmbedded(embeddingSourceId: number, sourceRecordId: number): boolean {
+  const row = db.prepare(
+    `SELECT 1 FROM tb_embeddings WHERE embedding_source_id = ? AND source_record_id = ?`
+  ).get(embeddingSourceId, sourceRecordId);
+  return !!row;
+}
+
+export function getUnembeddedResponses(): Array<{
+  response_id: number; question: string; response: string; date: string;
+}> {
+  return db.prepare(`
+    SELECT r.response_id, q.text as question, r.text as response, q.scheduled_for as date
+    FROM tb_responses r
+    JOIN tb_questions q ON r.question_id = q.question_id
+    WHERE NOT EXISTS (
+      SELECT 1 FROM tb_embeddings e
+      WHERE e.embedding_source_id = 1 AND e.source_record_id = r.response_id
+    )
+    ORDER BY q.scheduled_for ASC
+  `).all() as Array<{
+    response_id: number; question: string; response: string; date: string;
+  }>;
+}
+
+export function getUnembeddedObservations(): Array<{
+  ai_observation_id: number; observation: string; date: string;
+}> {
+  return db.prepare(`
+    SELECT o.ai_observation_id, o.observation_text as observation, o.observation_date as date
+    FROM tb_ai_observations o
+    WHERE NOT EXISTS (
+      SELECT 1 FROM tb_embeddings e
+      WHERE e.embedding_source_id = 2 AND e.source_record_id = o.ai_observation_id
+    )
+    ORDER BY o.observation_date ASC
+  `).all() as Array<{
+    ai_observation_id: number; observation: string; date: string;
+  }>;
+}
+
+export function getUnembeddedReflections(): Array<{
+  reflection_id: number; text: string; dttm_created_utc: string;
+}> {
+  return db.prepare(`
+    SELECT r.reflection_id, r.text, r.dttm_created_utc
+    FROM tb_reflections r
+    WHERE NOT EXISTS (
+      SELECT 1 FROM tb_embeddings e
+      WHERE e.embedding_source_id = 3 AND e.source_record_id = r.reflection_id
+    )
+    ORDER BY r.dttm_created_utc ASC
+  `).all() as Array<{
+    reflection_id: number; text: string; dttm_created_utc: string;
+  }>;
+}
+
+export function searchVecEmbeddings(queryVector: Buffer, k: number): Array<{
+  embedding_id: number; distance: number; embedding_source_id: number;
+  source_record_id: number; embedded_text: string; source_date: string | null;
+}> {
+  return db.prepare(`
+    SELECT e.embedding_id, e.embedding_source_id, e.source_record_id,
+           e.embedded_text, e.source_date, v.distance
+    FROM vec_embeddings v
+    JOIN tb_embeddings e ON v.rowid = e.embedding_id
+    WHERE v.embedding MATCH ?
+      AND k = ?
+    ORDER BY v.distance
+  `).all(queryVector, k) as Array<{
+    embedding_id: number; distance: number; embedding_source_id: number;
+    source_record_id: number; embedded_text: string; source_date: string | null;
+  }>;
 }
 
 export default db;

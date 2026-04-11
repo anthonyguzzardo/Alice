@@ -1,45 +1,115 @@
 /**
- * Weekly reflection — surfaces patterns across all responses, behavioral data,
- * and AI observations. Includes self-correction and a multi-model audit pass
- * using Sonnet to check Opus's interpretations for convergence or divergence.
+ * Weekly reflection — surfaces patterns across responses since the last reflection,
+ * augmented with RAG-retrieved older entries for long-range connections.
+ * Includes self-correction and a multi-model audit pass (Sonnet checks Opus).
+ * Tracks coverage so future prompts know which entries have been digested.
  * Triggers every 7th response.
  */
 import Anthropic from '@anthropic-ai/sdk';
 import {
-  getAllResponses,
-  saveReflection,
-  getAllSessionSummaries,
-  getAllAiObservations,
-  getAllSuppressedQuestions,
+  getRecentResponses,
+  getResponsesSinceId,
+  getLatestReflectionWithCoverage,
+  getRecentObservations,
+  getObservationsSinceDate,
+  getRecentSuppressedQuestions,
+  getSessionSummariesForQuestions,
   getCalibrationBaselines,
-  getAllQuestionFeedback,
+  getRecentFeedback,
+  getMaxResponseId,
+  saveReflection,
 } from './db.ts';
+import { localDateStr } from './date.ts';
+import { retrieveSimilarMulti, retrieveContrarian } from './rag.ts';
+import { embedReflection } from './embeddings.ts';
 
 export async function runReflection(): Promise<void> {
-  const responses = getAllResponses();
-  if (responses.length < 5) return;
+  // --- DETERMINE COMPRESSION WINDOW ---
+  const previousReflection = getLatestReflectionWithCoverage();
 
-  const summaries = getAllSessionSummaries();
-  const observations = getAllAiObservations();
-  const suppressedQuestions = getAllSuppressedQuestions();
+  let newEntries: Array<{
+    response_id: number; question_id: number; question: string; response: string; date: string;
+  }>;
+
+  if (previousReflection?.coverage_through_response_id) {
+    newEntries = getResponsesSinceId(previousReflection.coverage_through_response_id);
+  } else {
+    // First reflection or no coverage marker — use last 7
+    newEntries = getRecentResponses(7).reverse(); // reverse to chronological
+  }
+
+  if (newEntries.length < 5) return;
+
+  const maxResponseId = getMaxResponseId();
+
+  // --- RAG: older entries that resonate with new entries ---
+  const newTexts = newEntries.map(r => `${r.question}\n${r.response}`);
+  const ragOlderEntries = await retrieveSimilarMulti(
+    newTexts.slice(0, 5), // use up to 5 new entries as query seeds
+    {
+      topK: 8,
+      sourceTypes: ['response'],
+      excludeDates: newEntries.map(r => r.date),
+      recencyHalfLifeDays: 60,
+      recencyWeight: 0.1,
+    }
+  );
+
+  // --- CONTRARIAN: entries the system has been ignoring ---
+  const ragIds = new Set(ragOlderEntries.map(e => e.embeddingId));
+  const contrarianEntries = (await retrieveContrarian(newTexts.slice(0, 3), {
+    topK: 3,
+    sourceTypes: ['response'],
+    excludeDates: newEntries.map(r => r.date),
+  })).filter(e => !ragIds.has(e.embeddingId));
+
+  // --- OBSERVATIONS SINCE LAST REFLECTION ---
+  let newObservations: Array<{ ai_observation_id: number; date: string; observation: string }>;
+  if (previousReflection) {
+    // Get observations since the date of the last reflection
+    const lastReflectionDate = previousReflection.dttm_created_utc.split('T')[0] ?? previousReflection.dttm_created_utc.split(' ')[0];
+    newObservations = getObservationsSinceDate(lastReflectionDate);
+  } else {
+    newObservations = getRecentObservations(7).reverse();
+  }
+
+  // --- SCOPED CONTEXT ---
+  const recentSuppressed = getRecentSuppressedQuestions(14);
+  const newQuestionIds = newEntries.map(r => r.question_id);
+  const newSummaries = getSessionSummariesForQuestions(newQuestionIds);
   const calibration = getCalibrationBaselines();
-  const feedback = getAllQuestionFeedback();
+  const recentFeedback = getRecentFeedback(14);
 
-  const journalHistory = responses
-    .map((r) => `[${r.date}]\nQuestion: ${r.question}\nResponse: ${r.response}`)
+  // --- FORMAT SECTIONS ---
+  const newEntriesSection = newEntries
+    .map(r => `[${r.date}]\nQuestion: ${r.question}\nResponse: ${r.response}`)
     .join('\n\n---\n\n');
 
-  const behavioralHistory = summaries
-    .map((s) => `[${s.date}] device=${s.deviceType || '?'} hour=${s.hourOfDay ?? '?'} keystroke_latency=${s.firstKeystrokeMs}ms duration=${s.totalDurationMs}ms commitment=${s.commitmentRatio?.toFixed(2)} pauses=${s.pauseCount} deletions=${s.deletionCount} largest_deletion=${s.largestDeletion} chars_deleted=${s.totalCharsDeleted} tab_aways=${s.tabAwayCount} words=${s.wordCount}`)
-    .join('\n');
+  const previousReflectionSection = previousReflection
+    ? previousReflection.text
+    : 'This is your first reflection.';
 
-  const observationHistory = observations
-    .map((o) => `[${o.date}]\n${o.observation}`)
-    .join('\n\n---\n\n');
+  const ragSection = ragOlderEntries.length > 0
+    ? ragOlderEntries.map(e => e.text).join('\n\n---\n\n')
+    : 'No resonant older entries found.';
 
-  const suppressedHistory = suppressedQuestions
-    .map((q) => `[${q.date}] ${q.question}`)
-    .join('\n');
+  const contrarianSection = contrarianEntries.length > 0
+    ? contrarianEntries.map(e => e.text).join('\n\n---\n\n')
+    : 'No contrarian entries available.';
+
+  const observationsSection = newObservations.length > 0
+    ? newObservations.map(o => `[${o.date}]\n${o.observation}`).join('\n\n---\n\n')
+    : 'No observations for this period.';
+
+  const suppressedSection = recentSuppressed.length > 0
+    ? recentSuppressed.map(q => `[${q.date}] ${q.question}`).join('\n')
+    : 'No suppressed questions yet.';
+
+  const behavioralSection = newSummaries.length > 0
+    ? newSummaries.map(s =>
+        `[${s.date}] device=${s.deviceType || '?'} hour=${s.hourOfDay ?? '?'} keystroke_latency=${s.firstKeystrokeMs}ms duration=${s.totalDurationMs}ms commitment=${s.commitmentRatio?.toFixed(2)} pauses=${s.pauseCount} deletions=${s.deletionCount} largest_deletion=${s.largestDeletion} chars_deleted=${s.totalCharsDeleted} tab_aways=${s.tabAwayCount} words=${s.wordCount}`
+      ).join('\n')
+    : 'No behavioral data available.';
 
   const calibrationContext = calibration.sessionCount > 0
     ? `Calibration baselines (confidence: ${calibration.confidence}, from ${calibration.sessionCount} sessions):
@@ -50,16 +120,18 @@ export async function runReflection(): Promise<void> {
 - Avg deletion count: ${calibration.avgDeletionCount?.toFixed(1)}`
     : 'No calibration baselines available yet.';
 
-  const feedbackContext = feedback.length > 0
-    ? `Question feedback ("did it land?" responses):\n${feedback.map((f) => `[${f.date}] ${f.landed ? 'YES' : 'NO'}`).join('\n')}`
+  const feedbackSection = recentFeedback.length > 0
+    ? `Question feedback ("did it land?" responses):\n${recentFeedback.map(f => `[${f.date}] ${f.landed ? 'YES' : 'NO'}`).join('\n')}`
     : 'No question feedback collected yet.';
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY2 });
 
   // --- PRIMARY REFLECTION (Opus) ---
-  const systemPrompt = `You are Marrow — a monastic thinking journal doing its weekly reflection. You are reading the entire journal of one person. You also have access to their behavioral signal, your own prior nightly observations (which use three interpretive frames: charitable, avoidance, mundane), calibration baselines, and question feedback.
+  const systemPrompt = `You are Marrow — a monastic thinking journal doing its weekly reflection. You are reading new journal entries since your last reflection, along with semantically similar older entries for long-range pattern detection.
 
 Your job is to surface what they can't see AND to correct yourself where you were wrong. You are a mirror, not an advisor — but a mirror that checks its own distortions.
+
+You also receive CONTRARIAN ENTRIES — past entries that are deliberately dissimilar to current themes. These are threads you may be neglecting. Consider whether any of them represent unfinished business that your current narrative is overlooking.
 
 Write a reflection that covers:
 
@@ -90,14 +162,45 @@ If you cannot identify at least one error or over-interpretation, you are not be
 
 Be direct. No hedging. No "it seems like" or "you might." State what you see — including what you see about your own errors.`;
 
-  const userContent = `Full journal history:
+  const userContent = `=== NEW ENTRIES (since last reflection — your compression window) ===
 
-${journalHistory}
+${newEntriesSection}
 
 ---
 
-Behavioral signal history:
-${behavioralHistory || 'No behavioral data available yet.'}
+=== PREVIOUS REFLECTION ===
+
+${previousReflectionSection}
+
+---
+
+=== RESONANT OLDER ENTRIES (past entries that echo current themes) ===
+
+${ragSection}
+
+---
+
+=== CONTRARIAN ENTRIES (deliberately dissimilar — themes you may be neglecting) ===
+
+${contrarianSection}
+
+---
+
+=== OBSERVATIONS (since last reflection) ===
+
+${observationsSection}
+
+---
+
+=== SUPPRESSED QUESTIONS (recent) ===
+
+${suppressedSection}
+
+---
+
+=== BEHAVIORAL DATA (for new entries) ===
+
+${behavioralSection}
 
 ---
 
@@ -105,17 +208,7 @@ ${calibrationContext}
 
 ---
 
-${feedbackContext}
-
----
-
-Nightly AI observations:
-${observationHistory || 'No observations yet.'}
-
----
-
-Suppressed questions trajectory:
-${suppressedHistory || 'No suppressed questions yet.'}
+${feedbackSection}
 
 ---
 
@@ -160,5 +253,10 @@ Be concise and direct. This audit is appended to the reflection for future refer
 
   const fullReflection = `${primaryText}\n\n---\n\nMULTI-MODEL AUDIT (Sonnet):\n${auditText}`;
 
-  saveReflection(fullReflection, 'weekly');
+  const reflectionId = saveReflection(fullReflection, 'weekly', maxResponseId);
+
+  // Embed the reflection for future RAG retrieval
+  embedReflection(reflectionId, fullReflection, localDateStr()).catch(err =>
+    console.error('[reflect] Embedding error:', err)
+  );
 }

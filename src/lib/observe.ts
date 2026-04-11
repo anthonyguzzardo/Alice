@@ -1,8 +1,8 @@
 /**
- * The AI's silent layer. Reads today's response + session summary + all prior
- * observations. Uses three interpretive frames (charitable, avoidance, mundane)
- * for structured disagreement. Generates a suppressed question targeting the
- * highest-uncertainty gap for disambiguation.
+ * The AI's silent layer. Reads today's response + session summary + RAG-retrieved
+ * similar past entries + recent observations. Uses three interpretive frames
+ * (charitable, avoidance, mundane) for structured disagreement. Generates a
+ * suppressed question targeting the highest-uncertainty gap for disambiguation.
  * Runs after every submission from day 1.
  */
 import Anthropic from '@anthropic-ai/sdk';
@@ -10,16 +10,16 @@ import {
   getTodaysQuestion,
   getTodaysResponse,
   getSessionSummary,
-  getAllResponses,
-  getAllSessionSummaries,
-  getAllAiObservations,
-  getAllSuppressedQuestions,
+  getRecentObservations,
+  getRecentSuppressedQuestions,
   getCalibrationBaselines,
   isCalibrationQuestion,
   saveAiObservation,
   saveSuppressedQuestion,
 } from './db.ts';
 import { localDateStr } from './date.ts';
+import { retrieveSimilar } from './rag.ts';
+import { embedObservation } from './embeddings.ts';
 
 export async function runObservation(): Promise<void> {
   const today = localDateStr();
@@ -33,10 +33,20 @@ export async function runObservation(): Promise<void> {
   if (isCalibrationQuestion(question.question_id)) return;
 
   const sessionSummary = getSessionSummary(question.question_id);
-  const allResponses = getAllResponses();
-  const allSummaries = getAllSessionSummaries();
-  const priorObservations = getAllAiObservations();
-  const priorSuppressed = getAllSuppressedQuestions();
+
+  // Scoped: last 7 observations, last 5 suppressed questions
+  const recentObservations = getRecentObservations(7);
+  const recentSuppressed = getRecentSuppressedQuestions(5);
+
+  // RAG: 8 past entries most similar to today's Q+A
+  const todayText = `Question: ${question.text}\nResponse: ${response.text}`;
+  const similarEntries = await retrieveSimilar(todayText, {
+    topK: 8,
+    sourceTypes: ['response'],
+    excludeDates: [today],
+    recencyHalfLifeDays: 30,
+    recencyWeight: 0.2,
+  });
 
   // Context-aware calibration
   const calibration = getCalibrationBaselines(
@@ -44,21 +54,17 @@ export async function runObservation(): Promise<void> {
     sessionSummary?.hourOfDay
   );
 
-  const journalHistory = allResponses
-    .map((r) => `[${r.date}]\nQuestion: ${r.question}\nResponse: ${r.response}`)
-    .join('\n\n---\n\n');
+  const similarEntriesSection = similarEntries.length > 0
+    ? similarEntries.map(e => e.text).join('\n\n---\n\n')
+    : 'No similar past entries available yet.';
 
-  const behavioralHistory = allSummaries
-    .map((s) => `[${s.date}] device=${s.deviceType || '?'} hour=${s.hourOfDay ?? '?'} keystroke_latency=${s.firstKeystrokeMs}ms duration=${s.totalDurationMs}ms commitment=${s.commitmentRatio?.toFixed(2)} pauses=${s.pauseCount} deletions=${s.deletionCount} largest_deletion=${s.largestDeletion} chars_deleted=${s.totalCharsDeleted} tab_aways=${s.tabAwayCount} words=${s.wordCount}`)
-    .join('\n');
+  const observationHistory = recentObservations.length > 0
+    ? recentObservations.map(o => `[${o.date}]\n${o.observation}`).join('\n\n---\n\n')
+    : 'None yet — this is your first observation.';
 
-  const observationHistory = priorObservations
-    .map((o) => `[${o.date}]\n${o.observation}`)
-    .join('\n\n---\n\n');
-
-  const suppressedHistory = priorSuppressed
-    .map((q) => `[${q.date}] ${q.question}`)
-    .join('\n');
+  const suppressedHistory = recentSuppressed.length > 0
+    ? recentSuppressed.map(q => `[${q.date}] ${q.question}`).join('\n')
+    : 'None yet.';
 
   const todayBehavior = sessionSummary
     ? `Today's behavioral signal:
@@ -127,14 +133,10 @@ OBSERVATION:
 SUPPRESSED QUESTION:
 [your disambiguating question]`;
 
-  const userContent = `Full journal history:
-
-${journalHistory}
-
----
-
-Behavioral signal history:
-${behavioralHistory || 'No prior behavioral data.'}
+  const userContent = `TODAY'S ENTRY:
+[${today}]
+Question: ${question.text}
+Response: ${response.text}
 
 ---
 
@@ -146,13 +148,18 @@ ${calibrationContext}
 
 ---
 
-Your prior observations:
-${observationHistory || 'None yet — this is your first observation.'}
+SIMILAR PAST ENTRIES (retrieved by semantic similarity for pattern context):
+${similarEntriesSection}
 
 ---
 
-Your prior suppressed questions:
-${suppressedHistory || 'None yet.'}
+YOUR RECENT OBSERVATIONS (last 7):
+${observationHistory}
+
+---
+
+YOUR RECENT SUPPRESSED QUESTIONS (last 5):
+${suppressedHistory}
 
 ---
 
@@ -176,7 +183,10 @@ Write tonight's observation and suppressed question.`;
   const suppressedText = suppressedMatch?.[1]?.trim();
 
   if (observationText) {
-    saveAiObservation(question.question_id, observationText, today);
+    const obsId = saveAiObservation(question.question_id, observationText, today);
+    embedObservation(obsId, observationText, today).catch(err =>
+      console.error('[observe] Embedding error:', err)
+    );
   }
   if (suppressedText) {
     saveSuppressedQuestion(question.question_id, suppressedText, today);

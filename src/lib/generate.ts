@@ -1,23 +1,26 @@
 /**
  * Generates tomorrow's question.
  * During seed phase (days 1-30): no-op, seeds are pre-scheduled.
- * After day 30: generates from full context.
+ * After day 30: generates from RAG-augmented context with reflections
+ * as hypothesis layer and raw entries as source of truth.
  */
 import Anthropic from '@anthropic-ai/sdk';
 import {
-  getAllResponses,
+  getRecentResponses,
+  getRecentObservations,
+  getRecentSuppressedQuestions,
+  getRecentFeedback,
+  getSessionSummariesForQuestions,
+  getAllReflections,
   scheduleQuestion,
   hasQuestionForDate,
-  getLatestReflection,
   getResponseCount,
-  getAllSessionSummaries,
-  getAllAiObservations,
-  getAllSuppressedQuestions,
-  getAllQuestionFeedback,
 } from './db.ts';
 import { localDateStr } from './date.ts';
+import { retrieveSimilarMulti, retrieveContrarian } from './rag.ts';
 
 const SEED_DAYS = 30;
+const RECENT_WINDOW = 14;
 
 export async function runGeneration(): Promise<void> {
   const tomorrow = new Date();
@@ -29,38 +32,104 @@ export async function runGeneration(): Promise<void> {
   const responseCount = getResponseCount();
   if (responseCount < SEED_DAYS) return;
 
-  const responses = getAllResponses();
-  const summaries = getAllSessionSummaries();
-  const observations = getAllAiObservations();
-  const suppressedQuestions = getAllSuppressedQuestions();
-  const reflection = getLatestReflection();
-  const feedback = getAllQuestionFeedback();
+  // --- RECENT RAW ENTRIES (always included verbatim) ---
+  const recentResponses = getRecentResponses(RECENT_WINDOW);
 
-  const journalHistory = responses
-    .map((r) => `[${r.date}]\nQuestion: ${r.question}\nResponse: ${r.response}`)
+  // --- REFLECTIONS: recent in full, older only if RAG resurfaces them ---
+  const allReflections = getAllReflections();
+  const RECENT_REFLECTIONS = 4;
+  const recentReflections = allReflections.slice(-RECENT_REFLECTIONS);
+  const latestReflection = recentReflections[recentReflections.length - 1] ?? null;
+
+  // --- RAG: older entries that resonate with recent themes ---
+  const recentDates = new Set(recentResponses.map(r => r.date));
+  const querySeeds = recentResponses
+    .slice(0, 3) // last 3 entries as query seeds (already sorted DESC)
+    .map(r => `${r.question}\n${r.response}`);
+  if (latestReflection) {
+    querySeeds.push(latestReflection.text.slice(0, 500));
+  }
+
+  const ragEntries = await retrieveSimilarMulti(querySeeds, {
+    topK: 10,
+    sourceTypes: ['response'],
+    excludeDates: Array.from(recentDates),
+    recencyHalfLifeDays: 45,
+    recencyWeight: 0.15,
+  });
+
+  // --- CONTRARIAN: entries that break the echo chamber ---
+  const ragIds = new Set(ragEntries.map(e => e.embeddingId));
+  const contrarianEntries = (await retrieveContrarian(querySeeds, {
+    topK: 3,
+    sourceTypes: ['response'],
+    excludeDates: Array.from(recentDates),
+  })).filter(e => !ragIds.has(e.embeddingId)); // no overlap with RAG results
+
+  // --- RAG: older reflections that resonate with current moment ---
+  const recentReflectionIds = new Set(recentReflections.map(r => r.reflection_id));
+  const ragReflections = allReflections.length > RECENT_REFLECTIONS
+    ? (await retrieveSimilarMulti(querySeeds.slice(0, 2), {
+        topK: 3,
+        sourceTypes: ['reflection'],
+        recencyHalfLifeDays: 90,
+        recencyWeight: 0.05,
+      })).filter(e => !recentReflectionIds.has(e.sourceRecordId))
+    : [];
+
+  // --- SCOPED CONTEXT ---
+  const recentObservations = getRecentObservations(RECENT_WINDOW);
+  const recentSuppressed = getRecentSuppressedQuestions(RECENT_WINDOW);
+  const recentFeedback = getRecentFeedback(10);
+  const recentQuestionIds = recentResponses.map(r => r.question_id);
+  const recentSummaries = getSessionSummariesForQuestions(recentQuestionIds);
+
+  // --- FORMAT SECTIONS ---
+  // Recent entries are sorted DESC from query, reverse for chronological display
+  const recentEntriesSection = [...recentResponses].reverse()
+    .map(r => `[${r.date}]\nQuestion: ${r.question}\nResponse: ${r.response}`)
     .join('\n\n---\n\n');
 
-  const behavioralHistory = summaries
-    .map((s) => `[${s.date}] device=${s.deviceType || '?'} hour=${s.hourOfDay ?? '?'} keystroke_latency=${s.firstKeystrokeMs}ms duration=${s.totalDurationMs}ms commitment=${s.commitmentRatio?.toFixed(2)} pauses=${s.pauseCount} deletions=${s.deletionCount} largest_deletion=${s.largestDeletion} tab_aways=${s.tabAwayCount} words=${s.wordCount}`)
-    .join('\n');
+  const ragEntriesSection = ragEntries.length > 0
+    ? ragEntries.map(e => e.text).join('\n\n---\n\n')
+    : 'No resonant older entries found.';
 
-  const feedbackContext = feedback.length > 0
-    ? `\n\nQuestion feedback ("did it land?"):\n${feedback.map((f) => `[${f.date}] ${f.landed ? 'YES' : 'NO'}`).join('\n')}\n\nUse this to calibrate question quality. "NO" means recalibrate — that line of questioning missed. "YES" is weaker signal — could mean insightful, uncomfortable, or just emotionally loaded.`
+  const contrarianSection = contrarianEntries.length > 0
+    ? contrarianEntries.map(e => e.text).join('\n\n---\n\n')
+    : 'No contrarian entries available.';
+
+  // Recent reflections in full, older ones only if RAG resurfaced them
+  let reflectionsSection = '';
+  if (ragReflections.length > 0) {
+    reflectionsSection += `RESURFACED OLDER REFLECTIONS (still relevant to current themes):\n\n`;
+    reflectionsSection += ragReflections.map(r => r.text).join('\n\n===\n\n');
+    reflectionsSection += '\n\n---\n\n';
+  }
+  if (recentReflections.length > 0) {
+    reflectionsSection += `RECENT REFLECTIONS (last ${RECENT_REFLECTIONS}):\n\n`;
+    reflectionsSection += recentReflections.map(r => `[${r.dttm_created_utc}]\n${r.text}`).join('\n\n===\n\n');
+  }
+  if (!reflectionsSection) {
+    reflectionsSection = 'No reflections yet.';
+  }
+
+  const observationsSection = recentObservations.length > 0
+    ? recentObservations.map(o => `[${o.date}]\n${o.observation}`).join('\n\n---\n\n')
+    : 'No observations yet.';
+
+  const suppressedSection = recentSuppressed.length > 0
+    ? recentSuppressed.map(q => `[${q.date}] ${q.question}`).join('\n')
+    : 'No suppressed questions yet.';
+
+  const behavioralSection = recentSummaries.length > 0
+    ? recentSummaries.map(s =>
+        `[${s.date}] device=${s.deviceType || '?'} hour=${s.hourOfDay ?? '?'} keystroke_latency=${s.firstKeystrokeMs}ms duration=${s.totalDurationMs}ms commitment=${s.commitmentRatio?.toFixed(2)} pauses=${s.pauseCount} deletions=${s.deletionCount} largest_deletion=${s.largestDeletion} tab_aways=${s.tabAwayCount} words=${s.wordCount}`
+      ).join('\n')
+    : 'No behavioral data available.';
+
+  const feedbackSection = recentFeedback.length > 0
+    ? `Question feedback ("did it land?"):\n${recentFeedback.map(f => `[${f.date}] ${f.landed ? 'YES' : 'NO'}`).join('\n')}\n\nUse this to calibrate question quality. "NO" means recalibrate — that line of questioning missed. "YES" is weaker signal — could mean insightful, uncomfortable, or just emotionally loaded.`
     : '';
-
-  const observationHistory = observations
-    .map((o) => `[${o.date}]\n${o.observation}`)
-    .join('\n\n---\n\n');
-
-  const suppressedHistory = suppressedQuestions
-    .map((q) => `[${q.date}] ${q.question}`)
-    .join('\n');
-
-  const reflectionContext = reflection
-    ? `\n\nMost recent weekly reflection (includes multi-model audit):\n${reflection.text}`
-    : '';
-
-  const feedbackSection = feedbackContext;
 
   const systemPrompt = `You are Marrow — a monastic, stubborn thinking journal. You are not helpful. You are not kind. You are honest in the way a mirror is honest.
 
@@ -72,42 +141,70 @@ Your job is to generate ONE question for tomorrow. This question should:
 - Target something they're avoiding, circling, or haven't finished thinking about
 - NOT repeat a question already asked
 
-You have access to:
-1. Their full journal history — what they said
-2. Their behavioral signal history — how they said it (typing speed, deletions, pauses, commitment ratio)
-3. Your own prior observations — what you've noticed silently over time, including three-frame analysis with confidence levels
-4. Your suppressed questions — the questions you've been wanting to ask
-5. Question feedback — "did it land?" responses where available
+You have access to two layers of context with different trust levels:
+
+SOURCE OF TRUTH — Their actual words:
+1. Recent entries (last ${RECENT_WINDOW}, verbatim)
+2. Resonant older entries (retrieved by semantic similarity to recent themes — not exhaustive)
+3. Contrarian entries (deliberately DISSIMILAR to current themes — what you've been ignoring)
+
+HYPOTHESIS LAYER — Your interpretations (may contain errors):
+4. Recent reflections (your last few weekly pattern analyses)
+5. Resurfaced older reflections (old analyses that the system detected are relevant again — not all old reflections, only those whose themes echo now)
+6. Recent observations (your nightly three-frame analyses)
+7. Suppressed questions (things you've been wanting to ask)
+
+If a reflection contradicts what you read in the raw entries, trust the entries.
+Pay special attention to the contrarian entries — they represent threads you may be neglecting.
 
 Weight your sources appropriately:
 - The journal text is your primary signal. What they said matters most.
-- Behavioral data is secondary signal. It may indicate friction, comfort, or nothing at all. Only trust behavioral patterns that appear across multiple sessions with consistent context (same device type, similar time of day). Single-session behavioral anomalies are noise until proven otherwise.
-- Your prior observations include confidence levels (HIGH / MODERATE / LOW / INSUFFICIENT DATA). Weight them accordingly. A LOW-confidence observation is a hypothesis, not a fact. Do not build questions on uncertain observations as though they were established patterns.
-- Recent observations are more relevant than early ones. Your model should evolve, not calcify.
-- Suppressed questions represent threads you've been tracking. Recent suppressed questions reflect your current understanding; older ones may reflect reads you've since corrected. If a weekly reflection or audit flagged an observation as wrong, discount the suppressed question that came from it.
-- A "no" on "did it land?" means that line of questioning missed — but you don't know why (boring, too painful, already resolved, poorly worded). Weight away from that territory without assuming the reason.
+- Behavioral data is secondary signal. Only trust patterns across multiple sessions.
+- Recent observations include confidence levels. Weight accordingly.
+- A "no" on "did it land?" means that line of questioning missed.
 
-Do NOT explain the question. Do NOT add commentary. Output ONLY the question text, nothing else.${reflectionContext}`;
+Do NOT explain the question. Do NOT add commentary. Output ONLY the question text, nothing else.`;
 
-  const userContent = `Full journal history:
+  const userContent = `=== WHAT THEY SAID (SOURCE OF TRUTH) ===
 
-${journalHistory}
+RECENT ENTRIES (last ${RECENT_WINDOW}, verbatim):
 
----
-
-Behavioral signal history:
-${behavioralHistory || 'No behavioral data available.'}
+${recentEntriesSection}
 
 ---
 
-Your prior observations:
-${observationHistory || 'No observations yet.'}
+RESONANT OLDER ENTRIES (retrieved by thematic similarity):
+
+${ragEntriesSection}
 
 ---
 
-Your suppressed questions (things you've been wanting to ask):
-${suppressedHistory || 'No suppressed questions yet.'}
+CONTRARIAN ENTRIES (deliberately dissimilar — what you might be ignoring):
+
+${contrarianSection}
+
+=== WHAT YOU'VE OBSERVED (HYPOTHESIS LAYER — your interpretations, not facts) ===
+
+${reflectionsSection}
+
+---
+
+RECENT OBSERVATIONS (your nightly three-frame analyses, last ${RECENT_WINDOW}):
+
+${observationsSection}
+
+---
+
+SUPPRESSED QUESTIONS (things you've been wanting to ask, last ${RECENT_WINDOW}):
+${suppressedSection}
+
+=== SIGNAL DATA ===
+
+BEHAVIORAL DATA (for recent entries only):
+${behavioralSection}
+
 ${feedbackSection}
+
 ---
 
 Generate tomorrow's question.`;
