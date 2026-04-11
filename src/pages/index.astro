@@ -166,6 +166,7 @@
           inputArea.innerHTML = `<div class="done-message">${getDoneMessage()}</div>`;
         } else {
           const questionId = data.question.id;
+          const pageOpenTime = Date.now();
           trackEvent(questionId, 'page_open');
 
           inputArea.innerHTML = `
@@ -182,27 +183,68 @@
           const textarea = document.getElementById('response') as HTMLTextAreaElement;
           const submitBtn = document.getElementById('submit') as HTMLButtonElement;
 
+          // Behavioral tracking state
           let firstKeystrokeSent = false;
+          let firstKeystrokeTime: number | null = null;
           let pauseTimer: number | null = null;
           let isPaused = false;
+          let pauseStartTime: number | null = null;
+          let totalPauseMs = 0;
+          let pauseCount = 0;
+          let totalCharsTyped = 0;
+          let totalCharsDeleted = 0;
+          let deletionCount = 0;
+          let largestDeletion = 0;
+          let lastTextLength = 0;
+          let tabAwayCount = 0;
+          let tabAwayStartTime: number | null = null;
+          let totalTabAwayMs = 0;
 
           textarea.addEventListener('input', () => {
+            const currentLength = textarea.value.length;
+            const delta = currentLength - lastTextLength;
+
+            if (delta > 0) {
+              totalCharsTyped += delta;
+            } else if (delta < 0) {
+              const deleted = Math.abs(delta);
+              totalCharsDeleted += deleted;
+              deletionCount++;
+              if (deleted > largestDeletion) largestDeletion = deleted;
+              trackEvent(questionId, 'deletion', JSON.stringify({
+                charsDeleted: deleted,
+                textLength: currentLength,
+              }));
+            }
+
+            lastTextLength = currentLength;
             submitBtn.disabled = !textarea.value.trim();
 
             if (!firstKeystrokeSent) {
+              firstKeystrokeTime = Date.now();
               trackEvent(questionId, 'first_keystroke');
               firstKeystrokeSent = true;
             }
 
             if (isPaused) {
-              trackEvent(questionId, 'resume');
+              if (pauseStartTime) {
+                totalPauseMs += Date.now() - pauseStartTime;
+                pauseStartTime = null;
+              }
+              trackEvent(questionId, 'resume', JSON.stringify({
+                textLength: currentLength,
+              }));
               isPaused = false;
             }
 
             if (pauseTimer) clearTimeout(pauseTimer);
             pauseTimer = window.setTimeout(() => {
               if (textarea.value.trim()) {
-                trackEvent(questionId, 'pause');
+                pauseCount++;
+                pauseStartTime = Date.now();
+                trackEvent(questionId, 'pause', JSON.stringify({
+                  textLength: currentLength,
+                }));
                 isPaused = true;
               }
             }, 30000);
@@ -210,8 +252,15 @@
 
           document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
+              tabAwayStartTime = Date.now();
               trackEvent(questionId, 'tab_blur');
             } else {
+              if (tabAwayStartTime) {
+                const awayMs = Date.now() - tabAwayStartTime;
+                totalTabAwayMs += awayMs;
+                tabAwayCount++;
+                tabAwayStartTime = null;
+              }
               trackEvent(questionId, 'tab_focus');
             }
           });
@@ -223,16 +272,47 @@
             submitBtn.disabled = true;
             submitBtn.textContent = '...';
 
+            // Finalize pause if still in one
+            if (isPaused && pauseStartTime) {
+              totalPauseMs += Date.now() - pauseStartTime;
+            }
+
+            const submitTime = Date.now();
+            const finalCharCount = text.length;
+            const wordCount = text.split(/\s+/).filter(Boolean).length;
+            const sentenceCount = text.split(/[.!?]+/).filter((s: string) => s.trim()).length;
+            const totalDurationMs = submitTime - pageOpenTime;
+            const firstKeystrokeMs = firstKeystrokeTime ? firstKeystrokeTime - pageOpenTime : null;
+            const commitmentRatio = totalCharsTyped > 0 ? finalCharCount / totalCharsTyped : null;
+
+            const sessionSummary = {
+              questionId,
+              firstKeystrokeMs,
+              totalDurationMs,
+              totalCharsTyped,
+              finalCharCount,
+              commitmentRatio,
+              pauseCount,
+              totalPauseMs,
+              deletionCount,
+              largestDeletion,
+              totalCharsDeleted,
+              tabAwayCount,
+              totalTabAwayMs,
+              wordCount,
+              sentenceCount,
+            };
+
             const res = await fetch('/api/respond', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ questionId, text }),
+              body: JSON.stringify({ questionId, text, sessionSummary }),
             });
 
             if (res.ok) {
               trackEvent(questionId, 'submit', JSON.stringify({
-                charCount: text.length,
-                wordCount: text.split(/\s+/).length,
+                charCount: finalCharCount,
+                wordCount,
               }));
               questionEl.textContent = '';
               inputArea.innerHTML = `<div class="done-message">${getDoneMessage()}</div>`;

@@ -132,7 +132,8 @@ db.exec(`
     ,(5, 'submit',           'Submit')
     ,(6, 'revisit',          'Revisit')
     ,(7, 'tab_blur',         'Tab Blur')
-    ,(8, 'tab_focus',        'Tab Focus');
+    ,(8, 'tab_focus',        'Tab Focus')
+    ,(9, 'deletion',         'Deletion');
 
   -- --------------------------------------------------------------------------
   -- tb_interaction_events
@@ -172,6 +173,78 @@ db.exec(`
     ,created_by          TEXT    NOT NULL DEFAULT 'system'
     ,dttm_modified_utc   TEXT
     ,modified_by         TEXT
+  );
+
+  -- --------------------------------------------------------------------------
+  -- tb_session_summaries
+  -- --------------------------------------------------------------------------
+  -- PURPOSE: Derived behavioral metrics for each daily session
+  -- USE CASE: "How did the user engage with today's question — not what
+  --           they said, but how they said it?"
+  -- MUTABILITY: Mutable (append-only, one row per question)
+  -- LOGICAL FK: question_id → tb_questions.question_id
+  -- FOOTER: Minimal (append-only)
+  -- --------------------------------------------------------------------------
+  CREATE TABLE IF NOT EXISTS tb_session_summaries (
+     session_summary_id         INTEGER PRIMARY KEY AUTOINCREMENT
+    ,question_id                INTEGER NOT NULL UNIQUE
+    ,first_keystroke_ms         INTEGER          -- ms from page open to first keystroke
+    ,total_duration_ms          INTEGER          -- ms from page open to submit
+    ,total_chars_typed          INTEGER          -- all chars typed including deleted
+    ,final_char_count           INTEGER          -- length of submitted text
+    ,commitment_ratio           REAL             -- final / total (0.0 - 1.0)
+    ,pause_count                INTEGER          -- pauses > 30s
+    ,total_pause_ms             INTEGER          -- cumulative pause time
+    ,deletion_count             INTEGER          -- number of deletion events
+    ,largest_deletion           INTEGER          -- max chars deleted in one burst
+    ,total_chars_deleted        INTEGER          -- all chars deleted
+    ,tab_away_count             INTEGER          -- times user left the page
+    ,total_tab_away_ms          INTEGER          -- cumulative time away
+    ,word_count                 INTEGER          -- words in final submission
+    ,sentence_count             INTEGER          -- sentences in final submission
+    -- FOOTER
+    ,dttm_created_utc           TEXT    NOT NULL DEFAULT (datetime('now'))
+    ,created_by                 TEXT    NOT NULL DEFAULT 'system'
+  );
+
+  -- --------------------------------------------------------------------------
+  -- tb_ai_observations
+  -- --------------------------------------------------------------------------
+  -- PURPOSE: Store the AI's nightly silent observations about the user
+  -- USE CASE: "What did the AI notice today that it couldn't say?"
+  -- MUTABILITY: Mutable (append-only, one row per day)
+  -- LOGICAL FK: question_id → tb_questions.question_id
+  -- FOOTER: Minimal (append-only)
+  -- --------------------------------------------------------------------------
+  CREATE TABLE IF NOT EXISTS tb_ai_observations (
+     ai_observation_id   INTEGER PRIMARY KEY AUTOINCREMENT
+    ,question_id         INTEGER NOT NULL UNIQUE
+    ,observation_text    TEXT    NOT NULL
+    ,observation_date    TEXT    NOT NULL
+    -- FOOTER
+    ,dttm_created_utc    TEXT    NOT NULL DEFAULT (datetime('now'))
+    ,created_by          TEXT    NOT NULL DEFAULT 'system'
+  );
+
+  -- --------------------------------------------------------------------------
+  -- tb_ai_suppressed_questions
+  -- --------------------------------------------------------------------------
+  -- PURPOSE: Store questions the AI wanted to ask but couldn't (seed phase)
+  --          or chose not to (generated phase — the runner-up)
+  -- USE CASE: "What has the AI been building toward asking?"
+  -- MUTABILITY: Mutable (append-only, one row per day)
+  -- LOGICAL FK: question_id → tb_questions.question_id (the question that
+  --             WAS asked that day, not this suppressed one)
+  -- FOOTER: Minimal (append-only)
+  -- --------------------------------------------------------------------------
+  CREATE TABLE IF NOT EXISTS tb_ai_suppressed_questions (
+     ai_suppressed_question_id  INTEGER PRIMARY KEY AUTOINCREMENT
+    ,question_id                INTEGER NOT NULL UNIQUE
+    ,suppressed_text            TEXT    NOT NULL
+    ,suppressed_date            TEXT    NOT NULL
+    -- FOOTER
+    ,dttm_created_utc           TEXT    NOT NULL DEFAULT (datetime('now'))
+    ,created_by                 TEXT    NOT NULL DEFAULT 'system'
   );
 `);
 
@@ -246,6 +319,114 @@ export function hasQuestionForDate(date: string): boolean {
     `SELECT 1 FROM tb_questions WHERE scheduled_for = ?`
   ).get(date);
   return !!row;
+}
+
+// ----------------------------------------------------------------------------
+// SESSION SUMMARIES
+// ----------------------------------------------------------------------------
+
+export interface SessionSummaryInput {
+  questionId: number;
+  firstKeystrokeMs: number | null;
+  totalDurationMs: number | null;
+  totalCharsTyped: number;
+  finalCharCount: number;
+  commitmentRatio: number | null;
+  pauseCount: number;
+  totalPauseMs: number;
+  deletionCount: number;
+  largestDeletion: number;
+  totalCharsDeleted: number;
+  tabAwayCount: number;
+  totalTabAwayMs: number;
+  wordCount: number;
+  sentenceCount: number;
+}
+
+export function saveSessionSummary(s: SessionSummaryInput): void {
+  db.prepare(`
+    INSERT OR IGNORE INTO tb_session_summaries (
+       question_id, first_keystroke_ms, total_duration_ms,
+       total_chars_typed, final_char_count, commitment_ratio,
+       pause_count, total_pause_ms, deletion_count, largest_deletion,
+       total_chars_deleted, tab_away_count, total_tab_away_ms,
+       word_count, sentence_count
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    s.questionId, s.firstKeystrokeMs, s.totalDurationMs,
+    s.totalCharsTyped, s.finalCharCount, s.commitmentRatio,
+    s.pauseCount, s.totalPauseMs, s.deletionCount, s.largestDeletion,
+    s.totalCharsDeleted, s.tabAwayCount, s.totalTabAwayMs,
+    s.wordCount, s.sentenceCount
+  );
+}
+
+export function getSessionSummary(questionId: number): SessionSummaryInput | null {
+  return db.prepare(
+    `SELECT question_id as questionId, first_keystroke_ms as firstKeystrokeMs,
+            total_duration_ms as totalDurationMs, total_chars_typed as totalCharsTyped,
+            final_char_count as finalCharCount, commitment_ratio as commitmentRatio,
+            pause_count as pauseCount, total_pause_ms as totalPauseMs,
+            deletion_count as deletionCount, largest_deletion as largestDeletion,
+            total_chars_deleted as totalCharsDeleted, tab_away_count as tabAwayCount,
+            total_tab_away_ms as totalTabAwayMs, word_count as wordCount,
+            sentence_count as sentenceCount
+     FROM tb_session_summaries WHERE question_id = ?`
+  ).get(questionId) as SessionSummaryInput | null;
+}
+
+export function getAllSessionSummaries(): Array<SessionSummaryInput & { date: string }> {
+  return db.prepare(`
+    SELECT s.question_id as questionId, q.scheduled_for as date,
+           s.first_keystroke_ms as firstKeystrokeMs,
+           s.total_duration_ms as totalDurationMs, s.total_chars_typed as totalCharsTyped,
+           s.final_char_count as finalCharCount, s.commitment_ratio as commitmentRatio,
+           s.pause_count as pauseCount, s.total_pause_ms as totalPauseMs,
+           s.deletion_count as deletionCount, s.largest_deletion as largestDeletion,
+           s.total_chars_deleted as totalCharsDeleted, s.tab_away_count as tabAwayCount,
+           s.total_tab_away_ms as totalTabAwayMs, s.word_count as wordCount,
+           s.sentence_count as sentenceCount
+    FROM tb_session_summaries s
+    JOIN tb_questions q ON s.question_id = q.question_id
+    ORDER BY q.scheduled_for ASC
+  `).all() as Array<SessionSummaryInput & { date: string }>;
+}
+
+// ----------------------------------------------------------------------------
+// AI OBSERVATIONS & SUPPRESSED QUESTIONS
+// ----------------------------------------------------------------------------
+
+export function saveAiObservation(questionId: number, text: string, date: string): void {
+  db.prepare(
+    `INSERT OR IGNORE INTO tb_ai_observations (question_id, observation_text, observation_date) VALUES (?, ?, ?)`
+  ).run(questionId, text, date);
+}
+
+export function saveSuppressedQuestion(questionId: number, text: string, date: string): void {
+  db.prepare(
+    `INSERT OR IGNORE INTO tb_ai_suppressed_questions (question_id, suppressed_text, suppressed_date) VALUES (?, ?, ?)`
+  ).run(questionId, text, date);
+}
+
+export function getAllAiObservations(): Array<{ date: string; observation: string }> {
+  return db.prepare(`
+    SELECT observation_date as date, observation_text as observation
+    FROM tb_ai_observations
+    ORDER BY observation_date ASC
+  `).all() as Array<{ date: string; observation: string }>;
+}
+
+export function getAllSuppressedQuestions(): Array<{ date: string; question: string }> {
+  return db.prepare(`
+    SELECT suppressed_date as date, suppressed_text as question
+    FROM tb_ai_suppressed_questions
+    ORDER BY suppressed_date ASC
+  `).all() as Array<{ date: string; question: string }>;
+}
+
+export function getResponseCount(): number {
+  const row = db.prepare(`SELECT COUNT(*) as count FROM tb_responses`).get() as { count: number };
+  return row.count;
 }
 
 export default db;

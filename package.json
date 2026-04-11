@@ -11,6 +11,7 @@
     "preview": "astro preview",
     "astro": "astro",
     "generate": "npx tsx src/scripts/generate-question.ts",
+    "observe": "npx tsx src/scripts/observe.ts",
     "reflect": "npx tsx src/scripts/surface-patterns.ts"
   },
   "dependencies": {
