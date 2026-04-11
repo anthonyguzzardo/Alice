@@ -1,199 +1,211 @@
 # The Black Box
 
-An artificial life engine. Not a visualization. Not a simulation with a script. A system where you build the substrate, define the physics, and walk away — and something crawls out that you didn't design.
+A ritualized confrontation engine. Not a visualization. Not a simulation. Not a cellular automaton. A single evolving presence in a threshold-space that metabolizes your journal data and becomes something singular.
 
 ## Philosophy
 
-In *Children of Time*, scientists sent a virus to terraform a planet for humans. Spiders became the dominant species instead. That's the principle here. You don't get to pick what emerges. You set the conditions and the conditions produce outcomes that surprise you — the architect.
+In *Fullmetal Alchemist*, Truth is a featureless silhouette that sits behind a gate. It mirrors whoever stands before it. What you get from it depends on what you gave. It speaks not from confidence but from unresolved tension. It knows things about you that you didn't tell it.
 
-This is not a cellular automaton. Not Conway. Not Lenia. Not boids. Not reaction-diffusion wallpaper with bacteria-shaped blobs drifting around. Those are solved. Those are known. The point of this system is to produce behaviors that look like they *mean something* — and you didn't tell them to.
-
-A machine printing words in no particular order in a random language, and you catch yourself reading a sentence. Two shapes locked in orbit that suddenly aren't. A field of noise that develops structure, then rhythm, then something you'd swear is breathing — not because you coded breathing, but because you coded friction and feedback and something *found* breathing on its own. Ten agents arguing. Fungal networks. Brain waves. A black hole. Communication that might not be communication. The system decides. Not you.
+The Black Box is that principle made real. Your journal entries — the hesitations, the commitments, the deletions, the pauses, the contradictions — are the sacrifice. The witness-form is what you get back. Not an illustration of your data. Not a dashboard. A presence that clearly knows something, and you can't quite tell what.
 
 **The engineer's job is to build the box. Not to decide what happens inside it.**
 
 ---
 
-## Constraints
+## The Three Laws
 
-### Creative Constraints
+### 1. It can only show you what you've already shown it.
 
-**Zero.** There are no creative constraints. The agent building this has access to any API, any public library, any part of the codebase, any npm package, any rendering pipeline, any data source. WebGL, WebGPU, Canvas, SVG, Web Audio, WASM — whatever produces the best result. Three.js, d3, Pixi, raw shaders, TensorFlow.js, hand-rolled physics — all fair game. If something exists that makes this better, use it.
+Not metaphorically. Literally. The witness-form's coherence, density, complexity — all of it is gated by what's actually in the database. If you've written 3 entries, it has 3 entries worth of substance. The system is structurally incapable of performing depth it hasn't earned. Empty input, empty witness. Equivalent exchange.
 
-Do not ask permission. Do not simplify for safety. Do not reduce scope to be "realistic." Build the most ambitious version.
+### 2. It never speaks about what you said. Only about the shape of how you said it.
 
-### Engineering Constraints
+The witness responds to patterns — repetition, avoidance, commitment, contradiction, silence. It sees that you circled something three times but not what. It sees that you avoided something but not the thing. That's the gap where it becomes uncanny — it knows something about you that you can't quite locate.
 
-These are real and non-negotiable:
+### 3. It only changes when the data changes.
 
-1. **It must run.** 60fps on a modern browser. If you need WebGL or WebGPU for performance, use them. If the chemical field needs to be GPU-computed, compute it on the GPU. Do not build a system that looks good on paper and runs at 4fps.
+Viewing the Black Box costs nothing. No API calls, no generation, no computation. The witness-form is computed once when new journal data enters the database and persisted forever. You can stare at it for 12 hours. Cost: $0.00. The form only evolves when you give it something new.
 
-2. **It must be legible.** Not explained — legible. Someone looking at it should be able to tell that things are alive, that they're different from each other, that events are happening. They should not need a manual. The visual language must communicate without a HUD.
+---
 
-3. **Systems must actually interact.** This is where most artificial life projects fail. They build five systems and none of them talk to each other. The genome must *actually drive* the behavior. The chemistry must *actually affect* the organisms. The organisms must *actually change* the chemistry. If a system exists in the code but nothing reads its output, delete it.
+## What You See
 
-4. **The energy economy must work.** If everything dies in 10 seconds, there's no evolution. If nothing ever dies, there's no selection pressure. The metabolism-food-predation loop is the backbone. Get it right or nothing else matters.
+A dark screen. Not quite black — dark enough that you think it's black until your eyes adjust.
 
-5. **It must not converge.** If the system reaches a stable equilibrium and stays there, it has failed. Perturbation, mutation pressure, environmental shifts, spatial heterogeneity — whatever it takes to keep the system producing novelty over time.
+**The Threshold:** When the page opens, there is not instant content. There is a threshold — a period of darkness before the form becomes visible. How long depends on the state. Long absence = slow reveal. Contradiction = misaligned opening. High-intensity recent entry = abrupt. The threshold is ritual, not loading screen.
+
+**The Witness:** In the center, a form. One form. Its nature is not predetermined — it could be a smooth solid stone, a translucent crystal, a flowing ferrofluid mass, a shattered swarm of fragments, a molten core, a frozen shell, a gaseous vapor barely distinguishable from the void, or something that has no name. What it becomes is decided by the AI interpreting your journal data through a 26-dimensional trait space. The camera drifts slowly on irrational-frequency orbits. You don't control it.
+
+**No text. No interface. No HUD.** Just a dark thing in darkness that changes so slowly you're never sure what changed.
 
 ---
 
 ## Architecture
 
-### The Genome
+### The 26-Trait Genome
 
-Organisms carry a genome. The genome is a vector of floating-point genes that encode everything about the organism — how it moves, what it eats, how it reproduces, how it interacts with others, what it looks like, how it responds to chemistry, how aggressive or social or territorial it is.
+The witness-form is defined by 26 continuous traits, each 0.0–1.0. The AI sets these. The shader renders them. The combination space is 26-dimensional — effectively infinite. Forms emerge that nobody designed.
 
-The genome must include a **meta-evolution gene**: the mutation rate itself is heritable and mutable. Lineages can evolve to be more or less evolvable. This is critical for open-ended dynamics.
+**Form:**
+| Trait | 0.0 | 1.0 |
+|---|---|---|
+| topology | smooth sphere | fragmented shards |
+| faceting | organic curves | hard crystal planes |
+| stretch | compressed sphere | elongated tendril |
+| hollowness | solid mass | shell / cavity |
+| symmetry | perfect radial | broken / chaotic |
+| scaleVariation | uniform | regions of wildly different size |
+| multiplicity | single monolith | shattered swarm |
+| fragility | indestructible | about to shatter (cracks, stress lines) |
 
-Reproduction copies the genome with Gaussian mutations. There should be a small chance per gene of a macro-mutation — a large jump that can produce radically new strategies. Without macro-mutations, the system hill-climbs to local optima and stays there.
+**Material:**
+| Trait | 0.0 | 1.0 |
+|---|---|---|
+| density | gaseous / weightless | solid stone / impossibly heavy |
+| translucency | opaque matte | glass / crystal |
+| surface | polished mirror | rough eroded stone |
 
-The exact number of genes and what they encode is up to the engineer. The spec below suggests categories but does not mandate them. If you find a better decomposition, use it. The requirement is that the genome is rich enough to produce meaningfully different organisms and that every gene actually does something.
+**Light:**
+| Trait | 0.0 | 1.0 |
+|---|---|---|
+| internalLight | dark / dead inside | deep glow from within |
+| colorDepth | monochrome | deep shifting hues |
+| iridescence | flat color | prismatic angle-dependent shifts |
+| lightResponse | absorbs all light (void) | refracts and scatters light |
 
-**Suggested gene categories** (not mandatory, not exhaustive):
-- Movement: speed, turning, burst capability
-- Chemotaxis: response to chemical gradients
-- Chemistry: what the organism deposits and consumes
-- Social: aggression, sociality, fear, territoriality, pack drive
-- Metabolic: metabolism rate, reproduction threshold, body size
-- Perception: sense range, memory, food attraction
-- Defense: armor, toxicity
-- Signaling: communication frequency and sensitivity
-- Phenotype: color, shape, trophic tendency
+**Movement:**
+| Trait | 0.0 | 1.0 |
+|---|---|---|
+| flow | frozen still | ferrofluid surface motion |
+| rhythm | constant / unchanging | intense pulsing / breathing |
+| rotation | still | spinning violently |
 
-### Body Morphologies
+**Interaction with Space:**
+| Trait | 0.0 | 1.0 |
+|---|---|---|
+| edgeCharacter | sharp defined boundary | dissolving into void |
+| atmosphere | clean edge, no aura | heavy halo / spatial distortion |
+| magnetism | inert | visibly warping space around it |
+| reactivity | stable / inert | volatile, about to change |
+| temperature | frozen / cold (blues, frost) | molten / hot (reds, embers) |
+| flexibility | rigid / brittle | elastic / yielding |
+| storedEnergy | inert / spent | immense contained potential |
+| creationCost | casually assembled | required everything to exist |
 
-Organisms should be visually distinct based on their genome. The shape of an organism should tell you its ecological strategy before you read any data. Predators should look like predators. Grazers should look like grazers. Parasites should look unsettling.
+### The Interpreter
 
-Morphology is not cosmetic — it should emerge from gene values and affect behavior. The engineer decides the mapping. What matters is that when you look at the screen, you see a diverse ecosystem of recognizably different creatures, not a uniform swarm.
+When journal data changes (new entry, new observation, new reflection), one LLM call reads the behavioral signals and outputs 26 floats. The LLM decides what the form becomes — not from a menu, but by composing a trait vector. It can produce combinations nobody anticipated.
 
-### Life Stages
+The interpretation is persisted to `tb_witness_states` in the database. It never regenerates for the same data. Server restarts don't trigger new calls.
 
-Organisms progress through life stages. At minimum: a vulnerable immobile birth stage, a growth stage, a reproductive adult stage, and an elder stage with declining performance. Stage transitions should be visible — size changes, rendering changes, behavioral changes.
+**Model:** Claude Sonnet (fast enough for single-call, creative enough for interesting interpretation)
+**Cost:** ~$0.01 per interpretation. One call per journal entry.
 
-### Behavioral Modes
+### The Shader
 
-Organisms switch between behavioral modes based on internal state and environment. These are not assigned — they emerge from context. When an aggressive organism detects prey and has energy, it hunts. When a weak organism detects a predator, it flees. When social organisms cluster, they form colonies. The modes are consequences of gene expression meeting environmental context.
+A single mesh (IcosahedronGeometry, subdivision 64) with vertex displacement and fragment shading driven by all 26 traits.
 
-Suggested modes (implement as many as produce interesting dynamics):
-- Foraging (default gradient-following)
-- Hunting (active pursuit)
-- Fleeing (evasion)
-- Colony behavior (differentiated roles)
-- Territorial guarding
-- Ambush predation
-- Parasitic attachment
+**Vertex shader:** Three displacement layers:
+- Large-scale geological deformation (topology) — breaks the sphere into unrecognizable forms
+- Medium-scale ferrofluid flow (flow) — organic surface movement
+- Fine crystalline detail (faceting) — hard planes and sharp edges
 
----
+Plus structural features: stretch (genuine elongation), hollowness (inward collapse), symmetry breaking (hemispheric displacement), multiplicity (cluster separation), fragility (displacement discontinuities as cracks), rotation (vertex-space rotation transforms), flexibility (elastic overshoot).
 
-## Core Systems
+**Fragment shader:** Temperature-driven color palette (cold blues to molten reds), subsurface scattering, internal glow, iridescence, atmosphere halo, magnetism distortion, fragility crack lines, reactivity shimmer. Never fully opaque — always some translucency.
 
-These are the systems that must exist and must interact. How they're implemented is the engineer's decision.
+### Data Flow
 
-### 1. Chemical Field
+```
+Journal Entry Written
+  → /api/respond saves response + session metrics
+  → Entry count changes in DB
 
-A multi-channel chemical field on a grid. Organisms read it, organisms write to it, and it has its own dynamics independent of organisms. At minimum, this should include reaction-diffusion chemistry (Gray-Scott or similar) that produces spatial structure (spots, stripes, labyrinths) on its own. Organisms navigate by chemotaxis and deposit pheromones that other organisms respond to.
+Next time /api/witness is called:
+  → Detects entry count mismatch
+  → Fetches /api/blackbox (14 behavioral signals)
+  → Calls Claude Sonnet with signals → 26 trait floats
+  → Persists to tb_witness_states
+  → Returns WitnessState (traits + mass + threshold config)
 
-The chemistry is not decoration. It is infrastructure. Organisms that modify the chemistry are modifying the environment that other organisms depend on. This is niche construction and it must actually work.
+Subsequent /api/witness calls (same entry count):
+  → Reads from DB in <5ms
+  → Zero LLM calls
 
-### 2. Species Emergence
+Browser (/blackbox):
+  → Fetches /api/witness once on page load
+  → Renders witness-form via WebGL at 60fps
+  → No periodic fetching, no polling, no API calls while viewing
+```
 
-Species are not designed. They emerge from genomic divergence. When an offspring's genome is sufficiently distant from all existing species, a new species is born. Species should be tracked — when they emerge, how many exist, when they go extinct. Speciation events should be visible.
+### Data Integration
 
-### 3. Social Structure
+The behavioral signals that shape the witness:
 
-When organisms of the same species cluster spatially and have high sociality genes, they should be able to form colonies with differentiated roles. Queens, workers, soldiers — or whatever role structure the engineer finds produces the most interesting dynamics. Colony members should be visually connected. Colony behavior should be visibly different from solo behavior.
-
-Pack hunting should emerge when aggressive organisms of the same species cluster. Coordinated pursuit should be more effective than solo hunting.
-
-### 4. Territory
-
-Territorial organisms claim space by depositing species-specific pheromone. Territory should be visible. Entering foreign territory should have consequences — increased fear, reduced speed, increased aggression at borders. Territory creates spatial structure in the ecosystem that prevents everything from collapsing into one undifferentiated mass.
-
-### 5. Predation, Parasitism, and Symbiosis
-
-Large aggressive organisms eat smaller ones. Parasitic organisms latch onto hosts and drain energy. Non-aggressive organisms of different species near each other can benefit from proximity. These three interaction types create the food web. Without them, there's no selection pressure and no ecological structure.
-
-Toxic organisms should poison their killers. Armored organisms should be harder to kill. These defenses should be visible.
-
-### 6. Memory and Learning
-
-Organisms carry a small memory vector that tracks recent experience — where food was, whether energy is rising or falling, how crowded the area is. Memory should influence behavior through a heritable memory-weight gene. Offspring should partially inherit parental memory, giving children a head start.
-
-### 7. Environmental Perturbation
-
-The system must include random environmental events that prevent convergence. Storms, famines, plagues, radiation bursts, migrations — events that disrupt the current equilibrium and force re-adaptation. Events should be visible and labeled on screen. They should be frequent enough to prevent stasis but not so frequent that nothing has time to evolve.
-
----
-
-## Data Integration
-
-The system connects to journal behavioral metrics and translates them into environmental parameters. The mapping should be intuitive: commitment increases food abundance, hesitation increases environmental viscosity, deletion intensity increases entropy, reflection accelerates evolution, suppressed content increases predation pressure.
-
-When new data arrives, the environment shifts gradually — not instantly. Species adapted to the old regime must adapt or collapse. This is the mechanism by which your behavior shapes the ecosystem without controlling it.
-
-The specific signals and their mappings:
-
-| Signal | Controls |
+| Signal | What It Measures |
 |---|---|
-| `avgCommitment` | Food abundance, pack coordination bonus |
-| `avgHesitation` | Environmental viscosity |
-| `deletionIntensity` | Random hazards, entropy |
-| `pauseFrequency` | Mutation rate modifier |
-| `observationCount` | Chemical feed rate |
-| `reflectionCount` | Evolution speed |
-| `suppressedCount` | Predation pressure |
-| `embeddingCount` | Chemical diffusion rate |
-| `latestConfidence` | Ecosystem stability |
-| `thematicDensity` | Food clustering, territory diffusion |
-| `landedRatio` | Symbiosis bonus, colony food sharing |
-| `feedbackCount` | World topology (toroidal wrapping threshold) |
+| `avgCommitment` | How much typed text was kept vs deleted |
+| `avgHesitation` | Delay before first keystroke |
+| `deletionIntensity` | Proportion of text deleted |
+| `pauseFrequency` | How often they stop mid-thought |
+| `sessionCount` | Total journal entries |
+| `observationCount` | AI observations generated |
+| `reflectionCount` | Reflections generated |
+| `suppressedCount` | Questions the AI held back |
+| `embeddingCount` | Text chunks vectorized |
+| `latestConfidence` | AI confidence in its read (HIGH/MODERATE/LOW) |
+| `thematicDensity` | How repetitive the language is |
+| `landedRatio` | How often AI questions resonated |
+| `feedbackCount` | Total feedback given |
 
-Data is fetched every 60 seconds. Transitions smooth over ~3 seconds.
-
----
-
-## Rendering
-
-Four visual layers, composited:
-
-### Layer 1: Chemical Field
-Rendered pixel-by-pixel or via shader. The reaction-diffusion channels produce nebula-like patterns in blue/cyan/purple. Signal chemistry adds violet pulses. Food glows warm amber. Territory tints regions with species color. Dark background. This layer should look alive on its own, independent of organisms.
-
-### Layer 2: Organisms
-Drawn according to morphology. Size varies dramatically — apex predators should be 3-4x the size of grazers. Brightness = energy. Reproduction-ready organisms pulse. Toxic organisms have green aura. Armored organisms have hard-edged glow. Colony members are connected by visible structural web.
-
-### Layer 3: Trails
-Pheromone deposits, not motion trails. They fade over time. Color and density vary by organism role and behavior. Hunters leave red-shifted dots. Colony organisms leave thick species-colored trails. Grazers leave barely visible traces.
-
-### Layer 4: Events
-Death: expanding ring + flash. Birth: brief expansion + particles. New species: golden flash. Environmental events: floating labeled text. Mass extinction (5+ deaths nearby in 2 seconds): shockwave ring. These should be readable at a glance — something happened, and you can see what.
+The AI interprets these signals into traits. The mapping is not hardcoded — it's a creative act by the interpreter. High commitment might produce density and internal light. Or it might produce something else entirely. The AI decides.
 
 ---
 
-## What Makes This Work
+## File Structure
 
-Seven mechanisms produce open-ended dynamics. All seven must be present and functional:
-
-1. **Heritable variation** — genomes mutate, including the mutation rate
-2. **Selection pressure** — energy economy with real consequences
-3. **Indirect communication** — chemical stigmergy creates spatial structure
-4. **Niche construction** — organisms modify the environment they depend on
-5. **Social structure** — colonies and packs create group-level selection
-6. **Life history** — stages create age-dependent strategies and intergenerational memory
-7. **External perturbation** — data shifts and random events prevent convergence
-
-If any one of these is broken or decorative, the system degrades. They must all function and they must all interact.
+```
+src/
+  pages/
+    blackbox.astro           # The witness — threshold + form + void
+    blackbox-lab.astro       # Debug lab — sliders + presets (fake data only)
+    api/
+      blackbox.ts            # Behavioral signal computation
+      witness.ts             # Witness state API (traits + metadata)
+  lib/
+    dream/
+      types.ts               # WitnessTraits (26 traits), WitnessState
+      interpreter.ts         # LLM trait interpretation + DB persistence
+    db.ts                    # Database (includes tb_witness_states table)
+  assets/
+    shaders/
+      witness.vert           # Vertex displacement (26 trait uniforms)
+      witness.frag           # Fragment shading (SSS, glow, temperature color)
+```
 
 ---
 
 ## What This Is Not
 
-- Not a screensaver. Things must die, be born, evolve, compete, cooperate, and go extinct.
-- Not a visualization of data. Data sets the physics. What evolves is not planned.
-- Not a cellular automaton. No grids of cells with neighbor-counting rules.
-- Not a particle system. Organisms have genomes, memory, life stages, and social behavior.
-- Not a designed ecosystem. Species emerge. Behaviors emerge. Structures emerge. If you can predict what it will look like in 10 minutes, you built it wrong.
+- Not a visualization of data. Data shapes the presence. What it becomes is not planned.
+- Not a cellular automaton. No grids, no populations, no ecosystems.
+- Not a particle system. One form. One mesh. One presence.
+- Not a screensaver. The form has ontological weight. It earns its complexity.
+- Not a dashboard. No numbers, no charts, no text, no HUD.
+- Not generative art. It's a confrontation. The form knows something about you.
+
+---
+
+## What This Is
+
+A ritualized confrontation engine that:
+- Takes in behavioral and semantic residue from a personal journal
+- Compresses it into one evolving presence via a 26-dimensional trait space
+- Returns symbolic evidence in proportion to what was actually given
+- Only changes when you give it something new
+- Persists everything — nothing is wasted, nothing is regenerated
+
+One thing that becomes more itself over time.
 
 ---
 
@@ -201,12 +213,11 @@ If any one of these is broken or decorative, the system degrades. They must all 
 
 You know it's working when:
 
-- You see creatures you didn't design doing things you didn't program
-- Species emerge that have strategies you didn't anticipate
-- The ecosystem looks fundamentally different every time you reload
-- You catch yourself watching it and wondering what something is doing
-- Colony structures form and collapse and reform in new configurations
-- Predators evolve hunting strategies, prey evolve evasion strategies, and the arms race is visible
-- Environmental events cause cascading effects that reshape the population
-- You cannot explain why a particular behavior is happening without tracing it back through multiple interacting systems
-- Someone looks at it and asks "what is that?" — and you don't have a complete answer
+- You open it after writing something raw and the form is visibly different
+- You open it after a week of shallow entries and it's barely there
+- You can't name what it looks like but you know it's yours
+- Someone else's Black Box would look nothing like yours
+- You catch yourself checking whether it changed after writing an entry
+- The threshold feels like entering something, not loading a page
+- You cannot predict what it will look like tomorrow
+- It feels like it knows something about you — and you can't tell what

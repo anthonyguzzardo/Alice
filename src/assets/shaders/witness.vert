@@ -118,11 +118,12 @@ void main() {
   float t = uTime;
 
   // ─── Rotation (actual mesh rotation via vertex transform) ─────
-  float rotAngle = t * uRotation * 0.5;
+  // At 1.0 this is violently fast — approaching visual blur
+  float rotAngle = t * uRotation * 8.0;
   float cosR = cos(rotAngle);
   float sinR = sin(rotAngle);
   // Secondary axis rotation for tumble effect
-  float rotAngle2 = t * uRotation * 0.31;
+  float rotAngle2 = t * uRotation * 4.96;
   float cosR2 = cos(rotAngle2);
   float sinR2 = sin(rotAngle2);
   // Y-axis rotation
@@ -152,12 +153,12 @@ void main() {
   norm = normalize(mix(norm, tumbleNorm, uRotation));
 
   // ─── Breathing / Rhythm ─────────────────────────────────────
-  float breathRate = 15.0 + (1.0 - uRhythm) * 20.0; // fast pulse at high rhythm
-  float breathDepth = 0.01 + uRhythm * 0.12;
+  float breathRate = 4.0 + (1.0 - uRhythm) * 25.0; // 4s at max rhythm, 29s at zero
+  float breathDepth = 0.01 + uRhythm * 0.45; // violent pulsing at 1.0
   // Flexibility makes breathing more elastic (overshoot)
   float breathPhase = t / breathRate * 6.2831853;
   float breathRaw = sin(breathPhase);
-  float breathElastic = breathRaw + uFlexibility * 0.3 * sin(breathPhase * 2.3) * breathRaw;
+  float breathElastic = breathRaw + uFlexibility * 0.8 * sin(breathPhase * 2.3) * breathRaw;
   float breath = breathElastic * breathDepth;
   pos *= 1.0 + breath;
 
@@ -165,7 +166,7 @@ void main() {
   // Elongate along a direction (primarily Y, with noise-driven tilt)
   float stretchDir = snoise3(pos * 0.3 + 200.0) * 0.3;
   vec3 stretchAxis = normalize(vec3(stretchDir, 1.0, stretchDir * 0.5));
-  float stretchAmount = uStretch * 1.8;
+  float stretchAmount = uStretch * 5.0; // extreme elongation at 1.0
   float axisProjection = dot(pos, stretchAxis);
   // Elongate: move vertices further from center along the stretch axis
   pos += stretchAxis * axisProjection * stretchAmount;
@@ -180,7 +181,7 @@ void main() {
   float geo2 = snoise3(pos * (geoFreq * 0.6) + vec3(50.0) + t * 0.002);
   float geo3 = snoise3(pos * (geoFreq * 1.4) + vec3(100.0) + t * 0.001);
   // Topology controls intensity -- from gentle undulation to total shattering
-  float geoIntensity = 0.1 + uTopology * 0.9;
+  float geoIntensity = 0.05 + uTopology * 2.5; // total destruction at 1.0
   // At high topology, sharpen the noise into hard ridges/shards
   float geoNoise = geo1 * 0.5 + geo2 * 0.3 + geo3 * 0.2;
   float geological = mix(geoNoise, sign(geoNoise) * pow(abs(geoNoise), 0.3), uTopology * 0.7);
@@ -188,17 +189,17 @@ void main() {
 
   // ─── Scale variation: different regions at different sizes ───
   float scaleRegion = snoise3(pos * 0.5 + 150.0);
-  float localScale = 1.0 + uScaleVariation * 0.6 * scaleRegion;
+  float localScale = 1.0 + uScaleVariation * 1.8 * scaleRegion; // wild size differences
   pos *= localScale;
 
   // ─── Layer 2: Ferrofluid flow ───────────────────────────────
-  float flowSpeed = 0.005 + uFlow * 0.06;
-  float flowAmp = 0.05 + uFlow * 0.45;
+  float flowSpeed = 0.005 + uFlow * 0.4; // violent churning at 1.0
+  float flowAmp = 0.02 + uFlow * 1.5;  // massive surface movement
   float flow1 = snoise3(pos * 1.8 + vec3(t * flowSpeed, t * flowSpeed * 0.7, 0.0));
   float flow2 = snoise3(pos * 2.5 + vec3(0.0, t * flowSpeed * 1.3, t * flowSpeed * 0.5) + 30.0);
   float ferrofluid = (flow1 * 0.6 + flow2 * 0.4) * flowAmp;
   // Reactivity adds surface shimmer/instability
-  float reactiveJitter = snoise3(pos * 8.0 + t * uReactivity * 2.0) * uReactivity * 0.08;
+  float reactiveJitter = snoise3(pos * 8.0 + t * uReactivity * 6.0) * uReactivity * 0.3;
   ferrofluid += reactiveJitter;
 
   // ─── Layer 3: Crystalline faceting ──────────────────────────
@@ -215,7 +216,7 @@ void main() {
   float asymLeft = smoothstep(-0.3, 0.4, pos.x);
   float asymTop = smoothstep(-0.2, 0.5, pos.y);
   float asymFront = smoothstep(-0.1, 0.6, pos.z);
-  float asymDisp = uSymmetry * 0.5 * (
+  float asymDisp = uSymmetry * 1.5 * (
     (asymLeft - 0.5) * (1.0 + geo1 * 0.8) +
     (asymTop - 0.5) * 0.6 * geo2 +
     (asymFront - 0.5) * 0.4
@@ -224,10 +225,10 @@ void main() {
   // ─── Hollowness: collapse inward ───────────────────────────
   float cavityRegion = snoise3(pos * 0.7 + 80.0);
   float cavityMask = smoothstep(0.1, 0.4, cavityRegion) * smoothstep(0.7, 0.4, cavityRegion);
-  float cavityDisp = -uHollowness * 0.7 * cavityMask;
-  // Also add a central hollow pull
+  float cavityDisp = -uHollowness * 1.5 * cavityMask; // deep collapse
+  // Central hollow pull — at 1.0 it nearly inverts
   float centerDist = length(pos);
-  float centralHollow = -uHollowness * 0.3 * smoothstep(0.8, 0.2, centerDist);
+  float centralHollow = -uHollowness * 0.8 * smoothstep(0.8, 0.2, centerDist);
   cavityDisp += centralHollow;
 
   // ─── Multiplicity: separate regions apart (gaps) ────────────
@@ -235,9 +236,9 @@ void main() {
   float clusterID = snoise3(pos * 1.2 + 170.0);
   float clusterBoundary = 1.0 - smoothstep(0.0, 0.15, abs(clusterID));
   // At boundaries between clusters, pull inward to create gaps
-  float multiplicityDisp = -uMultiplicity * 0.6 * clusterBoundary;
-  // Push clusters outward from center based on their region
-  float clusterPush = uMultiplicity * 0.3 * sign(clusterID) * (1.0 - clusterBoundary);
+  float multiplicityDisp = -uMultiplicity * 1.5 * clusterBoundary; // wide gaps
+  // Push clusters outward — at 1.0 they fly apart
+  float clusterPush = uMultiplicity * 1.0 * sign(clusterID) * (1.0 - clusterBoundary);
   multiplicityDisp += clusterPush;
 
   // ─── Fragility: crack lines (displacement discontinuities) ──
@@ -249,21 +250,21 @@ void main() {
   float crackLine2 = 1.0 - smoothstep(0.0, 0.03 + (1.0 - uFragility) * 0.08, abs(crackNoise2));
   float cracks = max(crackLine1, crackLine2);
   // Displace sharply along cracks
-  float crackDisp = uFragility * 0.2 * cracks * sign(snoise3(pos * 7.0 + 300.0));
+  float crackDisp = uFragility * 0.6 * cracks * sign(snoise3(pos * 7.0 + 300.0));
 
   // ─── Edge dissolution ───────────────────────────────────────
   float edgeNoise = snoise3(pos * 2.0 + 60.0 + t * 0.005);
   float edgeMask = smoothstep(-0.3, 0.3, edgeNoise);
-  float edgeDisp = -uEdgeCharacter * 0.25 * edgeMask;
+  float edgeDisp = -uEdgeCharacter * 0.9 * edgeMask; // dissolve into nothing
 
   // ─── Temperature: hot = smoother/liquid, cold = harder/brittle
   float tempMod = mix(1.0, 0.7, uTemperature); // hot damps high-freq displacement
   crystalline *= tempMod;
 
   // ─── Stored energy: compressed, tighter containment ─────────
-  float energyCompress = 1.0 - uStoredEnergy * 0.15; // slightly smaller when charged
-  // But with high-frequency pressure tremors
-  float energyTremor = snoise3(pos * 10.0 + t * 1.5) * uStoredEnergy * 0.04;
+  float energyCompress = 1.0 - uStoredEnergy * 0.35; // visibly compressed when charged
+  // High-frequency pressure tremors — about to explode at 1.0
+  float energyTremor = snoise3(pos * 12.0 + t * 3.0) * uStoredEnergy * 0.2;
 
   // ─── Compose displacement ─────────────────────────────────
   float totalDisp = geological * (0.3 + uMass * 0.5)
@@ -276,8 +277,12 @@ void main() {
                   + edgeDisp
                   + energyTremor;
 
+  // Density: high density suppresses displacement — surface becomes flat, heavy, still
+  float densityDamp = 1.0 - uDensity * 0.7;
+  totalDisp *= densityDamp;
+
   // Flexibility: elastic overshoot on displacement
-  float elasticBounce = 1.0 + uFlexibility * 0.2 * sin(t * 3.0 + totalDisp * 10.0);
+  float elasticBounce = 1.0 + uFlexibility * 0.5 * sin(t * 3.0 + totalDisp * 10.0);
   totalDisp *= elasticBounce;
 
   // Scale by mass

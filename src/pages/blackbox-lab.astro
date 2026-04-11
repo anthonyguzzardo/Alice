@@ -352,7 +352,7 @@
         witnessMaterial.uniforms.uTime.value = elapsed;
         witnessMaterial.uniforms.uCameraPos.value = camera.position;
 
-        const rotationSpeed = currentTraits['rotation'] * 0.5;
+        const rotationSpeed = currentTraits['rotation'] * 8.0;
         witnessMesh.rotation.y += rotationSpeed * dt;
 
         updateCamera(elapsed);

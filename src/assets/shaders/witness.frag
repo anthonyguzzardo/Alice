@@ -126,9 +126,11 @@ void main() {
 
   // ─── Temperature-driven base color ────────────────────────
   // cold(0) = deep blues/frost, neutral(0.5) = dark grays, hot(1) = deep reds/embers
-  vec3 coldColor = vec3(0.05, 0.08, 0.18);     // deep glacial blue
-  vec3 neutralColor = vec3(0.04, 0.04, 0.045);  // near-black gray
-  vec3 hotColor = vec3(0.2, 0.04, 0.02);        // deep ember red
+  // Density affects how dark the base is — dense = darker, heavier
+  float densityDarken = 1.0 - uDensity * 0.5; // dense things absorb more light
+  vec3 coldColor = vec3(0.06, 0.1, 0.25) * densityDarken;
+  vec3 neutralColor = vec3(0.05, 0.05, 0.055) * densityDarken;
+  vec3 hotColor = vec3(0.35, 0.06, 0.02) * densityDarken;
 
   vec3 tempColor;
   if (vTemperature < 0.5) {
@@ -146,10 +148,10 @@ void main() {
   vec3 hueShiftColor;
   if (vTemperature < 0.5) {
     // Cold range: shift between blues and teals
-    hueShiftColor = hsl2rgb(0.6 + totalHueShift, 0.4 * uColorDepth, 0.08);
+    hueShiftColor = hsl2rgb(0.6 + totalHueShift, 0.5 * uColorDepth, 0.06 + uInternalLight * 0.08);
   } else {
     // Hot range: shift between reds, oranges, magentas
-    hueShiftColor = hsl2rgb(0.02 + totalHueShift * 0.5, 0.5 * uColorDepth, 0.1);
+    hueShiftColor = hsl2rgb(0.02 + totalHueShift * 0.5, 0.6 * uColorDepth, 0.08 + uInternalLight * 0.1);
   }
   vec3 baseColor = mix(tempColor, hueShiftColor, uColorDepth * 0.6);
 
@@ -178,13 +180,13 @@ void main() {
 
   // ─── Subsurface scattering ────────────────────────────────
   // Light bleeding through thin regions
-  float sssStrength = (1.0 - vThickness) * pow(fresnel, 0.8) * 0.7;
+  float sssStrength = (1.0 - vThickness) * pow(fresnel, 0.8) * 1.2;
   sssStrength *= (0.3 + uTranslucency * 0.7);
 
   // SSS color follows temperature
-  vec3 sssCold = vec3(0.1, 0.15, 0.35);   // icy blue bleed
-  vec3 sssNeutral = vec3(0.15, 0.08, 0.06); // warm amber
-  vec3 sssHot = vec3(0.4, 0.08, 0.02);     // molten red bleed
+  vec3 sssCold = vec3(0.15, 0.25, 0.6);   // icy blue bleed
+  vec3 sssNeutral = vec3(0.25, 0.12, 0.08); // warm amber
+  vec3 sssHot = vec3(0.7, 0.12, 0.03);     // molten red bleed
   vec3 sssBaseColor;
   if (vTemperature < 0.5) {
     sssBaseColor = mix(sssCold, sssNeutral, vTemperature * 2.0);
@@ -198,15 +200,15 @@ void main() {
   float glowDepth = smoothstep(0.4, 0.0, NdotV); // strongest when looking through
   float glowPulse = sin(uTime * 0.12 + vObjectPos.y * 2.0) * 0.3 + 0.7;
   float rhythmPulse = 1.0 + uRhythm * 0.5 * sin(uTime * 0.4 + length(vObjectPos) * 3.0);
-  float internalGlow = glowDepth * uInternalLight * 0.5 * glowPulse * rhythmPulse;
+  float internalGlow = glowDepth * uInternalLight * 1.0 * glowPulse * rhythmPulse;
 
-  // Stored energy intensifies the internal glow
-  internalGlow += glowDepth * uStoredEnergy * 0.4 * (0.8 + 0.2 * sin(uTime * 0.8));
+  // Stored energy intensifies massively — about to burst at 1.0
+  internalGlow += glowDepth * uStoredEnergy * 0.8 * (0.7 + 0.3 * sin(uTime * 0.8));
 
   // Internal glow color follows temperature with more saturation
-  vec3 glowCold = vec3(0.08, 0.12, 0.4);
-  vec3 glowNeutral = vec3(0.15, 0.1, 0.08);
-  vec3 glowHot = vec3(0.5, 0.1, 0.02);
+  vec3 glowCold = vec3(0.1, 0.2, 0.7);
+  vec3 glowNeutral = vec3(0.25, 0.15, 0.1);
+  vec3 glowHot = vec3(0.9, 0.15, 0.03);
   vec3 glowBaseColor;
   if (vTemperature < 0.5) {
     glowBaseColor = mix(glowCold, glowNeutral, vTemperature * 2.0);
@@ -234,7 +236,7 @@ void main() {
   // ─── Atmosphere: soft halo extending into space ───────────
   // Glow that extends beyond the form's surface
   float haloFresnel = pow(fresnel, 1.5);
-  float haloIntensity = haloFresnel * uAtmosphere * 0.35;
+  float haloIntensity = haloFresnel * uAtmosphere * 0.8; // heavy halo at 1.0
   // Broader, softer than edge light
   vec3 haloColor = mix(vec3(0.06, 0.06, 0.08), glowBaseColor * 0.3, uInternalLight);
   haloColor *= haloIntensity;
@@ -243,32 +245,32 @@ void main() {
   // Visible as light bending near edges
   float lensing = pow(fresnel, 1.2) * uMagnetism;
   // Shift the view-dependent effects to simulate spatial warping
-  float lensingShift = snoise3(vWorldPos * 3.0 + viewDir * 2.0 + uTime * 0.05) * lensing * 0.15;
-  // Manifests as color aberration at edges
+  float lensingShift = snoise3(vWorldPos * 3.0 + viewDir * 2.0 + uTime * 0.05) * lensing * 0.4;
+  // Heavy chromatic aberration at edges — space bending visibly
   vec3 magnetismColor = vec3(
-    lensingShift * 0.3,
-    0.0,
-    -lensingShift * 0.2
+    lensingShift * 0.6,
+    lensingShift * 0.1,
+    -lensingShift * 0.5
   ) * uMagnetism;
 
   // ─── Stored energy: pressure containment glow ─────────────
   // Brighter interior, tighter containment — like something is about to burst
-  float pressureGlow = smoothstep(0.5, 0.1, NdotV) * uStoredEnergy * 0.3;
-  vec3 pressureColor = glowBaseColor * pressureGlow * (1.0 + sin(uTime * 1.2) * 0.2);
+  float pressureGlow = smoothstep(0.5, 0.05, NdotV) * uStoredEnergy * 0.7;
+  vec3 pressureColor = glowBaseColor * pressureGlow * (1.0 + sin(uTime * 1.2) * 0.3);
 
   // ─── Fragility: glowing crack lines ───────────────────────
   // vFaceting contains crack information from vertex shader
-  float crackGlow = vFaceting * uFragility * 0.6;
+  float crackGlow = vFaceting * uFragility * 1.2; // bright stress fractures
   // Cracks glow with temperature-appropriate color
-  vec3 crackCold = vec3(0.2, 0.3, 0.6);
-  vec3 crackHot = vec3(0.8, 0.15, 0.02);
+  vec3 crackCold = vec3(0.3, 0.5, 0.9);
+  vec3 crackHot = vec3(1.0, 0.2, 0.03);
   vec3 crackColor = mix(crackCold, crackHot, vTemperature) * crackGlow;
   // Stress fracture pulsing
   crackColor *= (0.7 + 0.3 * sin(uTime * 0.6 + vObjectPos.x * 5.0));
 
   // ─── Reactivity: surface shimmer/instability ──────────────
   float shimmer = snoise3(vWorldPos * 6.0 + uTime * uReactivity * 3.0);
-  float reactiveShimmer = shimmer * shimmer * uReactivity * 0.15;
+  float reactiveShimmer = shimmer * shimmer * uReactivity * 0.4;
   vec3 shimmerColor = baseColor * reactiveShimmer * 2.0;
 
   // ─── Iridescence: angle-dependent color shifts ────────────
@@ -278,7 +280,7 @@ void main() {
     sin(iriAngle + 2.094) * 0.5 + 0.5,
     sin(iriAngle + 4.189) * 0.5 + 0.5
   );
-  iriColor = mix(vec3(0.0), iriColor * 0.08, uIridescence);
+  iriColor = mix(vec3(0.0), iriColor * 0.2, uIridescence); // vivid prismatic at 1.0
 
   // ─── Creation cost: visual weight and layered complexity ──
   // More dense detail, more visual layers
