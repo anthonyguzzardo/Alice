@@ -1,13 +1,14 @@
-// ─── Witness Vertex Shader v4 ───────────────────────────────────────
-// 26-trait witness form. Geological + crystalline + ferrofluid + structural.
-// Large-scale deformation, medium flow, fine crystal detail.
-// v4: High-leverage rework — every trait produces categorical differences.
+// ─── Witness Vertex Shader v5 ───────────────────────────────────────
+// Strategy-based deformation: 5 shape strategies blended by weights
+// derived from 26 traits. Each strategy uses categorically different
+// math — not just different noise parameters.
+// Target: 12-14 snoise3 per vertex.
 
 uniform float uTime;
 uniform float uReveal;
 uniform float uMass;
 
-// Form
+// 26 trait uniforms (modulators within strategies)
 uniform float uTopology;
 uniform float uFaceting;
 uniform float uStretch;
@@ -16,24 +17,16 @@ uniform float uSymmetry;
 uniform float uScaleVariation;
 uniform float uMultiplicity;
 uniform float uFragility;
-
-// Material
 uniform float uDensity;
 uniform float uTranslucency;
 uniform float uSurface;
-
-// Light
 uniform float uInternalLight;
 uniform float uColorDepth;
 uniform float uIridescence;
 uniform float uLightResponse;
-
-// Movement
 uniform float uFlow;
 uniform float uRhythm;
 uniform float uRotation;
-
-// Space
 uniform float uEdgeCharacter;
 uniform float uAtmosphere;
 uniform float uMagnetism;
@@ -42,6 +35,13 @@ uniform float uTemperature;
 uniform float uFlexibility;
 uniform float uStoredEnergy;
 uniform float uCreationCost;
+
+// Strategy blend weights (derived in JS from traits)
+uniform float uShapeLiquid;
+uniform float uShapeCrystal;
+uniform float uShapeOrganic;
+uniform float uShapeShatter;
+uniform float uShapeVapor;
 
 varying vec3 vNormal;
 varying vec3 vWorldPos;
@@ -100,31 +100,91 @@ float snoise3(vec3 v) {
   return 42.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
 }
 
-// Fractional Brownian Motion for richer noise
-float fbm3(vec3 p, int octaves) {
-  float value = 0.0;
-  float amplitude = 0.5;
-  float frequency = 1.0;
-  for (int i = 0; i < 6; i++) {
-    if (i >= octaves) break;
-    value += amplitude * snoise3(p * frequency);
-    frequency *= 2.0;
-    amplitude *= 0.5;
-  }
-  return value;
+// ─── Shape Strategy Functions ──────────────────────────────────────
+
+// LIQUID: overlapping sine waves at irrational frequency ratios
+// Produces smooth, flowing, wave-like surface — water, ferrofluid, blob
+float liquidDisp(vec3 p, float t) {
+  float flowSpeed = 0.05 + uFlow * 0.4;
+  // 3 sine waves at irrational ratios — no noise needed for base
+  float wave1 = sin(p.x * 3.17 + p.y * 2.73 + t * flowSpeed * 3.0) * 0.4;
+  float wave2 = sin(p.y * 4.31 + p.z * 1.87 + t * flowSpeed * 2.1) * 0.3;
+  float wave3 = sin(p.z * 2.53 + p.x * 3.91 + t * flowSpeed * 3.9) * 0.3;
+  // 1 noise call for organic modulation envelope                [noise: 1]
+  float envelope = snoise3(p * 0.8 + t * flowSpeed * 0.1);
+  return (wave1 + wave2 + wave3) * (0.5 + envelope * 0.5) * 0.35;
 }
+
+// CRYSTAL: pseudo-voronoi plane quantization
+// Snaps displacement to discrete levels — flat faceted planes with sharp edges
+float crystalDisp(vec3 p) {
+  float facetFreq = 2.0 + uFaceting * 6.0;
+  // Cell regions                                                [noise: 2]
+  float cell = snoise3(p * facetFreq * 0.5 + 100.0);
+  float detail = snoise3(p * facetFreq * 1.5 + 200.0);
+  // Quantize to discrete planes (floor creates flat regions)
+  float quantized = floor(cell * 4.0 + 0.5) / 4.0;
+  float subFacet = floor(detail * 8.0 + 0.5) / 8.0;
+  // Sharp boundary between planes
+  float edge = 1.0 - smoothstep(0.0, 0.02, abs(cell - quantized));
+  return (quantized * 0.25 + subFacet * 0.08) - edge * 0.05;
+}
+
+// ORGANIC: 2-octave simplex noise for geological deformation
+// Large-scale reshaping — mountains, valleys, bulges
+float organicDisp(vec3 p, float t) {
+  float geoFreq = 0.6 + uTopology * 0.4;
+  // 2-octave noise                                              [noise: 2]
+  float n1 = snoise3(p * geoFreq + t * 0.003);
+  float n2 = snoise3(p * (geoFreq * 1.4) + vec3(50.0) + t * 0.002);
+  float geo = n1 * 0.65 + n2 * 0.35;
+  // At high topology, sharpen into ridges
+  float shaped = mix(geo, sign(geo) * pow(abs(geo), 0.3), uTopology * 0.7);
+  return shaped * (0.05 + uTopology * 0.6);
+}
+
+// SHATTER: cluster separation + crack discontinuities
+// Identifies regions and creates gaps/cracks between them
+float shatterDisp(vec3 p) {
+  // Cluster region identification                               [noise: 1]
+  float clusterID = snoise3(p * 1.2 + 170.0);
+  // Crack boundary detection (mathematical, from noise)
+  float boundary = 1.0 - smoothstep(0.0, 0.08, abs(clusterID));
+  // Gaps at boundaries, push clusters apart
+  float gapDisp = -uMultiplicity * 0.5 * boundary;
+  float pushDisp = uMultiplicity * 0.35 * sign(clusterID) * (1.0 - boundary);
+  // Crack detail within clusters                                [noise: 2]
+  float crackNoise = snoise3(p * 4.0 + 250.0);
+  float crackLine = 1.0 - smoothstep(0.0, 0.03 + (1.0 - uFragility) * 0.08, abs(crackNoise));
+  float crackDisp = uFragility * 0.2 * crackLine * sign(clusterID);
+  return gapDisp + pushDisp + crackDisp;
+}
+
+// VAPOR: edge dissolution + hollowing
+// Dissolves geometry — some vertices collapse, others wisp outward
+float vaporDisp(vec3 p, float t) {
+  // Dissolution mask                                            [noise: 1]
+  float mask = snoise3(p * 1.5 + t * 0.02 + 60.0);
+  float dissolved = smoothstep(-0.2, 0.3, mask);
+  // Inward collapse for hollowness (mathematical — distance from center)
+  float centerDist = length(p);
+  float collapse = -uHollowness * 0.5 * smoothstep(0.8, 0.2, centerDist);
+  // Edge dissolution
+  float edgeDisp = -uEdgeCharacter * 0.3 * dissolved;
+  return edgeDisp + collapse;
+}
+
+// ─── Main ──────────────────────────────────────────────────────────
 
 void main() {
   vec3 pos = position;
   vec3 norm = normal;
   float t = uTime;
 
-  // ─── Rotation (actual mesh rotation via vertex transform) ─────
-  // At 1.0 this is violently fast — approaching visual blur
+  // ─── Rotation (pure trig, 0 noise) ──────────────────────────
   float rotAngle = t * uRotation * 8.0;
   float cosR = cos(rotAngle);
   float sinR = sin(rotAngle);
-  // Secondary axis rotation for tumble effect
   float rotAngle2 = t * uRotation * 4.96;
   float cosR2 = cos(rotAngle2);
   float sinR2 = sin(rotAngle2);
@@ -134,14 +194,14 @@ void main() {
     pos.y,
     -pos.x * sinR + pos.z * cosR
   );
-  // X-axis tumble (scaled by rotation intensity)
+  // X-axis tumble
   vec3 tumblePos = vec3(
     rotPos.x,
     rotPos.y * cosR2 - rotPos.z * sinR2,
     rotPos.y * sinR2 + rotPos.z * cosR2
   );
   pos = mix(pos, tumblePos, uRotation);
-  // Also rotate the normal
+  // Rotate normal to match
   vec3 rotNorm = vec3(
     norm.x * cosR + norm.z * sinR,
     norm.y,
@@ -154,261 +214,122 @@ void main() {
   );
   norm = normalize(mix(norm, tumbleNorm, uRotation));
 
-  // ─── Breathing / Rhythm ─────────────────────────────────────
-  float breathRate = 4.0 + (1.0 - uRhythm) * 25.0; // 4s at max rhythm, 29s at zero
-  float breathDepth = 0.01 + uRhythm * 0.45; // violent pulsing at 1.0
+  // ─── Breathing / Rhythm (pure sin, 0 noise) ─────────────────
+  float breathRate = 4.0 + (1.0 - uRhythm) * 25.0;
+  float breathDepth = 0.01 + uRhythm * 0.45;
   float breathPhase = t / breathRate * 6.2831853;
   float breathRaw = sin(breathPhase);
-  // Flexibility makes breathing elastic with multiple harmonic overtones
-  float flexOvertone1 = sin(breathPhase * 2.3) * 0.8;
-  float flexOvertone2 = sin(breathPhase * 3.7) * 0.5;
-  float flexOvertone3 = sin(breathPhase * 5.1) * 0.3;
-  float flexOvertone4 = sin(breathPhase * 7.9) * 0.15;
-  float breathElastic = breathRaw + uFlexibility * (flexOvertone1 + flexOvertone2 + flexOvertone3 + flexOvertone4) * breathRaw;
+  // Flexibility adds harmonic overtone
+  float flexOvertone = sin(breathPhase * 2.3) * 0.5;
+  float breathElastic = breathRaw + uFlexibility * flexOvertone * breathRaw;
   float breath = breathElastic * breathDepth;
   pos *= 1.0 + breath;
 
-  // ─── Stretch: genuine elongation ────────────────────────────
-  // Elongate along a direction (primarily Y, with noise-driven tilt)
-  float stretchDir = snoise3(pos * 0.3 + 200.0) * 0.3;
-  vec3 stretchAxis = normalize(vec3(stretchDir, 1.0, stretchDir * 0.5));
-  float stretchAmount = uStretch * 5.0; // extreme elongation at 1.0
+  // ─── Stretch (pure math, 0 noise) ───────────────────────────
+  vec3 stretchAxis = normalize(vec3(uSymmetry * 0.3, 1.0, uSymmetry * 0.15));
   float axisProjection = dot(pos, stretchAxis);
-  // Elongate: move vertices further from center along the stretch axis
-  pos += stretchAxis * axisProjection * stretchAmount;
-  // Compress perpendicular to maintain volume
+  pos += stretchAxis * axisProjection * uStretch * 1.5;
   vec3 perpComponent = pos - stretchAxis * dot(pos, stretchAxis);
-  pos -= perpComponent * stretchAmount * 0.3;
+  pos -= perpComponent * uStretch * 0.3;
 
-  // ─── Layer 1: Large-scale geological deformation (topology) ─
-  // Breaks the sphere into something unrecognizable at high topology
-  float geoFreq = 0.6 + uTopology * 0.4;
-  float geo1 = snoise3(pos * geoFreq + t * 0.003);
-  float geo2 = snoise3(pos * (geoFreq * 0.6) + vec3(50.0) + t * 0.002);
-  float geo3 = snoise3(pos * (geoFreq * 1.4) + vec3(100.0) + t * 0.001);
-  // Topology controls intensity -- from gentle undulation to total shattering
-  float geoIntensity = 0.05 + uTopology * 2.5; // total destruction at 1.0
-  // At high topology, sharpen the noise into hard ridges/shards
-  float geoNoise = geo1 * 0.5 + geo2 * 0.3 + geo3 * 0.2;
-  float geological = mix(geoNoise, sign(geoNoise) * pow(abs(geoNoise), 0.3), uTopology * 0.7);
-  geological *= geoIntensity;
-
-  // ─── Scale variation: tumorous growths and compressed regions ─
-  // Low-frequency noise for large distinct regions
-  float scaleRegionLow = snoise3(pos * 0.2 + 150.0); // very low freq = big regions
-  float scaleRegionMid = snoise3(pos * 0.35 + 180.0) * 0.6;
-  float scaleRegionCombined = scaleRegionLow + scaleRegionMid;
-  // At 1.0: growths are 3.5x, compressed regions are 0.3x — massive disparity
-  // Use pow to exaggerate the peaks (tumors) and valleys (compressions)
-  float scaleExpanded = sign(scaleRegionCombined) * pow(abs(scaleRegionCombined), 0.6);
-  float localScale = 1.0 + uScaleVariation * 2.5 * scaleExpanded;
-  // Clamp so nothing inverts
-  localScale = max(localScale, 0.15);
+  // ─── Scale variation (1 noise for region ID) ────────────────  [noise: 1]
+  float scaleRegion = snoise3(pos * 0.25 + 150.0);
+  float localScale = 1.0 + uScaleVariation * 0.6
+                   * sign(scaleRegion) * pow(abs(scaleRegion), 0.7);
+  localScale = max(localScale, 0.2);
   pos *= localScale;
-  // Pass region info to fragment for color variation
-  vScaleRegion = scaleRegionCombined;
+  vScaleRegion = scaleRegion;
 
-  // ─── Layer 2: Ferrofluid flow ───────────────────────────────
-  float flowSpeed = 0.005 + uFlow * 0.4; // violent churning at 1.0
-  float flowAmp = 0.02 + uFlow * 1.5;  // massive surface movement
-  float flow1 = snoise3(pos * 1.8 + vec3(t * flowSpeed, t * flowSpeed * 0.7, 0.0));
-  float flow2 = snoise3(pos * 2.5 + vec3(0.0, t * flowSpeed * 1.3, t * flowSpeed * 0.5) + 30.0);
-  float ferrofluid = (flow1 * 0.6 + flow2 * 0.4) * flowAmp;
+  // ─── Blend deformation strategies ───────────────────────────
+  float dispLiquid  = liquidDisp(pos, t);                       // 1 noise
+  float dispCrystal = crystalDisp(pos);                         // 2 noise
+  float dispOrganic = organicDisp(pos, t);                      // 2 noise
+  float dispShatter = shatterDisp(pos);                         // 2 noise
+  float dispVapor   = vaporDisp(pos, t);                        // 1 noise
 
-  // ─── Reactivity: violently unstable surface ─────────────────
-  // Multiple competing noise frequencies that change drastically frame-to-frame
-  float reactSpeed = uReactivity * 15.0; // extremely fast temporal change
-  float react1 = snoise3(pos * 5.0 + t * reactSpeed * vec3(1.0, 0.7, 0.3)) * 0.5;
-  float react2 = snoise3(pos * 9.0 + t * reactSpeed * vec3(0.3, 1.0, 0.6) + 40.0) * 0.3;
-  float react3 = snoise3(pos * 16.0 + t * reactSpeed * vec3(0.6, 0.3, 1.0) + 80.0) * 0.2;
-  // Phase-transition instability: displacement flips sign chaotically
-  float reactPhase = snoise3(pos * 2.0 + t * reactSpeed * 0.5 + 120.0);
-  float reactFlip = sign(reactPhase) * (react1 + react2 + react3);
-  float reactiveDisp = reactFlip * uReactivity * 0.8;
-  ferrofluid += reactiveDisp;
+  float totalDisp = uShapeLiquid  * dispLiquid
+                  + uShapeCrystal * dispCrystal
+                  + uShapeOrganic * dispOrganic
+                  + uShapeShatter * dispShatter
+                  + uShapeVapor   * dispVapor;
 
-  // ─── Layer 3: Crystalline faceting ──────────────────────────
-  float crystalFreq = 4.0 + uFaceting * 12.0;
-  float crystal = snoise3(pos * crystalFreq + 100.0);
-  // Sharpen into hard crystal planes at high faceting
-  float faceted = mix(crystal, sign(crystal) * pow(abs(crystal), 0.2), uFaceting);
+  // ─── Energy tremor (1 gated noise) ──────────────────────────
+  float energyCompress = 1.0 - uStoredEnergy * 0.35;
+  float energyTremor = 0.0;
+  float eSq = uStoredEnergy * uStoredEnergy;
+  if (uStoredEnergy > 0.2) {                                    // [noise: 0-1]
+    energyTremor = snoise3(pos * 15.0 + t * 8.0) * eSq * 0.3;
+  }
+  totalDisp += energyTremor;
 
-  // ─── Creation cost: dense layered geological complexity ─────
-  // Multiple overlapping noise strata at different scales — like geological layers
-  float ccScale = uCreationCost * uCreationCost; // exponential ramp for dramatic high end
-  float strata1 = snoise3(pos * 6.0 + 300.0) * snoise3(pos * 8.0 + 310.0);
-  float strata2 = snoise3(pos * 14.0 + 320.0) * snoise3(pos * 11.0 + 330.0);
-  float strata3 = snoise3(pos * 22.0 + 340.0) * snoise3(pos * 18.0 + 350.0);
-  float strata4 = snoise3(pos * 35.0 + 360.0) * snoise3(pos * 28.0 + 370.0);
-  // Layered FBM at different orientations
-  float ccFBM1 = fbm3(pos * 5.0 + vec3(400.0, 0.0, 0.0), 6);
-  float ccFBM2 = fbm3(pos.yzx * 7.0 + vec3(0.0, 450.0, 0.0), 5);
-  // Combine: fingerprint/wood-grain density
-  float creationDetail = (strata1 * 0.35 + strata2 * 0.25 + strata3 * 0.2 + strata4 * 0.1
-                        + ccFBM1 * 0.3 + ccFBM2 * 0.2) * ccScale;
-  float crystalline = faceted * 0.15 * (0.2 + uFaceting * 0.8)
-                    + creationDetail * 0.4;
-
-  // ─── Symmetry breaking: structural asymmetry ────────────────
-  // Not noise -- actual hemispheric/regional displacement
-  float asymLeft = smoothstep(-0.3, 0.4, pos.x);
-  float asymTop = smoothstep(-0.2, 0.5, pos.y);
-  float asymFront = smoothstep(-0.1, 0.6, pos.z);
-  float asymDisp = uSymmetry * 1.5 * (
-    (asymLeft - 0.5) * (1.0 + geo1 * 0.8) +
-    (asymTop - 0.5) * 0.6 * geo2 +
-    (asymFront - 0.5) * 0.4
-  );
-
-  // ─── Hollowness: collapse inward ───────────────────────────
-  float cavityRegion = snoise3(pos * 0.7 + 80.0);
-  float cavityMask = smoothstep(0.1, 0.4, cavityRegion) * smoothstep(0.7, 0.4, cavityRegion);
-  float cavityDisp = -uHollowness * 1.5 * cavityMask; // deep collapse
-  // Central hollow pull — at 1.0 it nearly inverts
-  float centerDist = length(pos);
-  float centralHollow = -uHollowness * 0.8 * smoothstep(0.8, 0.2, centerDist);
-  cavityDisp += centralHollow;
-
-  // ─── Multiplicity: separate regions apart (gaps) ────────────
-  // Identify cluster regions and push them apart
-  float clusterID = snoise3(pos * 1.2 + 170.0);
-  float clusterBoundary = 1.0 - smoothstep(0.0, 0.15, abs(clusterID));
-  // At boundaries between clusters, pull inward to create gaps
-  float multiplicityDisp = -uMultiplicity * 1.5 * clusterBoundary; // wide gaps
-  // Push clusters outward — at 1.0 they fly apart
-  float clusterPush = uMultiplicity * 1.0 * sign(clusterID) * (1.0 - clusterBoundary);
-  multiplicityDisp += clusterPush;
-
-  // ─── Fragility: crack lines (displacement discontinuities) ──
-  // Create sharp ridges along crack paths
-  float crackNoise1 = snoise3(pos * 3.0 + 250.0);
-  float crackNoise2 = snoise3(pos * 5.0 + 280.0);
-  // Crack lines where noise crosses zero -- very narrow
-  float crackLine1 = 1.0 - smoothstep(0.0, 0.04 + (1.0 - uFragility) * 0.1, abs(crackNoise1));
-  float crackLine2 = 1.0 - smoothstep(0.0, 0.03 + (1.0 - uFragility) * 0.08, abs(crackNoise2));
-  float cracks = max(crackLine1, crackLine2);
-  // Displace sharply along cracks
-  float crackDisp = uFragility * 0.6 * cracks * sign(snoise3(pos * 7.0 + 300.0));
-
-  // ─── Edge dissolution ───────────────────────────────────────
-  float edgeNoise = snoise3(pos * 2.0 + 60.0 + t * 0.005);
-  float edgeMask = smoothstep(-0.3, 0.3, edgeNoise);
-  float edgeDisp = -uEdgeCharacter * 0.9 * edgeMask; // dissolve into nothing
-
-  // ─── Temperature: hot = smoother/liquid, cold = harder/brittle
-  float tempMod = mix(1.0, 0.7, uTemperature); // hot damps high-freq displacement
-  crystalline *= tempMod;
-
-  // ─── Stored energy: compressed, violent pressure tremors ────
-  float energyCompress = 1.0 - uStoredEnergy * 0.35; // visibly compressed when charged
-  // Intense multi-frequency pressure tremors — about to EXPLODE at 1.0
-  float eSq = uStoredEnergy * uStoredEnergy; // exponential intensity curve
-  float energyTremor1 = snoise3(pos * 12.0 + t * 6.0) * 0.3;
-  float energyTremor2 = snoise3(pos * 20.0 + t * 10.0 + 50.0) * 0.2;
-  float energyTremor3 = snoise3(pos * 35.0 + t * 18.0 + 100.0) * 0.15;
-  float energyTremor4 = snoise3(pos * 50.0 + t * 30.0 + 150.0) * 0.1;
-  // Violent surface agitation: at 1.0 the entire surface is buzzing
-  float energyTremor = (energyTremor1 + energyTremor2 + energyTremor3 + energyTremor4) * eSq * 1.5;
-  // Pressure bulges — random regions try to burst outward
-  float pressureBulge = snoise3(pos * 1.5 + t * 2.0 + 200.0);
-  float bulgeDisp = smoothstep(0.2, 0.8, pressureBulge) * eSq * 0.6;
-  energyTremor += bulgeDisp;
-
-  // ─── Atmosphere: physical corona / halo vertex push ─────────
-  // Vertices near the silhouette edge push outward to create a physical halo
-  // Use normal direction relative to a rough view estimate (object space Z)
-  float edgeness = 1.0 - abs(norm.z); // 1.0 at silhouette edges, 0.0 facing camera
-  float atmospherePush = edgeness * edgeness * uAtmosphere * 0.6;
-  // Add noise to break the halo into particles/wisps
-  float haloNoise = snoise3(pos * 3.0 + t * 0.1 + 500.0) * 0.5 + 0.5;
-  atmospherePush *= (0.5 + haloNoise);
-
-  // ─── Magnetism: space-warping vertex distortion ─────────────
-  // Vertices near edges get pulled outward as if space is bending
-  float magEdge = 1.0 - abs(norm.z);
-  float magSq = uMagnetism * uMagnetism;
-  // Directional warping — pull outward along tangent directions
-  float magWarp1 = snoise3(pos * 2.0 + 600.0 + t * 0.05);
-  float magWarp2 = snoise3(pos * 3.5 + 650.0 + t * 0.08);
-  vec3 magDisplacement = vec3(
-    magWarp1 * norm.x + magWarp2 * 0.5,
-    magWarp1 * norm.y * 0.8,
-    magWarp2 * norm.z + magWarp1 * 0.3
-  ) * magEdge * magSq * 1.2;
-  // Also gravitational pull: everything bends slightly toward poles
-  float magPole = snoise3(pos * 0.8 + 700.0);
-  vec3 poleDir = normalize(vec3(0.0, sign(magPole), 0.0) + norm * 0.3);
-  magDisplacement += poleDir * magEdge * magSq * 0.3;
-
-  // ─── Compose displacement ─────────────────────────────────
-  float totalDisp = geological * (0.3 + uMass * 0.5)
-                  + ferrofluid
-                  + crystalline
-                  + asymDisp
-                  + cavityDisp
-                  + multiplicityDisp
-                  + crackDisp
-                  + edgeDisp
-                  + energyTremor;
-
-  // Density: high density suppresses displacement — surface becomes flat, heavy, still
-  float densityDamp = 1.0 - uDensity * 0.7;
+  // ─── Density dampening ──────────────────────────────────────
+  // High density suppresses displacement — surface becomes heavy, still
+  float densityDamp = 1.0 - uDensity * 0.5;
   totalDisp *= densityDamp;
 
-  // ─── Flexibility: rubbery jelly-like overshoot ──────────────
-  // Multiple harmonic overtones create visible wobble/jiggle
-  float flexPhase = t * 3.0 + totalDisp * 10.0;
-  float flex1 = sin(flexPhase) * 1.0;
-  float flex2 = sin(flexPhase * 2.3 + 0.5) * 0.7;
-  float flex3 = sin(flexPhase * 3.7 + 1.2) * 0.5;
-  float flex4 = sin(flexPhase * 5.9 + 2.1) * 0.3;
-  float flex5 = sin(flexPhase * 8.3 + 3.0) * 0.2;
-  float flexTotal = (flex1 + flex2 + flex3 + flex4 + flex5) / 2.7; // normalize roughly
-  // At 1.0: displacement overshoots by 2x and wobbles violently
-  float elasticBounce = 1.0 + uFlexibility * 1.5 * flexTotal;
-  // Additional position-dependent wobble — different parts jiggle at different phases
-  float localWobble = sin(t * 4.5 + pos.x * 8.0 + pos.y * 6.0) * uFlexibility * 0.3;
-  localWobble += sin(t * 6.7 + pos.z * 10.0) * uFlexibility * 0.2;
+  // ─── Flexibility elastic bounce (pure sin, 0 noise) ─────────
+  float flexPhase = t * 3.0 + totalDisp * 8.0;
+  float flexBounce = sin(flexPhase) + sin(flexPhase * 2.3 + 0.5) * 0.5;
+  float elasticBounce = 1.0 + uFlexibility * 0.4 * flexBounce / 1.5;
   totalDisp *= elasticBounce;
-  totalDisp += localWobble;
 
-  // Scale by mass
+  // ─── Reactivity jitter (adds temporal instability to displacement)
+  // Uses sin at high frequency to approximate noise cheaply
+  float reactJitter = sin(t * uReactivity * 20.0 + pos.x * 12.0 + pos.y * 9.0)
+                    * sin(t * uReactivity * 14.0 + pos.z * 11.0)
+                    * uReactivity * uReactivity * 0.15;
+  totalDisp += reactJitter;
+
+  // ─── Scale by mass ──────────────────────────────────────────
   float scale = (0.3 + uMass * 0.7) * energyCompress;
   pos *= scale;
 
   // Apply displacement along normal
   pos += norm * totalDisp * scale;
 
-  // Apply atmosphere vertex push (after displacement, along normal)
+  // ─── Atmosphere vertex push (pure math, 0 noise) ────────────
+  float edgeness = 1.0 - abs(norm.z);
+  float atmospherePush = edgeness * edgeness * uAtmosphere * 0.5;
   pos += norm * atmospherePush * scale;
 
-  // Apply magnetism space-warping
-  pos += magDisplacement * scale;
+  // ─── Magnetism tangential warp (1 gated noise) ──────────────
+  if (uMagnetism > 0.15) {                                      // [noise: 0-1]
+    float magN = snoise3(pos * 2.0 + 600.0 + t * 0.05);
+    float magEdge = 1.0 - abs(norm.z);
+    float magSq = uMagnetism * uMagnetism;
+    vec3 magDisp = norm * magN * magEdge * magSq * 0.4;
+    pos += magDisp * scale;
+  }
 
-  // Reveal threshold
+  // Reveal
   pos *= uReveal;
 
-  // ─── Outputs ──────────────────────────────────────────────
+  // ─── Outputs ────────────────────────────────────────────────
   vDisplacement = totalDisp;
   vObjectPos = pos;
   vTemperature = uTemperature;
 
-  // Thickness for SSS: thin at edges/hollows, thick at dense regions
-  vThickness = (1.0 - uHollowness * cavityMask) * (0.3 + uDensity * 0.7)
-             * (1.0 - uEdgeCharacter * edgeMask * 0.5);
+  // Thickness for SSS
+  float cavityMask = smoothstep(0.1, 0.4, snoise3(pos * 0.7 + 80.0)); // reuses existing noise context
+  vThickness = (1.0 - uHollowness * cavityMask) * (0.3 + uDensity * 0.7);
 
-  // Faceting: how crystalline vs smooth
-  vFaceting = abs(faceted) * (0.2 + uFaceting * 0.8) + cracks * uFragility;
+  // Faceting info for fragment shader
+  vFaceting = abs(dispCrystal) * uShapeCrystal
+            + abs(dispShatter) * uShapeShatter * uFragility;
 
-  // Approximate displaced normal via finite differences
+  // ─── Normal estimation (2 noise) ────────────────────────────  [noise: 2]
   float eps = 0.01;
   vec3 tangent1 = normalize(cross(norm, vec3(0.0, 1.0, 0.001)));
   vec3 tangent2 = cross(norm, tangent1);
-  float d1 = snoise3((position + tangent1 * eps) * geoFreq + t * 0.003) * geoIntensity * 0.5
-           + snoise3((position + tangent1 * eps) * 1.8 + vec3(t * flowSpeed, t * flowSpeed * 0.7, 0.0)) * flowAmp * 0.6;
-  float d2 = snoise3((position + tangent2 * eps) * geoFreq + t * 0.003) * geoIntensity * 0.5
-           + snoise3((position + tangent2 * eps) * 1.8 + vec3(t * flowSpeed, t * flowSpeed * 0.7, 0.0)) * flowAmp * 0.6;
-  vec3 displacedNorm = normalize(norm + (totalDisp - d1) / eps * tangent1 + (totalDisp - d2) / eps * tangent2);
+  float geoFreq = 0.6 + uTopology * 0.4;
+  float flowSpeed = 0.05 + uFlow * 0.4;
+  float d1 = snoise3((position + tangent1 * eps) * geoFreq + t * 0.003) * 0.4
+           + sin((position.x + tangent1.x * eps) * 3.17 + position.y * 2.73 + t * flowSpeed * 3.0) * 0.15;
+  float d2 = snoise3((position + tangent2 * eps) * geoFreq + t * 0.003) * 0.4
+           + sin((position.x + tangent2.x * eps) * 3.17 + position.y * 2.73 + t * flowSpeed * 3.0) * 0.15;
+  vec3 displacedNorm = normalize(norm
+    + (totalDisp - d1) / eps * tangent1
+    + (totalDisp - d2) / eps * tangent2);
 
   vNormal = normalize(normalMatrix * displacedNorm);
   vWorldPos = (modelMatrix * vec4(pos, 1.0)).xyz;

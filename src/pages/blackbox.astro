@@ -34,6 +34,7 @@
       import * as THREE from 'three';
       import type { WitnessState, WitnessTraits } from '../lib/dream/types';
       import { DEFAULT_WITNESS, TRAIT_KEYS } from '../lib/dream/types';
+      import { deriveShaderWeights, WEIGHT_KEYS, weightUniformName } from '../lib/dream/shader-weights';
 
       import witnessVert from '../assets/shaders/witness.vert?raw';
       import witnessFrag from '../assets/shaders/witness.frag?raw';
@@ -74,6 +75,11 @@
         traitUniforms[traitUniformName(key)] = { value: DEFAULT_WITNESS.traits[key] };
       }
 
+      const weightUniforms: Record<string, { value: number }> = {};
+      for (const key of WEIGHT_KEYS) {
+        weightUniforms[weightUniformName(key)] = { value: 0 };
+      }
+
       const witnessMaterial = new THREE.ShaderMaterial({
         vertexShader: witnessVert,
         fragmentShader: witnessFrag,
@@ -83,6 +89,7 @@
           uMass: { value: DEFAULT_WITNESS.mass },
           uCameraPos: { value: camera.position },
           ...traitUniforms,
+          ...weightUniforms,
         },
         transparent: true,
         depthWrite: true,
@@ -166,6 +173,16 @@
 
         displayedMass += (witnessState.mass - displayedMass) * rate;
         witnessMaterial.uniforms.uMass.value = displayedMass;
+
+        // Derive strategy weights from current (lerped) trait values
+        const traitObj = {} as WitnessTraits;
+        for (const key of TRAIT_KEYS) {
+          (traitObj as any)[key] = displayedTraits[key];
+        }
+        const weights = deriveShaderWeights(traitObj);
+        for (const key of WEIGHT_KEYS) {
+          witnessMaterial.uniforms[weightUniformName(key)].value = weights[key];
+        }
       }
 
       // ─── Data Fetch ─────────────────────────────────────────────
