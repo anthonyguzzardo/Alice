@@ -1,6 +1,7 @@
-// ─── Witness Vertex Shader v3 ───────────────────────────────────────
+// ─── Witness Vertex Shader v4 ───────────────────────────────────────
 // 26-trait witness form. Geological + crystalline + ferrofluid + structural.
 // Large-scale deformation, medium flow, fine crystal detail.
+// v4: High-leverage rework — every trait produces categorical differences.
 
 uniform float uTime;
 uniform float uReveal;
@@ -49,6 +50,7 @@ varying float vDisplacement;
 varying float vThickness;
 varying float vFaceting;
 varying float vTemperature;
+varying float vScaleRegion;
 
 // ─── 3D Simplex Noise ──────────────────────────────────────────────
 
@@ -155,10 +157,14 @@ void main() {
   // ─── Breathing / Rhythm ─────────────────────────────────────
   float breathRate = 4.0 + (1.0 - uRhythm) * 25.0; // 4s at max rhythm, 29s at zero
   float breathDepth = 0.01 + uRhythm * 0.45; // violent pulsing at 1.0
-  // Flexibility makes breathing more elastic (overshoot)
   float breathPhase = t / breathRate * 6.2831853;
   float breathRaw = sin(breathPhase);
-  float breathElastic = breathRaw + uFlexibility * 0.8 * sin(breathPhase * 2.3) * breathRaw;
+  // Flexibility makes breathing elastic with multiple harmonic overtones
+  float flexOvertone1 = sin(breathPhase * 2.3) * 0.8;
+  float flexOvertone2 = sin(breathPhase * 3.7) * 0.5;
+  float flexOvertone3 = sin(breathPhase * 5.1) * 0.3;
+  float flexOvertone4 = sin(breathPhase * 7.9) * 0.15;
+  float breathElastic = breathRaw + uFlexibility * (flexOvertone1 + flexOvertone2 + flexOvertone3 + flexOvertone4) * breathRaw;
   float breath = breathElastic * breathDepth;
   pos *= 1.0 + breath;
 
@@ -187,10 +193,20 @@ void main() {
   float geological = mix(geoNoise, sign(geoNoise) * pow(abs(geoNoise), 0.3), uTopology * 0.7);
   geological *= geoIntensity;
 
-  // ─── Scale variation: different regions at different sizes ───
-  float scaleRegion = snoise3(pos * 0.5 + 150.0);
-  float localScale = 1.0 + uScaleVariation * 1.8 * scaleRegion; // wild size differences
+  // ─── Scale variation: tumorous growths and compressed regions ─
+  // Low-frequency noise for large distinct regions
+  float scaleRegionLow = snoise3(pos * 0.2 + 150.0); // very low freq = big regions
+  float scaleRegionMid = snoise3(pos * 0.35 + 180.0) * 0.6;
+  float scaleRegionCombined = scaleRegionLow + scaleRegionMid;
+  // At 1.0: growths are 3.5x, compressed regions are 0.3x — massive disparity
+  // Use pow to exaggerate the peaks (tumors) and valleys (compressions)
+  float scaleExpanded = sign(scaleRegionCombined) * pow(abs(scaleRegionCombined), 0.6);
+  float localScale = 1.0 + uScaleVariation * 2.5 * scaleExpanded;
+  // Clamp so nothing inverts
+  localScale = max(localScale, 0.15);
   pos *= localScale;
+  // Pass region info to fragment for color variation
+  vScaleRegion = scaleRegionCombined;
 
   // ─── Layer 2: Ferrofluid flow ───────────────────────────────
   float flowSpeed = 0.005 + uFlow * 0.4; // violent churning at 1.0
@@ -198,18 +214,40 @@ void main() {
   float flow1 = snoise3(pos * 1.8 + vec3(t * flowSpeed, t * flowSpeed * 0.7, 0.0));
   float flow2 = snoise3(pos * 2.5 + vec3(0.0, t * flowSpeed * 1.3, t * flowSpeed * 0.5) + 30.0);
   float ferrofluid = (flow1 * 0.6 + flow2 * 0.4) * flowAmp;
-  // Reactivity adds surface shimmer/instability
-  float reactiveJitter = snoise3(pos * 8.0 + t * uReactivity * 6.0) * uReactivity * 0.3;
-  ferrofluid += reactiveJitter;
+
+  // ─── Reactivity: violently unstable surface ─────────────────
+  // Multiple competing noise frequencies that change drastically frame-to-frame
+  float reactSpeed = uReactivity * 15.0; // extremely fast temporal change
+  float react1 = snoise3(pos * 5.0 + t * reactSpeed * vec3(1.0, 0.7, 0.3)) * 0.5;
+  float react2 = snoise3(pos * 9.0 + t * reactSpeed * vec3(0.3, 1.0, 0.6) + 40.0) * 0.3;
+  float react3 = snoise3(pos * 16.0 + t * reactSpeed * vec3(0.6, 0.3, 1.0) + 80.0) * 0.2;
+  // Phase-transition instability: displacement flips sign chaotically
+  float reactPhase = snoise3(pos * 2.0 + t * reactSpeed * 0.5 + 120.0);
+  float reactFlip = sign(reactPhase) * (react1 + react2 + react3);
+  float reactiveDisp = reactFlip * uReactivity * 0.8;
+  ferrofluid += reactiveDisp;
 
   // ─── Layer 3: Crystalline faceting ──────────────────────────
-  float crystalFreq = 4.0 + uFaceting * 12.0 + uCreationCost * 6.0;
+  float crystalFreq = 4.0 + uFaceting * 12.0;
   float crystal = snoise3(pos * crystalFreq + 100.0);
   // Sharpen into hard crystal planes at high faceting
   float faceted = mix(crystal, sign(crystal) * pow(abs(crystal), 0.2), uFaceting);
-  // creationCost adds more octaves of detail
-  float detailNoise = fbm3(pos * crystalFreq * 1.5 + 300.0, int(2.0 + uCreationCost * 4.0));
-  float crystalline = (faceted * 0.7 + detailNoise * 0.3 * uCreationCost) * 0.15 * (0.2 + uFaceting * 0.8);
+
+  // ─── Creation cost: dense layered geological complexity ─────
+  // Multiple overlapping noise strata at different scales — like geological layers
+  float ccScale = uCreationCost * uCreationCost; // exponential ramp for dramatic high end
+  float strata1 = snoise3(pos * 6.0 + 300.0) * snoise3(pos * 8.0 + 310.0);
+  float strata2 = snoise3(pos * 14.0 + 320.0) * snoise3(pos * 11.0 + 330.0);
+  float strata3 = snoise3(pos * 22.0 + 340.0) * snoise3(pos * 18.0 + 350.0);
+  float strata4 = snoise3(pos * 35.0 + 360.0) * snoise3(pos * 28.0 + 370.0);
+  // Layered FBM at different orientations
+  float ccFBM1 = fbm3(pos * 5.0 + vec3(400.0, 0.0, 0.0), 6);
+  float ccFBM2 = fbm3(pos.yzx * 7.0 + vec3(0.0, 450.0, 0.0), 5);
+  // Combine: fingerprint/wood-grain density
+  float creationDetail = (strata1 * 0.35 + strata2 * 0.25 + strata3 * 0.2 + strata4 * 0.1
+                        + ccFBM1 * 0.3 + ccFBM2 * 0.2) * ccScale;
+  float crystalline = faceted * 0.15 * (0.2 + uFaceting * 0.8)
+                    + creationDetail * 0.4;
 
   // ─── Symmetry breaking: structural asymmetry ────────────────
   // Not noise -- actual hemispheric/regional displacement
@@ -261,10 +299,46 @@ void main() {
   float tempMod = mix(1.0, 0.7, uTemperature); // hot damps high-freq displacement
   crystalline *= tempMod;
 
-  // ─── Stored energy: compressed, tighter containment ─────────
+  // ─── Stored energy: compressed, violent pressure tremors ────
   float energyCompress = 1.0 - uStoredEnergy * 0.35; // visibly compressed when charged
-  // High-frequency pressure tremors — about to explode at 1.0
-  float energyTremor = snoise3(pos * 12.0 + t * 3.0) * uStoredEnergy * 0.2;
+  // Intense multi-frequency pressure tremors — about to EXPLODE at 1.0
+  float eSq = uStoredEnergy * uStoredEnergy; // exponential intensity curve
+  float energyTremor1 = snoise3(pos * 12.0 + t * 6.0) * 0.3;
+  float energyTremor2 = snoise3(pos * 20.0 + t * 10.0 + 50.0) * 0.2;
+  float energyTremor3 = snoise3(pos * 35.0 + t * 18.0 + 100.0) * 0.15;
+  float energyTremor4 = snoise3(pos * 50.0 + t * 30.0 + 150.0) * 0.1;
+  // Violent surface agitation: at 1.0 the entire surface is buzzing
+  float energyTremor = (energyTremor1 + energyTremor2 + energyTremor3 + energyTremor4) * eSq * 1.5;
+  // Pressure bulges — random regions try to burst outward
+  float pressureBulge = snoise3(pos * 1.5 + t * 2.0 + 200.0);
+  float bulgeDisp = smoothstep(0.2, 0.8, pressureBulge) * eSq * 0.6;
+  energyTremor += bulgeDisp;
+
+  // ─── Atmosphere: physical corona / halo vertex push ─────────
+  // Vertices near the silhouette edge push outward to create a physical halo
+  // Use normal direction relative to a rough view estimate (object space Z)
+  float edgeness = 1.0 - abs(norm.z); // 1.0 at silhouette edges, 0.0 facing camera
+  float atmospherePush = edgeness * edgeness * uAtmosphere * 0.6;
+  // Add noise to break the halo into particles/wisps
+  float haloNoise = snoise3(pos * 3.0 + t * 0.1 + 500.0) * 0.5 + 0.5;
+  atmospherePush *= (0.5 + haloNoise);
+
+  // ─── Magnetism: space-warping vertex distortion ─────────────
+  // Vertices near edges get pulled outward as if space is bending
+  float magEdge = 1.0 - abs(norm.z);
+  float magSq = uMagnetism * uMagnetism;
+  // Directional warping — pull outward along tangent directions
+  float magWarp1 = snoise3(pos * 2.0 + 600.0 + t * 0.05);
+  float magWarp2 = snoise3(pos * 3.5 + 650.0 + t * 0.08);
+  vec3 magDisplacement = vec3(
+    magWarp1 * norm.x + magWarp2 * 0.5,
+    magWarp1 * norm.y * 0.8,
+    magWarp2 * norm.z + magWarp1 * 0.3
+  ) * magEdge * magSq * 1.2;
+  // Also gravitational pull: everything bends slightly toward poles
+  float magPole = snoise3(pos * 0.8 + 700.0);
+  vec3 poleDir = normalize(vec3(0.0, sign(magPole), 0.0) + norm * 0.3);
+  magDisplacement += poleDir * magEdge * magSq * 0.3;
 
   // ─── Compose displacement ─────────────────────────────────
   float totalDisp = geological * (0.3 + uMass * 0.5)
@@ -281,9 +355,22 @@ void main() {
   float densityDamp = 1.0 - uDensity * 0.7;
   totalDisp *= densityDamp;
 
-  // Flexibility: elastic overshoot on displacement
-  float elasticBounce = 1.0 + uFlexibility * 0.5 * sin(t * 3.0 + totalDisp * 10.0);
+  // ─── Flexibility: rubbery jelly-like overshoot ──────────────
+  // Multiple harmonic overtones create visible wobble/jiggle
+  float flexPhase = t * 3.0 + totalDisp * 10.0;
+  float flex1 = sin(flexPhase) * 1.0;
+  float flex2 = sin(flexPhase * 2.3 + 0.5) * 0.7;
+  float flex3 = sin(flexPhase * 3.7 + 1.2) * 0.5;
+  float flex4 = sin(flexPhase * 5.9 + 2.1) * 0.3;
+  float flex5 = sin(flexPhase * 8.3 + 3.0) * 0.2;
+  float flexTotal = (flex1 + flex2 + flex3 + flex4 + flex5) / 2.7; // normalize roughly
+  // At 1.0: displacement overshoots by 2x and wobbles violently
+  float elasticBounce = 1.0 + uFlexibility * 1.5 * flexTotal;
+  // Additional position-dependent wobble — different parts jiggle at different phases
+  float localWobble = sin(t * 4.5 + pos.x * 8.0 + pos.y * 6.0) * uFlexibility * 0.3;
+  localWobble += sin(t * 6.7 + pos.z * 10.0) * uFlexibility * 0.2;
   totalDisp *= elasticBounce;
+  totalDisp += localWobble;
 
   // Scale by mass
   float scale = (0.3 + uMass * 0.7) * energyCompress;
@@ -291,6 +378,12 @@ void main() {
 
   // Apply displacement along normal
   pos += norm * totalDisp * scale;
+
+  // Apply atmosphere vertex push (after displacement, along normal)
+  pos += norm * atmospherePush * scale;
+
+  // Apply magnetism space-warping
+  pos += magDisplacement * scale;
 
   // Reveal threshold
   pos *= uReveal;
