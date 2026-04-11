@@ -16,14 +16,12 @@ Marrow operates in two distinct phases. The transition is invisible to the user.
 
 #### Phase 1: Seed (Days 1-30)
 
-Thirty questions delivered one per day in a fixed sequence. Twenty-six are deep, designed to create friction:
+Thirty questions delivered one per day in a fixed sequence. All thirty are deep, designed to create friction:
 
 1. Unanswerable in one sentence
 2. About you, not a topic
 3. No right answer
 4. Worth returning to in three months
-
-Four are **calibration questions** — intentionally low-stakes prompts ("Describe what you did this morning in as much detail as you can remember") mixed into the sequence at days 6, 13, 20, and 27. These look like normal questions. They establish a behavioral baseline: what your typing speed, deletion patterns, and pause behavior look like when you're not emotionally engaged. Without this baseline, the system can't tell the difference between "this question hit a nerve" and "this is just how you type."
 
 During this phase, **the questions do not adapt**. But the system is not idle. Every submission triggers the AI's silent observation layer, building an internal model of the user from day 1. The questions are fixed. The watching is not.
 
@@ -68,13 +66,23 @@ Every day after submission, the AI reads the response, the behavioral signal, ca
 
 3. **A suppressed question** — the question the AI would ask tomorrow if it could. During the seed phase, it can't — the questions are fixed. These accumulate. By day 31, the AI has 30 suppressed questions it's been refining. But unlike a system without self-correction, these questions have been stress-tested against competing interpretations at every step.
 
+### Calibration
+
+The system needs to know what "normal" looks like for you. Without a baseline, every pause looks meaningful and every deletion looks like avoidance. A 47-second first-keystroke latency means nothing if that's just how long you take to start writing about anything.
+
+Calibration is on-demand. After you submit your daily question, a "free write" option appears. Click it, get a neutral prompt — "Describe what you did this morning" or "What's on your desk right now?" — and write. Same textarea. Same invisible behavioral capture. Same session summary. But tagged as calibration data, not interpreted by the AI.
+
+You can do as many as you want. Three in one sitting, or none for a week. The baseline gets richer over time at your own pace. It also captures variance — how you type on a calm Tuesday morning is different from how you type exhausted on a Friday night. Four fixed data points can't capture that. Dozens across different times and moods can.
+
+The daily question always comes first. You cannot access free writes until you've answered. The daily question is sacred. Calibration is secondary.
+
 ### Error Correction
 
 The system is designed to catch its own mistakes.
 
 **The problem it solves:** any system that interprets behavior and then uses those interpretations to generate future prompts can drift. An early wrong guess shapes later questions, which shape later responses, which appear to confirm the original guess. The system manufactures its own evidence. Three mechanisms prevent this:
 
-**1. Calibration baselines.** The system knows what your "normal" looks like on low-stakes questions. It only flags behavioral metrics that deviate significantly from your personal baseline. A 47-second pause is not "meaningful" if your baseline is 40 seconds.
+**1. Calibration baselines.** The system knows what your "normal" looks like from your free write sessions. It only flags behavioral metrics that deviate significantly from your personal baseline. A 47-second pause is not "meaningful" if your baseline is 40 seconds.
 
 **2. Competing interpretations.** The AI cannot write a single confident narrative. It must present alternatives and rank them. This forces intellectual honesty at every observation and prevents the most dramatic interpretation from winning by default.
 
@@ -91,14 +99,19 @@ If it cannot identify at least one error, it's not being honest. Every model dri
 
 Everything fires on a single event: the user hitting submit.
 
-#### On Submission
+#### On Submission (Daily Question)
 
 1. **Response + session summary saved** — the response text and all derived behavioral metrics are written to the database.
-2. **AI observation runs** — reads today's data in the context of all prior days and calibration baselines. Generates competing interpretations and a suppressed question. Skipped on calibration days (just stores the behavioral data).
+2. **AI observation runs** — reads today's data in the context of all prior days and calibration baselines. Generates competing interpretations and a suppressed question.
 3. **Question generation runs** — during the seed phase (days 1-30), this is a no-op. After day 30, it reads the full context — responses, behavioral data, observations, suppressed questions, weekly reflections — and generates tomorrow's question.
 4. **Weekly reflection runs** — every 7th response, the system does a deeper pass with mandatory self-correction.
 
-The user sees none of this. They get their done message instantly. The background jobs run after the response is returned.
+#### On Submission (Free Write)
+
+1. **Response + session summary saved** — tagged as calibration. The behavioral data feeds into baselines.
+2. **No AI observation, no question generation, no reflection.** Pure data collection.
+
+The user sees none of the background processing. They get their done message instantly. The background jobs run after the response is returned.
 
 There are no cron jobs, no scheduled tasks, no server dependencies. The system is fully event-driven. If the user submits, everything runs. If they don't, nothing runs. The system's heartbeat is the user's engagement.
 
@@ -114,7 +127,7 @@ The question: *"What decision are you quietly avoiding?"*
 
 You open the page. Stare at it for 47 seconds before typing. You write: "I think I need to leave my job but I keep telling myself the timing isn't right." Then you delete "I think I need to leave my job" and replace it with "There's a career thing I haven't figured out yet." You submit.
 
-**What you see:** A done message. "That's enough for today."
+**What you see:** A done message. "That's enough for today." Below it, a subtle "free write" link.
 
 **What the system captured:**
 - First-keystroke latency: 47,000ms
@@ -122,7 +135,7 @@ You open the page. Stare at it for 47 seconds before typing. You write: "I think
 - Largest deletion: 36 characters (a full sentence, retracted)
 - Total session: 4 minutes
 
-**What the AI wrote that night (you never see this):**
+**What the AI wrote (you never see this):**
 
 > Signal: 47-second first-keystroke latency
 > - A: The question landed immediately — user knew the answer before typing (medium)
@@ -141,13 +154,13 @@ You open the page. Stare at it for 47 seconds before typing. You write: "I think
 **Suppressed question:**
 > *"When you edit what you write, are you getting closer to the truth or further from it?"*
 
-### Day 6 (Calibration)
+### After Day 3 — Free Write
 
-The question: *"Describe what you did this morning in as much detail as you can remember."*
+You click "free write." The prompt: *"What did you eat yesterday? Walk through it meal by meal."*
 
-You type for 3 minutes. First-keystroke latency: 12 seconds. Commitment ratio: 0.89. Two deletions, both under 5 characters. No pauses over 30 seconds.
+You type for 3 minutes. First-keystroke latency: 12 seconds. Commitment ratio: 0.89. Two deletions, both under 5 characters. No pauses over 30 seconds. You click "another one." New prompt. Similar numbers.
 
-The AI doesn't interpret this day. It just stores the numbers. Now it knows: on a question that doesn't challenge you, your baseline latency is 12 seconds, your commitment ratio is 0.89, and you barely delete anything.
+The AI doesn't interpret any of this. It just stores the behavioral data. Now it knows: on a question that doesn't challenge you, your baseline latency is 12 seconds, your commitment ratio is 0.89, and you barely delete anything.
 
 Day 3's 47-second latency and 0.38 commitment ratio look very different now.
 
@@ -169,7 +182,7 @@ You type fast. No pauses. No deletions. 280 words in 6 minutes. Commitment ratio
 
 ### Day 31
 
-Seeds are done. The AI has 26 observations with competing interpretations. 30 suppressed questions. A behavioral fingerprint calibrated against neutral baselines. Four self-correction cycles where it identified its own errors and dropped bad threads.
+Seeds are done. The AI has 30 observations with competing interpretations. 30 suppressed questions. A behavioral fingerprint calibrated against an on-demand baseline built across different times of day and moods. Multiple self-correction cycles where it identified its own errors and dropped bad threads.
 
 It generates tomorrow's question. Not from a single confident narrative about who you are. From a model that knows what it's sure about, what it's guessing, and where it needs more data.
 
@@ -179,14 +192,15 @@ The question it asks targets the gap where the competing interpretations haven't
 
 - **Astro** (SSR, Node adapter)
 - **SQLite** via better-sqlite3
-- **Claude API** (`@anthropic-ai/sdk`) for question generation and pattern analysis
+- **Claude API** (`@anthropic-ai/sdk`) — Claude Opus 4.6 for all AI analysis
 - **TypeScript** (strict)
 
 ## Architecture
 
 - Single user, no auth
 - SQLite database at `data/marrow.db`
-- Seed questions (with calibration) in `src/lib/seeds.ts`
+- Seed questions in `src/lib/seeds.ts`
+- On-demand calibration via free writes
 - All analysis triggered on submit — no cron, no scheduler
 - Manual script fallbacks available for debugging
 

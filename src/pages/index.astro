@@ -10,6 +10,42 @@
     <style is:global>
       @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap');
 
+      :root {
+        --bg: #f5f2ed;
+        --bg-input: #ebe7e1;
+        --text: #1a1a1a;
+        --text-muted: #6b6560;
+        --text-faint: #9a9590;
+        --border: #ccc5bc;
+        --border-focus: #8a8580;
+        --btn-bg: #e0dbd5;
+        --btn-hover: #ccc5bc;
+        --btn-text: #1a1a1a;
+        --done-text: #8a8580;
+        --loading: #c5c0ba;
+        --free-border: #c5c0ba;
+        --free-hover-bg: rgba(0, 0, 0, 0.03);
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0a0a0a;
+          --bg-input: #161514;
+          --text: #e8e4df;
+          --text-muted: #5a5550;
+          --text-faint: #3a3530;
+          --border: #333;
+          --border-focus: #555;
+          --btn-bg: #222;
+          --btn-hover: #444;
+          --btn-text: #e8e4df;
+          --done-text: #6a6560;
+          --loading: #3a3530;
+          --free-border: #2a2825;
+          --free-hover-bg: rgba(255, 255, 255, 0.03);
+        }
+      }
+
       * {
         margin: 0;
         padding: 0;
@@ -18,8 +54,8 @@
 
       html, body {
         height: 100%;
-        background: #0a0a0a;
-        color: #e8e4df;
+        background: var(--bg);
+        color: var(--text);
         font-family: 'EB Garamond', Georgia, serif;
       }
 
@@ -31,13 +67,13 @@
       }
 
       .container {
-        max-width: 540px;
+        max-width: 620px;
         width: 100%;
       }
 
       .date {
-        font-size: 0.85rem;
-        color: #5a5550;
+        font-size: 1rem;
+        color: var(--text-muted);
         letter-spacing: 0.08em;
         text-transform: uppercase;
         margin-bottom: 2.5rem;
@@ -45,26 +81,26 @@
 
       .question {
         font-family: 'Cormorant Garamond', Georgia, serif;
-        font-size: 1.6rem;
+        font-size: 2rem;
         font-weight: 300;
-        line-height: 1.8;
+        line-height: 1.7;
         letter-spacing: 0.03em;
-        color: #e8e4df;
+        color: var(--text);
         margin-bottom: 3rem;
         font-style: italic;
       }
 
       .response-area {
         width: 100%;
-        min-height: 160px;
-        background-color: #161514;
-        border: 1px solid #333;
+        min-height: 200px;
+        background-color: var(--bg-input);
+        border: 1px solid var(--border);
         border-radius: 4px;
-        color: #e8e4df;
+        color: var(--text);
         font-family: 'EB Garamond', Georgia, serif;
-        font-size: 1.1rem;
-        line-height: 1.7;
-        padding: 1.25rem;
+        font-size: 1.25rem;
+        line-height: 1.8;
+        padding: 1.5rem;
         resize: none;
         outline: none;
         -webkit-appearance: none;
@@ -73,12 +109,12 @@
       }
 
       .response-area:focus {
-        border-color: #555;
+        border-color: var(--border-focus);
         outline: none;
       }
 
       .response-area::placeholder {
-        color: #5a5550;
+        color: var(--text-muted);
         font-style: italic;
       }
 
@@ -87,25 +123,25 @@
       }
 
       .submit-btn {
-        background: #222;
-        border: 1px solid #444;
+        background: var(--btn-bg);
+        border: 1px solid var(--border);
         border-radius: 4px;
-        color: #e8e4df;
+        color: var(--btn-text);
         font-family: 'EB Garamond', Georgia, serif;
-        font-size: 1rem;
-        padding: 0.6rem 1.8rem;
+        font-size: 1.1rem;
+        padding: 0.7rem 2rem;
         cursor: pointer;
         letter-spacing: 0.05em;
+        transition: all 0.3s ease;
       }
 
       .submit-btn:hover:not(:disabled) {
-        background: #444;
-        border-color: #888;
-        color: #fff;
+        background: var(--btn-hover);
+        border-color: var(--border-focus);
       }
 
       .submit-btn:active:not(:disabled) {
-        background: #555;
+        opacity: 0.8;
       }
 
       .submit-btn:disabled {
@@ -115,16 +151,52 @@
 
       .done-message {
         font-family: 'Cormorant Garamond', Georgia, serif;
-        font-size: 1.3rem;
+        font-size: 1.5rem;
         font-weight: 300;
         font-style: italic;
         line-height: 1.8;
-        color: #6a6560;
+        color: var(--done-text);
         margin-top: 1rem;
       }
 
       .loading {
-        color: #3a3530;
+        color: var(--loading);
+        font-style: italic;
+      }
+
+      .free-write-link {
+        display: inline-block;
+        margin-top: 3rem;
+        color: var(--text-muted);
+        font-size: 1.05rem;
+        letter-spacing: 0.1em;
+        text-transform: lowercase;
+        cursor: pointer;
+        border: 1px solid var(--free-border);
+        background: none;
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-style: italic;
+        font-weight: 300;
+        text-decoration: none;
+        padding: 0.6rem 1.8rem;
+        border-radius: 4px;
+        transition: all 0.4s ease;
+      }
+
+      .free-write-link:hover {
+        color: var(--text);
+        border-color: var(--border-focus);
+        background: var(--free-hover-bg);
+      }
+
+      .calibration-prompt {
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-size: 1.5rem;
+        font-weight: 300;
+        line-height: 1.8;
+        letter-spacing: 0.03em;
+        color: var(--done-text);
+        margin-bottom: 2rem;
         font-style: italic;
       }
     </style>
@@ -163,7 +235,7 @@
         if (data.response) {
           trackEvent(data.question.id, 'revisit');
           questionEl.textContent = '';
-          inputArea.innerHTML = `<div class="done-message">${getDoneMessage()}</div>`;
+          showDoneState();
         } else {
           const questionId = data.question.id;
           const pageOpenTime = Date.now();
@@ -315,7 +387,7 @@
                 wordCount,
               }));
               questionEl.textContent = '';
-              inputArea.innerHTML = `<div class="done-message">${getDoneMessage()}</div>`;
+              showDoneState();
             } else {
               submitBtn.textContent = 'Submit';
               submitBtn.disabled = false;
@@ -354,6 +426,159 @@
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+      }
+
+      function showDoneState() {
+        inputArea.innerHTML = `
+          <div class="done-message">${getDoneMessage()}</div>
+          <button class="free-write-link" id="free-write-btn">free write</button>
+        `;
+        document.getElementById('free-write-btn')!.addEventListener('click', startFreeWrite);
+      }
+
+      async function startFreeWrite() {
+        const res = await fetch('/api/calibrate');
+        if (!res.ok) return;
+        const data = await res.json();
+        const prompt = data.prompt;
+
+        questionEl.textContent = '';
+        inputArea.innerHTML = '';
+
+        const promptDiv = document.createElement('div');
+        promptDiv.className = 'calibration-prompt';
+        promptDiv.textContent = prompt;
+        inputArea.appendChild(promptDiv);
+
+        const pageOpenTime = Date.now();
+
+        const formHtml = document.createElement('div');
+        formHtml.innerHTML = `
+          <textarea
+            class="response-area"
+            id="response"
+            placeholder="Just write..."
+          ></textarea>
+          <div class="submit-row">
+            <button class="submit-btn" id="submit" disabled>Submit</button>
+          </div>
+        `;
+        inputArea.appendChild(formHtml);
+
+        const textarea = document.getElementById('response') as HTMLTextAreaElement;
+        const submitBtn = document.getElementById('submit') as HTMLButtonElement;
+
+        let firstKeystrokeSent = false;
+        let firstKeystrokeTime: number | null = null;
+        let pauseTimer: number | null = null;
+        let isPaused = false;
+        let pauseStartTime: number | null = null;
+        let totalPauseMs = 0;
+        let pauseCount = 0;
+        let totalCharsTyped = 0;
+        let totalCharsDeleted = 0;
+        let deletionCount = 0;
+        let largestDeletion = 0;
+        let lastTextLength = 0;
+        let tabAwayCount = 0;
+        let tabAwayStartTime: number | null = null;
+        let totalTabAwayMs = 0;
+
+        textarea.addEventListener('input', () => {
+          const currentLength = textarea.value.length;
+          const delta = currentLength - lastTextLength;
+
+          if (delta > 0) {
+            totalCharsTyped += delta;
+          } else if (delta < 0) {
+            const deleted = Math.abs(delta);
+            totalCharsDeleted += deleted;
+            deletionCount++;
+            if (deleted > largestDeletion) largestDeletion = deleted;
+          }
+
+          lastTextLength = currentLength;
+          submitBtn.disabled = !textarea.value.trim();
+
+          if (!firstKeystrokeSent) {
+            firstKeystrokeTime = Date.now();
+            firstKeystrokeSent = true;
+          }
+
+          if (isPaused) {
+            if (pauseStartTime) {
+              totalPauseMs += Date.now() - pauseStartTime;
+              pauseStartTime = null;
+            }
+            isPaused = false;
+          }
+
+          if (pauseTimer) clearTimeout(pauseTimer);
+          pauseTimer = window.setTimeout(() => {
+            if (textarea.value.trim()) {
+              pauseCount++;
+              pauseStartTime = Date.now();
+              isPaused = true;
+            }
+          }, 30000);
+        });
+
+        submitBtn.addEventListener('click', async () => {
+          const text = textarea.value.trim();
+          if (!text) return;
+
+          submitBtn.disabled = true;
+          submitBtn.textContent = '...';
+
+          if (isPaused && pauseStartTime) {
+            totalPauseMs += Date.now() - pauseStartTime;
+          }
+
+          const submitTime = Date.now();
+          const finalCharCount = text.length;
+          const wordCount = text.split(/\s+/).filter(Boolean).length;
+          const sentenceCount = text.split(/[.!?]+/).filter((s: string) => s.trim()).length;
+          const totalDurationMs = submitTime - pageOpenTime;
+          const firstKeystrokeMs = firstKeystrokeTime ? firstKeystrokeTime - pageOpenTime : null;
+          const commitmentRatio = totalCharsTyped > 0 ? finalCharCount / totalCharsTyped : null;
+
+          const sessionSummary = {
+            firstKeystrokeMs,
+            totalDurationMs,
+            totalCharsTyped,
+            finalCharCount,
+            commitmentRatio,
+            pauseCount,
+            totalPauseMs,
+            deletionCount,
+            largestDeletion,
+            totalCharsDeleted,
+            tabAwayCount,
+            totalTabAwayMs,
+            wordCount,
+            sentenceCount,
+          };
+
+          const calRes = await fetch('/api/calibrate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt, text, sessionSummary }),
+          });
+
+          if (calRes.ok) {
+            promptDiv.textContent = '';
+            inputArea.innerHTML = `
+              <div class="done-message">Noted.</div>
+              <button class="free-write-link" id="another-btn">another one</button>
+            `;
+            document.getElementById('another-btn')!.addEventListener('click', startFreeWrite);
+          } else {
+            submitBtn.textContent = 'Submit';
+            submitBtn.disabled = false;
+          }
+        });
+
+        textarea.focus();
       }
 
       load();
