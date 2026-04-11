@@ -809,7 +809,8 @@ export function insertEmbeddingMeta(
 }
 
 export function insertVecEmbedding(embeddingId: number, vector: Buffer): void {
-  db.prepare(`INSERT INTO vec_embeddings (embedding_id, embedding) VALUES (?, ?)`).run(embeddingId, vector);
+  // sqlite-vec requires BigInt for primary key values
+  db.prepare(`INSERT INTO vec_embeddings (embedding_id, embedding) VALUES (?, ?)`).run(BigInt(embeddingId), vector);
 }
 
 export function isRecordEmbedded(embeddingSourceId: number, sourceRecordId: number): boolean {
