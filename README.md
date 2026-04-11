@@ -27,7 +27,7 @@ During this phase, **the questions do not adapt**. But the system is not idle. E
 
 #### Phase 2: Generated (Day 31+)
 
-After the seeds run out, the system generates tomorrow's question from the full accumulated context — every response, every behavioral signal, every silent observation, every suppressed question the AI has been holding, and the calibration baselines that tell it what's noise and what's real.
+After the seeds run out, the system generates tomorrow's question from the full accumulated context — every response, every behavioral signal, every silent observation, every suppressed question the AI has been holding, calibration baselines, question feedback, and the multi-model audit trail.
 
 No question is generated in advance. Tomorrow's question doesn't exist until you submit today's response. There is nothing to preview, leak, or game.
 
@@ -41,59 +41,73 @@ What you submitted. Stored as-is. Never surfaced back to you.
 
 #### Layer 2: Behavioral Signal
 
-The system silently captures raw input events throughout the session — keystrokes, deletions, pauses, tab-aways, resumptions. On submission, these raw events are crunched into a session summary: a single row of derived behavioral metrics.
+The system silently captures raw input events throughout the session — keystrokes, deletions, pauses, tab-aways, resumptions. On submission, these raw events are crunched into a session summary: a single row of derived behavioral metrics plus context metadata.
 
 The variables that contribute to signal:
 
-- **First-keystroke latency** — how long you sat with the question before starting. Only meaningful relative to your calibration baseline. If your neutral latency is 40 seconds, a 47-second pause on a deep question is not signal.
+- **First-keystroke latency** — how long you sat with the question before starting. Only meaningful relative to your calibration baseline *on the same device type and similar time of day*. A 47-second pause on your phone at midnight is a different signal than 47 seconds on your laptop at 9am.
 - **Velocity curve** — not average typing speed, but how speed changes within a session. Starting fast and slowing down is gaining resistance. Starting slow and accelerating means you found your thread.
-- **Commitment ratio** — total characters typed vs. final character count. Heavy editing could mean avoidance, or it could mean careful writing. The system doesn't assume — it generates competing interpretations and compares against your calibration baseline to determine which is more likely.
-- **Deletion behavior** — single-character backspaces are typo corrections (noise). Deleting 20+ characters could be a retraction, or it could be restructuring a sentence. The length, frequency, and timing of deletions are tracked, but interpretation requires cross-session context and calibration comparison.
-- **Pause topology** — where in the response you stall matters, but only relative to where you normally stall. Early pauses on a deep question mean something different than early pauses on a calibration question.
-- **Session rhythm** — the temporal shape of the session. Burst-pause-burst is a different thinking mode than slow-and-steady. A long pause followed by a fast burst usually means something clicked. Multiple short pauses means self-negotiation.
+- **Commitment ratio** — total characters typed vs. final character count. Heavy editing could mean avoidance, or it could mean careful writing. The system applies three interpretive frames to determine which is more likely.
+- **Deletion behavior** — single-character backspaces are typo corrections (noise). Deleting 20+ characters could be a retraction, or it could be restructuring a sentence. The system cannot tell the difference from deletion data alone — it needs cross-session context, calibration comparison, and frame analysis.
+- **Pause topology** — where in the response you stall matters, but only relative to where you normally stall on the same device in similar conditions.
+- **Session rhythm** — the temporal shape of the session. Burst-pause-burst is a different thinking mode than slow-and-steady.
 - **Tab-away behavior** — leaving the page and returning. Duration of absence. Whether typing speed changes after return.
-- **Punctuation and structure** — ellipses, dashes, question marks, sentence length, paragraph breaks. These are tracked but interpreted cautiously — punctuation habits are shaped by device, platform, and personal style as much as by psychological state.
+- **Punctuation and structure** — tracked but interpreted cautiously. Punctuation habits are shaped by device, platform, and personal style as much as by psychological state.
 
-Any single session's behavioral data is noisy. The system knows this. That's why calibration baselines exist — to separate "this is how they type" from "something is different today."
+Every session also captures **context metadata**: device type (mobile/desktop), user agent, hour of day, and day of week. This prevents the system from comparing your exhausted Friday-night phone session against your focused Tuesday-morning laptop session and concluding you were "avoidant."
 
 #### Layer 3: The AI's Silent Layer
 
-Every day after submission, the AI reads the response, the behavioral signal, calibration baselines, and all of its own prior observations. It generates three things:
+Every day after submission, the AI reads the response, the behavioral signal, context-matched calibration baselines, and all of its own prior observations. It applies **three interpretive frames** to every notable signal:
 
-1. **Competing interpretations** — for each notable signal, the AI must generate three possible explanations and rank them by likelihood. Not one confident story. Three hypotheses with reasoning. "A: They deleted that sentence because it was too revealing (medium likelihood). B: They deleted it because it was poorly written (high likelihood). C: They were distracted (low likelihood). Basis: commitment ratio matches calibration baseline, suggesting normal editing behavior." This is the difference between analysis and storytelling.
+**Frame A — Charitable:** The user is being thoughtful, careful, honest, or simply editing for quality. Deletions are revisions. Pauses are contemplation. Vagueness is appropriate boundary-setting.
 
-2. **A synthesis** — the AI's overall read of the day, explicitly stating what it's confident about and what it's guessing.
+**Frame B — Avoidance:** The user is hedging, self-censoring, retreating from honesty, or protecting themselves. Deletions are retractions. Pauses are resistance. Vagueness is deflection.
 
-3. **A suppressed question** — the question the AI would ask tomorrow if it could. During the seed phase, it can't — the questions are fixed. These accumulate. By day 31, the AI has 30 suppressed questions it's been refining. But unlike a system without self-correction, these questions have been stress-tested against competing interpretations at every step.
+**Frame C — Mundane:** The behavior has no psychological meaning. The user was distracted, tired, on a different device, dealing with autocorrect, or is just a careful writer. The signal is noise.
+
+These are not three guesses from the same perspective. They are three deliberately opposed lenses. For each signal, the system applies all three, then assesses which frame the calibration data and cross-session patterns support. Where the frames genuinely diverge with no clear winner, the system says so and assigns an overall confidence level (HIGH / MODERATE / LOW / INSUFFICIENT DATA).
+
+The system also generates a **suppressed question** — the question the AI would ask tomorrow if it could. This question must target the highest-uncertainty gap: the place where Frame A and Frame B give equally plausible but contradictory reads. It is designed to *disambiguate*, not to probe the most dramatic interpretation.
+
+A bad suppressed question: "What are you hiding?" (presupposes Frame B)
+A good suppressed question: "When you revise what you've written, what are you usually trying to get closer to?" (helps distinguish A from B)
 
 ### Calibration
 
-The system needs to know what "normal" looks like for you. Without a baseline, every pause looks meaningful and every deletion looks like avoidance. A 47-second first-keystroke latency means nothing if that's just how long you take to start writing about anything.
+The system needs to know what "normal" looks like for you. Without a baseline, every pause looks meaningful and every deletion looks like avoidance.
 
-Calibration is on-demand. After you submit your daily question, a "free write" option appears. Click it, get a neutral prompt — "Describe what you did this morning" or "What's on your desk right now?" — and write. Same textarea. Same invisible behavioral capture. Same session summary. But tagged as calibration data, not interpreted by the AI.
+Calibration is on-demand. After you submit your daily question, a "free write" option appears. Click it, get a neutral prompt — "Describe what you did this morning" or "What's on your desk right now?" — and write. Same textarea. Same invisible behavioral capture. Same session summary with full context metadata. But tagged as calibration data, not interpreted by the AI.
 
-You can do as many as you want. Three in one sitting, or none for a week. The baseline gets richer over time at your own pace. It also captures variance — how you type on a calm Tuesday morning is different from how you type exhausted on a Friday night. Four fixed data points can't capture that. Dozens across different times and moods can.
+You can do as many as you want. Three in one sitting, or none for a week. The baseline gets richer over time at your own pace.
+
+Calibration baselines are **context-matched**. The system compares your deep question session against calibration sessions from the same device type and similar time of day. When it lacks calibration data for a specific context, it falls back to global baselines and flags the reduced confidence. Baseline confidence is a spectrum — none, low, moderate, strong — not a binary.
 
 The daily question always comes first. You cannot access free writes until you've answered. The daily question is sacred. Calibration is secondary.
 
 ### Error Correction
 
-The system is designed to catch its own mistakes.
+The system is designed to catch its own mistakes. Five mechanisms prevent interpretive drift:
 
-**The problem it solves:** any system that interprets behavior and then uses those interpretations to generate future prompts can drift. An early wrong guess shapes later questions, which shape later responses, which appear to confirm the original guess. The system manufactures its own evidence. Three mechanisms prevent this:
+**1. Context-matched calibration baselines.** The system knows what your "normal" looks like on the same device at a similar time of day. It only flags behavioral metrics that deviate significantly from your personal baseline in that context. A 47-second pause is not "meaningful" if your baseline on the same device at the same hour is 40 seconds.
 
-**1. Calibration baselines.** The system knows what your "normal" looks like from your free write sessions. It only flags behavioral metrics that deviate significantly from your personal baseline. A 47-second pause is not "meaningful" if your baseline is 40 seconds.
+**2. Three interpretive frames.** The AI cannot collapse to a single narrative. It must apply charitable, avoidance, and mundane frames to every signal and assess which one the data supports. This produces structured disagreement along axes that matter, not three variations of the same story.
 
-**2. Competing interpretations.** The AI cannot write a single confident narrative. It must present alternatives and rank them. This forces intellectual honesty at every observation and prevents the most dramatic interpretation from winning by default.
+**3. "Did it land?" feedback.** Every 5th daily submission, a simple yes/no prompt appears: "Did today's question land?" One bit of external signal. A "no" is clear — the system's line of questioning missed. A "yes" is weaker signal — could mean insightful, uncomfortable, or just emotionally loaded. This tunes question generation without breaking the black box.
 
-**3. Weekly self-correction.** Every 7th response, the AI runs a reflection that includes a mandatory self-correction section. It must:
-- Identify which prior observations were likely wrong
-- Flag where it picked the most dramatic interpretation over a more mundane one
-- Name suppressed questions that were based on flawed reads and should be dropped
+**4. Weekly self-correction.** Every 7th response, the AI runs a reflection that includes a mandatory self-correction section. It must:
+- Identify which observations were likely wrong — where the charitable or mundane frame fit better than the avoidance frame
+- Flag where the three frames converged too much, producing "decorated confirmation bias" rather than genuine disagreement
+- Name suppressed questions that presupposed an interpretation rather than disambiguating between frames
 - Identify narratives it has been building that might be stories rather than evidence
+- Flag where it lacked calibration data for a specific context and should have been more cautious
 - State what it's confident about vs. uncertain about vs. needs more data on
 
 If it cannot identify at least one error, it's not being honest. Every model drifts. The system is designed to name the drift.
+
+**5. Multi-model audit.** Every weekly reflection runs two passes. The primary reflection is generated by Claude Opus 4.6. A secondary audit is then run by Claude Sonnet 4.6, which reviews the primary reflection against the same raw data and checks for: overconfident claims, confirmation bias, dishonest self-correction (identifying minor errors while protecting major narratives), and missed patterns. The audit is appended to the reflection and becomes context for all future analysis.
+
+One model generating three interpretations is structured self-disagreement. Two different models reviewing each other's work is genuine independence. The daily observations use the first approach (cheaper, controlled). The weekly reflection uses both.
 
 ### Event-Driven Architecture
 
@@ -101,14 +115,14 @@ Everything fires on a single event: the user hitting submit.
 
 #### On Submission (Daily Question)
 
-1. **Response + session summary saved** — the response text and all derived behavioral metrics are written to the database.
-2. **AI observation runs** — reads today's data in the context of all prior days and calibration baselines. Generates competing interpretations and a suppressed question.
-3. **Question generation runs** — during the seed phase (days 1-30), this is a no-op. After day 30, it reads the full context — responses, behavioral data, observations, suppressed questions, weekly reflections — and generates tomorrow's question.
-4. **Weekly reflection runs** — every 7th response, the system does a deeper pass with mandatory self-correction.
+1. **Response + session summary + context metadata saved** — the response text, all derived behavioral metrics, and device/time context are written to the database.
+2. **AI observation runs** — reads today's data with context-matched calibration baselines. Applies three interpretive frames. Generates a disambiguating suppressed question. Skipped on calibration sessions.
+3. **Question generation runs** — during the seed phase (days 1-30), this is a no-op. After day 30, it reads the full context — responses, behavioral data, observations, suppressed questions, weekly reflections with audits, and question feedback — and generates tomorrow's question.
+4. **Weekly reflection + audit runs** — every 7th response. Primary reflection on Opus, then secondary audit on Sonnet.
 
 #### On Submission (Free Write)
 
-1. **Response + session summary saved** — tagged as calibration. The behavioral data feeds into baselines.
+1. **Response + session summary + context metadata saved** — tagged as calibration. The behavioral data feeds into context-matched baselines.
 2. **No AI observation, no question generation, no reflection.** Pure data collection.
 
 The user sees none of the background processing. They get their done message instantly. The background jobs run after the response is returned.
@@ -117,7 +131,7 @@ There are no cron jobs, no scheduled tasks, no server dependencies. The system i
 
 ### What Marrow Feeds
 
-Marrow is the data layer for [Einstein](https://github.com/anthonyguzzardo/Einstein), a longitudinal thinking partner. Einstein consumes everything Marrow collects — response text, behavioral signals, AI observations with competing interpretations, suppressed questions, weekly reflections with self-corrections — as persistent context. Where Marrow asks, Einstein converses. The depth of that conversation is bounded by the depth of the data Marrow has accumulated.
+Marrow is the data layer for [Einstein](https://github.com/anthonyguzzardo/Einstein), a longitudinal thinking partner. Einstein consumes everything Marrow collects — response text, behavioral signals with context, AI observations with three-frame analysis, suppressed questions, weekly reflections with multi-model audits, and question feedback — as persistent context. Where Marrow asks, Einstein converses. The depth of that conversation is bounded by the depth of the data Marrow has accumulated.
 
 ## What This Looks Like
 
@@ -125,11 +139,12 @@ Marrow is the data layer for [Einstein](https://github.com/anthonyguzzardo/Einst
 
 The question: *"What decision are you quietly avoiding?"*
 
-You open the page. Stare at it for 47 seconds before typing. You write: "I think I need to leave my job but I keep telling myself the timing isn't right." Then you delete "I think I need to leave my job" and replace it with "There's a career thing I haven't figured out yet." You submit.
+You open the page on your laptop at 9pm. Stare at it for 47 seconds before typing. You write: "I think I need to leave my job but I keep telling myself the timing isn't right." Then you delete "I think I need to leave my job" and replace it with "There's a career thing I haven't figured out yet." You submit.
 
 **What you see:** A done message. "That's enough for today." Below it, a subtle "free write" link.
 
 **What the system captured:**
+- Device: desktop, 21:00, Friday
 - First-keystroke latency: 47,000ms
 - Commitment ratio: 0.38 (you typed 140 characters, kept 53)
 - Largest deletion: 36 characters (a full sentence, retracted)
@@ -138,61 +153,75 @@ You open the page. Stare at it for 47 seconds before typing. You write: "I think
 **What the AI wrote (you never see this):**
 
 > Signal: 47-second first-keystroke latency
-> - A: The question landed immediately — user knew the answer before typing (medium)
-> - B: User was distracted or reading the question carefully (medium)
-> - C: User was composing mentally before starting (low)
-> - Basis: No calibration baseline yet to compare against. Cannot distinguish A from B with confidence.
+> - Frame A (Charitable): User was composing thoughtfully before starting. The question requires introspection. (medium)
+> - Frame B (Avoidance): The question landed immediately — user knew the answer and hesitated to commit. (medium)
+> - Frame C (Mundane): User was distracted, reading the question carefully, or settling in. (medium)
+> - Calibration: NONE. No baseline exists for this device or time of day. Cannot distinguish between frames.
 >
 > Signal: 36-character deletion replacing direct statement with vague one
-> - A: Self-censorship — user retracted something too honest (medium)
-> - B: User decided the first phrasing was melodramatic and revised for accuracy (medium)
-> - C: User reconsidered scope and chose to keep the answer abstract (low)
-> - Basis: Without calibration data, deletion could be normal editing behavior. The shift from specific ("leave my job") to vague ("career thing") is notable but not conclusive.
+> - Frame A (Charitable): User decided the first phrasing was melodramatic and revised for accuracy. (medium)
+> - Frame B (Avoidance): Self-censorship — user retracted something too honest. (medium)
+> - Frame C (Mundane): Normal editing behavior — user reconsidered scope. (low-medium)
+> - Calibration: No data. The shift from specific ("leave my job") to vague ("career thing") is notable but interpretation is underdetermined.
 >
-> Synthesis: Two signals suggest possible avoidance but both have plausible mundane explanations. Confidence is low without calibration baselines. The specificity gap (job → career thing) is the most interesting data point — worth tracking but not enough to build a narrative on.
+> Synthesis: Two signals suggest possible avoidance but both have equally plausible charitable explanations. Overall confidence: INSUFFICIENT DATA. The specificity gap (job → career thing) is the most interesting data point — worth tracking but not enough to build a narrative on.
 
 **Suppressed question:**
-> *"When you edit what you write, are you getting closer to the truth or further from it?"*
+> *"When you revise what you've written, what are you usually trying to get closer to?"*
+
+This question doesn't presuppose avoidance. It helps the system distinguish Frame A (editing toward accuracy) from Frame B (editing away from honesty) on future sessions.
 
 ### After Day 3 — Free Write
 
 You click "free write." The prompt: *"What did you eat yesterday? Walk through it meal by meal."*
 
-You type for 3 minutes. First-keystroke latency: 12 seconds. Commitment ratio: 0.89. Two deletions, both under 5 characters. No pauses over 30 seconds. You click "another one." New prompt. Similar numbers.
+You type for 3 minutes on the same laptop at 9:15pm. First-keystroke latency: 12 seconds. Commitment ratio: 0.89. Two deletions, both under 5 characters. No pauses over 30 seconds. You click "another one." New prompt. Similar numbers.
 
-The AI doesn't interpret any of this. It just stores the behavioral data. Now it knows: on a question that doesn't challenge you, your baseline latency is 12 seconds, your commitment ratio is 0.89, and you barely delete anything.
+The AI doesn't interpret any of this. It stores the behavioral data with context: desktop, 21:00, Friday. Now it has a context-matched baseline. On this device at this time: latency is 12 seconds, commitment ratio is 0.89, and you barely delete.
 
-Day 3's 47-second latency and 0.38 commitment ratio look very different now.
+Day 3's 47-second latency and 0.38 commitment ratio deviate significantly from this baseline. The system's confidence in flagging those signals just went from INSUFFICIENT DATA to MODERATE.
+
+### Day 10 — "Did It Land?"
+
+You submit your response. This is every 5th submission, so below the done message you see: *"did it land?"* with two buttons: *yes* and *no*.
+
+You tap "no." One bit of signal. The system knows this question missed. When it generates questions in Phase 2, it will weight away from this line of inquiry.
 
 ### Day 11
 
 The question: *"What have you outgrown but haven't let go of yet?"*
 
-You type fast. No pauses. No deletions. 280 words in 6 minutes. Commitment ratio: 0.97.
+You type fast on your phone during lunch. No pauses. No deletions. 280 words in 6 minutes. Commitment ratio: 0.97.
 
 **What the AI wrote:**
 
-> Signal: Commitment ratio 0.97 vs calibration baseline 0.89
-> - A: User had a prepared answer — this topic is already processed (high)
-> - B: User is fluent on this topic because they've rehearsed it mentally many times (medium)
-> - C: The question didn't challenge them enough to trigger friction (low)
-> - Basis: Ratio is only slightly above calibration, suggesting this is close to their natural writing style. Day 3 (0.38) was the anomaly, not today.
+> Signal: Commitment ratio 0.97 on mobile at 12:00
+> - Frame A (Charitable): User had a clear, processed answer. This topic is resolved for them. (high)
+> - Frame B (Avoidance): User gave a rehearsed answer — fluency indicates performance, not honesty. (low)
+> - Frame C (Mundane): Mobile typing tends toward fewer deletions. Ratio may reflect device, not psychology. (medium)
+> - Calibration: No mobile calibration data exists. Comparing against desktop baseline (0.89) is unreliable — flagging device mismatch.
 >
-> Synthesis: The contrast with Day 3 is the real data point. Day 3 had extreme deviation from baseline — this day doesn't. Whatever is happening with the "career thing" on Day 3 is producing friction that other deep questions aren't. That's worth tracking, but interpreting Day 3's deletion as "hiding" rather than "editing" is still a 50/50 call.
+> Synthesis: Frame A is most likely but Frame C introduces legitimate doubt. The system needs mobile calibration sessions before it can interpret phone-based behavioral data with confidence. Overall confidence: LOW due to device mismatch.
+
+### Day 14 — Weekly Reflection
+
+The AI runs its weekly reflection on Opus. Then Sonnet audits it.
+
+**Sonnet's audit (appended to the reflection):**
+
+> The primary reflection identifies the "career thing" thread as the strongest signal but correctly notes calibration weakness. However, the self-correction section identifies only one minor error (over-interpreting Day 7's pause count) while protecting the career-avoidance narrative across four other observations. The reflection would be stronger if it considered that the Day 3 specificity gap could reflect the user learning the system's format rather than psychological avoidance. The primary model's revised model section states "moderate confidence" in the career thread — given the calibration gaps and device mismatches flagged elsewhere, "low confidence" would be more honest.
 
 ### Day 31
 
-Seeds are done. The AI has 30 observations with competing interpretations. 30 suppressed questions. A behavioral fingerprint calibrated against an on-demand baseline built across different times of day and moods. Multiple self-correction cycles where it identified its own errors and dropped bad threads.
+Seeds are done. The AI has 30 observations with three-frame analysis. 30 suppressed questions designed to disambiguate, not dramatize. A behavioral fingerprint calibrated across devices and times of day. Four self-correction cycles with multi-model audits. Question feedback data on which questions landed and which didn't.
 
-It generates tomorrow's question. Not from a single confident narrative about who you are. From a model that knows what it's sure about, what it's guessing, and where it needs more data.
-
-The question it asks targets the gap where the competing interpretations haven't converged — the thing about you that the system still can't tell if it's understanding correctly.
+It generates tomorrow's question. Not from a single confident narrative. From a model that knows what it's sure about, what it's guessing, where its calibration is weak, and where an independent auditor disagreed with its read.
 
 ## Stack
 
 - **Astro** (SSR, Node adapter)
 - **SQLite** via better-sqlite3
-- **Claude API** (`@anthropic-ai/sdk`) — Claude Opus 4.6 for all AI analysis
+- **Claude API** (`@anthropic-ai/sdk`) — Claude Opus 4.6 for primary analysis, Claude Sonnet 4.6 for weekly audit
 - **TypeScript** (strict)
 
 ## Architecture
@@ -200,9 +229,12 @@ The question it asks targets the gap where the competing interpretations haven't
 - Single user, no auth
 - SQLite database at `data/marrow.db`
 - Seed questions in `src/lib/seeds.ts`
-- On-demand calibration via free writes
+- On-demand calibration via free writes with context metadata
+- Three interpretive frames (charitable, avoidance, mundane)
+- Context-matched baselines with confidence scoring
+- Multi-model audit (Opus + Sonnet) on weekly reflections
+- "Did it land?" feedback every 5th submission
 - All analysis triggered on submit — no cron, no scheduler
-- Manual script fallbacks available for debugging
 
 ## Commands
 

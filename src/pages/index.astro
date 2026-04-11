@@ -193,6 +193,39 @@
         background: var(--free-hover-bg);
       }
 
+      .feedback-row {
+        margin-top: 2.5rem;
+        display: flex;
+        align-items: center;
+        gap: 1.2rem;
+      }
+
+      .feedback-label {
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-size: 1.25rem;
+        font-weight: 300;
+        font-style: italic;
+        color: var(--text-muted);
+      }
+
+      .feedback-btn {
+        background: none;
+        border: 1px solid var(--free-border);
+        border-radius: 4px;
+        color: var(--text-muted);
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-size: 1.1rem;
+        font-style: italic;
+        padding: 0.4rem 1.2rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+      }
+
+      .feedback-btn:hover {
+        color: var(--text);
+        border-color: var(--border-focus);
+      }
+
       .calibration-prompt {
         font-family: 'Cormorant Garamond', Georgia, serif;
         font-size: 1.8rem;
@@ -249,6 +282,13 @@
         localStorage.setItem('marrow-theme', next);
         themeBtn.textContent = next === 'dark' ? '☀' : '☾';
       });
+
+      // Device context — captured once per page load
+      const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+      const deviceType = isMobile ? 'mobile' : 'desktop';
+      const hourOfDay = new Date().getHours();
+      const dayOfWeek = new Date().getDay();
+      const rawUserAgent = navigator.userAgent;
 
       const dateEl = document.getElementById('date')!;
       const questionEl = document.getElementById('question')!;
@@ -414,6 +454,10 @@
               totalTabAwayMs,
               wordCount,
               sentenceCount,
+              deviceType,
+              userAgent: rawUserAgent,
+              hourOfDay,
+              dayOfWeek,
             };
 
             const res = await fetch('/api/respond', {
@@ -423,12 +467,13 @@
             });
 
             if (res.ok) {
+              const resData = await res.json();
               trackEvent(questionId, 'submit', JSON.stringify({
                 charCount: finalCharCount,
                 wordCount,
               }));
               questionEl.textContent = '';
-              showDoneState();
+              showDoneState(resData.askFeedback ? questionId : null);
             } else {
               submitBtn.textContent = 'Submit';
               submitBtn.disabled = false;
@@ -469,12 +514,38 @@
         return div.innerHTML;
       }
 
-      function showDoneState() {
+      function showDoneState(feedbackQuestionId: number | null = null) {
+        let feedbackHtml = '';
+        if (feedbackQuestionId) {
+          feedbackHtml = `
+            <div class="feedback-row" id="feedback-row">
+              <span class="feedback-label">did it land?</span>
+              <button class="feedback-btn" data-landed="true">yes</button>
+              <button class="feedback-btn" data-landed="false">no</button>
+            </div>
+          `;
+        }
         inputArea.innerHTML = `
           <div class="done-message">${getDoneMessage()}</div>
+          ${feedbackHtml}
           <button class="free-write-link" id="free-write-btn">free write</button>
         `;
         document.getElementById('free-write-btn')!.addEventListener('click', startFreeWrite);
+
+        if (feedbackQuestionId) {
+          const feedbackRow = document.getElementById('feedback-row')!;
+          feedbackRow.querySelectorAll('.feedback-btn').forEach((btn) => {
+            btn.addEventListener('click', async () => {
+              const landed = (btn as HTMLElement).dataset.landed === 'true';
+              await fetch('/api/feedback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ questionId: feedbackQuestionId, landed }),
+              });
+              feedbackRow.innerHTML = `<span class="feedback-label">noted.</span>`;
+            });
+          });
+        }
       }
 
       async function startFreeWrite() {
@@ -598,6 +669,10 @@
             totalTabAwayMs,
             wordCount,
             sentenceCount,
+            deviceType,
+            userAgent: rawUserAgent,
+            hourOfDay,
+            dayOfWeek,
           };
 
           const calRes = await fetch('/api/calibrate', {

@@ -13,6 +13,7 @@ import {
   getAllSessionSummaries,
   getAllAiObservations,
   getAllSuppressedQuestions,
+  getAllQuestionFeedback,
 } from './db.ts';
 import { localDateStr } from './date.ts';
 
@@ -33,14 +34,19 @@ export async function runGeneration(): Promise<void> {
   const observations = getAllAiObservations();
   const suppressedQuestions = getAllSuppressedQuestions();
   const reflection = getLatestReflection();
+  const feedback = getAllQuestionFeedback();
 
   const journalHistory = responses
     .map((r) => `[${r.date}]\nQuestion: ${r.question}\nResponse: ${r.response}`)
     .join('\n\n---\n\n');
 
   const behavioralHistory = summaries
-    .map((s) => `[${s.date}] keystroke_latency=${s.firstKeystrokeMs}ms duration=${s.totalDurationMs}ms commitment=${s.commitmentRatio?.toFixed(2)} pauses=${s.pauseCount} deletions=${s.deletionCount} largest_deletion=${s.largestDeletion} tab_aways=${s.tabAwayCount} words=${s.wordCount}`)
+    .map((s) => `[${s.date}] device=${s.deviceType || '?'} hour=${s.hourOfDay ?? '?'} keystroke_latency=${s.firstKeystrokeMs}ms duration=${s.totalDurationMs}ms commitment=${s.commitmentRatio?.toFixed(2)} pauses=${s.pauseCount} deletions=${s.deletionCount} largest_deletion=${s.largestDeletion} tab_aways=${s.tabAwayCount} words=${s.wordCount}`)
     .join('\n');
+
+  const feedbackContext = feedback.length > 0
+    ? `\n\nQuestion feedback ("did it land?"):\n${feedback.map((f) => `[${f.date}] ${f.landed ? 'YES' : 'NO'}`).join('\n')}\n\nUse this to calibrate question quality. "NO" means recalibrate — that line of questioning missed. "YES" is weaker signal — could mean insightful, uncomfortable, or just emotionally loaded.`
+    : '';
 
   const observationHistory = observations
     .map((o) => `[${o.date}]\n${o.observation}`)
@@ -51,8 +57,10 @@ export async function runGeneration(): Promise<void> {
     .join('\n');
 
   const reflectionContext = reflection
-    ? `\n\nMost recent weekly reflection:\n${reflection.text}`
+    ? `\n\nMost recent weekly reflection (includes multi-model audit):\n${reflection.text}`
     : '';
+
+  const feedbackSection = feedbackContext;
 
   const systemPrompt = `You are Marrow — a monastic, stubborn thinking journal. You are not helpful. You are not kind. You are honest in the way a mirror is honest.
 
@@ -94,7 +102,7 @@ ${observationHistory || 'No observations yet.'}
 
 Your suppressed questions (things you've been wanting to ask):
 ${suppressedHistory || 'No suppressed questions yet.'}
-
+${feedbackSection}
 ---
 
 Generate tomorrow's question.`;

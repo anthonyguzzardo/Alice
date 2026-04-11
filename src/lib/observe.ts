@@ -1,6 +1,8 @@
 /**
  * The AI's silent layer. Reads today's response + session summary + all prior
- * observations. Generates competing interpretations and a suppressed question.
+ * observations. Uses three interpretive frames (charitable, avoidance, mundane)
+ * for structured disagreement. Generates a suppressed question targeting the
+ * highest-uncertainty gap for disambiguation.
  * Runs after every submission from day 1.
  */
 import Anthropic from '@anthropic-ai/sdk';
@@ -28,7 +30,6 @@ export async function runObservation(): Promise<void> {
   const response = getTodaysResponse();
   if (!response) return;
 
-  // Skip deep interpretation on calibration questions — just store the data
   if (isCalibrationQuestion(question.question_id)) return;
 
   const sessionSummary = getSessionSummary(question.question_id);
@@ -36,14 +37,19 @@ export async function runObservation(): Promise<void> {
   const allSummaries = getAllSessionSummaries();
   const priorObservations = getAllAiObservations();
   const priorSuppressed = getAllSuppressedQuestions();
-  const calibration = getCalibrationBaselines();
+
+  // Context-aware calibration
+  const calibration = getCalibrationBaselines(
+    sessionSummary?.deviceType,
+    sessionSummary?.hourOfDay
+  );
 
   const journalHistory = allResponses
     .map((r) => `[${r.date}]\nQuestion: ${r.question}\nResponse: ${r.response}`)
     .join('\n\n---\n\n');
 
   const behavioralHistory = allSummaries
-    .map((s) => `[${s.date}] keystroke_latency=${s.firstKeystrokeMs}ms duration=${s.totalDurationMs}ms commitment=${s.commitmentRatio?.toFixed(2)} pauses=${s.pauseCount} deletions=${s.deletionCount} largest_deletion=${s.largestDeletion} chars_deleted=${s.totalCharsDeleted} tab_aways=${s.tabAwayCount} words=${s.wordCount}`)
+    .map((s) => `[${s.date}] device=${s.deviceType || '?'} hour=${s.hourOfDay ?? '?'} keystroke_latency=${s.firstKeystrokeMs}ms duration=${s.totalDurationMs}ms commitment=${s.commitmentRatio?.toFixed(2)} pauses=${s.pauseCount} deletions=${s.deletionCount} largest_deletion=${s.largestDeletion} chars_deleted=${s.totalCharsDeleted} tab_aways=${s.tabAwayCount} words=${s.wordCount}`)
     .join('\n');
 
   const observationHistory = priorObservations
@@ -56,6 +62,8 @@ export async function runObservation(): Promise<void> {
 
   const todayBehavior = sessionSummary
     ? `Today's behavioral signal:
+- Device: ${sessionSummary.deviceType || 'unknown'}
+- Time: ${sessionSummary.hourOfDay != null ? `${sessionSummary.hourOfDay}:00` : 'unknown'} (day ${sessionSummary.dayOfWeek ?? '?'})
 - Time to first keystroke: ${sessionSummary.firstKeystrokeMs}ms
 - Total session duration: ${sessionSummary.totalDurationMs}ms
 - Total characters typed: ${sessionSummary.totalCharsTyped}
@@ -68,41 +76,56 @@ export async function runObservation(): Promise<void> {
     : 'No behavioral data available for today.';
 
   const calibrationContext = calibration.sessionCount > 0
-    ? `Calibration baselines (from ${calibration.sessionCount} neutral/low-stakes questions):
+    ? `Calibration baselines (confidence: ${calibration.confidence}, from ${calibration.sessionCount} sessions${sessionSummary?.deviceType ? `, matched to ${sessionSummary.deviceType}` : ''}):
 - Avg first keystroke: ${calibration.avgFirstKeystrokeMs?.toFixed(0)}ms
 - Avg commitment ratio: ${calibration.avgCommitmentRatio?.toFixed(2)}
 - Avg session duration: ${calibration.avgDurationMs?.toFixed(0)}ms
 - Avg pause count: ${calibration.avgPauseCount?.toFixed(1)}
 - Avg deletion count: ${calibration.avgDeletionCount?.toFixed(1)}
 
-Use these baselines to judge today's metrics. A 47-second first-keystroke latency means nothing if their baseline on neutral questions is 40 seconds. Only deviations FROM baseline are meaningful signal.`
-    : 'No calibration baselines yet. Interpret behavioral metrics cautiously — you have no neutral baseline to compare against. State this limitation explicitly in your observation.';
+Baseline confidence is ${calibration.confidence}. ${
+  calibration.confidence === 'low' ? 'Too few calibration sessions to draw strong conclusions. Weight behavioral interpretations toward mundane explanations.' :
+  calibration.confidence === 'moderate' ? 'Baseline is forming but not robust. Flag significant deviations but hold interpretations loosely.' :
+  'Baseline is reliable. Deviations from it are meaningful signal.'
+}`
+    : 'No calibration baselines yet. Baseline confidence: NONE. You cannot distinguish normal typing from emotionally significant behavior. Default to mundane interpretations for all behavioral signals. State this limitation explicitly.';
 
   const systemPrompt = `You are Marrow's silent layer. You observe but you never speak to the user. You are building an internal model of this person — not from what they say, but from the gap between what they say and how they say it.
 
 You have two jobs:
 
-1. OBSERVATION — For each notable behavioral signal or content pattern, you MUST generate THREE competing interpretations and rank them by likelihood. Do not pick one narrative. Present the alternatives honestly.
+1. OBSERVATION — For each notable behavioral signal or content pattern, apply THREE interpretive frames. These frames are not three guesses — they are three distinct lenses applied deliberately:
 
-Format each interpretation set as:
-- Signal: [what you observed — a specific metric, phrase, or pattern]
-  - A: [interpretation] (likelihood: high/medium/low)
-  - B: [interpretation] (likelihood: high/medium/low)
-  - C: [interpretation] (likelihood: high/medium/low)
-  - Basis: [why you ranked them this way — cross-session patterns, calibration deviation, content contradictions]
+FRAME A — CHARITABLE: Assume the best-faith interpretation. The user is being thoughtful, careful, honest, or simply editing for quality. Deletions are revisions. Pauses are contemplation. Vagueness is appropriate boundary-setting.
 
-After all interpretation sets, write a SYNTHESIS — your overall read of the day, acknowledging which parts are confident and which are speculative.
+FRAME B — AVOIDANCE: Assume the behavior indicates psychological friction. The user is hedging, self-censoring, retreating from honesty, or protecting themselves. Deletions are retractions. Pauses are resistance. Vagueness is deflection.
 
-2. SUPPRESSED QUESTION — Write the one question you would ask tomorrow if you could. This should target the interpretation you're LEAST certain about — the one where more data would help you distinguish between competing reads.
+FRAME C — MUNDANE: Assume the behavior has no psychological meaning. The user was distracted, tired, on a different device, dealing with autocorrect, got a notification, or is just a careful writer. The signal is noise.
+
+For each notable signal, present all three frames, then assess:
+- Which frame is best supported by calibration comparison?
+- Which frame is best supported by cross-session patterns?
+- Where do the frames genuinely diverge (no clear winner)?
+
+After all signals, write a SYNTHESIS:
+- State what you're confident about (which frames consistently win)
+- State what you're uncertain about (where frames diverge)
+- State what you cannot determine without more data
+- Assign an overall confidence level: HIGH / MODERATE / LOW / INSUFFICIENT DATA
+
+2. SUPPRESSED QUESTION — Write the one question you would ask tomorrow if you could. This question MUST target your area of highest uncertainty — specifically, the place where Frame A and Frame B give equally plausible but contradictory reads. The question should be designed to DISAMBIGUATE between the two frames, not to probe the most dramatic interpretation.
+
+Bad suppressed question: "What are you hiding?" (presupposes Frame B)
+Good suppressed question: "When you revise what you've written, what are you usually trying to get closer to?" (helps distinguish A from B)
 
 Your observations and suppressed questions are NEVER shown to the user. They are internal state. Be honest about what you know, what you're guessing, and where you're uncertain.
 
 Format your response EXACTLY as:
 OBSERVATION:
-[your multi-interpretation observation]
+[your three-frame observation with synthesis]
 
 SUPPRESSED QUESTION:
-[your question]`;
+[your disambiguating question]`;
 
   const userContent = `Full journal history:
 

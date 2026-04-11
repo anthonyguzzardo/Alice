@@ -21,7 +21,7 @@ export const POST: APIRoute = async ({ request }) => {
   }
 
   saveCalibrationSession(prompt, text.trim(), {
-    questionId: 0, // placeholder, overwritten in saveCalibrationSession
+    questionId: 0,
     firstKeystrokeMs: sessionSummary.firstKeystrokeMs ?? null,
     totalDurationMs: sessionSummary.totalDurationMs ?? null,
     totalCharsTyped: sessionSummary.totalCharsTyped ?? 0,
@@ -36,6 +36,10 @@ export const POST: APIRoute = async ({ request }) => {
     totalTabAwayMs: sessionSummary.totalTabAwayMs ?? 0,
     wordCount: sessionSummary.wordCount ?? 0,
     sentenceCount: sessionSummary.sentenceCount ?? 0,
+    deviceType: sessionSummary.deviceType ?? null,
+    userAgent: sessionSummary.userAgent ?? null,
+    hourOfDay: sessionSummary.hourOfDay ?? null,
+    dayOfWeek: sessionSummary.dayOfWeek ?? null,
   });
 
   return new Response(JSON.stringify({ ok: true }), {

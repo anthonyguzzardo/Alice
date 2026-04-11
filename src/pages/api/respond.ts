@@ -50,14 +50,18 @@ export const POST: APIRoute = async ({ request }) => {
       totalTabAwayMs: sessionSummary.totalTabAwayMs ?? 0,
       wordCount: sessionSummary.wordCount ?? 0,
       sentenceCount: sessionSummary.sentenceCount ?? 0,
+      deviceType: sessionSummary.deviceType ?? null,
+      userAgent: sessionSummary.userAgent ?? null,
+      hourOfDay: sessionSummary.hourOfDay ?? null,
+      dayOfWeek: sessionSummary.dayOfWeek ?? null,
     });
   }
 
-  // Fire background jobs after response — non-blocking
   const responseCount = getResponseCount();
 
-  // Observe + generate run after every submission
-  // Reflect runs every 7th response
+  // Determine if we should ask "did it land?" (every 5th daily response)
+  const askFeedback = responseCount % 5 === 0;
+
   Promise.resolve()
     .then(() => runObservation())
     .then(() => runGeneration())
@@ -70,7 +74,7 @@ export const POST: APIRoute = async ({ request }) => {
       console.error('Background job error:', err);
     });
 
-  return new Response(JSON.stringify({ ok: true }), {
+  return new Response(JSON.stringify({ ok: true, askFeedback, questionId }), {
     headers: { 'Content-Type': 'application/json' },
   });
 };

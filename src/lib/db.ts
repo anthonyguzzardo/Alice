@@ -186,6 +186,23 @@ db.exec(`
   -- LOGICAL FK: question_id → tb_questions.question_id
   -- FOOTER: Minimal (append-only)
   -- --------------------------------------------------------------------------
+  -- --------------------------------------------------------------------------
+  -- tb_question_feedback
+  -- --------------------------------------------------------------------------
+  -- PURPOSE: Minimal external signal — did the question land?
+  -- USE CASE: "Was this question relevant/resonant for the user?"
+  -- MUTABILITY: Mutable (append-only)
+  -- LOGICAL FK: question_id → tb_questions.question_id
+  -- FOOTER: Minimal (append-only)
+  -- --------------------------------------------------------------------------
+  CREATE TABLE IF NOT EXISTS tb_question_feedback (
+     question_feedback_id  INTEGER PRIMARY KEY AUTOINCREMENT
+    ,question_id           INTEGER NOT NULL UNIQUE
+    ,landed                INTEGER NOT NULL          -- 1 = yes, 0 = no
+    ,dttm_created_utc      TEXT    NOT NULL DEFAULT (datetime('now'))
+    ,created_by            TEXT    NOT NULL DEFAULT 'user'
+  );
+
   CREATE TABLE IF NOT EXISTS tb_session_summaries (
      session_summary_id         INTEGER PRIMARY KEY AUTOINCREMENT
     ,question_id                INTEGER NOT NULL UNIQUE
@@ -203,6 +220,11 @@ db.exec(`
     ,total_tab_away_ms          INTEGER          -- cumulative time away
     ,word_count                 INTEGER          -- words in final submission
     ,sentence_count             INTEGER          -- sentences in final submission
+    -- CONTEXT
+    ,device_type                TEXT             -- 'mobile' or 'desktop'
+    ,user_agent                 TEXT             -- raw user agent string
+    ,hour_of_day                INTEGER          -- 0-23 local time
+    ,day_of_week                INTEGER          -- 0=Sunday, 6=Saturday
     -- FOOTER
     ,dttm_created_utc           TEXT    NOT NULL DEFAULT (datetime('now'))
     ,created_by                 TEXT    NOT NULL DEFAULT 'system'
@@ -342,6 +364,10 @@ export interface SessionSummaryInput {
   totalTabAwayMs: number;
   wordCount: number;
   sentenceCount: number;
+  deviceType: string | null;
+  userAgent: string | null;
+  hourOfDay: number | null;
+  dayOfWeek: number | null;
 }
 
 export function saveSessionSummary(s: SessionSummaryInput): void {
@@ -351,14 +377,16 @@ export function saveSessionSummary(s: SessionSummaryInput): void {
        total_chars_typed, final_char_count, commitment_ratio,
        pause_count, total_pause_ms, deletion_count, largest_deletion,
        total_chars_deleted, tab_away_count, total_tab_away_ms,
-       word_count, sentence_count
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       word_count, sentence_count,
+       device_type, user_agent, hour_of_day, day_of_week
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     s.questionId, s.firstKeystrokeMs, s.totalDurationMs,
     s.totalCharsTyped, s.finalCharCount, s.commitmentRatio,
     s.pauseCount, s.totalPauseMs, s.deletionCount, s.largestDeletion,
     s.totalCharsDeleted, s.tabAwayCount, s.totalTabAwayMs,
-    s.wordCount, s.sentenceCount
+    s.wordCount, s.sentenceCount,
+    s.deviceType, s.userAgent, s.hourOfDay, s.dayOfWeek
   );
 }
 
@@ -371,7 +399,8 @@ export function getSessionSummary(questionId: number): SessionSummaryInput | nul
             deletion_count as deletionCount, largest_deletion as largestDeletion,
             total_chars_deleted as totalCharsDeleted, tab_away_count as tabAwayCount,
             total_tab_away_ms as totalTabAwayMs, word_count as wordCount,
-            sentence_count as sentenceCount
+            sentence_count as sentenceCount, device_type as deviceType,
+            user_agent as userAgent, hour_of_day as hourOfDay, day_of_week as dayOfWeek
      FROM tb_session_summaries WHERE question_id = ?`
   ).get(questionId) as SessionSummaryInput | null;
 }
@@ -386,22 +415,40 @@ export function getAllSessionSummaries(): Array<SessionSummaryInput & { date: st
            s.deletion_count as deletionCount, s.largest_deletion as largestDeletion,
            s.total_chars_deleted as totalCharsDeleted, s.tab_away_count as tabAwayCount,
            s.total_tab_away_ms as totalTabAwayMs, s.word_count as wordCount,
-           s.sentence_count as sentenceCount
+           s.sentence_count as sentenceCount, s.device_type as deviceType,
+           s.user_agent as userAgent, s.hour_of_day as hourOfDay, s.day_of_week as dayOfWeek
     FROM tb_session_summaries s
     JOIN tb_questions q ON s.question_id = q.question_id
     ORDER BY q.scheduled_for ASC
   `).all() as Array<SessionSummaryInput & { date: string }>;
 }
 
-export function getCalibrationBaselines(): {
+export interface CalibrationBaseline {
   avgFirstKeystrokeMs: number | null;
   avgCommitmentRatio: number | null;
   avgDurationMs: number | null;
   avgPauseCount: number | null;
   avgDeletionCount: number | null;
   sessionCount: number;
-} {
-  const row = db.prepare(`
+  confidence: 'none' | 'low' | 'moderate' | 'strong';
+}
+
+export function getCalibrationBaselines(deviceType?: string | null, hourOfDay?: number | null): CalibrationBaseline {
+  // Try context-matched first, then fall back to global
+  const conditions: string[] = ['q.question_source_id = 3'];
+  const params: (string | number)[] = [];
+
+  if (deviceType) {
+    conditions.push('s.device_type = ?');
+    params.push(deviceType);
+  }
+  if (hourOfDay != null) {
+    // Match within a 4-hour window (e.g., 9pm-1am for a 11pm session)
+    conditions.push('ABS(s.hour_of_day - ?) <= 2 OR ABS(s.hour_of_day - ?) >= 22');
+    params.push(hourOfDay, hourOfDay);
+  }
+
+  const contextRow = db.prepare(`
     SELECT
        AVG(s.first_keystroke_ms) as avgFirstKeystrokeMs
       ,AVG(s.commitment_ratio) as avgCommitmentRatio
@@ -411,16 +458,33 @@ export function getCalibrationBaselines(): {
       ,COUNT(*) as sessionCount
     FROM tb_session_summaries s
     JOIN tb_questions q ON s.question_id = q.question_id
-    WHERE q.question_source_id = 3
-  `).get() as {
-    avgFirstKeystrokeMs: number | null;
-    avgCommitmentRatio: number | null;
-    avgDurationMs: number | null;
-    avgPauseCount: number | null;
-    avgDeletionCount: number | null;
-    sessionCount: number;
-  };
-  return row;
+    WHERE ${conditions.join(' AND ')}
+  `).get(...params) as { avgFirstKeystrokeMs: number | null; avgCommitmentRatio: number | null; avgDurationMs: number | null; avgPauseCount: number | null; avgDeletionCount: number | null; sessionCount: number };
+
+  // Fall back to global if context-matched has too few
+  let row = contextRow;
+  if (contextRow.sessionCount < 3 && (deviceType || hourOfDay != null)) {
+    row = db.prepare(`
+      SELECT
+         AVG(s.first_keystroke_ms) as avgFirstKeystrokeMs
+        ,AVG(s.commitment_ratio) as avgCommitmentRatio
+        ,AVG(s.total_duration_ms) as avgDurationMs
+        ,AVG(s.pause_count) as avgPauseCount
+        ,AVG(s.deletion_count) as avgDeletionCount
+        ,COUNT(*) as sessionCount
+      FROM tb_session_summaries s
+      JOIN tb_questions q ON s.question_id = q.question_id
+      WHERE q.question_source_id = 3
+    `).get() as typeof contextRow;
+  }
+
+  const count = row.sessionCount;
+  const confidence: CalibrationBaseline['confidence'] =
+    count === 0 ? 'none' :
+    count < 3 ? 'low' :
+    count < 8 ? 'moderate' : 'strong';
+
+  return { ...row, confidence };
 }
 
 export function isCalibrationQuestion(questionId: number): boolean {
@@ -484,6 +548,25 @@ export function saveCalibrationSession(
   saveSessionSummary({ ...summary, questionId });
 
   return questionId;
+}
+
+// ----------------------------------------------------------------------------
+// QUESTION FEEDBACK
+// ----------------------------------------------------------------------------
+
+export function saveQuestionFeedback(questionId: number, landed: boolean): void {
+  db.prepare(
+    `INSERT OR IGNORE INTO tb_question_feedback (question_id, landed) VALUES (?, ?)`
+  ).run(questionId, landed ? 1 : 0);
+}
+
+export function getAllQuestionFeedback(): Array<{ date: string; landed: boolean }> {
+  return db.prepare(`
+    SELECT q.scheduled_for as date, f.landed
+    FROM tb_question_feedback f
+    JOIN tb_questions q ON f.question_id = q.question_id
+    ORDER BY q.scheduled_for ASC
+  `).all().map((r: any) => ({ date: r.date, landed: !!r.landed }));
 }
 
 export default db;
