@@ -1,0 +1,1 @@
+kill -9 $(lsof -iTCP -sTCP:LISTEN -nP | awk 'NR>1 {print $2}' | sort -u | xargs)

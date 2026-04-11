@@ -1,227 +1,212 @@
 # The Black Box
 
-An artificial life engine driven by your journal data. Not a visualization of data — a living system shaped by it.
+An artificial life engine. Not a visualization. Not a simulation with a script. A system where you build the substrate, define the physics, and walk away — and something crawls out that you didn't design.
 
-## What It Is
+## Philosophy
 
-The Black Box is a self-evolving ecosystem that runs in your browser. Organisms carry 36-gene genomes that encode their body plan, behavior, defenses, and social strategy. They grow through life stages, form packs and colonies, claim territory, parasitize each other, hunt in coordinated formations, and die in ways that reshape the world. Species emerge from genomic divergence — they are not designed. Your journal data sets the physics. What evolves is not planned.
+In *Children of Time*, scientists sent a virus to terraform a planet for humans. Spiders became the dominant species instead. That's the principle here. You don't get to pick what emerges. You set the conditions and the conditions produce outcomes that surprise you — the architect.
 
-## How Data Becomes Physics
+This is not a cellular automaton. Not Conway. Not Lenia. Not boids. Not reaction-diffusion wallpaper with bacteria-shaped blobs drifting around. Those are solved. Those are known. The point of this system is to produce behaviors that look like they *mean something* — and you didn't tell them to.
 
-Every 60 seconds, the system fetches behavioral metrics from your journal and translates them into environmental parameters:
+A machine printing words in no particular order in a random language, and you catch yourself reading a sentence. Two shapes locked in orbit that suddenly aren't. A field of noise that develops structure, then rhythm, then something you'd swear is breathing — not because you coded breathing, but because you coded friction and feedback and something *found* breathing on its own. Ten agents arguing. Fungal networks. Brain waves. A black hole. Communication that might not be communication. The system decides. Not you.
+
+**The engineer's job is to build the box. Not to decide what happens inside it.**
+
+---
+
+## Constraints
+
+### Creative Constraints
+
+**Zero.** There are no creative constraints. The agent building this has access to any API, any public library, any part of the codebase, any npm package, any rendering pipeline, any data source. WebGL, WebGPU, Canvas, SVG, Web Audio, WASM — whatever produces the best result. Three.js, d3, Pixi, raw shaders, TensorFlow.js, hand-rolled physics — all fair game. If something exists that makes this better, use it.
+
+Do not ask permission. Do not simplify for safety. Do not reduce scope to be "realistic." Build the most ambitious version.
+
+### Engineering Constraints
+
+These are real and non-negotiable:
+
+1. **It must run.** 60fps on a modern browser. If you need WebGL or WebGPU for performance, use them. If the chemical field needs to be GPU-computed, compute it on the GPU. Do not build a system that looks good on paper and runs at 4fps.
+
+2. **It must be legible.** Not explained — legible. Someone looking at it should be able to tell that things are alive, that they're different from each other, that events are happening. They should not need a manual. The visual language must communicate without a HUD.
+
+3. **Systems must actually interact.** This is where most artificial life projects fail. They build five systems and none of them talk to each other. The genome must *actually drive* the behavior. The chemistry must *actually affect* the organisms. The organisms must *actually change* the chemistry. If a system exists in the code but nothing reads its output, delete it.
+
+4. **The energy economy must work.** If everything dies in 10 seconds, there's no evolution. If nothing ever dies, there's no selection pressure. The metabolism-food-predation loop is the backbone. Get it right or nothing else matters.
+
+5. **It must not converge.** If the system reaches a stable equilibrium and stays there, it has failed. Perturbation, mutation pressure, environmental shifts, spatial heterogeneity — whatever it takes to keep the system producing novelty over time.
+
+---
+
+## Architecture
+
+### The Genome
+
+Organisms carry a genome. The genome is a vector of floating-point genes that encode everything about the organism — how it moves, what it eats, how it reproduces, how it interacts with others, what it looks like, how it responds to chemistry, how aggressive or social or territorial it is.
+
+The genome must include a **meta-evolution gene**: the mutation rate itself is heritable and mutable. Lineages can evolve to be more or less evolvable. This is critical for open-ended dynamics.
+
+Reproduction copies the genome with Gaussian mutations. There should be a small chance per gene of a macro-mutation — a large jump that can produce radically new strategies. Without macro-mutations, the system hill-climbs to local optima and stays there.
+
+The exact number of genes and what they encode is up to the engineer. The spec below suggests categories but does not mandate them. If you find a better decomposition, use it. The requirement is that the genome is rich enough to produce meaningfully different organisms and that every gene actually does something.
+
+**Suggested gene categories** (not mandatory, not exhaustive):
+- Movement: speed, turning, burst capability
+- Chemotaxis: response to chemical gradients
+- Chemistry: what the organism deposits and consumes
+- Social: aggression, sociality, fear, territoriality, pack drive
+- Metabolic: metabolism rate, reproduction threshold, body size
+- Perception: sense range, memory, food attraction
+- Defense: armor, toxicity
+- Signaling: communication frequency and sensitivity
+- Phenotype: color, shape, trophic tendency
+
+### Body Morphologies
+
+Organisms should be visually distinct based on their genome. The shape of an organism should tell you its ecological strategy before you read any data. Predators should look like predators. Grazers should look like grazers. Parasites should look unsettling.
+
+Morphology is not cosmetic — it should emerge from gene values and affect behavior. The engineer decides the mapping. What matters is that when you look at the screen, you see a diverse ecosystem of recognizably different creatures, not a uniform swarm.
+
+### Life Stages
+
+Organisms progress through life stages. At minimum: a vulnerable immobile birth stage, a growth stage, a reproductive adult stage, and an elder stage with declining performance. Stage transitions should be visible — size changes, rendering changes, behavioral changes.
+
+### Behavioral Modes
+
+Organisms switch between behavioral modes based on internal state and environment. These are not assigned — they emerge from context. When an aggressive organism detects prey and has energy, it hunts. When a weak organism detects a predator, it flees. When social organisms cluster, they form colonies. The modes are consequences of gene expression meeting environmental context.
+
+Suggested modes (implement as many as produce interesting dynamics):
+- Foraging (default gradient-following)
+- Hunting (active pursuit)
+- Fleeing (evasion)
+- Colony behavior (differentiated roles)
+- Territorial guarding
+- Ambush predation
+- Parasitic attachment
+
+---
+
+## Core Systems
+
+These are the systems that must exist and must interact. How they're implemented is the engineer's decision.
+
+### 1. Chemical Field
+
+A multi-channel chemical field on a grid. Organisms read it, organisms write to it, and it has its own dynamics independent of organisms. At minimum, this should include reaction-diffusion chemistry (Gray-Scott or similar) that produces spatial structure (spots, stripes, labyrinths) on its own. Organisms navigate by chemotaxis and deposit pheromones that other organisms respond to.
+
+The chemistry is not decoration. It is infrastructure. Organisms that modify the chemistry are modifying the environment that other organisms depend on. This is niche construction and it must actually work.
+
+### 2. Species Emergence
+
+Species are not designed. They emerge from genomic divergence. When an offspring's genome is sufficiently distant from all existing species, a new species is born. Species should be tracked — when they emerge, how many exist, when they go extinct. Speciation events should be visible.
+
+### 3. Social Structure
+
+When organisms of the same species cluster spatially and have high sociality genes, they should be able to form colonies with differentiated roles. Queens, workers, soldiers — or whatever role structure the engineer finds produces the most interesting dynamics. Colony members should be visually connected. Colony behavior should be visibly different from solo behavior.
+
+Pack hunting should emerge when aggressive organisms of the same species cluster. Coordinated pursuit should be more effective than solo hunting.
+
+### 4. Territory
+
+Territorial organisms claim space by depositing species-specific pheromone. Territory should be visible. Entering foreign territory should have consequences — increased fear, reduced speed, increased aggression at borders. Territory creates spatial structure in the ecosystem that prevents everything from collapsing into one undifferentiated mass.
+
+### 5. Predation, Parasitism, and Symbiosis
+
+Large aggressive organisms eat smaller ones. Parasitic organisms latch onto hosts and drain energy. Non-aggressive organisms of different species near each other can benefit from proximity. These three interaction types create the food web. Without them, there's no selection pressure and no ecological structure.
+
+Toxic organisms should poison their killers. Armored organisms should be harder to kill. These defenses should be visible.
+
+### 6. Memory and Learning
+
+Organisms carry a small memory vector that tracks recent experience — where food was, whether energy is rising or falling, how crowded the area is. Memory should influence behavior through a heritable memory-weight gene. Offspring should partially inherit parental memory, giving children a head start.
+
+### 7. Environmental Perturbation
+
+The system must include random environmental events that prevent convergence. Storms, famines, plagues, radiation bursts, migrations — events that disrupt the current equilibrium and force re-adaptation. Events should be visible and labeled on screen. They should be frequent enough to prevent stasis but not so frequent that nothing has time to evolve.
+
+---
+
+## Data Integration
+
+The system connects to journal behavioral metrics and translates them into environmental parameters. The mapping should be intuitive: commitment increases food abundance, hesitation increases environmental viscosity, deletion intensity increases entropy, reflection accelerates evolution, suppressed content increases predation pressure.
+
+When new data arrives, the environment shifts gradually — not instantly. Species adapted to the old regime must adapt or collapse. This is the mechanism by which your behavior shapes the ecosystem without controlling it.
+
+The specific signals and their mappings:
 
 | Signal | Controls |
 |---|---|
-| `avgCommitment` | Food abundance + pack coordination bonus |
-| `avgHesitation` | Environmental viscosity — contemplation slows the medium |
-| `deletionIntensity` | Random hazards — self-editing introduces entropy |
-| `pauseFrequency` | Mutation rate modifier — pauses breed variation |
-| `observationCount` | Chemical feed rate — more observations, more reactive chemistry |
-| `reflectionCount` | Evolution speed — reflection accelerates adaptation |
-| `suppressedCount` | Predation pressure — suppressed questions build pressure |
-| `embeddingCount` | Chemical diffusion rate — embeddings spread influence |
-| `latestConfidence` | Ecosystem stability — HIGH is stable, LOW is volatile |
-| `thematicDensity` | Food clustering + territory diffusion rate |
-| `landedRatio` | Symbiosis bonus + colony food-sharing rate |
-| `feedbackCount` | World topology — enough feedback wraps the world toroidal |
+| `avgCommitment` | Food abundance, pack coordination bonus |
+| `avgHesitation` | Environmental viscosity |
+| `deletionIntensity` | Random hazards, entropy |
+| `pauseFrequency` | Mutation rate modifier |
+| `observationCount` | Chemical feed rate |
+| `reflectionCount` | Evolution speed |
+| `suppressedCount` | Predation pressure |
+| `embeddingCount` | Chemical diffusion rate |
+| `latestConfidence` | Ecosystem stability |
+| `thematicDensity` | Food clustering, territory diffusion |
+| `landedRatio` | Symbiosis bonus, colony food sharing |
+| `feedbackCount` | World topology (toroidal wrapping threshold) |
 
-When new data arrives, the environment shifts gradually over ~3 seconds. Species adapted to the old regime must adapt or collapse.
+Data is fetched every 60 seconds. Transitions smooth over ~3 seconds.
 
-## The Genome
-
-Each organism carries a 36-gene genome encoded as floating-point values:
-
-- **Movement** (4 genes): speed preference, turning rate, burst speed, burst cooldown
-- **Chemotaxis** (3 genes): attraction/repulsion to each of three chemical channels
-- **Chemistry** (6 genes): deposit and consumption rates for each channel
-- **Social** (5 genes): aggression, sociality, fear, territoriality, pack drive
-- **Metabolic** (4 genes): metabolism rate, reproduction threshold, body size, growth rate
-- **Meta-evolution** (1 gene): mutation rate — the mutation rate itself evolves
-- **Perception** (3 genes): sense range, memory weight, phototropism (food attraction)
-- **Defense** (2 genes): armor (physical hardness), toxicity (chemical defense)
-- **Signaling** (2 genes): signal frequency, signal response sensitivity
-- **Phenotype** (5 genes): hue, saturation, luminance, body shape, trophic tendency
-- **Reserved** (1 gene): unused, available for future mutation pressure
-
-Reproduction copies the genome with Gaussian mutations. 5% chance per mutated gene of a macro-mutation that can produce radically new strategies. The mutation rate gene means lineages can evolve to be more or less evolvable.
-
-## Five Body Morphologies
-
-Body shape is not cosmetic — it emerges from the `BODY_SHAPE` gene and determines rendering, ecological role, and available behaviors.
-
-### Round / Colony (0.0–0.2)
-Soft circles with concentric internal rings and organelle patterns. Metabolism-synced pulsing. These organisms tend toward sociality and colony formation. Multiple concentric rings render at different opacities. A bright nucleus at center scales with energy.
-
-### Elongated / Hunter (0.2–0.4)
-Pill-shaped bodies aligned with heading direction. Elongate further in hunt mode. Jaw arcs render at the front when aggression is high or actively hunting. Speed lines trail behind during pursuit or flight. Angular, predatory.
-
-### Disc / Grazer (0.4–0.6)
-Flattened ellipses with animated cilia fringe — small radiating lines around the edge that oscillate. Semi-transparent bodies. Soft organic edges with subtle wobble. The cilia count and movement speed are driven by metabolism.
-
-### Star / Defender (0.6–0.8)
-Spiky geometric forms with 5–10 points (driven by the armor gene). Spikes pulse outward when threatened. Bright glow concentrates at spike tips. Hard geometric edges. The number of points encodes defensive capability — more armor, more spikes.
-
-### Amorphous / Parasite (0.8–1.0)
-Shape-shifting blobs defined by sin-wave radius modulation that constantly shifts. Tentacle-like projections reach toward nearby organisms via quadratic curves. Semi-transparent, eerie. When latched to a host, they orbit it.
-
-## Life Stages
-
-Every organism progresses through four stages:
-
-| Stage | Age (ticks) | Behavior |
-|---|---|---|
-| **Egg** | 0–50 | Immobile. Tiny pulsing dot. Vulnerable. Cannot feed or reproduce. |
-| **Juvenile** | 50–300 | Small (60% size). Fast. Memory builds faster. Cannot reproduce. |
-| **Adult** | 300–4000 | Full size. Full capabilities. Can reproduce when energy threshold met. |
-| **Elder** | 4000+ | 120% size. Slower. Lower mutation on offspring. Increasing energy drain. |
-
-Size scales with stage: egg ×0.3, juvenile ×0.6, adult ×1.0, elder ×1.2.
-
-## Six Behavioral Modes
-
-Organisms switch between modes based on internal state — modes are not assigned, they emerge from context:
-
-- **FORAGE**: Default. Follow food and chemical gradients. Physarum-style multi-angle sensing.
-- **HUNT**: Activated when prey detected, energy > 0.3, aggression > 0.4. Faster, more direct pursuit.
-- **FLEE**: Activated when predator detected. Maximum speed, erratic turning.
-- **COLONY**: Activated when organism belongs to a colony. Follow colony behavioral rules.
-- **GUARD**: Activated when territorial organism is at territory border. Patrol behavior.
-- **AMBUSH**: Activated for high-aggression, low-speed organisms. Sit still, burst attack when prey enters range.
-
-## The Nine Systems
-
-### 1. Chemical Field (Reaction-Diffusion)
-
-Four chemical channels on a grid:
-
-- **Channel A**: Substrate — consumed by the Gray-Scott reaction, replenished by feed rate
-- **Channel B**: Catalyst — produced by the reaction, creates visible Turing patterns (spots, stripes, labyrinths)
-- **Channel C**: Signal — deposited by organisms, decays quickly, used for local communication and pheromone trails
-- **Channel D**: Territory — deposited by territorial organisms, colored by species, decays slowly
-
-Channels A and B undergo Gray-Scott reaction-diffusion. Channel C is simple diffusion + decay. Channel D diffuses slowly and decays at a rate set by journal data.
-
-### 2. Species
-
-Species emerge from genomic divergence. When an offspring's genome is sufficiently distant (Euclidean distance > 2.8 in genome space) from all existing species centroids, a new species is born. Species centroids track as running averages. Species colors shift as the population evolves.
-
-Extinction occurs when all members die. The system tracks peak population, total individuals ever born, and time of origin.
-
-### 3. Colony System
-
-When 5+ organisms of the same species with high sociality cluster within 40px of a centroid for 100+ ticks, a colony forms. Members differentiate:
-
-- **Queens**: Highest energy members. Stay near center. Reproduce more efficiently. Rendered with gold crown-like concentric rings.
-- **Workers**: Highest phototropism. Forage outward and return. Share a percentage of gathered food with the queen (rate set by `landedRatio`). Rendered with directional foraging indicator.
-- **Soldiers**: Highest aggression. Patrol the colony perimeter. Rendered with sharp heading arrow.
-
-Colony members are connected by a visible structural web — semi-transparent species-colored lines between nearby members.
-
-### 4. Pack Hunting
-
-When 3+ organisms of the same species with aggression > 0.4 and pack drive > 0.3 are within 50px, they form a temporary pack. The organism with the most kills becomes pack leader.
-
-Pack members coordinate: the leader sets pursuit direction, others flank. Successful pack kills distribute energy to all members with a bonus scaled by the `packBonus` environment parameter.
-
-Visually: dashed formation lines between pack members (red-shifted). Lines become solid during active pursuit.
-
-### 5. Territory
-
-Organisms with territoriality > 0.3 deposit species-specific pheromone on the 4th chemical channel. A territory grid tracks species ownership per cell.
-
-- Entering foreign territory amplifies fear response and reduces speed
-- Territory borders are visible as faint species-colored boundaries in the chemical field rendering
-- Border proximity increases aggression in territorial organisms
-- Territory pheromone decays at a rate controlled by ecosystem stability
-
-### 6. Parasite Mechanics
-
-Organisms with body shape in the parasite range (0.8–1.0) can latch onto larger organisms:
-
-- **Attachment**: Within 5px of a host whose body size is > 2× the parasite's
-- **Drain**: 0.003 energy/tick from host, parasite gains 0.002/tick
-- **Escape**: Host shakes parasite based on speed gene (random chance per tick)
-- **Rendering**: Parasites orbit their host at a small radius, visually attached
-- **Spread**: Parasites near other organisms can jump to new hosts
-
-### 7. Predation & Symbiosis
-
-**Predation**: Organisms with high aggression and large body size can kill smaller, less aggressive organisms and absorb 70% of their energy. Kill experience makes hunters more effective over time. Toxic organisms inflict energy damage on their killers.
-
-**Symbiosis**: Non-aggressive organisms of different species near each other gain a small energy bonus, scaled by `landedRatio`. Cooperation is rewarded when questions land.
-
-### 8. Memory & Learning
-
-Each organism carries a 4-element memory vector:
-
-- **Memory[0-1]**: Directional food gradient — which direction food was found
-- **Memory[2]**: Energy trend — rising or falling
-- **Memory[3]**: Social density — how crowded the neighborhood has been
-
-Memory influences steering through the memory weight gene. Partially inherited by offspring at 50% strength, giving children a head start from parental experience.
-
-### 9. Environmental Perturbation
-
-Nine event types prevent convergence:
-
-| Event | Effect |
-|---|---|
-| **Storm** | Flood a region with one chemical channel |
-| **Superstorm** | Flood half the map + migration pressure |
-| **Oasis** | Large, rich food zone — becomes a battleground |
-| **Famine** | Regional food depletion |
-| **Ice Age** | Global food production drops 80% for ~5 seconds |
-| **Plague** | Kills weak organisms near each other — density-dependent |
-| **Radiation Burst** | Mass mutation — 3–4 random gene changes per affected organism |
-| **Migration** | Directional force pushing organisms |
-| **Tectonic Shift** | Chemical field inverts in a vertical band across the map |
-
-Events display as floating labeled text on screen. Minimum 10 seconds between events.
+---
 
 ## Rendering
 
-The visual has four layers:
+Four visual layers, composited:
 
-### 1. Chemical Field
-Rendered pixel-by-pixel. Channel B produces dominant blue/cyan/purple nebula patterns. Channel C adds violet signal pulses. Food glows warm amber/gold. Territory pheromone tints regions with species color. Dark mode includes a subtle star-field background.
+### Layer 1: Chemical Field
+Rendered pixel-by-pixel or via shader. The reaction-diffusion channels produce nebula-like patterns in blue/cyan/purple. Signal chemistry adds violet pulses. Food glows warm amber. Territory tints regions with species color. Dark background. This layer should look alive on its own, independent of organisms.
 
-### 2. Organisms
-Each drawn according to its morphology type (see Five Body Morphologies above). Size varies dramatically — apex predators can be 3–4× the size of grazers. Energy determines brightness and glow radius. Reproduction-ready organisms pulse with a golden ring. Toxic organisms have green-tinted aura. Armored organisms have harder glow edges.
+### Layer 2: Organisms
+Drawn according to morphology. Size varies dramatically — apex predators should be 3-4x the size of grazers. Brightness = energy. Reproduction-ready organisms pulse. Toxic organisms have green aura. Armored organisms have hard-edged glow. Colony members are connected by visible structural web.
 
-### 3. Trails
-Not lines — pheromone dot deposits that fade over time. Trail rendering varies by role:
-- Hunters leave red-shifted dots
-- Colony organisms leave thick species-colored trails (pheromone highways)
-- Grazers leave barely visible trails
-- Fast-moving organisms leave stretched/motion-blurred segments
+### Layer 3: Trails
+Pheromone deposits, not motion trails. They fade over time. Color and density vary by organism role and behavior. Hunters leave red-shifted dots. Colony organisms leave thick species-colored trails. Grazers leave barely visible traces.
 
-### 4. Events
-- **Predation kill**: Large expanding ring + red flash + energy particles flowing to killer
-- **Starvation**: Quick fade + small particle burst
-- **Plague death**: Expanding ring with green tint
-- **Mass extinction** (5+ deaths nearby in 2 seconds): Shockwave ring
-- **Birth**: Brief expansion flash + particle ring
-- **New species**: Golden flash + larger ring
-- **Environmental events**: Floating labeled text with colored glow
+### Layer 4: Events
+Death: expanding ring + flash. Birth: brief expansion + particles. New species: golden flash. Environmental events: floating labeled text. Mass extinction (5+ deaths nearby in 2 seconds): shockwave ring. These should be readable at a glance — something happened, and you can see what.
 
-## Why It Works
+---
 
-Seven mechanisms produce genuine open-ended dynamics:
+## What Makes This Work
 
-1. **Heritable variation** — 36-gene genomes mutate, including the mutation rate
-2. **Selection pressure** — energy economy with food, predation, metabolism, parasites, and territory costs
-3. **Indirect communication** — chemical stigmergy and territory pheromones create spatial structure
-4. **Niche construction** — organisms modify the chemical field and territory they depend on
+Seven mechanisms produce open-ended dynamics. All seven must be present and functional:
+
+1. **Heritable variation** — genomes mutate, including the mutation rate
+2. **Selection pressure** — energy economy with real consequences
+3. **Indirect communication** — chemical stigmergy creates spatial structure
+4. **Niche construction** — organisms modify the environment they depend on
 5. **Social structure** — colonies and packs create group-level selection
-6. **Life history** — stages create age-dependent strategies and intergenerational memory transfer
-7. **External perturbation** — data shifts and nine event types prevent convergence
+6. **Life history** — stages create age-dependent strategies and intergenerational memory
+7. **External perturbation** — data shifts and random events prevent convergence
 
-No stable equilibrium exists. The system doesn't converge — it keeps producing novelty.
+If any one of these is broken or decorative, the system degrades. They must all function and they must all interact.
 
-## What You're Looking At
+---
 
-The dark nebula of blue and purple is the reaction-diffusion field — chemistry happening independent of life. The glowing shapes are organisms — their morphology tells you their ecological strategy, their color tells you their species, their brightness tells you their energy. Elongated forms are hunters. Spiky forms are defenders. Flat discs with waving cilia are grazers. Shape-shifting blobs are parasites. Pulsing circles in structured webs are colonies.
+## What This Is Not
 
-The dots left behind are pheromone deposits, not tails. The web-lines between clustered organisms are colony structure. The dashed red lines are pack formations. The faint colored regions are claimed territory. The expanding rings are deaths. The flashes are births. The floating text tells you when the world itself changes.
+- Not a screensaver. Things must die, be born, evolve, compete, cooperate, and go extinct.
+- Not a visualization of data. Data sets the physics. What evolves is not planned.
+- Not a cellular automaton. No grids of cells with neighbor-counting rules.
+- Not a particle system. Organisms have genomes, memory, life stages, and social behavior.
+- Not a designed ecosystem. Species emerge. Behaviors emerge. Structures emerge. If you can predict what it will look like in 10 minutes, you built it wrong.
 
-You don't control any of it. Your journal sets the physics. Everything else evolves.
+---
+
+## Success Criteria
+
+You know it's working when:
+
+- You see creatures you didn't design doing things you didn't program
+- Species emerge that have strategies you didn't anticipate
+- The ecosystem looks fundamentally different every time you reload
+- You catch yourself watching it and wondering what something is doing
+- Colony structures form and collapse and reform in new configurations
+- Predators evolve hunting strategies, prey evolve evasion strategies, and the arms race is visible
+- Environmental events cause cascading effects that reshape the population
+- You cannot explain why a particular behavior is happening without tracing it back through multiple interacting systems
+- Someone looks at it and asks "what is that?" — and you don't have a complete answer
