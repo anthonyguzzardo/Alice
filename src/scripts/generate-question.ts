@@ -9,10 +9,11 @@ import Anthropic from '@anthropic-ai/sdk';
 import { getAllResponses, scheduleQuestion, hasQuestionForDate, getLatestReflection } from '../lib/db.ts';
 import { SEED_QUESTIONS } from '../lib/seeds.ts';
 import { seedUpcomingQuestions } from '../lib/schedule.ts';
+import { localDateStr } from '../lib/date.ts';
 
 const tomorrow = new Date();
 tomorrow.setDate(tomorrow.getDate() + 1);
-const tomorrowStr = tomorrow.toISOString().split('T')[0];
+const tomorrowStr = localDateStr(tomorrow);
 
 if (hasQuestionForDate(tomorrowStr)) {
   console.log(`Question already exists for ${tomorrowStr}. Skipping.`);

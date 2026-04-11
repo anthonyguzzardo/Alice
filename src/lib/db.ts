@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { localDateStr } from './date.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DB_PATH = path.resolve(__dirname, '../../data/marrow.db');
@@ -179,14 +180,14 @@ db.exec(`
 // ----------------------------------------------------------------------------
 
 export function getTodaysQuestion(): { question_id: number; text: string } | null {
-  const today = new Date().toISOString().split('T')[0];
+  const today = localDateStr();
   return db.prepare(
     `SELECT question_id, text FROM tb_questions WHERE scheduled_for = ?`
   ).get(today) as { question_id: number; text: string } | null;
 }
 
 export function getTodaysResponse(): { response_id: number; text: string } | null {
-  const today = new Date().toISOString().split('T')[0];
+  const today = localDateStr();
   return db.prepare(`
     SELECT r.response_id, r.text
     FROM tb_responses r

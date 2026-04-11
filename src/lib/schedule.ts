@@ -1,5 +1,6 @@
 import { SEED_QUESTIONS } from './seeds.ts';
 import { scheduleQuestion, hasQuestionForDate } from './db.ts';
+import { localDateStr } from './date.ts';
 
 /**
  * Seeds the next N days with questions from the seed list.
@@ -11,7 +12,7 @@ export function seedUpcomingQuestions(days = 30): void {
   for (let i = 0; i < days && i < SEED_QUESTIONS.length; i++) {
     const date = new Date(today);
     date.setDate(today.getDate() + i);
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = localDateStr(date);
 
     if (!hasQuestionForDate(dateStr)) {
       scheduleQuestion(SEED_QUESTIONS[i], dateStr, 'seed');
