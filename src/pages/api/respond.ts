@@ -1,5 +1,8 @@
 import type { APIRoute } from 'astro';
-import { saveResponse, getTodaysQuestion, getTodaysResponse, saveSessionSummary } from '../../lib/db.ts';
+import { saveResponse, getTodaysQuestion, getTodaysResponse, saveSessionSummary, getResponseCount } from '../../lib/db.ts';
+import { runObservation } from '../../lib/observe.ts';
+import { runGeneration } from '../../lib/generate.ts';
+import { runReflection } from '../../lib/reflect.ts';
 
 export const POST: APIRoute = async ({ request }) => {
   const body = await request.json();
@@ -49,6 +52,23 @@ export const POST: APIRoute = async ({ request }) => {
       sentenceCount: sessionSummary.sentenceCount ?? 0,
     });
   }
+
+  // Fire background jobs after response — non-blocking
+  const responseCount = getResponseCount();
+
+  // Observe + generate run after every submission
+  // Reflect runs every 7th response
+  Promise.resolve()
+    .then(() => runObservation())
+    .then(() => runGeneration())
+    .then(() => {
+      if (responseCount >= 5 && responseCount % 7 === 0) {
+        return runReflection();
+      }
+    })
+    .catch((err) => {
+      console.error('Background job error:', err);
+    });
 
   return new Response(JSON.stringify({ ok: true }), {
     headers: { 'Content-Type': 'application/json' },
