@@ -1,0 +1,222 @@
+---
+
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Marrow</title>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap');
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      html, body {
+        height: 100%;
+        background: #0a0a0a;
+        color: #e8e4df;
+        font-family: 'EB Garamond', Georgia, serif;
+      }
+
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+      }
+
+      .container {
+        max-width: 540px;
+        width: 100%;
+      }
+
+      .date {
+        font-size: 0.85rem;
+        color: #5a5550;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        margin-bottom: 2.5rem;
+      }
+
+      .question {
+        font-size: 1.65rem;
+        font-weight: 400;
+        line-height: 1.45;
+        color: #e8e4df;
+        margin-bottom: 2.5rem;
+        font-style: italic;
+      }
+
+      .response-area {
+        width: 100%;
+        min-height: 200px;
+        background: transparent;
+        border: 1px solid #2a2520;
+        border-radius: 2px;
+        color: #e8e4df;
+        font-family: 'EB Garamond', Georgia, serif;
+        font-size: 1.1rem;
+        line-height: 1.6;
+        padding: 1.25rem;
+        resize: vertical;
+        outline: none;
+        transition: border-color 0.3s ease;
+      }
+
+      .response-area:focus {
+        border-color: #5a5550;
+      }
+
+      .response-area::placeholder {
+        color: #3a3530;
+        font-style: italic;
+      }
+
+      .submit-row {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 1.25rem;
+      }
+
+      .submit-btn {
+        background: transparent;
+        border: 1px solid #2a2520;
+        color: #5a5550;
+        font-family: 'EB Garamond', Georgia, serif;
+        font-size: 0.95rem;
+        padding: 0.6rem 1.5rem;
+        cursor: pointer;
+        letter-spacing: 0.05em;
+        transition: all 0.3s ease;
+        border-radius: 2px;
+      }
+
+      .submit-btn:hover {
+        color: #e8e4df;
+        border-color: #5a5550;
+      }
+
+      .submit-btn:disabled {
+        opacity: 0.3;
+        cursor: default;
+      }
+
+      .past-response {
+        font-size: 1.1rem;
+        line-height: 1.6;
+        color: #8a8580;
+        white-space: pre-wrap;
+      }
+
+      .done-note {
+        margin-top: 2rem;
+        font-size: 0.85rem;
+        color: #3a3530;
+        font-style: italic;
+      }
+
+      .loading {
+        color: #3a3530;
+        font-style: italic;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="date" id="date"></div>
+      <div class="question loading" id="question">...</div>
+      <div id="input-area"></div>
+    </div>
+
+    <script>
+      const dateEl = document.getElementById('date')!;
+      const questionEl = document.getElementById('question')!;
+      const inputArea = document.getElementById('input-area')!;
+
+      const today = new Date();
+      dateEl.textContent = today.toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+
+      async function load() {
+        const res = await fetch('/api/today');
+        if (!res.ok) {
+          questionEl.textContent = 'No question today. Rest.';
+          return;
+        }
+
+        const data = await res.json();
+        questionEl.textContent = data.question.text;
+        questionEl.classList.remove('loading');
+
+        if (data.response) {
+          inputArea.innerHTML = `
+            <div class="past-response">${escapeHtml(data.response.text)}</div>
+            <div class="done-note">You've thought about this today. Come back tomorrow.</div>
+          `;
+        } else {
+          const questionId = data.question.id;
+          inputArea.innerHTML = `
+            <textarea
+              class="response-area"
+              id="response"
+              placeholder="Think before you type..."
+            ></textarea>
+            <div class="submit-row">
+              <button class="submit-btn" id="submit" disabled>Submit</button>
+            </div>
+          `;
+
+          const textarea = document.getElementById('response') as HTMLTextAreaElement;
+          const submitBtn = document.getElementById('submit') as HTMLButtonElement;
+
+          textarea.addEventListener('input', () => {
+            submitBtn.disabled = !textarea.value.trim();
+          });
+
+          submitBtn.addEventListener('click', async () => {
+            const text = textarea.value.trim();
+            if (!text) return;
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = '...';
+
+            const res = await fetch('/api/respond', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ questionId, text }),
+            });
+
+            if (res.ok) {
+              inputArea.innerHTML = `
+                <div class="past-response">${escapeHtml(text)}</div>
+                <div class="done-note">Noted. Come back tomorrow.</div>
+              `;
+            } else {
+              submitBtn.textContent = 'Submit';
+              submitBtn.disabled = false;
+            }
+          });
+
+          textarea.focus();
+        }
+      }
+
+      function escapeHtml(text: string): string {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      load();
+    </script>
+  </body>
+</html>
