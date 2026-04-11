@@ -236,10 +236,17 @@
         margin-bottom: 2rem;
         font-style: italic;
       }
-      .theme-toggle {
+      .top-controls {
         position: fixed;
         top: 2rem;
         right: 2rem;
+        display: flex;
+        gap: 0.6rem;
+        align-items: center;
+        z-index: 10;
+      }
+
+      .top-btn {
         background: none;
         border: 1px solid var(--border);
         border-radius: 50%;
@@ -252,16 +259,20 @@
         transition: all 0.3s ease;
         color: var(--text-muted);
         font-size: 1rem;
+        text-decoration: none;
       }
 
-      .theme-toggle:hover {
+      .top-btn:hover {
         border-color: var(--border-focus);
         color: var(--text);
       }
     </style>
   </head>
   <body>
-    <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme"></button>
+    <div class="top-controls">
+      <a href="/blackbox" class="top-btn" aria-label="The Black Box" title="The Black Box">&#x25CF;</a>
+      <button class="top-btn" id="theme-toggle" aria-label="Toggle theme"></button>
+    </div>
     <div class="container">
       <div class="date" id="date"></div>
       <div class="question loading" id="question">...</div>
