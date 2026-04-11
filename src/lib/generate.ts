@@ -99,10 +99,10 @@ ${suppressedHistory || 'No suppressed questions yet.'}
 
 Generate tomorrow's question.`;
 
-  const client = new Anthropic();
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY2 });
 
   const message = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-opus-4-6',
     max_tokens: 200,
     system: systemPrompt,
     messages: [{ role: 'user', content: userContent }],

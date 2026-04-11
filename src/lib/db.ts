@@ -29,7 +29,7 @@ db.exec(`
   -- PURPOSE: Define how a question originated
   -- USE CASE: "Was this question hand-curated or AI-generated?"
   -- MUTABILITY: Static
-  -- VALUES: seed (1), generated (2)
+  -- VALUES: seed (1), generated (2), calibration (3)
   -- REFERENCED BY: tb_questions.question_source_id
   -- FOOTER: None
   -- --------------------------------------------------------------------------
@@ -41,8 +41,9 @@ db.exec(`
 
   INSERT OR IGNORE INTO te_question_source (question_source_id, enum_code, name)
   VALUES
-     (1, 'seed',      'Seed')
-    ,(2, 'generated', 'Generated');
+     (1, 'seed',        'Seed')
+    ,(2, 'generated',   'Generated')
+    ,(3, 'calibration', 'Calibration');
 
   -- --------------------------------------------------------------------------
   -- te_reflection_type
@@ -275,8 +276,8 @@ export function saveResponse(questionId: number, text: string): void {
   ).run(questionId, text);
 }
 
-export function scheduleQuestion(text: string, date: string, source: 'seed' | 'generated' = 'seed'): void {
-  const sourceId = source === 'generated' ? 2 : 1;
+export function scheduleQuestion(text: string, date: string, source: 'seed' | 'generated' | 'calibration' = 'seed'): void {
+  const sourceId = source === 'generated' ? 2 : source === 'calibration' ? 3 : 1;
   db.prepare(
     `INSERT OR IGNORE INTO tb_questions (text, question_source_id, scheduled_for) VALUES (?, ?, ?)`
   ).run(text, sourceId, date);
@@ -392,6 +393,43 @@ export function getAllSessionSummaries(): Array<SessionSummaryInput & { date: st
   `).all() as Array<SessionSummaryInput & { date: string }>;
 }
 
+export function getCalibrationBaselines(): {
+  avgFirstKeystrokeMs: number | null;
+  avgCommitmentRatio: number | null;
+  avgDurationMs: number | null;
+  avgPauseCount: number | null;
+  avgDeletionCount: number | null;
+  sessionCount: number;
+} {
+  const row = db.prepare(`
+    SELECT
+       AVG(s.first_keystroke_ms) as avgFirstKeystrokeMs
+      ,AVG(s.commitment_ratio) as avgCommitmentRatio
+      ,AVG(s.total_duration_ms) as avgDurationMs
+      ,AVG(s.pause_count) as avgPauseCount
+      ,AVG(s.deletion_count) as avgDeletionCount
+      ,COUNT(*) as sessionCount
+    FROM tb_session_summaries s
+    JOIN tb_questions q ON s.question_id = q.question_id
+    WHERE q.question_source_id = 3
+  `).get() as {
+    avgFirstKeystrokeMs: number | null;
+    avgCommitmentRatio: number | null;
+    avgDurationMs: number | null;
+    avgPauseCount: number | null;
+    avgDeletionCount: number | null;
+    sessionCount: number;
+  };
+  return row;
+}
+
+export function isCalibrationQuestion(questionId: number): boolean {
+  const row = db.prepare(
+    `SELECT 1 FROM tb_questions WHERE question_id = ? AND question_source_id = 3`
+  ).get(questionId);
+  return !!row;
+}
+
 // ----------------------------------------------------------------------------
 // AI OBSERVATIONS & SUPPRESSED QUESTIONS
 // ----------------------------------------------------------------------------
@@ -427,6 +465,25 @@ export function getAllSuppressedQuestions(): Array<{ date: string; question: str
 export function getResponseCount(): number {
   const row = db.prepare(`SELECT COUNT(*) as count FROM tb_responses`).get() as { count: number };
   return row.count;
+}
+
+export function saveCalibrationSession(
+  promptText: string,
+  responseText: string,
+  summary: SessionSummaryInput
+): number {
+  const result = db.prepare(
+    `INSERT INTO tb_questions (text, question_source_id) VALUES (?, 3)`
+  ).run(promptText);
+  const questionId = Number(result.lastInsertRowid);
+
+  db.prepare(
+    `INSERT INTO tb_responses (question_id, text) VALUES (?, ?)`
+  ).run(questionId, responseText);
+
+  saveSessionSummary({ ...summary, questionId });
+
+  return questionId;
 }
 
 export default db;
