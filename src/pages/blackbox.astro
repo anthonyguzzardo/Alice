@@ -14,57 +14,27 @@
       })();
     </script>
     <style is:global>
-      :root {
-        --bg: #f5f2ed;
-        --text-muted: #6b6560;
-      }
-      [data-theme="dark"] {
-        --bg: #0a0a0a;
-        --text-muted: #7a7570;
-      }
+      :root { --bg: #f5f2ed; }
+      [data-theme="dark"] { --bg: #0a0a0a; }
       * { margin: 0; padding: 0; box-sizing: border-box; }
-      html, body {
-        height: 100%;
-        background: var(--bg);
-        overflow: hidden;
-      }
-      canvas {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-      }
+      html, body { height: 100%; background: var(--bg); overflow: hidden; }
+      canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; }
       .back-btn {
-        position: fixed;
-        top: 2rem;
-        right: 2rem;
-        background: none;
-        border: 1px solid rgba(255,255,255,0.15);
-        border-radius: 50%;
-        width: 36px;
-        height: 36px;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: rgba(255,255,255,0.3);
-        font-size: 1rem;
-        text-decoration: none;
-        z-index: 10;
-        transition: all 0.3s ease;
+        position: fixed; top: 2rem; right: 2rem;
+        background: none; border: 1px solid rgba(255,255,255,0.15);
+        border-radius: 50%; width: 36px; height: 36px; cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        color: rgba(255,255,255,0.3); font-size: 1rem;
+        text-decoration: none; z-index: 10; transition: all 0.3s ease;
       }
       [data-theme="light"] .back-btn {
-        border-color: rgba(0,0,0,0.15);
-        color: rgba(0,0,0,0.3);
+        border-color: rgba(0,0,0,0.15); color: rgba(0,0,0,0.3);
       }
       .back-btn:hover {
-        border-color: rgba(255,255,255,0.4);
-        color: rgba(255,255,255,0.6);
+        border-color: rgba(255,255,255,0.4); color: rgba(255,255,255,0.6);
       }
       [data-theme="light"] .back-btn:hover {
-        border-color: rgba(0,0,0,0.4);
-        color: rgba(0,0,0,0.6);
+        border-color: rgba(0,0,0,0.4); color: rgba(0,0,0,0.6);
       }
     </style>
   </head>
@@ -72,211 +42,519 @@
     <a href="/" class="back-btn" aria-label="Back to Marrow" title="Back to Marrow">&larr;</a>
     <canvas id="canvas"></canvas>
     <script>
-      /**
-       * THE BLACK BOX — data-driven ambient visualization
-       * Every visual property maps to a real system metric.
-       * Nothing is random. Everything is derived from your data.
-       *
-       * MAPPING:
-       * - Drop SPEED        = your avgHesitation (slow starter = slow drops)
-       * - Drop DENSITY       = sessionCount (more entries = denser field)
-       * - Drop OPACITY       = system confidence (HIGH=bright, LOW=faint)
-       * - DELETION FLICKERS  = your deletionIntensity (more deleting = more visual noise)
-       * - COLOR HUE          = thematicDensity (repetitive=warm/amber, diverse=cool/blue)
-       * - PULSE RATE         = suppressedCount (more held-back questions = faster pulse)
-       * - TRAIL LENGTH       = reflectionCount (more reflections = longer memory trails)
-       * - GLYPH SET          = which interpretive frame dominates latest observation
-       * - FADE SPEED         = commitment ratio (decisive writer = cleaner fade)
-       * - INITIAL DENSITY    = session count (grows with you)
-       */
+      // =====================================================================
+      // THE BLACK BOX — Emergent Cellular Automaton with Symbiote Particles
+      //
+      // Your journal data is the DNA. You don't control what evolves.
+      //
+      // DATA → RULES:
+      // avgCommitment    → cell survival breadth (stable vs fragile)
+      // avgHesitation    → simulation speed (contemplative vs rapid)
+      // deletionIntensity → spontaneous cell death (self-editing = entropy)
+      // pauseFrequency   → birth threshold (pauses = generative chaos)
+      // sessionCount     → initial density + grid resolution
+      // observationCount → number of symbiote particles
+      // reflectionCount  → rule mutation frequency (evolution pressure)
+      // suppressedCount  → particle reproduction rate (pressure building)
+      // latestConfidence → species count (ecosystem complexity)
+      // thematicDensity  → color temperature (repetitive=amber, diverse=blue)
+      // landedRatio      → particle deposit strength (impact on substrate)
+      // feedbackCount    → toroidal vs bounded grid
+      // embeddingCount   → particle sense radius
+      // =====================================================================
 
       const canvas = document.getElementById('canvas') as HTMLCanvasElement;
       const ctx = canvas.getContext('2d')!;
 
-      // Glyph pools mapped to interpretive frames
-      const FRAME_A = '◯◎○◌◍●◉∘∙·'.split('');       // circles — wholeness, charitable
-      const FRAME_B = '╱╲╳╴╵╶╷┊┋┆┇│'.split('');      // fractures — avoidance
-      const FRAME_C = '─━┄┅┈┉╌╍═≡≈'.split('');       // flat lines — mundane
-      const NEUTRAL = '∴∵∶∷∸∹∺∻∼∽∾∿'.split('');      // logic — processing
-
+      // --- Signal & Rules ---
       interface Signal {
-        avgCommitment: number;
-        avgHesitation: number;
-        deletionIntensity: number;
-        pauseFrequency: number;
-        sessionCount: number;
-        observationCount: number;
-        reflectionCount: number;
-        suppressedCount: number;
-        embeddingCount: number;
-        latestConfidence: string | null;
-        thematicDensity: number;
-        landedRatio: number;
-        feedbackCount: number;
+        avgCommitment: number; avgHesitation: number; deletionIntensity: number;
+        pauseFrequency: number; sessionCount: number; observationCount: number;
+        reflectionCount: number; suppressedCount: number; embeddingCount: number;
+        latestConfidence: string | null; thematicDensity: number;
+        landedRatio: number; feedbackCount: number;
       }
 
-      interface Drop {
-        x: number;
-        y: number;
-        speed: number;
-        char: string;
-        opacity: number;
-        fontSize: number;
-        trailLength: number;
-        trail: Array<{ x: number; y: number; char: string }>;
-        nextMutateTime: number;
-        flickering: boolean;
-        glyphPool: string[];
-        pulsePhase: number;
+      interface Rules {
+        surviveMin: number; surviveMax: number;
+        birthMin: number; birthMax: number;
+        tickInterval: number; deathChance: number;
+        initialDensity: number; cellSize: number;
+        particleCount: number; mutationInterval: number;
+        reproThreshold: number; speciesCount: number;
+        depositStrength: number; toroidal: boolean;
+        senseRadius: number; thematicDensity: number;
+        fadeAlpha: number;
       }
 
-      let signal: Signal | null = null;
-      let drops: Drop[] = [];
+      function computeRules(s: Signal): Rules {
+        return {
+          surviveMin: 2,
+          surviveMax: 2 + Math.floor(s.avgCommitment * 2),
+          birthMin: Math.max(2, 3 - Math.floor(s.pauseFrequency)),
+          birthMax: 3,
+          tickInterval: 1 + Math.floor(s.avgHesitation * 5),
+          deathChance: s.deletionIntensity * 0.02,
+          initialDensity: Math.min(0.4, 0.08 + s.sessionCount * 0.01),
+          cellSize: Math.max(4, 8 - Math.floor(s.sessionCount / 20)),
+          particleCount: Math.min(200, 20 + s.observationCount * 3),
+          mutationInterval: Math.max(300, 1800 - s.reflectionCount * 60),
+          reproThreshold: Math.max(50, 200 - s.suppressedCount * 5),
+          speciesCount: s.latestConfidence === 'HIGH' ? 3
+            : s.latestConfidence === 'MODERATE' ? 2 : 1,
+          depositStrength: 0.3 + s.landedRatio * 0.7,
+          toroidal: s.feedbackCount >= 5,
+          senseRadius: Math.min(6, 2 + Math.floor(s.embeddingCount / 20)),
+          thematicDensity: s.thematicDensity,
+          fadeAlpha: 0.03 + s.avgCommitment * 0.04,
+        };
+      }
+
+      function defaultRules(): Rules {
+        return computeRules({
+          avgCommitment: 0.5, avgHesitation: 0.5, deletionIntensity: 0.1,
+          pauseFrequency: 0.2, sessionCount: 5, observationCount: 5,
+          reflectionCount: 0, suppressedCount: 0, embeddingCount: 0,
+          latestConfidence: null, thematicDensity: 0.5,
+          landedRatio: 0.5, feedbackCount: 0,
+        });
+      }
+
+      function lerpRules(a: Rules, b: Rules, t: number): Rules {
+        const l = (x: number, y: number) => x + (y - x) * t;
+        return {
+          surviveMin: Math.round(l(a.surviveMin, b.surviveMin)),
+          surviveMax: Math.round(l(a.surviveMax, b.surviveMax)),
+          birthMin: Math.round(l(a.birthMin, b.birthMin)),
+          birthMax: Math.round(l(a.birthMax, b.birthMax)),
+          tickInterval: Math.round(l(a.tickInterval, b.tickInterval)),
+          deathChance: l(a.deathChance, b.deathChance),
+          initialDensity: l(a.initialDensity, b.initialDensity),
+          cellSize: Math.round(l(a.cellSize, b.cellSize)),
+          particleCount: Math.round(l(a.particleCount, b.particleCount)),
+          mutationInterval: Math.round(l(a.mutationInterval, b.mutationInterval)),
+          reproThreshold: Math.round(l(a.reproThreshold, b.reproThreshold)),
+          speciesCount: Math.round(l(a.speciesCount, b.speciesCount)),
+          depositStrength: l(a.depositStrength, b.depositStrength),
+          toroidal: b.toroidal,
+          senseRadius: Math.round(l(a.senseRadius, b.senseRadius)),
+          thematicDensity: l(a.thematicDensity, b.thematicDensity),
+          fadeAlpha: l(a.fadeAlpha, b.fadeAlpha),
+        };
+      }
+
+      // --- Grid ---
+      let gridW = 0, gridH = 0;
+      let gridA: Uint8Array; // current
+      let gridB: Uint8Array; // next
+      let gridAge: Uint16Array; // cell age for visual brightness
+
+      function initGrid(rules: Rules) {
+        gridW = Math.floor(canvas.width / rules.cellSize);
+        gridH = Math.floor(canvas.height / rules.cellSize);
+        const size = gridW * gridH;
+        gridA = new Uint8Array(size);
+        gridB = new Uint8Array(size);
+        gridAge = new Uint16Array(size);
+
+        for (let i = 0; i < size; i++) {
+          if (Math.random() < rules.initialDensity) {
+            gridA[i] = 1 + Math.floor(Math.random() * rules.speciesCount);
+            gridAge[i] = 1;
+          }
+        }
+      }
+
+      function getCell(x: number, y: number, rules: Rules): number {
+        if (rules.toroidal) {
+          x = ((x % gridW) + gridW) % gridW;
+          y = ((y % gridH) + gridH) % gridH;
+        } else {
+          if (x < 0 || x >= gridW || y < 0 || y >= gridH) return 0;
+        }
+        return gridA[y * gridW + x];
+      }
+
+      function tickGrid(rules: Rules) {
+        for (let y = 0; y < gridH; y++) {
+          for (let x = 0; x < gridW; x++) {
+            const idx = y * gridW + x;
+            const cell = gridA[idx];
+            let totalNeighbors = 0;
+            let sameNeighbors = 0;
+
+            for (let dy = -1; dy <= 1; dy++) {
+              for (let dx = -1; dx <= 1; dx++) {
+                if (dx === 0 && dy === 0) continue;
+                const n = getCell(x + dx, y + dy, rules);
+                if (n > 0) {
+                  totalNeighbors++;
+                  if (n === cell) sameNeighbors++;
+                }
+              }
+            }
+
+            if (cell > 0) {
+              // Alive: survive based on same-species neighbors
+              const survives = sameNeighbors >= rules.surviveMin && sameNeighbors <= rules.surviveMax;
+              const spontaneousDeath = Math.random() < rules.deathChance;
+              if (survives && !spontaneousDeath) {
+                gridB[idx] = cell;
+                gridAge[idx] = Math.min(gridAge[idx] + 1, 500);
+              } else {
+                gridB[idx] = 0;
+                gridAge[idx] = 0;
+              }
+            } else {
+              // Dead: birth based on total neighbors
+              if (totalNeighbors >= rules.birthMin && totalNeighbors <= rules.birthMax) {
+                // Born as the majority species among neighbors
+                const speciesCounts = new Array(rules.speciesCount + 1).fill(0);
+                for (let dy = -1; dy <= 1; dy++) {
+                  for (let dx = -1; dx <= 1; dx++) {
+                    if (dx === 0 && dy === 0) continue;
+                    const n = getCell(x + dx, y + dy, rules);
+                    if (n > 0) speciesCounts[n]++;
+                  }
+                }
+                let maxSpecies = 1, maxCount = 0;
+                for (let s = 1; s <= rules.speciesCount; s++) {
+                  if (speciesCounts[s] > maxCount) { maxCount = speciesCounts[s]; maxSpecies = s; }
+                }
+                gridB[idx] = maxSpecies;
+                gridAge[idx] = 1;
+              } else {
+                gridB[idx] = 0;
+              }
+            }
+          }
+        }
+        // Swap buffers
+        const tmp = gridA;
+        gridA = gridB;
+        gridB = tmp;
+      }
+
+      // --- Particles ---
+      interface Particle {
+        x: number; y: number; vx: number; vy: number;
+        species: number; energy: number; alive: boolean;
+        trail: Array<{ x: number; y: number }>;
+      }
+
+      let particles: Particle[] = [];
+
+      function spawnParticle(rules: Rules): Particle {
+        return {
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height,
+          vx: (Math.random() - 0.5) * 2,
+          vy: (Math.random() - 0.5) * 2,
+          species: 1 + Math.floor(Math.random() * rules.speciesCount),
+          energy: 100,
+          alive: true,
+          trail: [],
+        };
+      }
+
+      function updateParticle(p: Particle, rules: Rules) {
+        if (!p.alive) return;
+
+        const cellX = Math.floor(p.x / rules.cellSize);
+        const cellY = Math.floor(p.y / rules.cellSize);
+
+        // Sense: look for living cells nearby and steer toward them
+        let bestDx = 0, bestDy = 0, bestCount = 0;
+        const sr = rules.senseRadius;
+        for (let dy = -sr; dy <= sr; dy++) {
+          for (let dx = -sr; dx <= sr; dx++) {
+            if (dx === 0 && dy === 0) continue;
+            const c = getCell(cellX + dx, cellY + dy, rules);
+            if (c > 0) {
+              const weight = c === p.species ? 2 : 1;
+              bestDx += dx * weight;
+              bestDy += dy * weight;
+              bestCount += weight;
+            }
+          }
+        }
+
+        if (bestCount > 0) {
+          const mag = Math.sqrt(bestDx * bestDx + bestDy * bestDy) || 1;
+          p.vx += (bestDx / mag) * 0.3;
+          p.vy += (bestDy / mag) * 0.3;
+        }
+
+        // Random perturbation
+        p.vx += (Math.random() - 0.5) * 0.4;
+        p.vy += (Math.random() - 0.5) * 0.4;
+
+        // Clamp speed
+        const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+        if (speed > 3) { p.vx = (p.vx / speed) * 3; p.vy = (p.vy / speed) * 3; }
+
+        // Move
+        p.x += p.vx;
+        p.y += p.vy;
+
+        // Wrap or bounce
+        if (rules.toroidal) {
+          p.x = ((p.x % canvas.width) + canvas.width) % canvas.width;
+          p.y = ((p.y % canvas.height) + canvas.height) % canvas.height;
+        } else {
+          if (p.x < 0 || p.x >= canvas.width) { p.vx *= -1; p.x = Math.max(0, Math.min(canvas.width - 1, p.x)); }
+          if (p.y < 0 || p.y >= canvas.height) { p.vy *= -1; p.y = Math.max(0, Math.min(canvas.height - 1, p.y)); }
+        }
+
+        // Trail
+        p.trail.push({ x: p.x, y: p.y });
+        if (p.trail.length > 12) p.trail.shift();
+
+        // Deposit: flip dead cells to alive
+        const gx = Math.floor(p.x / rules.cellSize);
+        const gy = Math.floor(p.y / rules.cellSize);
+        if (gx >= 0 && gx < gridW && gy >= 0 && gy < gridH) {
+          const gi = gy * gridW + gx;
+          if (gridA[gi] === 0 && Math.random() < rules.depositStrength * 0.1) {
+            gridA[gi] = p.species;
+            gridAge[gi] = 1;
+          }
+          // Energy from living cells
+          if (gridA[gi] > 0) {
+            p.energy += gridA[gi] === p.species ? 2 : 0.5;
+          } else {
+            p.energy -= 0.5;
+          }
+        }
+
+        // Death
+        if (p.energy <= 0) p.alive = false;
+      }
+
+      // --- Colors ---
+      function cellColor(species: number, age: number, td: number, isDark: boolean): [number, number, number, number] {
+        const brightness = Math.min(1, age / 60);
+        const alpha = (0.3 + brightness * 0.5) * 255;
+
+        if (isDark) {
+          switch (species) {
+            case 1: return [Math.floor(140 + td * 60), Math.floor(80 + (1 - td) * 30), Math.floor(40 + (1 - td) * 40), alpha]; // amber/rust
+            case 2: return [Math.floor(40 + (1 - td) * 30), Math.floor(120 + (1 - td) * 40), Math.floor(130 + (1 - td) * 50), alpha]; // teal
+            case 3: return [Math.floor(100 + td * 20), Math.floor(70), Math.floor(130 + (1 - td) * 30), alpha]; // violet
+            default: return [60, 55, 50, alpha];
+          }
+        } else {
+          switch (species) {
+            case 1: return [Math.floor(180 + td * 40), Math.floor(120 + (1 - td) * 20), Math.floor(80 + (1 - td) * 30), alpha * 0.7];
+            case 2: return [Math.floor(80 + (1 - td) * 20), Math.floor(150 + (1 - td) * 30), Math.floor(160 + (1 - td) * 40), alpha * 0.7];
+            case 3: return [Math.floor(140 + td * 20), Math.floor(110), Math.floor(160 + (1 - td) * 20), alpha * 0.7];
+            default: return [160, 155, 148, alpha * 0.7];
+          }
+        }
+      }
+
+      // --- Rendering ---
+      let imgData: ImageData;
+
+      function renderGrid(rules: Rules) {
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        const cs = rules.cellSize;
+
+        if (!imgData || imgData.width !== canvas.width || imgData.height !== canvas.height) {
+          imgData = ctx.createImageData(canvas.width, canvas.height);
+        }
+
+        const data = imgData.data;
+
+        // Clear image data with background
+        const bgR = isDark ? 10 : 245;
+        const bgG = isDark ? 10 : 242;
+        const bgB = isDark ? 10 : 237;
+        for (let i = 0; i < data.length; i += 4) {
+          data[i] = bgR; data[i + 1] = bgG; data[i + 2] = bgB; data[i + 3] = 255;
+        }
+
+        // Draw cells
+        for (let gy = 0; gy < gridH; gy++) {
+          for (let gx = 0; gx < gridW; gx++) {
+            const cell = gridA[gy * gridW + gx];
+            if (cell === 0) continue;
+
+            const age = gridAge[gy * gridW + gx];
+            const [r, g, b, a] = cellColor(cell, age, rules.thematicDensity, isDark);
+            const alpha = a / 255;
+
+            const px0 = gx * cs;
+            const py0 = gy * cs;
+            for (let py = py0; py < py0 + cs && py < canvas.height; py++) {
+              for (let px = px0; px < px0 + cs && px < canvas.width; px++) {
+                const i = (py * canvas.width + px) * 4;
+                // Alpha blend
+                data[i] = Math.floor(data[i] * (1 - alpha) + r * alpha);
+                data[i + 1] = Math.floor(data[i + 1] * (1 - alpha) + g * alpha);
+                data[i + 2] = Math.floor(data[i + 2] * (1 - alpha) + b * alpha);
+              }
+            }
+          }
+        }
+
+        ctx.putImageData(imgData, 0, 0);
+      }
+
+      function renderParticles(rules: Rules) {
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+
+        for (const p of particles) {
+          if (!p.alive) continue;
+
+          // Trail
+          if (p.trail.length > 1) {
+            ctx.beginPath();
+            ctx.moveTo(p.trail[0].x, p.trail[0].y);
+            for (let t = 1; t < p.trail.length; t++) {
+              ctx.lineTo(p.trail[t].x, p.trail[t].y);
+            }
+            const [r, g, b] = cellColor(p.species, 60, rules.thematicDensity, isDark);
+            ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, 0.15)`;
+            ctx.lineWidth = 1;
+            ctx.stroke();
+          }
+
+          // Head
+          const [r, g, b] = cellColor(p.species, 100, rules.thematicDensity, isDark);
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.8)`;
+          ctx.fill();
+        }
+      }
+
+      // --- Main Loop ---
+      let rules: Rules = defaultRules();
+      let targetRules: Rules | null = null;
+      let lerpProgress = 0;
+      let frameCount = 0;
+      let mutationCounter = 0;
 
       function resize() {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
+        initGrid(rules);
+        imgData = ctx.createImageData(canvas.width, canvas.height);
       }
 
-      function getGlyphPool(): string[] {
-        if (!signal?.latestConfidence) return NEUTRAL;
-        switch (signal.latestConfidence) {
-          case 'HIGH': return FRAME_A;
-          case 'MODERATE': return [...FRAME_A, ...FRAME_B];
-          case 'LOW': return [...FRAME_B, ...FRAME_C];
-          case 'INSUFFICIENT DATA': return FRAME_C;
-          default: return NEUTRAL;
+      function mutateRules() {
+        const keys: (keyof Rules)[] = ['surviveMin', 'surviveMax', 'birthMin', 'birthMax', 'deathChance'];
+        const key = keys[Math.floor(Math.random() * keys.length)];
+        const val = rules[key] as number;
+        const delta = Math.random() < 0.5 ? 1 : -1;
+
+        switch (key) {
+          case 'surviveMin': rules.surviveMin = Math.max(1, Math.min(4, val + delta)); break;
+          case 'surviveMax': rules.surviveMax = Math.max(rules.surviveMin, Math.min(6, val + delta)); break;
+          case 'birthMin': rules.birthMin = Math.max(1, Math.min(4, val + delta)); break;
+          case 'birthMax': rules.birthMax = Math.max(rules.birthMin, Math.min(5, val + delta)); break;
+          case 'deathChance': rules.deathChance = Math.max(0, Math.min(0.1, val + delta * 0.005)); break;
         }
       }
 
-      function createDrop(): Drop {
-        const s = signal;
-        const pool = getGlyphPool();
+      function frame(timestamp: number) {
+        frameCount++;
 
-        const baseSpeed = s ? 0.2 + (1 - s.avgHesitation) * 0.8 : 0.4;
-        const speed = baseSpeed * (0.7 + Math.random() * 0.6);
-        const trailLength = s ? Math.min(8, 2 + s.reflectionCount) : 3;
-
-        let baseOpacity = 0.06;
-        if (s?.latestConfidence === 'HIGH') baseOpacity = 0.12;
-        else if (s?.latestConfidence === 'MODERATE') baseOpacity = 0.08;
-        else if (s?.latestConfidence === 'LOW') baseOpacity = 0.04;
-        else if (s?.latestConfidence === 'INSUFFICIENT DATA') baseOpacity = 0.025;
-
-        const flickering = s ? Math.random() < s.deletionIntensity : false;
-
-        return {
-          x: Math.random() * canvas.width,
-          y: -20 - Math.random() * 100,
-          speed,
-          char: pool[Math.floor(Math.random() * pool.length)],
-          opacity: baseOpacity + Math.random() * 0.03,
-          fontSize: 11 + Math.random() * 6,
-          trailLength,
-          trail: [],
-          nextMutateTime: 0,
-          flickering,
-          glyphPool: pool,
-          pulsePhase: Math.random() * Math.PI * 2,
-        };
-      }
-
-      function getColor(opacity: number, isDark: boolean): string {
-        if (!signal) {
-          return isDark ? `rgba(74, 69, 64, ${opacity})` : `rgba(180, 175, 168, ${opacity})`;
-        }
-        const d = signal.thematicDensity;
-        if (isDark) {
-          return `rgba(${Math.floor(64 + d * 50)}, ${Math.floor(59 + (1 - d) * 30)}, ${Math.floor(54 + (1 - d) * 60)}, ${opacity})`;
-        } else {
-          return `rgba(${Math.floor(160 + d * 40)}, ${Math.floor(155 + (1 - d) * 20)}, ${Math.floor(148 + (1 - d) * 50)}, ${opacity})`;
-        }
-      }
-
-      function draw(timestamp: number) {
-        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-
-        const fadeAlpha = signal ? 0.03 + signal.avgCommitment * 0.04 : 0.05;
-        ctx.fillStyle = isDark
-          ? `rgba(10, 10, 10, ${fadeAlpha})`
-          : `rgba(245, 242, 237, ${fadeAlpha})`;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        const maxDrops = signal ? Math.min(80, 15 + signal.sessionCount * 2) : 25;
-        const spawnRate = signal ? 0.03 + (signal.sessionCount / 200) : 0.05;
-
-        if (drops.length < maxDrops && Math.random() < spawnRate) {
-          drops.push(createDrop());
-        }
-
-        const pulseSpeed = signal ? 0.001 + signal.suppressedCount * 0.0003 : 0.002;
-
-        for (let i = drops.length - 1; i >= 0; i--) {
-          const drop = drops[i];
-          drop.y += drop.speed;
-
-          drop.trail.push({ x: drop.x, y: drop.y, char: drop.char });
-          if (drop.trail.length > drop.trailLength) drop.trail.shift();
-
-          if (timestamp > drop.nextMutateTime) {
-            drop.char = drop.glyphPool[Math.floor(Math.random() * drop.glyphPool.length)];
-            drop.nextMutateTime = timestamp + 200 + Math.random() * 500;
-          }
-
-          if (drop.flickering && Math.random() < 0.15) continue;
-
-          const pulse = Math.sin(drop.pulsePhase + timestamp * pulseSpeed);
-          const pulseOpacity = drop.opacity * (0.7 + pulse * 0.3);
-
-          // Trail
-          for (let t = 0; t < drop.trail.length - 1; t++) {
-            const te = drop.trail[t];
-            const trailAge = (drop.trail.length - 1 - t) / drop.trail.length;
-            const trailOp = pulseOpacity * (1 - trailAge) * 0.5;
-            if (trailOp > 0.005) {
-              ctx.font = `${drop.fontSize - 1}px monospace`;
-              ctx.fillStyle = getColor(trailOp, isDark);
-              ctx.fillText(te.char, te.x, te.y);
-            }
-          }
-
-          // Head
-          ctx.font = `${drop.fontSize}px monospace`;
-          ctx.fillStyle = getColor(pulseOpacity, isDark);
-          ctx.fillText(drop.char, drop.x, drop.y);
-
-          if (drop.y > canvas.height + 50) {
-            drops.splice(i, 1);
+        // Lerp rules if transitioning
+        if (targetRules && lerpProgress < 1) {
+          lerpProgress += 1 / 120; // ~2 seconds at 60fps
+          if (lerpProgress >= 1) {
+            rules = targetRules;
+            targetRules = null;
+          } else {
+            rules = lerpRules(rules, targetRules, lerpProgress);
           }
         }
 
-        requestAnimationFrame(draw);
+        // Grid tick (decoupled from render)
+        if (frameCount % rules.tickInterval === 0) {
+          tickGrid(rules);
+        }
+
+        // Particle updates (every frame for smooth movement)
+        for (const p of particles) {
+          updateParticle(p, rules);
+        }
+
+        // Reproduce
+        const newParticles: Particle[] = [];
+        for (const p of particles) {
+          if (p.alive && p.energy > rules.reproThreshold && particles.length + newParticles.length < rules.particleCount) {
+            p.energy /= 2;
+            const child: Particle = {
+              x: p.x + (Math.random() - 0.5) * 10,
+              y: p.y + (Math.random() - 0.5) * 10,
+              vx: p.vx + (Math.random() - 0.5) * 2,
+              vy: p.vy + (Math.random() - 0.5) * 2,
+              species: p.species,
+              energy: p.energy,
+              alive: true,
+              trail: [],
+            };
+            newParticles.push(child);
+          }
+        }
+        particles.push(...newParticles);
+
+        // Remove dead particles
+        particles = particles.filter(p => p.alive);
+
+        // Spawn if below target
+        while (particles.length < Math.min(rules.particleCount, 20 + frameCount / 60)) {
+          particles.push(spawnParticle(rules));
+        }
+
+        // Rule mutation
+        mutationCounter++;
+        if (mutationCounter >= rules.mutationInterval) {
+          mutateRules();
+          mutationCounter = 0;
+        }
+
+        // Render
+        renderGrid(rules);
+        renderParticles(rules);
+
+        requestAnimationFrame(frame);
       }
 
       async function init() {
         resize();
         window.addEventListener('resize', resize);
 
+        // Fetch real data
         try {
           const res = await fetch('/api/blackbox');
-          if (res.ok) signal = await res.json();
+          if (res.ok) {
+            const signal: Signal = await res.json();
+            rules = computeRules(signal);
+          }
         } catch {}
 
-        // Seed
-        const seedCount = signal ? Math.min(30, 8 + signal.sessionCount) : 15;
-        for (let i = 0; i < seedCount; i++) {
-          const d = createDrop();
-          d.y = Math.random() * canvas.height;
-          drops.push(d);
+        initGrid(rules);
+
+        // Seed particles
+        for (let i = 0; i < Math.min(rules.particleCount, 30); i++) {
+          particles.push(spawnParticle(rules));
         }
 
-        requestAnimationFrame(draw);
+        requestAnimationFrame(frame);
 
-        // Refresh signal every 60 seconds
+        // Refresh signal every 60 seconds — morph, don't reset
         setInterval(async () => {
           try {
             const res = await fetch('/api/blackbox');
-            if (res.ok) signal = await res.json();
+            if (res.ok) {
+              const signal: Signal = await res.json();
+              targetRules = computeRules(signal);
+              lerpProgress = 0;
+            }
           } catch {}
         }, 60000);
       }
