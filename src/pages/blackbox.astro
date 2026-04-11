@@ -32,8 +32,8 @@
 
     <script>
       import * as THREE from 'three';
-      import type { WitnessState } from '../lib/dream/types';
-      import { DEFAULT_WITNESS } from '../lib/dream/types';
+      import type { WitnessState, WitnessTraits } from '../lib/dream/types';
+      import { DEFAULT_WITNESS, TRAIT_KEYS } from '../lib/dream/types';
 
       import witnessVert from '../assets/shaders/witness.vert?raw';
       import witnessFrag from '../assets/shaders/witness.frag?raw';
@@ -52,74 +52,72 @@
 
       const scene = new THREE.Scene();
 
-      // Camera: slightly off-center, creates subtle asymmetry
       const camera = new THREE.PerspectiveCamera(40, W / H, 0.1, 100);
       camera.position.set(0, 0.1, 3.5);
       camera.lookAt(0, 0, 0);
 
       // ─── Witness State ──────────────────────────────────────────
 
-      let witnessState: WitnessState = { ...DEFAULT_WITNESS };
+      let witnessState: WitnessState = { ...DEFAULT_WITNESS, traits: { ...DEFAULT_WITNESS.traits } };
       let stateLoaded = false;
 
-      // ─── Witness Mesh ───────────────────────────────────────────
+      // ─── Trait uniform name mapping ─────────────────────────────
 
-      // High-poly sphere as base — displacement does the shaping
-      const baseGeometry = new THREE.IcosahedronGeometry(1, 64);
-      baseGeometry.computeVertexNormals();
+      function traitUniformName(key: keyof WitnessTraits): string {
+        return 'u' + key.charAt(0).toUpperCase() + key.slice(1);
+      }
+
+      // ─── Build uniforms ─────────────────────────────────────────
+
+      const traitUniforms: Record<string, { value: number }> = {};
+      for (const key of TRAIT_KEYS) {
+        traitUniforms[traitUniformName(key)] = { value: DEFAULT_WITNESS.traits[key] };
+      }
 
       const witnessMaterial = new THREE.ShaderMaterial({
         vertexShader: witnessVert,
         fragmentShader: witnessFrag,
         uniforms: {
           uTime: { value: 0 },
-          uDensity: { value: 0.1 },
-          uCoherence: { value: 0.5 },
-          uAsymmetry: { value: 0 },
-          uConcavity: { value: 0 },
-          uErosion: { value: 0.8 },
-          uMass: { value: 0.1 },
-          uBreathRate: { value: 25 },
-          uBreathDepth: { value: 0.02 },
           uReveal: { value: 0 },
+          uMass: { value: DEFAULT_WITNESS.mass },
           uCameraPos: { value: camera.position },
+          ...traitUniforms,
         },
         transparent: true,
         depthWrite: true,
         side: THREE.DoubleSide,
       });
 
+      // ─── Witness Mesh ───────────────────────────────────────────
+
+      const baseGeometry = new THREE.IcosahedronGeometry(1, 64);
+      baseGeometry.computeVertexNormals();
+
       const witnessMesh = new THREE.Mesh(baseGeometry, witnessMaterial);
-      witnessMesh.position.set(0, -0.1, 0); // slightly below center
+      witnessMesh.position.set(0, -0.1, 0);
       scene.add(witnessMesh);
 
       // ─── Threshold System ───────────────────────────────────────
 
       let thresholdStartTime = 0;
-      let thresholdDuration = 8; // seconds, updated from state
+      let thresholdDuration = DEFAULT_WITNESS.thresholdDuration;
       let thresholdComplete = false;
       let revealValue = 0;
-
-      // Threshold character affects the reveal curve
-      let thresholdCharacter: WitnessState['thresholdCharacter'] = 'normal';
+      let thresholdCharacter: WitnessState['thresholdCharacter'] = DEFAULT_WITNESS.thresholdCharacter;
 
       function getRevealCurve(progress: number): number {
-        // progress: 0 (start) to 1 (fully revealed)
         switch (thresholdCharacter) {
           case 'slow':
-            // Very gradual — cubic ease-in
             return progress * progress * progress;
           case 'misaligned':
-            // Stuttered — two-step reveal with a pause
             if (progress < 0.4) return progress / 0.4 * 0.3;
-            if (progress < 0.6) return 0.3; // pause
+            if (progress < 0.6) return 0.3;
             return 0.3 + ((progress - 0.6) / 0.4) * 0.7;
           case 'abrupt':
-            // Quick snap after brief darkness
             if (progress < 0.3) return 0;
             return Math.min(1, (progress - 0.3) / 0.3);
           default:
-            // Smooth ease-in-out
             return progress < 0.5
               ? 2 * progress * progress
               : 1 - 2 * (1 - progress) * (1 - progress);
@@ -127,14 +125,12 @@
       }
 
       // ─── Camera Drift ───────────────────────────────────────────
-      // Slow, dream-like camera movement. Not controllable.
 
       const cameraDrift = {
         basePos: new THREE.Vector3(0, 0.1, 3.5),
-        // Irrational frequencies for non-repeating orbits
-        freqX: 0.017,   // ~59s period
-        freqY: 0.013,   // ~77s period
-        freqZ: 0.0091,  // ~110s period
+        freqX: 0.017,
+        freqY: 0.013,
+        freqZ: 0.0091,
         ampX: 0.15,
         ampY: 0.08,
         ampZ: 0.1,
@@ -150,40 +146,26 @@
         camera.lookAt(0, -0.05, 0);
       }
 
-      // ─── Uniform Sync ──────────────────────────────────────────
+      // ─── Uniform Lerping ───────────────────────────────────────
 
-      // Current displayed values — lerp toward target for smooth transitions
-      const displayed = {
-        density: 0.1,
-        coherence: 0.5,
-        asymmetry: 0,
-        concavity: 0,
-        erosion: 0.8,
-        mass: 0.1,
-        breathRate: 25,
-        breathDepth: 0.02,
-      };
+      const displayedTraits: Record<string, number> = {};
+      for (const key of TRAIT_KEYS) {
+        displayedTraits[key] = DEFAULT_WITNESS.traits[key];
+      }
+      let displayedMass = DEFAULT_WITNESS.mass;
 
       function lerpUniforms(dt: number): void {
-        const rate = 0.3 * dt; // slow convergence
-        displayed.density += (witnessState.density - displayed.density) * rate;
-        displayed.coherence += (witnessState.coherence - displayed.coherence) * rate;
-        displayed.asymmetry += (witnessState.asymmetry - displayed.asymmetry) * rate;
-        displayed.concavity += (witnessState.concavity - displayed.concavity) * rate;
-        displayed.erosion += (witnessState.erosion - displayed.erosion) * rate;
-        displayed.mass += (witnessState.mass - displayed.mass) * rate;
-        displayed.breathRate += (witnessState.breathRate - displayed.breathRate) * rate;
-        displayed.breathDepth += (witnessState.breathDepth - displayed.breathDepth) * rate;
+        const rate = 0.3 * dt;
 
-        const u = witnessMaterial.uniforms;
-        u.uDensity.value = displayed.density;
-        u.uCoherence.value = displayed.coherence;
-        u.uAsymmetry.value = displayed.asymmetry;
-        u.uConcavity.value = displayed.concavity;
-        u.uErosion.value = displayed.erosion;
-        u.uMass.value = displayed.mass;
-        u.uBreathRate.value = displayed.breathRate;
-        u.uBreathDepth.value = displayed.breathDepth;
+        for (const key of TRAIT_KEYS) {
+          const target = witnessState.traits[key];
+          displayedTraits[key] += (target - displayedTraits[key]) * rate;
+          const uniformName = traitUniformName(key);
+          witnessMaterial.uniforms[uniformName].value = displayedTraits[key];
+        }
+
+        displayedMass += (witnessState.mass - displayedMass) * rate;
+        witnessMaterial.uniforms.uMass.value = displayedMass;
       }
 
       // ─── Data Fetch ─────────────────────────────────────────────
@@ -199,12 +181,10 @@
             stateLoaded = true;
           }
         } catch {
-          stateLoaded = true; // proceed with defaults
+          stateLoaded = true;
         }
       }
 
-      // Fetch once on load. No periodic fetching — data only changes
-      // when a journal entry is written, and you're not writing here.
       fetchWitnessState();
 
       // ─── Animation Loop ─────────────────────────────────────────
@@ -220,8 +200,8 @@
           thresholdStartTime = now;
         }
 
-        const elapsed = (now - startTime) / 1000; // seconds since page open
-        const dt = Math.min((now - lastFrame) / 1000, 0.05); // capped delta
+        const elapsed = (now - startTime) / 1000;
+        const dt = Math.min((now - lastFrame) / 1000, 0.05);
         lastFrame = now;
 
         // ─── Threshold ─────────────────────────────
@@ -238,11 +218,16 @@
 
         witnessMaterial.uniforms.uReveal.value = revealValue;
         witnessMaterial.uniforms.uTime.value = elapsed;
+        witnessMaterial.uniforms.uCameraPos.value = camera.position;
 
         // ─── Lerp uniforms toward data state ───────
         if (stateLoaded) {
           lerpUniforms(dt);
         }
+
+        // ─── Mesh rotation from rotation trait ─────
+        const rotationSpeed = displayedTraits['rotation'] * 0.5;
+        witnessMesh.rotation.y += rotationSpeed * dt;
 
         // ─── Camera drift ──────────────────────────
         updateCamera(elapsed);

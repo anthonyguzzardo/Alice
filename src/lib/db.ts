@@ -379,6 +379,27 @@ db.exec(`
   );
 `);
 
+db.exec(`
+  -- --------------------------------------------------------------------------
+  -- tb_witness_states
+  -- --------------------------------------------------------------------------
+  -- PURPOSE: Store the witness-form's AI-generated trait vectors
+  -- USE CASE: "What did the Black Box look like after entry N?"
+  -- MUTABILITY: Append-only — one row per data change event
+  -- REFERENCED BY: /api/witness reads the latest row
+  -- FOOTER: dttm_created_utc, created_by
+  -- --------------------------------------------------------------------------
+  CREATE TABLE IF NOT EXISTS tb_witness_states (
+     witness_state_id    INTEGER PRIMARY KEY AUTOINCREMENT
+    ,entry_count         INTEGER NOT NULL
+    ,traits_json         TEXT    NOT NULL
+    ,signals_json        TEXT    NOT NULL
+    ,model_name          TEXT    DEFAULT 'claude-sonnet-4-20250514'
+    ,dttm_created_utc    TEXT    DEFAULT (datetime('now'))
+    ,created_by          TEXT    DEFAULT 'system'
+  );
+`);
+
 // --------------------------------------------------------------------------
 // MIGRATION: Add coverage_through_response_id to tb_reflections
 // --------------------------------------------------------------------------
@@ -973,6 +994,26 @@ export function savePromptTrace(trace: PromptTraceInput): void {
     trace.modelName ?? 'claude-opus-4-6',
     trace.tokenEstimate ?? null,
   );
+}
+
+// ----------------------------------------------------------------------------
+// WITNESS STATE
+// ----------------------------------------------------------------------------
+
+export function saveWitnessState(entryCount: number, traitsJson: string, signalsJson: string, modelName = 'claude-sonnet-4-20250514'): number {
+  const result = db.prepare(`
+    INSERT INTO tb_witness_states (entry_count, traits_json, signals_json, model_name)
+    VALUES (?, ?, ?, ?)
+  `).run(entryCount, traitsJson, signalsJson, modelName);
+  return Number(result.lastInsertRowid);
+}
+
+export function getLatestWitnessState(): { witness_state_id: number; entry_count: number; traits_json: string; signals_json: string } | null {
+  return db.prepare(`
+    SELECT witness_state_id, entry_count, traits_json, signals_json
+    FROM tb_witness_states
+    ORDER BY witness_state_id DESC LIMIT 1
+  `).get() as { witness_state_id: number; entry_count: number; traits_json: string; signals_json: string } | null;
 }
 
 export default db;

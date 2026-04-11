@@ -1,0 +1,379 @@
+---
+
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Black Box Lab</title>
+    <style is:global>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { height: 100%; background: #000; overflow: hidden; font-family: monospace; }
+      canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; }
+      .panel {
+        position: fixed; top: 0; right: 0; width: 280px; height: 100%;
+        background: rgba(0,0,0,0.85); border-left: 1px solid rgba(255,255,255,0.1);
+        overflow-y: auto; z-index: 10; padding: 12px;
+      }
+      .panel h3 { color: rgba(255,255,255,0.4); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin: 12px 0 6px; }
+      .panel h3:first-child { margin-top: 4px; }
+      .slider-row { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
+      .slider-row label { color: rgba(255,255,255,0.5); font-size: 10px; width: 90px; flex-shrink: 0; }
+      .slider-row input[type="range"] { flex: 1; height: 3px; accent-color: #666; }
+      .slider-row .val { color: rgba(255,255,255,0.3); font-size: 9px; width: 28px; text-align: right; }
+      .presets { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
+      .presets button {
+        background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+        color: rgba(255,255,255,0.5); font-size: 9px; padding: 4px 8px; cursor: pointer;
+        font-family: monospace; border-radius: 2px;
+      }
+      .presets button:hover { background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.8); }
+      .back-btn {
+        position: fixed; top: 1rem; left: 1rem;
+        background: none; border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 50%; width: 30px; height: 30px; cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        color: rgba(255,255,255,0.3); font-size: 0.8rem;
+        text-decoration: none; z-index: 20;
+      }
+    </style>
+  </head>
+  <body>
+    <a href="/blackbox" class="back-btn" aria-label="Back to Black Box">&larr;</a>
+    <canvas id="blackbox"></canvas>
+
+    <div class="panel" id="panel">
+      <h3>Presets</h3>
+      <div class="presets" id="presets"></div>
+      <div id="sliders"></div>
+    </div>
+
+    <script>
+      import * as THREE from 'three';
+      import type { WitnessTraits } from '../lib/dream/types';
+      import { DEFAULT_WITNESS, TRAIT_KEYS } from '../lib/dream/types';
+
+      import witnessVert from '../assets/shaders/witness.vert?raw';
+      import witnessFrag from '../assets/shaders/witness.frag?raw';
+
+      // ─── Presets ────────────────────────────────────────────────
+
+      const PRESETS: Record<string, { traits: Partial<WitnessTraits>; mass: number; label: string }> = {
+        solid: {
+          label: 'Solid Stone',
+          mass: 0.8,
+          traits: {
+            topology: 0, faceting: 0, stretch: 0, hollowness: 0, symmetry: 0,
+            scaleVariation: 0, multiplicity: 0, fragility: 0,
+            density: 1, translucency: 0, surface: 0.1,
+            internalLight: 0, colorDepth: 0, iridescence: 0, lightResponse: 0.3,
+            flow: 0, rhythm: 0, rotation: 0,
+            edgeCharacter: 0, atmosphere: 0, magnetism: 0, reactivity: 0,
+            temperature: 0.45, flexibility: 0, storedEnergy: 0, creationCost: 0.2,
+          },
+        },
+        blackhole: {
+          label: 'Black Hole',
+          mass: 0.95,
+          traits: {
+            topology: 0.1, faceting: 0, stretch: 0, hollowness: 0.3, symmetry: 0.05,
+            scaleVariation: 0, multiplicity: 0, fragility: 0,
+            density: 1, translucency: 0, surface: 0,
+            internalLight: 0.8, colorDepth: 0.2, iridescence: 0, lightResponse: 0,
+            flow: 0.3, rhythm: 0.4, rotation: 1,
+            edgeCharacter: 0.1, atmosphere: 0.9, magnetism: 1, reactivity: 0.2,
+            temperature: 0.9, flexibility: 0, storedEnergy: 1, creationCost: 1,
+          },
+        },
+        crystal: {
+          label: 'Crystal Edifice',
+          mass: 0.7,
+          traits: {
+            topology: 0.3, faceting: 1, stretch: 0.2, hollowness: 0.1, symmetry: 0.2,
+            scaleVariation: 0.3, multiplicity: 0, fragility: 0.2,
+            density: 0.7, translucency: 0.9, surface: 0,
+            internalLight: 0.6, colorDepth: 0.4, iridescence: 0.8, lightResponse: 1,
+            flow: 0, rhythm: 0.1, rotation: 0.05,
+            edgeCharacter: 0, atmosphere: 0.2, magnetism: 0.1, reactivity: 0,
+            temperature: 0.2, flexibility: 0, storedEnergy: 0.3, creationCost: 0.7,
+          },
+        },
+        ferrofluid: {
+          label: 'Ferrofluid',
+          mass: 0.6,
+          traits: {
+            topology: 0.4, faceting: 0, stretch: 0.1, hollowness: 0, symmetry: 0.3,
+            scaleVariation: 0.2, multiplicity: 0, fragility: 0,
+            density: 0.8, translucency: 0.1, surface: 0,
+            internalLight: 0.2, colorDepth: 0.1, iridescence: 0.3, lightResponse: 0.7,
+            flow: 1, rhythm: 0.5, rotation: 0.1,
+            edgeCharacter: 0.1, atmosphere: 0.3, magnetism: 0.6, reactivity: 0.4,
+            temperature: 0.5, flexibility: 0.7, storedEnergy: 0.2, creationCost: 0.3,
+          },
+        },
+        shattered: {
+          label: 'Shattered',
+          mass: 0.7,
+          traits: {
+            topology: 0.9, faceting: 0.7, stretch: 0.3, hollowness: 0.4, symmetry: 0.9,
+            scaleVariation: 0.8, multiplicity: 0.9, fragility: 1,
+            density: 0.5, translucency: 0.2, surface: 0.8,
+            internalLight: 0.3, colorDepth: 0.3, iridescence: 0, lightResponse: 0.2,
+            flow: 0.1, rhythm: 0.2, rotation: 0.15,
+            edgeCharacter: 0.6, atmosphere: 0.4, magnetism: 0.2, reactivity: 0.8,
+            temperature: 0.3, flexibility: 0, storedEnergy: 0.1, creationCost: 0.5,
+          },
+        },
+        ghost: {
+          label: 'Ghost / Vapor',
+          mass: 0.4,
+          traits: {
+            topology: 0.1, faceting: 0, stretch: 0.4, hollowness: 0.6, symmetry: 0.2,
+            scaleVariation: 0.1, multiplicity: 0, fragility: 0,
+            density: 0, translucency: 0.3, surface: 0,
+            internalLight: 0.1, colorDepth: 0.05, iridescence: 0, lightResponse: 0.1,
+            flow: 0.3, rhythm: 0.15, rotation: 0.02,
+            edgeCharacter: 1, atmosphere: 0.6, magnetism: 0, reactivity: 0,
+            temperature: 0.3, flexibility: 0.8, storedEnergy: 0, creationCost: 0,
+          },
+        },
+        molten: {
+          label: 'Molten Core',
+          mass: 0.85,
+          traits: {
+            topology: 0.3, faceting: 0.1, stretch: 0.1, hollowness: 0.2, symmetry: 0.2,
+            scaleVariation: 0.2, multiplicity: 0, fragility: 0.5,
+            density: 0.9, translucency: 0.2, surface: 0.4,
+            internalLight: 1, colorDepth: 0.7, iridescence: 0.1, lightResponse: 0.3,
+            flow: 0.7, rhythm: 0.6, rotation: 0.1,
+            edgeCharacter: 0.2, atmosphere: 0.5, magnetism: 0.3, reactivity: 0.6,
+            temperature: 1, flexibility: 0.4, storedEnergy: 0.9, creationCost: 0.8,
+          },
+        },
+        dead: {
+          label: 'Lifeless',
+          mass: 0.3,
+          traits: {
+            topology: 0.2, faceting: 0.05, stretch: 0, hollowness: 0.7, symmetry: 0.1,
+            scaleVariation: 0, multiplicity: 0, fragility: 0.3,
+            density: 0.2, translucency: 0, surface: 0.9,
+            internalLight: 0, colorDepth: 0, iridescence: 0, lightResponse: 0.05,
+            flow: 0, rhythm: 0, rotation: 0,
+            edgeCharacter: 0.7, atmosphere: 0, magnetism: 0, reactivity: 0,
+            temperature: 0.1, flexibility: 0, storedEnergy: 0, creationCost: 0.1,
+          },
+        },
+      };
+
+      // ─── Setup ──────────────────────────────────────────────────
+
+      const canvas = document.getElementById('blackbox') as HTMLCanvasElement;
+      let W = window.innerWidth - 280;
+      let H = window.innerHeight;
+
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+      renderer.setSize(W, H);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setClearColor(0x000000, 1);
+
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(40, W / H, 0.1, 100);
+      camera.position.set(0, 0.1, 3.5);
+      camera.lookAt(0, 0, 0);
+
+      // ─── Trait state ────────────────────────────────────────────
+
+      function traitUniformName(key: keyof WitnessTraits): string {
+        return 'u' + key.charAt(0).toUpperCase() + key.slice(1);
+      }
+
+      const currentTraits: Record<string, number> = {};
+      const targetTraits: Record<string, number> = {};
+      for (const key of TRAIT_KEYS) {
+        currentTraits[key] = DEFAULT_WITNESS.traits[key];
+        targetTraits[key] = DEFAULT_WITNESS.traits[key];
+      }
+      let currentMass = 0.5;
+      let targetMass = 0.5;
+
+      // ─── Build uniforms ─────────────────────────────────────────
+
+      const traitUniforms: Record<string, { value: number }> = {};
+      for (const key of TRAIT_KEYS) {
+        traitUniforms[traitUniformName(key)] = { value: currentTraits[key] };
+      }
+
+      const witnessMaterial = new THREE.ShaderMaterial({
+        vertexShader: witnessVert,
+        fragmentShader: witnessFrag,
+        uniforms: {
+          uTime: { value: 0 },
+          uReveal: { value: 1 }, // no threshold in lab
+          uMass: { value: currentMass },
+          uCameraPos: { value: camera.position },
+          ...traitUniforms,
+        },
+        transparent: true,
+        depthWrite: true,
+        side: THREE.DoubleSide,
+      });
+
+      const baseGeometry = new THREE.IcosahedronGeometry(1, 64);
+      baseGeometry.computeVertexNormals();
+      const witnessMesh = new THREE.Mesh(baseGeometry, witnessMaterial);
+      witnessMesh.position.set(0, -0.1, 0);
+      scene.add(witnessMesh);
+
+      // ─── Build UI ───────────────────────────────────────────────
+
+      const slidersDiv = document.getElementById('sliders')!;
+      const presetsDiv = document.getElementById('presets')!;
+
+      const groups: Record<string, string[]> = {
+        'Form': ['topology', 'faceting', 'stretch', 'hollowness', 'symmetry', 'scaleVariation', 'multiplicity', 'fragility'],
+        'Material': ['density', 'translucency', 'surface'],
+        'Light': ['internalLight', 'colorDepth', 'iridescence', 'lightResponse'],
+        'Movement': ['flow', 'rhythm', 'rotation'],
+        'Space': ['edgeCharacter', 'atmosphere', 'magnetism', 'reactivity', 'temperature', 'flexibility', 'storedEnergy', 'creationCost'],
+      };
+
+      // Mass slider first
+      const massHeader = document.createElement('h3');
+      massHeader.textContent = 'Scale';
+      slidersDiv.appendChild(massHeader);
+      const massRow = createSlider('mass', currentMass, (v) => { targetMass = v; });
+      slidersDiv.appendChild(massRow.el);
+
+      for (const [group, keys] of Object.entries(groups)) {
+        const h3 = document.createElement('h3');
+        h3.textContent = group;
+        slidersDiv.appendChild(h3);
+        for (const key of keys) {
+          const row = createSlider(key, currentTraits[key], (v) => { targetTraits[key] = v; });
+          slidersDiv.appendChild(row.el);
+          sliderEls[key] = row;
+        }
+      }
+
+      // Preset buttons
+      for (const [id, preset] of Object.entries(PRESETS)) {
+        const btn = document.createElement('button');
+        btn.textContent = preset.label;
+        btn.onclick = () => applyPreset(preset);
+        presetsDiv.appendChild(btn);
+      }
+
+      const sliderEls: Record<string, { el: HTMLElement; input: HTMLInputElement; valSpan: HTMLElement }> = {};
+
+      function createSlider(name: string, value: number, onChange: (v: number) => void) {
+        const row = document.createElement('div');
+        row.className = 'slider-row';
+
+        const label = document.createElement('label');
+        label.textContent = name;
+
+        const input = document.createElement('input');
+        input.type = 'range';
+        input.min = '0';
+        input.max = '100';
+        input.value = String(Math.round(value * 100));
+
+        const valSpan = document.createElement('span');
+        valSpan.className = 'val';
+        valSpan.textContent = value.toFixed(2);
+
+        input.oninput = () => {
+          const v = parseInt(input.value) / 100;
+          valSpan.textContent = v.toFixed(2);
+          onChange(v);
+        };
+
+        row.appendChild(label);
+        row.appendChild(input);
+        row.appendChild(valSpan);
+
+        if (!sliderEls[name]) sliderEls[name] = { el: row, input, valSpan };
+
+        return { el: row, input, valSpan };
+      }
+
+      function applyPreset(preset: { traits: Partial<WitnessTraits>; mass: number }) {
+        // Set all to 0 first, then apply preset values
+        for (const key of TRAIT_KEYS) {
+          targetTraits[key] = 0;
+        }
+        for (const [key, val] of Object.entries(preset.traits)) {
+          targetTraits[key] = val as number;
+        }
+        targetMass = preset.mass;
+
+        // Update sliders
+        for (const key of TRAIT_KEYS) {
+          if (sliderEls[key]) {
+            sliderEls[key].input.value = String(Math.round(targetTraits[key] * 100));
+            sliderEls[key].valSpan.textContent = targetTraits[key].toFixed(2);
+          }
+        }
+        if (sliderEls['mass']) {
+          sliderEls['mass'].input.value = String(Math.round(targetMass * 100));
+          sliderEls['mass'].valSpan.textContent = targetMass.toFixed(2);
+        }
+      }
+
+      // ─── Camera Drift ───────────────────────────────────────────
+
+      function updateCamera(time: number): void {
+        camera.position.set(
+          Math.sin(time * 0.017 * Math.PI * 2) * 0.15,
+          0.1 + Math.sin(time * 0.013 * Math.PI * 2) * 0.08,
+          3.5 + Math.sin(time * 0.0091 * Math.PI * 2) * 0.1,
+        );
+        camera.lookAt(0, -0.05, 0);
+      }
+
+      // ─── Animation Loop ─────────────────────────────────────────
+
+      let startTime = 0;
+      let lastFrame = 0;
+
+      function frame(now: number): void {
+        if (!startTime) { startTime = now; lastFrame = now; }
+        const elapsed = (now - startTime) / 1000;
+        const dt = Math.min((now - lastFrame) / 1000, 0.05);
+        lastFrame = now;
+
+        // Lerp toward targets
+        const rate = 2.0 * dt; // faster lerp for lab
+        for (const key of TRAIT_KEYS) {
+          currentTraits[key] += (targetTraits[key] - currentTraits[key]) * rate;
+          witnessMaterial.uniforms[traitUniformName(key as keyof WitnessTraits)].value = currentTraits[key];
+        }
+        currentMass += (targetMass - currentMass) * rate;
+        witnessMaterial.uniforms.uMass.value = currentMass;
+
+        witnessMaterial.uniforms.uTime.value = elapsed;
+        witnessMaterial.uniforms.uCameraPos.value = camera.position;
+
+        const rotationSpeed = currentTraits['rotation'] * 0.5;
+        witnessMesh.rotation.y += rotationSpeed * dt;
+
+        updateCamera(elapsed);
+        renderer.render(scene, camera);
+        requestAnimationFrame(frame);
+      }
+
+      requestAnimationFrame(frame);
+
+      // ─── Resize ─────────────────────────────────────────────────
+
+      window.addEventListener('resize', () => {
+        W = window.innerWidth - 280;
+        H = window.innerHeight;
+        renderer.setSize(W, H);
+        camera.aspect = W / H;
+        camera.updateProjectionMatrix();
+      });
+    </script>
+  </body>
+</html>
