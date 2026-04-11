@@ -106,6 +106,54 @@ db.exec(`
   );
 
   -- --------------------------------------------------------------------------
+  -- te_interaction_event_type
+  -- --------------------------------------------------------------------------
+  -- PURPOSE: Define types of user interaction events
+  -- USE CASE: "What kind of interaction just happened?"
+  -- MUTABILITY: Static
+  -- VALUES: page_open (1), first_keystroke (2), pause (3), resume (4),
+  --         submit (5), revisit (6), tab_blur (7), tab_focus (8)
+  -- REFERENCED BY: tb_interaction_events.interaction_event_type_id
+  -- FOOTER: None
+  -- --------------------------------------------------------------------------
+  CREATE TABLE IF NOT EXISTS te_interaction_event_type (
+     interaction_event_type_id  INTEGER PRIMARY KEY
+    ,enum_code                  TEXT    UNIQUE NOT NULL
+    ,name                       TEXT    NOT NULL
+  );
+
+  INSERT OR IGNORE INTO te_interaction_event_type (interaction_event_type_id, enum_code, name)
+  VALUES
+     (1, 'page_open',        'Page Open')
+    ,(2, 'first_keystroke',  'First Keystroke')
+    ,(3, 'pause',            'Pause')
+    ,(4, 'resume',           'Resume')
+    ,(5, 'submit',           'Submit')
+    ,(6, 'revisit',          'Revisit')
+    ,(7, 'tab_blur',         'Tab Blur')
+    ,(8, 'tab_focus',        'Tab Focus');
+
+  -- --------------------------------------------------------------------------
+  -- tb_interaction_events
+  -- --------------------------------------------------------------------------
+  -- PURPOSE: Log raw interaction events for behavioral signal
+  -- USE CASE: "How did the user engage with today's question?"
+  -- MUTABILITY: Mutable (append-only)
+  -- LOGICAL FK: question_id → tb_questions.question_id
+  -- LOGICAL FK: interaction_event_type_id → te_interaction_event_type
+  -- FOOTER: Minimal (created only, no modified — append-only table)
+  -- --------------------------------------------------------------------------
+  CREATE TABLE IF NOT EXISTS tb_interaction_events (
+     interaction_event_id       INTEGER PRIMARY KEY AUTOINCREMENT
+    ,question_id                INTEGER NOT NULL
+    ,interaction_event_type_id  INTEGER NOT NULL
+    ,metadata                   TEXT
+    -- FOOTER
+    ,dttm_created_utc           TEXT    NOT NULL DEFAULT (datetime('now'))
+    ,created_by                 TEXT    NOT NULL DEFAULT 'client'
+  );
+
+  -- --------------------------------------------------------------------------
   -- tb_reflections
   -- --------------------------------------------------------------------------
   -- PURPOSE: Store AI-generated pattern reflections
@@ -180,6 +228,16 @@ export function saveReflection(text: string, type: 'weekly' | 'monthly' = 'weekl
   db.prepare(
     `INSERT INTO tb_reflections (text, reflection_type_id) VALUES (?, ?)`
   ).run(text, typeId);
+}
+
+export function logInteractionEvent(questionId: number, eventType: string, metadata?: string): void {
+  const typeRow = db.prepare(
+    `SELECT interaction_event_type_id FROM te_interaction_event_type WHERE enum_code = ?`
+  ).get(eventType) as { interaction_event_type_id: number } | null;
+  if (!typeRow) return;
+  db.prepare(
+    `INSERT INTO tb_interaction_events (question_id, interaction_event_type_id, metadata) VALUES (?, ?, ?)`
+  ).run(questionId, typeRow.interaction_event_type_id, metadata ?? null);
 }
 
 export function hasQuestionForDate(date: string): boolean {
