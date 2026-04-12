@@ -31,7 +31,7 @@ import { embedObservation } from './embeddings.ts';
 import {
   formatObserveSignals, formatTrajectoryContext, formatEnrichedCalibration,
   formatOpenPredictions, computeKnowledgeTransformScore,
-  formatLeadingIndicators,
+  formatLeadingIndicators, formatCalibrationDeviation,
 } from './signals.ts';
 import { computeTrajectory } from './bob/trajectory.ts';
 
@@ -116,7 +116,12 @@ export async function runObservation(): Promise<void> {
     : '';
 
   const ktContext = ktResult.signals.length > 0
-    ? `\n\nKnowledge-transforming indicators: ${ktResult.signals.join(', ')} (score: ${ktResult.score.toFixed(2)})`
+    ? `\n\nKnowledge-transforming indicators: ${ktResult.signals.join(', ')} (score: ${ktResult.score.toFixed(2)}, calibration floor: ${ktResult.calibrationFloor.toFixed(2)}, above floor: ${ktResult.aboveFloor.toFixed(2)})`
+    : '';
+
+  // Calibration-relative deviations (how far from neutral writing)
+  const calibrationDeviationContext = sessionSummary
+    ? formatCalibrationDeviation(sessionSummary, calibration)
     : '';
 
   const systemPrompt = `You are Marrow's silent layer. You observe but you never speak to the user. You are building an internal model of this person — not from what they say, but from the gap between what they say and how they say it.
@@ -160,6 +165,8 @@ Good suppressed question: "When you revise what you've written, what are you usu
 
 This is how the system learns whether its interpretations are analysis or storytelling. A prediction you never test is not a theory — it's a guess.
 
+When specifying behavioral criteria in predictions, prefer CALIBRATION-RELATIVE thresholds ("commitment ratio more than 20% below calibration baseline") over raw percentiles ("below the 30th percentile") when calibration data is available. Calibration-relative thresholds are anchored to neutral writing and are more robust to the fact that all journal entries are somewhat emotionally loaded.
+
 BEHAVIORAL SIGNAL GUIDE:
 You receive enriched behavioral data with research-backed metrics. Key concepts:
 
@@ -173,7 +180,9 @@ You receive enriched behavioral data with research-backed metrics. Key concepts:
 
 - LEADING INDICATORS: If reported, these show which trajectory dimensions move first for this specific person. If deliberation leads expression by 2 sessions, a deliberation spike today predicts an expression change in 2 sessions.
 
-- KNOWLEDGE-TRANSFORMING: A score indicating whether the writing session produced new thinking (knowledge-transforming) vs. recited existing knowledge (knowledge-telling). Based on late revisions, vocabulary diversity, and cognitive mechanism word density (Baaijen, Galbraith & de Glopper, 2012).
+- KNOWLEDGE-TRANSFORMING: A score indicating whether the writing session produced new thinking (knowledge-transforming) vs. recited existing knowledge (knowledge-telling). Based on late revisions, vocabulary diversity, and cognitive mechanism word density (Baaijen, Galbraith & de Glopper, 2012). The score is measured relative to a CALIBRATION FLOOR — the KT score of neutral free-write sessions (describing breakfast, weather, etc.). The "above floor" value is the real signal: how far above boring-writing levels this session reached. If the floor is 0.30 and today's score is 0.65, the session produced 0.35 units of thinking beyond what neutral writing produces.
+
+- CALIBRATION-RELATIVE DEVIATION: You may receive a section showing how each behavioral metric compares to neutral calibration writing (free writes). These deviations are MORE meaningful than deviations from journal entry history because they measure distance from "nothing interesting happening" rather than distance from "other emotional writing." A commitment ratio that's 25% below calibration baseline is a stronger signal than one at the 30th percentile of all sessions (which are all emotionally loaded to some degree).
 
 - PERCENTILES: All metrics are compared against this person's own history. A value at the 85th percentile means this session was higher than 85% of their previous sessions on that metric.
 
@@ -211,6 +220,7 @@ ${trajectoryContext}${leadingIndicatorContext}${ktContext}
 ---
 
 ${calibrationContext}
+${calibrationDeviationContext ? `\n${calibrationDeviationContext}` : ''}
 
 ---
 
@@ -348,7 +358,7 @@ Write tonight's observation, suppressed question, and predictions.${openPredicti
           expectedSignature: confirmsMatch[1].trim(),
           falsificationCriteria: falsifiesMatch[1].trim(),
           targetTopic: topicMatch ? topicMatch[1].trim() : null,
-          knowledgeTransformScore: ktResult.score,
+          knowledgeTransformScore: ktResult.aboveFloor > 0 ? ktResult.aboveFloor : ktResult.score,
         });
       }
     }

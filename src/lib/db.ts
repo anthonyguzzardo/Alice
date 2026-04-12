@@ -862,6 +862,36 @@ export function getCalibrationBaselines(deviceType?: string | null, hourOfDay?: 
   return { ...row, confidence };
 }
 
+export function getCalibrationSessionsWithText(): Array<SessionSummaryInput & { date: string; responseText: string }> {
+  return db.prepare(`
+    SELECT s.question_id as questionId, q.scheduled_for as date,
+           r.text as responseText,
+           s.first_keystroke_ms as firstKeystrokeMs,
+           s.total_duration_ms as totalDurationMs, s.total_chars_typed as totalCharsTyped,
+           s.final_char_count as finalCharCount, s.commitment_ratio as commitmentRatio,
+           s.pause_count as pauseCount, s.total_pause_ms as totalPauseMs,
+           s.deletion_count as deletionCount, s.largest_deletion as largestDeletion,
+           s.total_chars_deleted as totalCharsDeleted, s.tab_away_count as tabAwayCount,
+           s.total_tab_away_ms as totalTabAwayMs, s.word_count as wordCount,
+           s.sentence_count as sentenceCount,
+           s.small_deletion_count as smallDeletionCount,
+           s.large_deletion_count as largeDeletionCount,
+           s.large_deletion_chars as largeDeletionChars,
+           s.first_half_deletion_chars as firstHalfDeletionChars,
+           s.second_half_deletion_chars as secondHalfDeletionChars,
+           s.active_typing_ms as activeTypingMs, s.chars_per_minute as charsPerMinute,
+           s.p_burst_count as pBurstCount, s.avg_p_burst_length as avgPBurstLength,
+           s.device_type as deviceType,
+           s.user_agent as userAgent, s.hour_of_day as hourOfDay, s.day_of_week as dayOfWeek
+    FROM tb_session_summaries s
+    JOIN tb_questions q ON s.question_id = q.question_id
+    JOIN tb_responses r ON q.question_id = r.question_id
+    WHERE q.question_source_id = 3
+      AND s.word_count >= 10
+    ORDER BY q.question_id ASC
+  `).all() as Array<SessionSummaryInput & { date: string; responseText: string }>;
+}
+
 export function isCalibrationQuestion(questionId: number): boolean {
   const row = db.prepare(
     `SELECT 1 FROM tb_questions WHERE question_id = ? AND question_source_id = 3`

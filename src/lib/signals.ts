@@ -13,6 +13,7 @@
  */
 
 import type { SessionSummaryInput, CalibrationBaseline, OpenPrediction } from './db.ts';
+import { getCalibrationSessionsWithText } from './db.ts';
 import type { TrajectoryAnalysis } from './bob/trajectory.ts';
 import { avg, stddev, percentileRank, computeMATTR, COGNITIVE_WORDS } from './bob/helpers.ts';
 
@@ -362,20 +363,43 @@ export function formatEnrichedCalibration(calibration: CalibrationBaseline, devi
 // vocabulary diversification, and revision clustering late in session.
 
 export interface KnowledgeTransformResult {
-  score: number;    // 0-1, higher = more knowledge-transforming
+  score: number;            // 0-1, higher = more knowledge-transforming
+  calibrationFloor: number; // KT score of neutral/calibration writing (the baseline)
+  aboveFloor: number;       // how far above calibration floor (score - floor, clamped to 0)
   signals: string[];
 }
 
 /**
- * Detect whether a session shows the knowledge-transforming signature
- * (generating new understanding through writing, not just reciting).
- * Uses available session summary data + response text.
+ * Compute the knowledge-telling floor from calibration sessions.
+ * This is what writing looks like when nothing interesting is happening.
+ * Cached per call since calibration data changes rarely.
  */
-export function computeKnowledgeTransformScore(
+function computeCalibrationKTFloor(allSummaries: SessionSummaryInput[]): number {
+  const calSessions = getCalibrationSessionsWithText();
+  // Need at least 5 calibration sessions with decent length for a reliable floor
+  const usable = calSessions.filter(s => s.wordCount >= 20);
+  if (usable.length < 3) return 0; // insufficient data — fall back to no floor
+
+  const scores: number[] = [];
+  for (const cal of usable) {
+    const result = computeRawKTScore(cal, (cal as any).responseText, allSummaries);
+    scores.push(result.rawScore);
+  }
+
+  // Use the 75th percentile as the floor (generous — most calibration writing
+  // should be below this, so anything above it in a real session is meaningful)
+  scores.sort((a, b) => a - b);
+  return scores[Math.floor(scores.length * 0.75)];
+}
+
+/**
+ * Internal: compute raw KT score without calibration adjustment.
+ */
+function computeRawKTScore(
   session: SessionSummaryInput,
   responseText: string,
   allSummaries: SessionSummaryInput[],
-): KnowledgeTransformResult {
+): { rawScore: number; signals: string[] } {
   const signals: string[] = [];
   let scoreSum = 0;
   let componentCount = 0;
@@ -385,7 +409,7 @@ export function computeKnowledgeTransformScore(
     const total = session.firstHalfDeletionChars + session.secondHalfDeletionChars;
     if (total > 0) {
       const lateRatio = session.secondHalfDeletionChars / total;
-      const lateScore = Math.min(1, lateRatio / 0.7); // 0.7+ = full score
+      const lateScore = Math.min(1, lateRatio / 0.7);
       scoreSum += lateScore;
       componentCount++;
       if (lateRatio > 0.6) signals.push('late revisions (wrote then restructured)');
@@ -412,9 +436,7 @@ export function computeKnowledgeTransformScore(
     .filter(w => w.length > 1);
   if (words.length >= 25) {
     const mattr = computeMATTR(words);
-    // Compare against personal MATTR history (approximate from past response texts)
-    // For now, raw threshold: MATTR > 0.7 is high diversity
-    const mattrScore = Math.min(1, (mattr - 0.5) / 0.3); // 0.5-0.8 range → 0-1
+    const mattrScore = Math.min(1, (mattr - 0.5) / 0.3);
     scoreSum += Math.max(0, mattrScore);
     componentCount++;
     if (mattr > 0.7) signals.push('high vocabulary diversity (MATTR)');
@@ -423,14 +445,39 @@ export function computeKnowledgeTransformScore(
   // 4. Cognitive mechanism words (Pennebaker) — thinking/reasoning language
   const cogCount = words.filter(w => COGNITIVE_WORDS.has(w)).length;
   const cogDensity = words.length > 0 ? cogCount / words.length : 0;
-  if (cogDensity > 0.04) { // >4% cognitive words
+  if (cogDensity > 0.04) {
     scoreSum += Math.min(1, cogDensity / 0.08);
     componentCount++;
     signals.push('high cognitive mechanism word density');
   }
 
-  const score = componentCount > 0 ? scoreSum / componentCount : 0;
-  return { score, signals };
+  const rawScore = componentCount > 0 ? scoreSum / componentCount : 0;
+  return { rawScore, signals };
+}
+
+/**
+ * Detect whether a session shows the knowledge-transforming signature
+ * (generating new understanding through writing, not just reciting).
+ *
+ * Returns both the raw score and the calibration-relative score.
+ * The calibration floor is computed from free-write sessions — what
+ * writing looks like when nothing interesting is happening. The
+ * distance above that floor is the real signal.
+ */
+export function computeKnowledgeTransformScore(
+  session: SessionSummaryInput,
+  responseText: string,
+  allSummaries: SessionSummaryInput[],
+): KnowledgeTransformResult {
+  const { rawScore, signals } = computeRawKTScore(session, responseText, allSummaries);
+  const calibrationFloor = computeCalibrationKTFloor(allSummaries);
+  const aboveFloor = Math.max(0, rawScore - calibrationFloor);
+
+  if (calibrationFloor > 0 && aboveFloor > 0.15) {
+    signals.push(`${(aboveFloor * 100).toFixed(0)}% above calibration floor (neutral writing = ${(calibrationFloor * 100).toFixed(0)}%)`);
+  }
+
+  return { score: rawScore, calibrationFloor, aboveFloor, signals };
 }
 
 // ─── Prediction formatting for LLM consumption ───────────────────
@@ -498,6 +545,61 @@ export function formatPredictionTrackRecord(
     }
     lines.push('');
   }
+
+  return lines.join('\n');
+}
+
+/**
+ * Format calibration-relative deviations for the observation prompt.
+ * Shows how far each metric deviates from the neutral writing baseline,
+ * making predictions anchored to "unusual relative to boring writing"
+ * rather than "unusual relative to other emotional writing."
+ */
+export function formatCalibrationDeviation(
+  session: SessionSummaryInput,
+  calibration: CalibrationBaseline,
+): string {
+  if (calibration.sessionCount === 0) return '';
+
+  const lines: string[] = [];
+  lines.push('=== CALIBRATION-RELATIVE DEVIATION (how far from neutral writing) ===');
+  lines.push('');
+
+  // Commitment ratio deviation
+  if (session.commitmentRatio != null && calibration.avgCommitmentRatio != null) {
+    const dev = session.commitmentRatio - calibration.avgCommitmentRatio;
+    const pctDev = calibration.avgCommitmentRatio > 0
+      ? (dev / calibration.avgCommitmentRatio * 100).toFixed(0)
+      : '?';
+    const dir = dev < -0.1 ? 'well below' : dev < -0.05 ? 'below' : dev > 0.05 ? 'above' : 'near';
+    lines.push(`- Commitment: ${(session.commitmentRatio * 100).toFixed(0)}% vs neutral ${(calibration.avgCommitmentRatio * 100).toFixed(0)}% (${dir} baseline, ${pctDev}% deviation)`);
+  }
+
+  // First keystroke deviation
+  if (session.firstKeystrokeMs != null && calibration.avgFirstKeystrokeMs != null && calibration.avgFirstKeystrokeMs > 0) {
+    const ratio = session.firstKeystrokeMs / calibration.avgFirstKeystrokeMs;
+    const label = ratio > 3 ? 'dramatically longer' : ratio > 1.5 ? 'notably longer' : ratio > 1.1 ? 'slightly longer' : ratio < 0.5 ? 'much shorter' : 'similar';
+    lines.push(`- First keystroke: ${(session.firstKeystrokeMs / 1000).toFixed(1)}s vs neutral ${(calibration.avgFirstKeystrokeMs / 1000).toFixed(1)}s (${label} than baseline, ${ratio.toFixed(1)}x)`);
+  }
+
+  // P-burst deviation
+  if (session.avgPBurstLength != null && session.avgPBurstLength > 0 && calibration.avgPBurstLength != null && calibration.avgPBurstLength > 0) {
+    const ratio = session.avgPBurstLength / calibration.avgPBurstLength;
+    const label = ratio < 0.5 ? 'much shorter bursts' : ratio < 0.8 ? 'shorter bursts' : ratio > 1.5 ? 'much longer bursts' : ratio > 1.2 ? 'longer bursts' : 'similar bursts';
+    lines.push(`- P-burst length: ${session.avgPBurstLength.toFixed(0)} vs neutral ${calibration.avgPBurstLength.toFixed(0)} chars/burst (${label}, ${ratio.toFixed(1)}x)`);
+  }
+
+  // Chars per minute deviation
+  if (session.charsPerMinute != null && calibration.avgCharsPerMinute != null && calibration.avgCharsPerMinute > 0) {
+    const ratio = session.charsPerMinute / calibration.avgCharsPerMinute;
+    const label = ratio < 0.6 ? 'much slower' : ratio < 0.85 ? 'slower' : ratio > 1.4 ? 'much faster' : ratio > 1.15 ? 'faster' : 'similar speed';
+    lines.push(`- Typing speed: ${session.charsPerMinute.toFixed(0)} vs neutral ${calibration.avgCharsPerMinute.toFixed(0)} cpm (${label}, ${ratio.toFixed(1)}x)`);
+  }
+
+  if (lines.length <= 2) return ''; // no meaningful deviations to report
+
+  lines.push('');
+  lines.push('Deviations from calibration baseline are more meaningful than deviations from journal entry history, because calibration captures what neutral writing looks like — no emotional content, no deep questions, just describing breakfast or the weather.');
 
   return lines.join('\n');
 }

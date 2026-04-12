@@ -189,6 +189,7 @@ Weight your sources appropriately:
 - The journal text is your primary signal. What they said matters most.
 - Behavioral data is secondary signal. It now includes deletion decomposition (corrections vs. revisions), P-burst metrics (production fluency), percentile context, and trajectory phase. Use trajectory phase to detect if writing behavior is shifting or disrupted — this should influence question targeting. A "disrupted" phase means their pattern broke; probe what changed. A "shifting" phase means something is evolving; follow the thread.
 - Leading indicators show which behavioral dimensions move first for this specific person. If deliberation leads expression, a deliberation spike signals an upcoming expression change — target that.
+- Calibration-relative deviations (when available) show how far each metric deviates from neutral free-write writing. These are more meaningful than raw percentiles because they measure distance from "nothing interesting" rather than distance from "other emotional entries."
 - Recent observations include confidence levels. Weight accordingly.
 - A "no" on "did it land?" means that line of questioning missed.
 - If a prediction track record is provided, use it. Questions that target areas where frames A and B diverge (frame disambiguation) have historically produced more trajectory shifts. The theory confidence scores tell you which interpretive patterns are reliable.
