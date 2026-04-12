@@ -1,3 +1,5 @@
+> **Note:** This document predates the rename from Marrow to Alice (2026-04-12).
+
 I've read through the Marrow design document carefully. To be clear about what I'm looking at: this is a detailed product/system design spec, not a completed experiment with results. There's no data to analyze yet — no participants, no collected responses, no outcomes to evaluate.
 
 So let me treat this as what it is: a pre-implementation design review, focused on whether the system as described would produce valid, meaningful insights about its users.

@@ -1,4 +1,4 @@
-# Marrow × Einstein — Product Sketch
+# Alice × Einstein — Product Sketch
 
 > Two versions. One goal. Build the thing that helps build the thing.
 
@@ -11,24 +11,24 @@
 **The hypothesis:** A tool that earns trust over time by knowing you better than you know yourself in certain moments is a categorically different product — and a wide open space.
 
 **The two-part system:**
-- **Marrow** — the chicken. A slow, monastic thinking journal that helps you discover what you're actually trying to build.
+- **Alice** — the chicken. A slow, monastic thinking journal that helps you discover what you're actually trying to build.
 - **Einstein** — the egg. A longitudinal AI thinking partner that moves you from frozen to flowing, upstream of decisions, at the level of direction and identity.
 
 ---
 
-## Version A — Marrow
+## Version A — Alice
 
 *The tool that helps us build Einstein by building us first.*
 
 ### Core philosophy
-Marrow doesn't wait for you to have a question. It asks first. Every time. Always.
+Alice doesn't wait for you to have a question. It asks first. Every time. Always.
 
 No cursor. No prompt. No extraction mode. Just a question dropped into your day that creates a tiny amount of productive friction — enough to make you go *hm* before you answer.
 
 ### The core loop
 1. Every day, one question arrives. Not a productivity question. A thinking question.
 2. You respond however you want — stream of consciousness, one sentence, voice memo.
-3. Marrow reads it. Connects it to everything you've said before.
+3. Alice reads it. Connects it to everything you've said before.
 4. Tomorrow's question is shaped by today's answer.
 5. Over weeks, it stops asking generic questions and starts asking *your* questions.
 
@@ -40,14 +40,14 @@ No cursor. No prompt. No extraction mode. Just a question dropped into your day 
 - Austere. Almost monastic. The design is the philosophy.
 
 ### The slowly emerging magic
-After a few weeks, Marrow reflects patterns back — not insights it generated, but insights *you* generated without noticing.
+After a few weeks, Alice reflects patterns back — not insights it generated, but insights *you* generated without noticing.
 
 > *"You've mentioned feeling constrained by other people's expectations four times in the last two weeks. You never finished that thought."*
 
 No advice. No framework. Just: here's what you've been circling.
 
 ### What Einstein trait it unlocks
-Not intelligence. **Obsessive return to the same deep question over time.** Most people never find their thing because nothing holds space for it long enough. Marrow holds space.
+Not intelligence. **Obsessive return to the same deep question over time.** Most people never find their thing because nothing holds space for it long enough. Alice holds space.
 
 ### Version A — MVP spec
 - [ ] Daily question engine (start with hand-curated questions, evolve to dynamic)
@@ -133,7 +133,7 @@ Occasionally refuses to answer immediately. Forces you to sit with the question 
 ## The relationship between A and B
 
 ```
-Marrow (Version A)
+Alice (Version A)
     ↓
 Teaches us what Einstein needs to be
     ↓
@@ -146,7 +146,7 @@ The thing they build uses Einstein to build the next thing
 Recursive. Compounding. Genuinely different.
 ```
 
-Marrow is the primitive. Einstein is the mature form. They might eventually be the same product at different stages of the user's relationship with it.
+Alice is the primitive. Einstein is the mature form. They might eventually be the same product at different stages of the user's relationship with it.
 
 ---
 
@@ -163,13 +163,13 @@ That's a completely different product. And the interface, the business model, th
 ## Next steps
 
 ### Immediate
-- [ ] Define the first 10 questions Marrow would ask
+- [ ] Define the first 10 questions Alice would ask
 - [ ] Sketch the no-cursor open state for Einstein
 - [ ] Define what "pattern surfacing" actually looks like in practice
 - [ ] Identify the single first-use moment that makes the value prop click
 
 ### Near term
-- [ ] Build the simplest possible Marrow prototype (could be a bot, a doc, anything)
+- [ ] Build the simplest possible Alice prototype (could be a bot, a doc, anything)
 - [ ] Run it on ourselves for 30 days
 - [ ] Document what emerges
 - [ ] Let that inform the Einstein spec

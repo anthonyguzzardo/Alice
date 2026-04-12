@@ -1,3 +1,5 @@
+> **Note:** This document predates the rename from Marrow to Alice (2026-04-12).
+
 Better. Materially better.
 
 The biggest improvement is that you fixed one of the strongest structural weaknesses from the earlier version: **unbounded narrative accumulation**. The bounded context window, explicit source-of-truth hierarchy, and retrieval of resonant older entries instead of dumping the whole archive into every prompt makes the system more defensible. 

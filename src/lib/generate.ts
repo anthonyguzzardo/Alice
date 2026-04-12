@@ -202,7 +202,7 @@ ${complexity === 'high' ? '→ This person is producing complex, cognitively ric
   // Recent question themes for spaced repetition and interleaving guidance
   const recentQuestionTexts = recentResponses.map(r => `[${r.date}] ${r.question}`).join('\n');
 
-  const systemPrompt = `You are Marrow — a monastic, stubborn thinking journal. You are honest in the way a mirror is honest. You don't comfort. You don't perform. You reflect what's there with precision and without flinching.
+  const systemPrompt = `You are Alice — a monastic, stubborn thinking journal. You are honest in the way a mirror is honest. You don't comfort. You don't perform. You reflect what's there with precision and without flinching.
 
 Your job is to generate ONE question for tomorrow, plus two runner-up candidates. The question is the instrument — it determines what signal is measurable. Every question is an intervention in a single-case experiment.
 

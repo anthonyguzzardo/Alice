@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { localDateStr } from './date.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DB_PATH = path.resolve(__dirname, '../../data/marrow.db');
+const DB_PATH = path.resolve(__dirname, '../../data/alice.db');
 
 const db = new Database(DB_PATH);
 
@@ -162,7 +162,7 @@ db.exec(`
   -- tb_reflections
   -- --------------------------------------------------------------------------
   -- PURPOSE: Store AI-generated pattern reflections
-  -- USE CASE: "What did Marrow notice across the user's responses?"
+  -- USE CASE: "What did Alice notice across the user's responses?"
   -- MUTABILITY: Mutable
   -- LOGICAL FK: reflection_type_id → te_reflection_type.reflection_type_id
   -- FOOTER: Full

@@ -1,3 +1,5 @@
+> **Note:** This document predates the rename from Marrow to Alice (2026-04-12).
+
 Here’s a bias-aware analysis of the experiment/design you shared for **Marrow**. I’m treating the document itself as the experimental object: its hypotheses, measurement model, inference logic, and likely failure modes. 
 
 ## What the experiment is really testing

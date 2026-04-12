@@ -1,3 +1,5 @@
+> **Note:** This document predates the rename from Marrow to Alice (2026-04-12).
+
 Here’s a neutral analysis of the experiment as described in your document. 
 
 Overall, this is not a single experiment yet. It is a **research program plus product architecture** wrapped in a strong scientific narrative. The design is ambitious, internally coherent, and unusually explicit about measurement, error correction, and hypothesis testing. But many of its strongest claims are still **theoretical inheritances from adjacent literatures**, not results demonstrated for this system. That distinction matters most. 

@@ -1,3 +1,5 @@
+> **Note:** This document predates the rename from Marrow to Alice (2026-04-12).
+
 ## Analysis of Marrow
 
 I'll work through this systematically — design logic, methodological strengths, genuine weaknesses, and unresolved tensions.

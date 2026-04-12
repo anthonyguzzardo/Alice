@@ -1,16 +1,16 @@
-# Marrow
+# Alice
 
 A personal, monastic daily thinking journal. One question per day. No gamification. No dashboard. Just depth.
 
 ## What It Does
 
-Marrow asks you one question every day. You answer it. That's it.
+Alice asks you one question every day. You answer it. That's it.
 
 There is no feed, no streak counter, no summary of your progress. Your responses go into a black box. You never see them again. The system sees them. You don't.
 
 ## Scientific Foundation
 
-Every layer of Marrow is grounded in peer-reviewed research. This is not a journaling app with AI bolted on — it is a single-case behavioral measurement instrument designed from validated science.
+Every layer of Alice is grounded in peer-reviewed research. This is not a journaling app with AI bolted on — it is a single-case behavioral measurement instrument designed from validated science.
 
 ### Writing Process Research
 - **P-burst production fluency** — Chenoweth & Hayes (2001). Text produced between 2-second pauses is the single strongest behavioral predictor of writing quality in process research.
@@ -109,7 +109,7 @@ Every layer of Marrow is grounded in peer-reviewed research. This is not a journ
 
 ### The Two Phases
 
-Marrow operates in two distinct phases. The transition is invisible to the user.
+Alice operates in two distinct phases. The transition is invisible to the user.
 
 #### Phase 1: Seed (Days 1-30)
 
@@ -171,7 +171,7 @@ The interface is the instrument. Every design decision is informed by HCI resear
 
 ### Data Collection
 
-Marrow captures three layers of data per session, all invisible to the user.
+Alice captures three layers of data per session, all invisible to the user.
 
 #### Layer 1: Response Text
 
@@ -258,7 +258,7 @@ A good suppressed question: "When you revise what you've written, what are you u
 
 ### The Prediction Engine
 
-The prediction engine is the mechanism that turns Marrow's interpretive layer from storytelling into science.
+The prediction engine is the mechanism that turns Alice's interpretive layer from storytelling into science.
 
 Every observation generates predictions. Every subsequent observation grades them. Every grade updates a Bayesian confidence score. Over time, the system accumulates evidence for which of its interpretive patterns are actually predictive and which are stories it tells itself.
 
@@ -352,9 +352,9 @@ The user sees none of the background processing. They get their done message ins
 
 There are no cron jobs, no scheduled tasks, no server dependencies. The system is fully event-driven. If the user submits, everything runs. If they don't, nothing runs. The system's heartbeat is the user's engagement.
 
-### What Marrow Feeds
+### What Alice Feeds
 
-Marrow is the data layer for [Einstein](https://github.com/anthonyguzzardo/Einstein), a longitudinal thinking partner. Einstein consumes everything Marrow collects — response text, behavioral signals with context, AI observations with three-frame analysis, suppressed questions, weekly reflections with multi-model audits, question feedback, prediction track records with Bayesian confidence scores, intervention-tagged questions, knowledge-transforming scores, trajectory data with leading indicators, and same-day session deltas with personal range context — as persistent context. Where Marrow asks, Einstein converses. The depth of that conversation is bounded by the depth of the data Marrow has accumulated.
+Alice is the data layer for [Einstein](https://github.com/anthonyguzzardo/Einstein), a longitudinal thinking partner. Einstein consumes everything Alice collects — response text, behavioral signals with context, AI observations with three-frame analysis, suppressed questions, weekly reflections with multi-model audits, question feedback, prediction track records with Bayesian confidence scores, intervention-tagged questions, knowledge-transforming scores, trajectory data with leading indicators, and same-day session deltas with personal range context — as persistent context. Where Alice asks, Einstein converses. The depth of that conversation is bounded by the depth of the data Alice has accumulated.
 
 Einstein is not a chatbot that knows you well. Einstein is a theorist whose subject happens to be you. The prediction engine gives him a lab notebook with a track record. The trajectory engine gives him a measurement instrument he can't manipulate. The intervention tags give him experimental metadata. When Einstein says "I think X about you," it's not a cold read — it's a theory with evidence, tested against a non-AI measurement instrument, graded by its own prediction history.
 
@@ -464,7 +464,7 @@ The question is tagged: FRAME_DISAMBIGUATION. The system chose it because its ca
 ## Architecture
 
 - Single user, no auth
-- SQLite database at `data/marrow.db` (includes vector embeddings via sqlite-vec)
+- SQLite database at `data/alice.db` (includes vector embeddings via sqlite-vec)
 - Seed questions in `src/lib/seeds.ts`
 - RAG-based memory: every entry is embedded and retrievable by semantic similarity with recency weighting
 - Contrarian retrieval: deliberately surfaces entries that are most *dissimilar* to current themes, preventing semantic lock-in
@@ -520,7 +520,7 @@ The system currently has no way to evaluate whether it is getting better. It gen
 
 ### Design Principles (Not Yet Implemented)
 
-- **Separate database.** The Lab reads from `marrow.db` but writes to its own `einstein-lab.db`. Nothing in Marrow's pipeline ever opens the Lab's database. The isolation is physical, not just logical.
+- **Separate database.** The Lab reads from `alice.db` but writes to its own `einstein-lab.db`. Nothing in Alice's pipeline ever opens the Lab's database. The isolation is physical, not just logical.
 - **Advisory, not executive.** The Lab can flag problems — "questions are converging on one theme" — but cannot directly influence question generation. The human is the only bridge.
 - **Evidence-backed findings.** Every Lab output follows a structured format: claim, evidence, confidence, expiry, falsifier. No vibes, no narrative.
 
@@ -538,6 +538,6 @@ At 30 entries there is nothing meaningful to audit. No question-generation histo
 
 Every technical decision serves depth over speed. If it optimizes for engagement or throughput, it's wrong. The design is the philosophy.
 
-Every design decision is grounded in peer-reviewed research — not because science legitimizes the work, but because the questions Marrow asks about human cognition have been studied for decades, and ignoring that work would mean rebuilding answers that already exist. The interface is informed by HCI research from MIT, Stanford, CMU, and KTH. The behavioral capture draws from writing process research spanning Chenoweth & Hayes to Baaijen & Galbraith. The linguistic analysis stands on Pennebaker's four decades of work and the NRC Emotion Lexicon. The prediction engine follows single-case experimental methodology. The question generator applies adaptive testing principles from psychometrics.
+Every design decision is grounded in peer-reviewed research — not because science legitimizes the work, but because the questions Alice asks about human cognition have been studied for decades, and ignoring that work would mean rebuilding answers that already exist. The interface is informed by HCI research from MIT, Stanford, CMU, and KTH. The behavioral capture draws from writing process research spanning Chenoweth & Hayes to Baaijen & Galbraith. The linguistic analysis stands on Pennebaker's four decades of work and the NRC Emotion Lexicon. The prediction engine follows single-case experimental methodology. The question generator applies adaptive testing principles from psychometrics.
 
 Where the research validates what we built, we cite it. Where it challenges what we assumed, we change. Where it has gaps, we experiment — but we name the gap, so we know what's hypothesis and what's evidence.

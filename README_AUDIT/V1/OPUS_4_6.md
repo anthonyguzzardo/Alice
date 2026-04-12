@@ -1,3 +1,5 @@
+> **Note:** This document predates the rename from Marrow to Alice (2026-04-12).
+
 Thanks for sharing Marrow. I've read through the full design document. Before I analyze, let me make sure I understand what you're asking — this is a design/concept document, not a completed experiment with results data. So the analysis would be about the soundness of the system's design, its assumptions, and its methodology.
 
 Let me lay out what I see, organized by what's strong, what's questionable, and what's unexamined.

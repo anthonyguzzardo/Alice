@@ -1,5 +1,5 @@
 /**
- * Signal formatting module for Marrow's AI interpretation layer.
+ * Signal formatting module for Alice's AI interpretation layer.
  *
  * Converts raw session summaries + trajectory data into research-backed
  * verbalized formats optimized for LLM consumption.

@@ -85,7 +85,7 @@ The existing `formatCalibrationDeviation` compared journal sessions against the 
 - Scientific Foundation: added "Same-Day Session Delta (Within-Person Control)" section with 6 citations (Pennebaker 1986, Toledo 2024, Collins 2025, Shimokawa/Lambert 2010, Bogaard 2022, Yoshizawa 2022)
 - Calibration: expanded to describe same-day delta computation and its 8 dimensions
 - Event-Driven Architecture: updated observation step to mention delta computation
-- What Marrow Feeds: updated to include session deltas with personal range context
+- What Alice Feeds: updated to include session deltas with personal range context
 
 Copied to `README_AUDIT/V16/V16_README.md`.
 
@@ -168,4 +168,4 @@ The delta module reads from the same `tb_session_summaries` table as Bob (state-
 
 ## Pending Rename
 
-`alice_handoff.md` exists in the project root with instructions to rename the system from "Marrow" to "Alice" (Alice sends, Bob receives — the canonical communication protocol metaphor). This is a naming change only, no product philosophy changes. Not yet executed.
+System renamed from "Marrow" to "Alice" (Alice sends, Bob receives — the canonical communication protocol metaphor). Naming change only, no product philosophy changes. Executed 2026-04-12.

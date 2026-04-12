@@ -1,3 +1,5 @@
+> **Note:** This document predates the rename from Marrow to Alice (2026-04-12).
+
 # Marrow
 
 A personal, monastic daily thinking journal. One question per day. No gamification. No dashboard. Just depth.

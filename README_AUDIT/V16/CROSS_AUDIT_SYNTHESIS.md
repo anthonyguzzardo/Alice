@@ -1,3 +1,5 @@
+> **Note:** This document predates the rename from Marrow to Alice (2026-04-12).
+
 # V16 Audit Synthesis
 
 Two models (GPT 5.4, Opus 4.6) reviewed the V16 README — the most citation-heavy and scientifically ambitious version of the document to date. This is the summary of their critiques, the rebuttal, and the revised positions.

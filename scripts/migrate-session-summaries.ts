@@ -19,7 +19,7 @@
  */
 import Database from 'better-sqlite3';
 
-const DB_PATH = './data/marrow.db';
+const DB_PATH = './data/alice.db';
 const db = new Database(DB_PATH);
 
 // Check if migration is already done

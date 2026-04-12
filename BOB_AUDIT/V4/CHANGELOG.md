@@ -1,3 +1,5 @@
+> **Note:** This document predates the rename from Marrow to Alice (2026-04-12).
+
 # BOB_AUDIT V4 — Signal Pipeline Wiring
 
 ## What Was Wrong With V3

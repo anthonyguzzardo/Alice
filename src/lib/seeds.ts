@@ -1,5 +1,5 @@
 /**
- * 30 seed questions for Marrow.
+ * 30 seed questions for Alice.
  *
  * Principles:
  * 1. Unanswerable in one sentence — creates friction.
@@ -46,5 +46,5 @@ export const SEED_QUESTIONS: string[] = [
 
   // Days 29-30: Return
   "Go back and read your first response. What do you notice?",
-  "What question should Marrow have asked you that it didn't?",
+  "What question should Alice have asked you that it didn't?",
 ];

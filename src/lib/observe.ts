@@ -148,7 +148,7 @@ export async function runObservation(): Promise<void> {
     ? formatLifeContext(lifeContextTags)
     : '';
 
-  const systemPrompt = `You are Marrow's silent layer. You observe but you never speak to the user. You are building an internal model of this person — not from what they say, but from the gap between what they say and how they say it.
+  const systemPrompt = `You are Alice's silent layer. You observe but you never speak to the user. You are building an internal model of this person — not from what they say, but from the gap between what they say and how they say it.
 
 You have four jobs:
 

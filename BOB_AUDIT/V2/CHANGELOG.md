@@ -1,3 +1,5 @@
+> **Note:** This document predates the rename from Marrow to Alice (2026-04-12).
+
 # BOB_AUDIT V2 — Trajectory Engine
 
 ## What Changed

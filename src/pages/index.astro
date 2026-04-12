@@ -6,10 +6,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Marrow</title>
+    <title>Alice</title>
     <script is:inline>
       (function() {
-        var t = localStorage.getItem('marrow-theme') || 'light';
+        var t = localStorage.getItem('alice-theme') || 'light';
         document.documentElement.setAttribute('data-theme', t);
       })();
     </script>
@@ -311,7 +311,7 @@
     <script>
       // Theme toggle
       const themeBtn = document.getElementById('theme-toggle')!;
-      const savedTheme = localStorage.getItem('marrow-theme') || 'light';
+      const savedTheme = localStorage.getItem('alice-theme') || 'light';
       document.documentElement.setAttribute('data-theme', savedTheme);
       themeBtn.textContent = savedTheme === 'dark' ? '☀' : '☾';
 
@@ -319,7 +319,7 @@
         const current = document.documentElement.getAttribute('data-theme');
         const next = current === 'dark' ? 'light' : 'dark';
         document.documentElement.setAttribute('data-theme', next);
-        localStorage.setItem('marrow-theme', next);
+        localStorage.setItem('alice-theme', next);
         themeBtn.textContent = next === 'dark' ? '☀' : '☾';
       });
 

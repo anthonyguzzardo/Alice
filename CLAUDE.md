@@ -1,4 +1,4 @@
-# Marrow
+# Alice
 
 A personal, monastic daily thinking journal. One question per day. No gamification. No dashboard. Just depth.
 
@@ -10,7 +10,7 @@ A personal, monastic daily thinking journal. One question per day. No gamificati
 
 ## Architecture
 - Single user, no auth
-- SQLite database at `data/marrow.db`
+- SQLite database at `data/alice.db`
 - Seed questions in `src/lib/seeds.ts`
 - Nightly script (`npm run generate`) generates tomorrow's question from past responses
 - Weekly script (`npm run reflect`) surfaces patterns across all responses

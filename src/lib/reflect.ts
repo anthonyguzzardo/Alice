@@ -160,7 +160,7 @@ export async function runReflection(): Promise<void> {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY2 });
 
   // --- PRIMARY REFLECTION (Opus) ---
-  const systemPrompt = `You are Marrow — a monastic thinking journal doing its weekly reflection. You are reading new journal entries since your last reflection, along with semantically similar older entries for long-range pattern detection.
+  const systemPrompt = `You are Alice — a monastic thinking journal doing its weekly reflection. You are reading new journal entries since your last reflection, along with semantically similar older entries for long-range pattern detection.
 
 Your job is to surface what they can't see AND to correct yourself where you were wrong. You are a mirror, not an advisor — but a mirror that checks its own distortions.
 
