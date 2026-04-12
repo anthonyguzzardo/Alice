@@ -2,16 +2,33 @@
 
 /** Raw signals from /api/blackbox */
 export interface BlackboxSignal {
+  // Behavioral — how you interact
   avgCommitment: number;
   avgHesitation: number;
   deletionIntensity: number;
   pauseFrequency: number;
+  avgDuration: number;
+  largestDeletion: number;
+  avgTabAways: number;
+  avgTabAwayDuration: number;
+  avgWordCount: number;
+  avgSentenceCount: number;
   sessionCount: number;
+
+  // Temporal — when and how consistently
+  avgHourOfDay: number;
+  daySpread: number;
+  consistency: number;
+  daysSinceLastEntry: number;
+
+  // System state
   observationCount: number;
   reflectionCount: number;
   suppressedCount: number;
   embeddingCount: number;
   latestConfidence: string | null;
+
+  // Patterns
   thematicDensity: number;
   landedRatio: number;
   feedbackCount: number;

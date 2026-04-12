@@ -6,31 +6,7 @@
 import type { APIRoute } from 'astro';
 import db from '../../lib/db.ts';
 
-interface BlackboxSignal {
-  // Derived from behavioral data — how you've been writing
-  avgCommitment: number;        // 0-1, your average commitment ratio
-  avgHesitation: number;        // 0-1, normalized first-keystroke latency
-  deletionIntensity: number;    // 0-1, how much you delete relative to what you type
-  pauseFrequency: number;       // 0-1, how often you pause
-  sessionCount: number;         // how many entries exist
-
-  // Derived from system state — what the system has been doing
-  observationCount: number;     // how many observations exist
-  reflectionCount: number;      // how many reflections exist
-  suppressedCount: number;      // how many questions the system held back
-  embeddingCount: number;       // how much has been vectorized
-
-  // Derived from the latest observation — abstracted confidence
-  latestConfidence: string;     // HIGH / MODERATE / LOW / INSUFFICIENT DATA / null
-
-  // Thematic density — how clustered or diverse recent entries are
-  // (ratio of unique words to total words in last 7 entries)
-  thematicDensity: number;      // 0-1, higher = more repetitive language
-
-  // Feedback signal
-  landedRatio: number;          // 0-1, ratio of "yes" to total feedback
-  feedbackCount: number;
-}
+import type { BlackboxSignal } from '../../lib/dream/types.ts';
 
 export const GET: APIRoute = async () => {
   try {
@@ -43,9 +19,51 @@ export const GET: APIRoute = async () => {
              THEN CAST(total_chars_deleted AS REAL) / total_chars_typed
              ELSE 0 END) as deletionIntensity
         ,AVG(CAST(pause_count AS REAL) / 10.0) as pauseFrequency
+        ,AVG(CAST(total_duration_ms AS REAL) / 600000.0) as avgDuration
+        ,MAX(largest_deletion) as maxLargestDeletion
+        ,AVG(CAST(largest_deletion AS REAL)) as avgLargestDeletion
+        ,AVG(CAST(tab_away_count AS REAL)) as avgTabAways
+        ,AVG(CAST(total_tab_away_ms AS REAL) / 60000.0) as avgTabAwayDuration
+        ,AVG(CAST(word_count AS REAL)) as avgWordCount
+        ,AVG(CAST(sentence_count AS REAL)) as avgSentenceCount
+        ,AVG(CAST(hour_of_day AS REAL)) as avgHourOfDay
+        ,COUNT(DISTINCT day_of_week) as uniqueDays
         ,COUNT(*) as sessionCount
       FROM tb_session_summaries
     `).get() as any;
+
+    // Temporal signals
+    const lastEntry = db.prepare(`
+      SELECT dttm_created_utc FROM tb_session_summaries
+      ORDER BY session_summary_id DESC LIMIT 1
+    `).get() as any;
+
+    let daysSinceLastEntry = 0;
+    if (lastEntry?.dttm_created_utc) {
+      const lastDate = new Date(lastEntry.dttm_created_utc + 'Z');
+      daysSinceLastEntry = Math.floor((Date.now() - lastDate.getTime()) / 86400000);
+    }
+
+    // Consistency: how evenly spaced are entries? (stddev of gaps)
+    const entryDates = db.prepare(`
+      SELECT dttm_created_utc FROM tb_session_summaries
+      ORDER BY session_summary_id ASC
+    `).all() as any[];
+
+    let consistency = 0.5;
+    if (entryDates.length >= 3) {
+      const gaps: number[] = [];
+      for (let i = 1; i < entryDates.length; i++) {
+        const a = new Date(entryDates[i - 1].dttm_created_utc + 'Z').getTime();
+        const b = new Date(entryDates[i].dttm_created_utc + 'Z').getTime();
+        gaps.push((b - a) / 86400000);
+      }
+      const meanGap = gaps.reduce((s, g) => s + g, 0) / gaps.length;
+      const variance = gaps.reduce((s, g) => s + (g - meanGap) ** 2, 0) / gaps.length;
+      const stddev = Math.sqrt(variance);
+      // Normalize: low stddev relative to mean = consistent = closer to 1.0
+      consistency = meanGap > 0 ? Math.max(0, Math.min(1, 1 - stddev / (meanGap + 1))) : 0.5;
+    }
 
     // System state counts
     const obsCount = (db.prepare(`SELECT COUNT(*) as c FROM tb_ai_observations`).get() as any).c;
@@ -89,18 +107,38 @@ export const GET: APIRoute = async () => {
       FROM tb_question_feedback
     `).get() as any;
 
+    const clamp = (v: number, fallback = 0) => Math.min(1, Math.max(0, v ?? fallback));
+    const sc = behavioral.sessionCount ?? 0;
+
     const signal: BlackboxSignal = {
-      avgCommitment: Math.min(1, Math.max(0, behavioral.avgCommitment ?? 0.5)),
-      avgHesitation: Math.min(1, Math.max(0, behavioral.avgHesitation ?? 0.5)),
-      deletionIntensity: Math.min(1, Math.max(0, behavioral.deletionIntensity ?? 0)),
-      pauseFrequency: Math.min(1, Math.max(0, behavioral.pauseFrequency ?? 0)),
-      sessionCount: behavioral.sessionCount ?? 0,
+      // Behavioral
+      avgCommitment: clamp(behavioral.avgCommitment, 0.5),
+      avgHesitation: clamp(behavioral.avgHesitation, 0.5),
+      deletionIntensity: clamp(behavioral.deletionIntensity),
+      pauseFrequency: clamp(behavioral.pauseFrequency),
+      avgDuration: clamp(behavioral.avgDuration),
+      largestDeletion: clamp((behavioral.avgLargestDeletion ?? 0) / 500),
+      avgTabAways: clamp((behavioral.avgTabAways ?? 0) / 5),
+      avgTabAwayDuration: clamp(behavioral.avgTabAwayDuration),
+      avgWordCount: clamp((behavioral.avgWordCount ?? 0) / 500),
+      avgSentenceCount: clamp((behavioral.avgSentenceCount ?? 0) / 30),
+      sessionCount: sc,
+
+      // Temporal
+      avgHourOfDay: clamp((behavioral.avgHourOfDay ?? 12) / 24),
+      daySpread: clamp((behavioral.uniqueDays ?? 1) / 7),
+      consistency,
+      daysSinceLastEntry,
+
+      // System state
       observationCount: obsCount,
       reflectionCount: refCount,
       suppressedCount: supCount,
       embeddingCount: embCount,
       latestConfidence,
-      thematicDensity: Math.min(1, Math.max(0, thematicDensity)),
+
+      // Patterns
+      thematicDensity: clamp(thematicDensity),
       landedRatio: feedback.total > 0 ? (feedback.landed ?? 0) / feedback.total : 0.5,
       feedbackCount: feedback.total ?? 0,
     };

@@ -26,7 +26,7 @@ export function loadPersistedTraits(currentEntryCount: number): WitnessTraits | 
   return null;
 }
 
-const SYSTEM_PROMPT = `You are shaping a singular presence — a witness-form that exists in a void. You receive behavioral signals from a personal journal. You output 26 trait values (each 0.0–1.0) that define what the form becomes.
+const SYSTEM_PROMPT = `You are shaping a singular presence — a witness-form that exists in a void. You receive behavioral signals from an interaction system. You output 26 trait values (each 0.0–1.0) that define what the form becomes.
 
 You are not illustrating data. You are not making art. You are deciding what this thing IS based on how someone has been thinking, writing, hesitating, committing, avoiding, and confronting.
 
@@ -84,6 +84,14 @@ Guidelines — these are intuitions, not rules:
 - High pause frequency → could mean depth (high internalLight) or avoidance (high hollowness). You decide.
 - Many entries over time → higher creationCost. This thing took time to build.
 - High commitment + many reflections → higher storedEnergy. Deep accumulated charge.
+- Long duration + high word count → they spent time. Reward that with density, creationCost.
+- Large deletions → they wrote something and killed it. That's fragility, reactivity, possibly hollowness.
+- Frequent tab-aways → distraction or avoidance. Consider edgeCharacter, symmetry-breaking.
+- Long tab-away duration → they left for a while. Atmosphere, hollowness — absence has shape.
+- Low consistency (irregular spacing) → the form is unstable, reactive. High consistency → rhythm, density.
+- Days since last entry → long absence dims the form. Decay. Lower internalLight, flow, rhythm. Higher surface roughness.
+- Late-night entries (high hour of day) → temperature shifts, different energy. You decide what it means.
+- High day spread (showing up on many different days) → commitment over time. CreationCost, storedEnergy.
 
 CRITICAL: Do NOT make everything moderate. Be decisive. Some traits should be near 0, some near 1. A form with all values at 0.4-0.6 has no character. Strong opinions produce strong forms.
 
@@ -111,13 +119,23 @@ async function interpretTraitsInner(sig: BlackboxSignal, entryCount: number): Pr
   try {
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY2 });
 
-    const userMessage = `Journal behavioral signals:
+    const userMessage = `Behavioral signals:
 
 - Commitment ratio: ${sig.avgCommitment.toFixed(3)} (how much typed text was kept vs deleted)
 - Hesitation: ${sig.avgHesitation.toFixed(3)} (delay before first keystroke, normalized)
 - Deletion intensity: ${sig.deletionIntensity.toFixed(3)} (proportion of text deleted)
 - Pause frequency: ${sig.pauseFrequency.toFixed(3)} (how often they stop mid-thought)
+- Average duration: ${sig.avgDuration.toFixed(3)} (time spent per session, normalized to 10min)
+- Largest deletion: ${sig.largestDeletion.toFixed(3)} (biggest single erasure, normalized)
+- Tab-away frequency: ${sig.avgTabAways.toFixed(3)} (how often they leave and come back)
+- Tab-away duration: ${sig.avgTabAwayDuration.toFixed(3)} (how long they stay away)
+- Average word count: ${sig.avgWordCount.toFixed(3)} (density of output, normalized)
+- Average sentence count: ${sig.avgSentenceCount.toFixed(3)} (structural complexity)
 - Total entries: ${sig.sessionCount}
+- Average hour of day: ${sig.avgHourOfDay.toFixed(3)} (when they show up, 0=midnight, 0.5=noon)
+- Day spread: ${sig.daySpread.toFixed(3)} (how many different days of the week)
+- Consistency: ${sig.consistency.toFixed(3)} (regularity of spacing between entries)
+- Days since last entry: ${sig.daysSinceLastEntry}
 - AI observations generated: ${sig.observationCount}
 - Reflections generated: ${sig.reflectionCount}
 - Suppressed questions: ${sig.suppressedCount}
