@@ -24,6 +24,7 @@ import {
   updateQuestionIntent,
   saveQuestionCandidates,
   getRecentCalibrationContext,
+  getRecentSessionDeltas,
 } from './db.ts';
 import { localDateStr } from './date.ts';
 import { retrieveSimilarMulti, retrieveContrarian } from './rag.ts';
@@ -34,6 +35,7 @@ import {
 import { computeEntryStates } from './bob/state-engine.ts';
 import { computeDynamics } from './bob/dynamics.ts';
 import { computeMATTR } from './bob/helpers.ts';
+import { formatCompactDelta } from './session-delta.ts';
 
 const SEED_DAYS = 30;
 const RECENT_WINDOW = 14;
@@ -154,6 +156,12 @@ export async function runGeneration(): Promise<void> {
   const recentLifeContext = getRecentCalibrationContext(20);
   const lifeContextSection = recentLifeContext.length > 0
     ? formatGenerateLifeContext(recentLifeContext)
+    : '';
+
+  // Session delta trends (same-day calibration → journal shifts)
+  const recentDeltas = getRecentSessionDeltas(14);
+  const deltaTrendSection = recentDeltas.length > 0
+    ? formatCompactDelta(recentDeltas)
     : '';
 
   // Prediction track record
@@ -323,6 +331,7 @@ ${predictionSection}
 
 ${feedbackSection}
 ${lifeContextSection ? `\n${lifeContextSection}\n` : ''}
+${deltaTrendSection ? `\n${deltaTrendSection}\n` : ''}
 ---
 
 RECENT QUESTION HISTORY (for spaced repetition — avoid clustering themes):

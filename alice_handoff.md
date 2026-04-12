@@ -14,6 +14,10 @@ Alice is the sender. The journal is where you write. You are Alice. The journal 
 
 The name isn't branding. It's the system described in one word.
 
+## What does NOT change
+
+Nothing about the product philosophy, system prompts, AI messaging, tone, or voice changes. The monastic design, the black box, the depth-over-engagement principle — all of it stays exactly as it is. This is a naming change, not a rebranding. Do not rewrite copy, descriptions, or any language that describes what the product does or how it feels. If it says "monastic," it still says "monastic." If it says "depth," it still says "depth." Only the proper noun changes.
+
 ## Scope
 
 - `data/marrow.db` → `data/alice.db`

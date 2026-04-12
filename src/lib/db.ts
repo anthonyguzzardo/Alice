@@ -808,6 +808,65 @@ db.exec(`
     ,dttm_created_utc        TEXT    NOT NULL DEFAULT (datetime('now'))
     ,created_by              TEXT    NOT NULL DEFAULT 'system'
   );
+
+  -- --------------------------------------------------------------------------
+  -- tb_session_delta
+  -- --------------------------------------------------------------------------
+  -- PURPOSE: Computed behavioral delta vectors between same-day calibration
+  --          (neutral writing) and journal (reflective writing) sessions.
+  --          Isolates what the reflective question provoked, controlling for
+  --          daily confounds (sleep, stress, fatigue, device, time-of-day).
+  -- USE CASE: "How did this person's writing behavior change when they
+  --           shifted from neutral to reflective writing today?"
+  -- RESEARCH: Pennebaker (1986) expressive writing paradigm — neutral vs
+  --           emotional writing as within-person control. Toledo et al (2024)
+  --           76-89% of stress response variance is within-day. Collins et al
+  --           (2025) self-referential language from diary text detects
+  --           depression AUC 0.68. Lambert OQ-45 deviation-from-expected-
+  --           trajectory detects 85-100% of deteriorating cases.
+  -- MUTABILITY: Append-only (one row per date, INSERT OR REPLACE)
+  -- LOGICAL FK: calibration_question_id → tb_questions.question_id
+  -- LOGICAL FK: journal_question_id → tb_questions.question_id
+  -- REFERENCED BY: session-delta.ts, observe.ts, generate.ts, reflect.ts
+  -- FOOTER: Minimal (append-only)
+  -- --------------------------------------------------------------------------
+  CREATE TABLE IF NOT EXISTS tb_session_delta (
+     session_delta_id                    INTEGER PRIMARY KEY AUTOINCREMENT
+    ,session_date                        TEXT    NOT NULL UNIQUE
+    ,calibration_question_id             INTEGER NOT NULL
+    ,journal_question_id                 INTEGER NOT NULL
+    -- DELTA DIMENSIONS (journal value minus calibration value)
+    ,delta_first_person                  REAL    -- Newman 2003: self-referential distancing
+    ,delta_cognitive                     REAL    -- Vrij: cognitive load markers
+    ,delta_hedging                       REAL    -- uncertainty / performance anxiety
+    ,delta_chars_per_minute              REAL    -- production disruption / fluency shift
+    ,delta_commitment                    REAL    -- self-censoring behavior
+    ,delta_large_deletion_count          REAL    -- substantive rethinking (Faigley & Witte)
+    ,delta_inter_key_interval_mean       REAL    -- keystroke hesitation (Epp et al 2011)
+    ,delta_avg_p_burst_length            REAL    -- thought-unit length (Chenoweth & Hayes)
+    -- COMPOSITE
+    ,delta_magnitude                     REAL    -- Euclidean distance in z-normalized delta-space
+    -- RAW VALUES (calibration then journal, for auditability)
+    ,calibration_first_person            REAL
+    ,journal_first_person                REAL
+    ,calibration_cognitive               REAL
+    ,journal_cognitive                   REAL
+    ,calibration_hedging                 REAL
+    ,journal_hedging                     REAL
+    ,calibration_chars_per_minute        REAL
+    ,journal_chars_per_minute            REAL
+    ,calibration_commitment              REAL
+    ,journal_commitment                  REAL
+    ,calibration_large_deletion_count    REAL
+    ,journal_large_deletion_count        REAL
+    ,calibration_inter_key_interval_mean REAL
+    ,journal_inter_key_interval_mean     REAL
+    ,calibration_avg_p_burst_length      REAL
+    ,journal_avg_p_burst_length          REAL
+    -- FOOTER
+    ,dttm_created_utc                    TEXT    NOT NULL DEFAULT (datetime('now'))
+    ,created_by                          TEXT    NOT NULL DEFAULT 'system'
+  );
 `);
 
 // --------------------------------------------------------------------------
@@ -2226,6 +2285,158 @@ export function getCalibrationContextNearDate(targetDate: string, windowDays: nu
     detail: string | null;
     confidence: number;
   }>;
+}
+
+// ----------------------------------------------------------------------------
+// SESSION DELTA (same-day calibration → journal behavioral shift)
+// ----------------------------------------------------------------------------
+
+export interface SessionDeltaRow {
+  sessionDeltaId: number;
+  sessionDate: string;
+  calibrationQuestionId: number;
+  journalQuestionId: number;
+  deltaFirstPerson: number | null;
+  deltaCognitive: number | null;
+  deltaHedging: number | null;
+  deltaCharsPerMinute: number | null;
+  deltaCommitment: number | null;
+  deltaLargeDeletionCount: number | null;
+  deltaInterKeyIntervalMean: number | null;
+  deltaAvgPBurstLength: number | null;
+  deltaMagnitude: number | null;
+  calibrationFirstPerson: number | null;
+  journalFirstPerson: number | null;
+  calibrationCognitive: number | null;
+  journalCognitive: number | null;
+  calibrationHedging: number | null;
+  journalHedging: number | null;
+  calibrationCharsPerMinute: number | null;
+  journalCharsPerMinute: number | null;
+  calibrationCommitment: number | null;
+  journalCommitment: number | null;
+  calibrationLargeDeletionCount: number | null;
+  journalLargeDeletionCount: number | null;
+  calibrationInterKeyIntervalMean: number | null;
+  journalInterKeyIntervalMean: number | null;
+  calibrationAvgPBurstLength: number | null;
+  journalAvgPBurstLength: number | null;
+}
+
+export function getSameDayCalibrationSummary(date: string): SessionSummaryInput | null {
+  // Calibration questions have scheduled_for = NULL (see saveCalibrationSession).
+  // Match by DATE(dttm_created_utc) instead. Take most recent if multiple same-day.
+  return db.prepare(`
+    SELECT ${SESSION_SUMMARY_COLS}
+    FROM tb_session_summaries s
+    JOIN tb_questions q ON s.question_id = q.question_id
+    WHERE q.question_source_id = 3
+      AND DATE(q.dttm_created_utc) = ?
+    ORDER BY q.dttm_created_utc DESC
+    LIMIT 1
+  `).get(date) as SessionSummaryInput | null;
+}
+
+export function saveSessionDelta(delta: SessionDeltaRow): void {
+  db.prepare(`
+    INSERT OR REPLACE INTO tb_session_delta (
+       session_date
+      ,calibration_question_id
+      ,journal_question_id
+      ,delta_first_person
+      ,delta_cognitive
+      ,delta_hedging
+      ,delta_chars_per_minute
+      ,delta_commitment
+      ,delta_large_deletion_count
+      ,delta_inter_key_interval_mean
+      ,delta_avg_p_burst_length
+      ,delta_magnitude
+      ,calibration_first_person
+      ,journal_first_person
+      ,calibration_cognitive
+      ,journal_cognitive
+      ,calibration_hedging
+      ,journal_hedging
+      ,calibration_chars_per_minute
+      ,journal_chars_per_minute
+      ,calibration_commitment
+      ,journal_commitment
+      ,calibration_large_deletion_count
+      ,journal_large_deletion_count
+      ,calibration_inter_key_interval_mean
+      ,journal_inter_key_interval_mean
+      ,calibration_avg_p_burst_length
+      ,journal_avg_p_burst_length
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    delta.sessionDate,
+    delta.calibrationQuestionId,
+    delta.journalQuestionId,
+    delta.deltaFirstPerson,
+    delta.deltaCognitive,
+    delta.deltaHedging,
+    delta.deltaCharsPerMinute,
+    delta.deltaCommitment,
+    delta.deltaLargeDeletionCount,
+    delta.deltaInterKeyIntervalMean,
+    delta.deltaAvgPBurstLength,
+    delta.deltaMagnitude,
+    delta.calibrationFirstPerson,
+    delta.journalFirstPerson,
+    delta.calibrationCognitive,
+    delta.journalCognitive,
+    delta.calibrationHedging,
+    delta.journalHedging,
+    delta.calibrationCharsPerMinute,
+    delta.journalCharsPerMinute,
+    delta.calibrationCommitment,
+    delta.journalCommitment,
+    delta.calibrationLargeDeletionCount,
+    delta.journalLargeDeletionCount,
+    delta.calibrationInterKeyIntervalMean,
+    delta.journalInterKeyIntervalMean,
+    delta.calibrationAvgPBurstLength,
+    delta.journalAvgPBurstLength,
+  );
+}
+
+export function getRecentSessionDeltas(limit: number = 30): SessionDeltaRow[] {
+  return db.prepare(`
+    SELECT
+       session_delta_id as sessionDeltaId
+      ,session_date as sessionDate
+      ,calibration_question_id as calibrationQuestionId
+      ,journal_question_id as journalQuestionId
+      ,delta_first_person as deltaFirstPerson
+      ,delta_cognitive as deltaCognitive
+      ,delta_hedging as deltaHedging
+      ,delta_chars_per_minute as deltaCharsPerMinute
+      ,delta_commitment as deltaCommitment
+      ,delta_large_deletion_count as deltaLargeDeletionCount
+      ,delta_inter_key_interval_mean as deltaInterKeyIntervalMean
+      ,delta_avg_p_burst_length as deltaAvgPBurstLength
+      ,delta_magnitude as deltaMagnitude
+      ,calibration_first_person as calibrationFirstPerson
+      ,journal_first_person as journalFirstPerson
+      ,calibration_cognitive as calibrationCognitive
+      ,journal_cognitive as journalCognitive
+      ,calibration_hedging as calibrationHedging
+      ,journal_hedging as journalHedging
+      ,calibration_chars_per_minute as calibrationCharsPerMinute
+      ,journal_chars_per_minute as journalCharsPerMinute
+      ,calibration_commitment as calibrationCommitment
+      ,journal_commitment as journalCommitment
+      ,calibration_large_deletion_count as calibrationLargeDeletionCount
+      ,journal_large_deletion_count as journalLargeDeletionCount
+      ,calibration_inter_key_interval_mean as calibrationInterKeyIntervalMean
+      ,journal_inter_key_interval_mean as journalInterKeyIntervalMean
+      ,calibration_avg_p_burst_length as calibrationAvgPBurstLength
+      ,journal_avg_p_burst_length as journalAvgPBurstLength
+    FROM tb_session_delta
+    ORDER BY session_date DESC
+    LIMIT ?
+  `).all(limit) as SessionDeltaRow[];
 }
 
 export default db;

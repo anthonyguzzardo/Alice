@@ -25,6 +25,9 @@ import {
   updateTheoryConfidence,
   getResponseCount,
   getCalibrationContextNearDate,
+  getSameDayCalibrationSummary,
+  getRecentSessionDeltas,
+  saveSessionDelta,
 } from './db.ts';
 import { localDateStr } from './date.ts';
 import { retrieveSimilar } from './rag.ts';
@@ -36,6 +39,9 @@ import {
 } from './signals.ts';
 import { computeEntryStates } from './bob/state-engine.ts';
 import { computeDynamics } from './bob/dynamics.ts';
+import {
+  computeSessionDelta, computeDeltaMagnitude, formatSessionDelta,
+} from './session-delta.ts';
 
 export async function runObservation(): Promise<void> {
   const today = localDateStr();
@@ -125,6 +131,17 @@ export async function runObservation(): Promise<void> {
     ? formatCalibrationDeviation(sessionSummary, calibration)
     : '';
 
+  // Same-day session delta (Pennebaker within-person control)
+  let sessionDeltaContext = '';
+  const sameDayCalibration = getSameDayCalibrationSummary(today);
+  if (sameDayCalibration && sessionSummary) {
+    const deltaHistory = getRecentSessionDeltas(30);
+    const delta = computeSessionDelta(sameDayCalibration, sessionSummary, today);
+    delta.deltaMagnitude = computeDeltaMagnitude(delta, deltaHistory);
+    saveSessionDelta(delta);
+    sessionDeltaContext = formatSessionDelta(delta, deltaHistory);
+  }
+
   // Life-context tags from recent calibration sessions (incidental supervision)
   const lifeContextTags = getCalibrationContextNearDate(today, 2);
   const lifeContextSection = lifeContextTags.length > 0
@@ -193,6 +210,8 @@ You receive enriched behavioral data with research-backed metrics. Key concepts:
 
 - CALIBRATION-RELATIVE DEVIATION: You may receive a section showing how each behavioral metric compares to neutral calibration writing (free writes). These deviations are MORE meaningful than deviations from journal entry history because they measure distance from "nothing interesting happening" rather than distance from "other emotional writing." A commitment ratio that's 25% below calibration baseline is a stronger signal than one at the 30th percentile of all sessions (which are all emotionally loaded to some degree).
 
+- SAME-DAY SESSION DELTA: You may receive a section showing the delta between today's calibration session and today's journal session. This is the MOST controlled comparison available — same person, same day, same sleep/stress/device/time. The only variable that changed was the prompt. A large delta means the real question provoked a significant behavioral shift. A delta near zero means the person wrote similarly regardless of topic. When both historical-average calibration deviation and same-day delta are available, prefer the same-day delta — it controls for TODAY's state, not the historical average. After enough history accumulates (15+ days), the system shows whether today's delta is within or outside this person's typical delta range. An unusual delta (especially widening commitment, revision, or first-person shifts) may indicate heightened engagement, self-monitoring, or a question that hit close to something real.
+
 - PERCENTILES: All metrics are compared against this person's own history. A value at the 85th percentile means this session was higher than 85% of their previous sessions on that metric.
 
 - LIFE CONTEXT: You may receive structured life-context tags extracted from recent calibration sessions. These are observable facts the user volunteered in neutral writing prompts — 7 research-backed dimensions ranked by effect size on cognitive output: sleep (d>0.80), physical state (d=0.40-0.80), emotional events (d=0.30-0.70), social quality, stress (d=0.40-0.80), exercise (d=0.20-0.50), routine disruption. Use these as CONTEXT for interpreting behavioral signals — not as primary signal themselves. For example, if today's behavioral signature shows high keystroke variability and low commitment, and the life context shows "sleep: poor" from this morning's calibration, that context strengthens Frame C (mundane: fatigue) relative to Frame B (avoidance). Life context helps you distinguish between causes of the same behavioral pattern.
@@ -232,6 +251,7 @@ ${dynamicsContext}${ktContext}
 
 ${calibrationContext}
 ${calibrationDeviationContext ? `\n${calibrationDeviationContext}` : ''}
+${sessionDeltaContext ? `\n${sessionDeltaContext}` : ''}
 ${lifeContextSection ? `\n${lifeContextSection}` : ''}
 
 ---

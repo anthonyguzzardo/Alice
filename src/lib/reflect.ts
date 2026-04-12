@@ -25,6 +25,7 @@ import {
   getAllTheoryConfidences,
   getRecentGradedPredictions,
   getRecentCalibrationContext,
+  getRecentSessionDeltas,
 } from './db.ts';
 import { localDateStr } from './date.ts';
 import { retrieveSimilarMulti, retrieveContrarian } from './rag.ts';
@@ -35,6 +36,7 @@ import {
 } from './signals.ts';
 import { computeEntryStates } from './bob/state-engine.ts';
 import { computeDynamics } from './bob/dynamics.ts';
+import { formatCompactDelta } from './session-delta.ts';
 
 export async function runReflection(): Promise<void> {
   // --- DETERMINE COMPRESSION WINDOW ---
@@ -145,6 +147,12 @@ export async function runReflection(): Promise<void> {
     ? formatReflectLifeContext(recentLifeContext)
     : '';
 
+  // Session delta trends (same-day calibration → journal shifts)
+  const recentDeltas = getRecentSessionDeltas(30);
+  const deltaTrendSection = recentDeltas.length > 0
+    ? formatCompactDelta(recentDeltas)
+    : '';
+
   const feedbackSection = recentFeedback.length > 0
     ? `Question feedback ("did it land?" responses):\n${recentFeedback.map(f => `[${f.date}] ${f.landed ? 'YES' : 'NO'}`).join('\n')}`
     : 'No question feedback collected yet.';
@@ -247,6 +255,7 @@ ${dynamicsSection ? `\n${dynamicsSection}` : ''}
 
 ${calibrationContext}
 ${lifeContextSection ? `\n${lifeContextSection}` : ''}
+${deltaTrendSection ? `\n${deltaTrendSection}` : ''}
 
 ---
 
