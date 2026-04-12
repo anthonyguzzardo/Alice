@@ -1,56 +1,94 @@
 // ─── Witness Types ──────────────────────────────────────────────────
 
-/** Raw signals from /api/bob */
+/**
+ * Behavioral signals from /api/bob — percentile-normalized against personal history.
+ * All values [0,1] except sessionCount, feedbackCount, daysSinceLastEntry (raw).
+ *
+ * Research basis:
+ *   Production fluency  — Chenoweth & Hayes (2001), Deane (2015)
+ *   Revision character  — Faigley & Witte (1981), Baaijen et al. (2012)
+ *   Lexical diversity   — McCarthy & Jarvis (2010) MATTR
+ *   Pause threshold     — 2s standard (Leijten & Van Waes, 2013)
+ */
 export interface BobSignal {
-  // ─── Behavioral (long-term) ──────────────────
-  avgCommitment: number;
-  avgHesitation: number;
-  deletionIntensity: number;
-  pauseFrequency: number;
-  avgDuration: number;
-  largestDeletion: number;
-  avgTabAways: number;
-  avgTabAwayDuration: number;
-  avgWordCount: number;
-  avgSentenceCount: number;
-  sessionCount: number;
+  // ─── Core Behavioral (percentile-normalized) ──────────────
+  commitmentRatio: number;          // avg final/total chars
+  firstKeystrokeLatency: number;    // avg first_keystroke_ms
+  pauseRatePerMinute: number;       // 30s pauses per active minute
+  tabAwayRatePerMinute: number;     // tab-aways per active minute
+  avgDurationNorm: number;          // session duration
+  avgWordCountNorm: number;         // words per session
 
-  // ─── Temporal ────────────────────────────────
+  // ─── Production Fluency (Chenoweth & Hayes P-bursts) ──────
+  charsPerMinuteActive: number;     // typing speed during active time
+  avgPBurstLength: number;          // mean P-burst length in chars
+  pBurstCountNorm: number;          // bursts per session
+
+  // ─── Revision Character (Faigley & Witte taxonomy) ────────
+  correctionRate: number;           // small deletions per 100 chars typed
+  revisionRate: number;             // large deletions per 100 chars typed
+  revisionWeight: number;           // large_deletion_chars / total_chars_typed
+  revisionTiming: number;           // 0=early, 1=late (second_half / total)
+  largestRevisionNorm: number;      // largest single deletion
+
+  // ─── Temporal ─────────────────────────────────────────────
   avgHourOfDay: number;
   daySpread: number;
   consistency: number;
   daysSinceLastEntry: number;
 
-  // ─── Patterns ────────────────────────────────
+  // ─── Linguistic Shape ─────────────────────────────────────
+  lexicalDiversity: number;         // MATTR (replaces TTR)
+  avgSentenceLength: number;
+  sentenceLengthVariance: number;
+  questionDensity: number;
+  firstPersonDensity: number;
+  hedgingDensity: number;
+
+  // ─── Momentum (recent 7 vs all-time, 0.5 = stable) ───────
+  commitmentDelta: number;
+  charsPerMinuteDelta: number;
+  revisionWeightDelta: number;
+  pBurstLengthDelta: number;
+
+  // ─── Stability ────────────────────────────────────────────
+  commitmentVariance: number;
+  fluencyVariance: number;          // variance in chars_per_minute
+  sessionVolatility: number;
+
+  // ─── Patterns ─────────────────────────────────────────────
   thematicDensity: number;
   landedRatio: number;
   feedbackCount: number;
+  sessionCount: number;
 
-  // ─── Recency (recent vs. long-term) ──────────
-  recentCommitment: number;
-  commitmentDelta: number;       // 0.5 = stable, >0.5 = increasing, <0.5 = decreasing
-  recentHesitation: number;
-  hesitationDelta: number;
-  recentDuration: number;
-  durationDelta: number;
+  // ─── Relational ───────────────────────────────────────────
+  latestSessionDeviation: number;
+  outlierFrequency: number;
 
-  // ─── Variance (stability vs. volatility) ─────
-  commitmentVariance: number;    // 0 = perfectly consistent, 1 = wildly volatile
-  hesitationVariance: number;
-  durationVariance: number;
-  sessionVolatility: number;     // how different consecutive sessions are from each other
+  // ─── Raw context for interpreter (not for shader pipeline) ─
+  _raw: BobSignalRaw;
+}
 
-  // ─── Shape (texture of language, not content) ─
-  vocabularyRichness: number;    // type-token ratio — diverse vs. repetitive word choice
-  avgSentenceLength: number;     // normalized — complex vs. terse structure
-  sentenceLengthVariance: number;// uniform vs. chaotic sentence structure
-  questionDensity: number;       // how often responses contain questions
-  firstPersonDensity: number;    // I/me/my frequency — self-focus
-  hedgingDensity: number;        // maybe/perhaps/guess — qualification frequency
-
-  // ─── Relational (how unusual recent behavior is)
-  latestSessionDeviation: number;// composite z-score of most recent session
-  outlierFrequency: number;      // what % of all sessions are statistical outliers
+/** Un-normalized values the interpreter uses for context-rich formatting */
+export interface BobSignalRaw {
+  avgFirstKeystrokeMs: number;
+  avgDurationMs: number;
+  avgWordCount: number;
+  avgCharsPerMinute: number;
+  avgCommitmentRatio: number;
+  avgPBurstLengthChars: number;
+  latestCommitmentRatio: number | null;
+  latestLargeDeletionCount: number | null;
+  latestLargeDeletionChars: number | null;
+  latestSmallDeletionCount: number | null;
+  latestCharsPerMinute: number | null;
+  latestPBurstLength: number | null;
+  latestRevisionTiming: number | null;
+  baselineCommitmentMean: number;
+  baselineCommitmentStd: number;
+  baselineCharsPerMinuteMean: number;
+  baselineCharsPerMinuteStd: number;
 }
 
 /** The trait vector that defines the witness-form.

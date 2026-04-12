@@ -205,6 +205,15 @@ db.exec(`
     ,created_by            TEXT    NOT NULL DEFAULT 'user'
   );
 
+  -- --------------------------------------------------------------------------
+  -- tb_session_summaries
+  -- --------------------------------------------------------------------------
+  -- PURPOSE: Derived behavioral metrics per daily session
+  -- USE CASE: Feed Bob signal computation and trajectory engine
+  -- MUTABILITY: Mutable (append-only, one row per question)
+  -- LOGICAL FK: question_id → tb_questions.question_id
+  -- FOOTER: Minimal (append-only)
+  -- --------------------------------------------------------------------------
   CREATE TABLE IF NOT EXISTS tb_session_summaries (
      session_summary_id         INTEGER PRIMARY KEY AUTOINCREMENT
     ,question_id                INTEGER NOT NULL UNIQUE
@@ -222,6 +231,17 @@ db.exec(`
     ,total_tab_away_ms          INTEGER          -- cumulative time away
     ,word_count                 INTEGER          -- words in final submission
     ,sentence_count             INTEGER          -- sentences in final submission
+    -- ENRICHED: deletion decomposition (Faigley & Witte taxonomy)
+    ,small_deletion_count       INTEGER          -- deletions <10 chars (corrections)
+    ,large_deletion_count       INTEGER          -- deletions >=10 chars (revisions)
+    ,large_deletion_chars       INTEGER          -- total chars in large deletions
+    ,first_half_deletion_chars  INTEGER          -- deletion chars in first half of session
+    ,second_half_deletion_chars INTEGER          -- deletion chars in second half of session
+    -- ENRICHED: production fluency (Chenoweth & Hayes P-bursts)
+    ,active_typing_ms           INTEGER          -- duration minus pauses minus tab-aways
+    ,chars_per_minute           REAL             -- total_chars_typed / active_minutes
+    ,p_burst_count              INTEGER          -- 2s-bounded production bursts
+    ,avg_p_burst_length         REAL             -- mean burst length in chars
     -- CONTEXT
     ,device_type                TEXT             -- 'mobile' or 'desktop'
     ,user_agent                 TEXT             -- raw user agent string
@@ -507,6 +527,18 @@ export interface SessionSummaryInput {
   totalTabAwayMs: number;
   wordCount: number;
   sentenceCount: number;
+  // Enriched: deletion decomposition
+  smallDeletionCount: number | null;
+  largeDeletionCount: number | null;
+  largeDeletionChars: number | null;
+  firstHalfDeletionChars: number | null;
+  secondHalfDeletionChars: number | null;
+  // Enriched: production fluency
+  activeTypingMs: number | null;
+  charsPerMinute: number | null;
+  pBurstCount: number | null;
+  avgPBurstLength: number | null;
+  // Context
   deviceType: string | null;
   userAgent: string | null;
   hourOfDay: number | null;
@@ -521,30 +553,46 @@ export function saveSessionSummary(s: SessionSummaryInput): void {
        pause_count, total_pause_ms, deletion_count, largest_deletion,
        total_chars_deleted, tab_away_count, total_tab_away_ms,
        word_count, sentence_count,
+       small_deletion_count, large_deletion_count, large_deletion_chars,
+       first_half_deletion_chars, second_half_deletion_chars,
+       active_typing_ms, chars_per_minute, p_burst_count, avg_p_burst_length,
        device_type, user_agent, hour_of_day, day_of_week
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     s.questionId, s.firstKeystrokeMs, s.totalDurationMs,
     s.totalCharsTyped, s.finalCharCount, s.commitmentRatio,
     s.pauseCount, s.totalPauseMs, s.deletionCount, s.largestDeletion,
     s.totalCharsDeleted, s.tabAwayCount, s.totalTabAwayMs,
     s.wordCount, s.sentenceCount,
+    s.smallDeletionCount, s.largeDeletionCount, s.largeDeletionChars,
+    s.firstHalfDeletionChars, s.secondHalfDeletionChars,
+    s.activeTypingMs, s.charsPerMinute, s.pBurstCount, s.avgPBurstLength,
     s.deviceType, s.userAgent, s.hourOfDay, s.dayOfWeek
   );
 }
 
+const SESSION_SUMMARY_COLS = `
+  question_id as questionId, first_keystroke_ms as firstKeystrokeMs,
+  total_duration_ms as totalDurationMs, total_chars_typed as totalCharsTyped,
+  final_char_count as finalCharCount, commitment_ratio as commitmentRatio,
+  pause_count as pauseCount, total_pause_ms as totalPauseMs,
+  deletion_count as deletionCount, largest_deletion as largestDeletion,
+  total_chars_deleted as totalCharsDeleted, tab_away_count as tabAwayCount,
+  total_tab_away_ms as totalTabAwayMs, word_count as wordCount,
+  sentence_count as sentenceCount,
+  small_deletion_count as smallDeletionCount, large_deletion_count as largeDeletionCount,
+  large_deletion_chars as largeDeletionChars,
+  first_half_deletion_chars as firstHalfDeletionChars,
+  second_half_deletion_chars as secondHalfDeletionChars,
+  active_typing_ms as activeTypingMs, chars_per_minute as charsPerMinute,
+  p_burst_count as pBurstCount, avg_p_burst_length as avgPBurstLength,
+  device_type as deviceType, user_agent as userAgent,
+  hour_of_day as hourOfDay, day_of_week as dayOfWeek
+`;
+
 export function getSessionSummary(questionId: number): SessionSummaryInput | null {
   return db.prepare(
-    `SELECT question_id as questionId, first_keystroke_ms as firstKeystrokeMs,
-            total_duration_ms as totalDurationMs, total_chars_typed as totalCharsTyped,
-            final_char_count as finalCharCount, commitment_ratio as commitmentRatio,
-            pause_count as pauseCount, total_pause_ms as totalPauseMs,
-            deletion_count as deletionCount, largest_deletion as largestDeletion,
-            total_chars_deleted as totalCharsDeleted, tab_away_count as tabAwayCount,
-            total_tab_away_ms as totalTabAwayMs, word_count as wordCount,
-            sentence_count as sentenceCount, device_type as deviceType,
-            user_agent as userAgent, hour_of_day as hourOfDay, day_of_week as dayOfWeek
-     FROM tb_session_summaries WHERE question_id = ?`
+    `SELECT ${SESSION_SUMMARY_COLS} FROM tb_session_summaries WHERE question_id = ?`
   ).get(questionId) as SessionSummaryInput | null;
 }
 
@@ -558,7 +606,15 @@ export function getAllSessionSummaries(): Array<SessionSummaryInput & { date: st
            s.deletion_count as deletionCount, s.largest_deletion as largestDeletion,
            s.total_chars_deleted as totalCharsDeleted, s.tab_away_count as tabAwayCount,
            s.total_tab_away_ms as totalTabAwayMs, s.word_count as wordCount,
-           s.sentence_count as sentenceCount, s.device_type as deviceType,
+           s.sentence_count as sentenceCount,
+           s.small_deletion_count as smallDeletionCount,
+           s.large_deletion_count as largeDeletionCount,
+           s.large_deletion_chars as largeDeletionChars,
+           s.first_half_deletion_chars as firstHalfDeletionChars,
+           s.second_half_deletion_chars as secondHalfDeletionChars,
+           s.active_typing_ms as activeTypingMs, s.chars_per_minute as charsPerMinute,
+           s.p_burst_count as pBurstCount, s.avg_p_burst_length as avgPBurstLength,
+           s.device_type as deviceType,
            s.user_agent as userAgent, s.hour_of_day as hourOfDay, s.day_of_week as dayOfWeek
     FROM tb_session_summaries s
     JOIN tb_questions q ON s.question_id = q.question_id
@@ -847,7 +903,15 @@ export function getSessionSummariesForQuestions(questionIds: number[]): Array<Se
            s.deletion_count as deletionCount, s.largest_deletion as largestDeletion,
            s.total_chars_deleted as totalCharsDeleted, s.tab_away_count as tabAwayCount,
            s.total_tab_away_ms as totalTabAwayMs, s.word_count as wordCount,
-           s.sentence_count as sentenceCount, s.device_type as deviceType,
+           s.sentence_count as sentenceCount,
+           s.small_deletion_count as smallDeletionCount,
+           s.large_deletion_count as largeDeletionCount,
+           s.large_deletion_chars as largeDeletionChars,
+           s.first_half_deletion_chars as firstHalfDeletionChars,
+           s.second_half_deletion_chars as secondHalfDeletionChars,
+           s.active_typing_ms as activeTypingMs, s.chars_per_minute as charsPerMinute,
+           s.p_burst_count as pBurstCount, s.avg_p_burst_length as avgPBurstLength,
+           s.device_type as deviceType,
            s.user_agent as userAgent, s.hour_of_day as hourOfDay, s.day_of_week as dayOfWeek
     FROM tb_session_summaries s
     JOIN tb_questions q ON s.question_id = q.question_id

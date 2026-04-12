@@ -51,7 +51,7 @@ export const GET: APIRoute = async ({ url }) => {
       thresholdCharacter = 'slow';
     } else if (traits.symmetry > 0.5 || traits.multiplicity > 0.4) {
       thresholdCharacter = 'misaligned';
-    } else if (sig.avgCommitment > 0.85 && sig.avgHesitation < 0.2) {
+    } else if (sig.commitmentRatio > 0.85 && sig.firstKeystrokeLatency < 0.2) {
       thresholdCharacter = 'abrupt';
     }
 

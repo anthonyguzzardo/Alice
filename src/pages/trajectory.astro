@@ -168,14 +168,14 @@
   <!-- Detail view: 4 panels -->
   <div class="detail-view" id="detail-view">
     <div class="panel">
-      <span class="panel-label">engagement</span>
-      <span class="panel-value" id="val-engagement">—</span>
-      <canvas id="canvas-engagement"></canvas>
+      <span class="panel-label">fluency</span>
+      <span class="panel-value" id="val-fluency">—</span>
+      <canvas id="canvas-fluency"></canvas>
     </div>
     <div class="panel">
-      <span class="panel-label">processing</span>
-      <span class="panel-value" id="val-processing">—</span>
-      <canvas id="canvas-processing"></canvas>
+      <span class="panel-label">deliberation</span>
+      <span class="panel-value" id="val-deliberation">—</span>
+      <canvas id="canvas-deliberation"></canvas>
     </div>
     <div class="panel">
       <span class="panel-label">revision</span>
@@ -183,9 +183,9 @@
       <canvas id="canvas-revision"></canvas>
     </div>
     <div class="panel">
-      <span class="panel-label">structure</span>
-      <span class="panel-value" id="val-structure">—</span>
-      <canvas id="canvas-structure"></canvas>
+      <span class="panel-label">expression</span>
+      <span class="panel-value" id="val-expression">—</span>
+      <canvas id="canvas-expression"></canvas>
     </div>
   </div>
 
@@ -216,12 +216,12 @@
     let mode = 'detail'; // 'detail' | 'trace'
     let trajectoryData = null;
 
-    const DIMS = ['engagement', 'processing', 'revision', 'structure'];
+    const DIMS = ['fluency', 'deliberation', 'revision', 'expression'];
     const COLORS = {
-      engagement: { line: '#3a6ea5', glow: 'rgba(58, 110, 165, 0.15)', dot: '#5a9ed6' },
-      processing: { line: '#8a5a44', glow: 'rgba(138, 90, 68, 0.15)', dot: '#c4836a' },
-      revision:   { line: '#5a7a5a', glow: 'rgba(90, 122, 90, 0.15)', dot: '#7aaa7a' },
-      structure:  { line: '#7a5a7a', glow: 'rgba(122, 90, 122, 0.15)', dot: '#aa7aaa' },
+      fluency:      { line: '#3a6ea5', glow: 'rgba(58, 110, 165, 0.15)', dot: '#5a9ed6' },
+      deliberation: { line: '#8a5a44', glow: 'rgba(138, 90, 68, 0.15)', dot: '#c4836a' },
+      revision:     { line: '#5a7a5a', glow: 'rgba(90, 122, 90, 0.15)', dot: '#7aaa7a' },
+      expression:   { line: '#7a5a7a', glow: 'rgba(122, 90, 122, 0.15)', dot: '#aa7aaa' },
     };
 
     // ─── Toggle ───────────────────────────────────────────────────
@@ -382,7 +382,7 @@
       const points = data.points;
 
       // Extract 4D vectors
-      const vectors = points.map(p => [p.engagement, p.processing, p.revision, p.structure]);
+      const vectors = points.map(p => [p.fluency, p.deliberation, p.revision, p.expression]);
 
       // PCA → 2D
       const projected = pca2D(vectors);

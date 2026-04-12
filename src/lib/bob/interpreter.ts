@@ -70,59 +70,70 @@ INTERACTION WITH SPACE:
 
 Guidelines — these are intuitions, not rules:
 
-- High commitment + low hesitation → more density, internalLight, lower edgeCharacter. They gave something real.
-- Low commitment + high deletion → higher edgeCharacter, surface roughness, fragility, lower density. They withheld.
-- High thematic density (circling same themes) → higher rotation, rhythm, magnetism. Obsessive energy.
-- High landed ratio → lower symmetry-breaking, smoother surface, higher flexibility. Things connecting.
+CORE BEHAVIORAL:
+- High commitment + low first-keystroke latency → more density, internalLight, lower edgeCharacter. They gave something real.
+- Low commitment + high revision weight → higher edgeCharacter, surface roughness, fragility, lower density. They withheld.
+- High first-keystroke latency + high commitment (slow but deliberate) → high density, low flow, high temperature. Molten.
+- High pause rate per minute → could mean depth (high internalLight) or avoidance (high hollowness). You decide.
+- Long duration + high word count → they spent time. Reward with density, creationCost.
+- Frequent tab-aways → distraction or avoidance. Consider edgeCharacter, symmetry-breaking.
+- Low consistency (irregular spacing) → unstable, reactive. High consistency → rhythm, density.
+- Days since last entry → long absence dims the form. Lower internalLight, flow, rhythm. Higher surface roughness.
+- Late-night entries → temperature shifts. You decide what it means.
+- High day spread → commitment over time. CreationCost, storedEnergy.
 - Few entries → keep most values low/modest. The form hasn't earned complexity yet.
 - Many entries + high commitment → earn everything. Dense, glowing, complex, alive.
-- High commitment + many entries over time → higher storedEnergy. Deep accumulated charge.
-- High hesitation + high commitment (slow but deliberate) → high density, low flow, high temperature. Molten.
-- High deletion intensity → high fragility, high reactivity. The form is unstable.
-- High pause frequency → could mean depth (high internalLight) or avoidance (high hollowness). You decide.
-- Many entries over time → higher creationCost. This thing took time to build.
-- Long duration + high word count → they spent time. Reward that with density, creationCost.
-- Large deletions → they wrote something and killed it. That's fragility, reactivity, possibly hollowness.
-- Frequent tab-aways → distraction or avoidance. Consider edgeCharacter, symmetry-breaking.
-- Long tab-away duration → they left for a while. Atmosphere, hollowness — absence has shape.
-- Low consistency (irregular spacing) → the form is unstable, reactive. High consistency → rhythm, density.
-- Days since last entry → long absence dims the form. Decay. Lower internalLight, flow, rhythm. Higher surface roughness.
-- Late-night entries (high hour of day) → temperature shifts, different energy. You decide what it means.
-- High day spread (showing up on many different days) → commitment over time. CreationCost, storedEnergy.
+
+PRODUCTION FLUENCY (P-bursts — text between 2s pauses):
+- High P-burst length → sustained flow, continuous production → flow, density, smooth surface. They write in long unbroken streams.
+- Low P-burst length → fragmented production, frequent stops → choppy form, higher topology, scaleVariation. They write in short stutters.
+- High chars per minute → energetic, fast → temperature rising, flow, rhythm
+- Low chars per minute → careful, measured → density, low flow, deliberate
+
+REVISION CHARACTER (corrections vs. revisions are different signals):
+- High correction rate (small deletions <10 chars) → typo fixes, normal editing. Minimal impact on form.
+- High revision rate (large deletions >=10 chars) → substantive rethinking → fragility, reactivity, hollowness. They wrote something real and killed it.
+- Revision timing: early revisions (low value) → false starts, couldn't begin → hollowness, edgeCharacter. Late revisions (high value) → they wrote the whole thing then gutted it → fragility, storedEnergy, temperature.
+- High revision weight → they deleted a large proportion of what they typed → the form should show this violence. Fragility, reactivity.
 
 RECENCY AND MOMENTUM:
-- commitmentDelta > 0.5 means commitment is increasing recently → the form is growing, earning substance, densifying
-- commitmentDelta < 0.5 means commitment is dropping → thinning, losing density, edges dissolving
-- hesitationDelta > 0.5 means they're hesitating more lately → cautious, hollowing, cooling
-- hesitationDelta < 0.5 means they're diving in faster → confidence, density, temperature rising
-- durationDelta > 0.5 means they're spending more time → the form is earning weight
-- durationDelta < 0.5 means sessions are getting shorter → the form is losing substance
+- commitmentDelta > 0.5 → commitment increasing → form growing, densifying
+- commitmentDelta < 0.5 → commitment dropping → thinning, edges dissolving
+- charsPerMinuteDelta > 0.5 → writing faster → temperature rising, flow increasing
+- charsPerMinuteDelta < 0.5 → slowing down → cooling, density increasing (deliberate)
+- revisionWeightDelta > 0.5 → revising more → instability, reactivity
+- pBurstLengthDelta > 0.5 → longer sustained flows → smoothing, density
+- pBurstLengthDelta < 0.5 → flows getting shorter → fragmenting, topology increasing
 - Large deltas in any direction → the form is in transition. Reactivity, temperature, flow should respond.
-- When recent signals diverge sharply from long-term → the form should look different from its "settled" state. Tension between what it was and what it's becoming.
 
 VARIANCE AND VOLATILITY:
 - High commitmentVariance → swings between giving everything and withholding → multiplicity, symmetry-breaking, reactivity
 - Low commitmentVariance → consistent presence → density, smooth surface, stability
-- High sessionVolatility → each session is drastically different from the last → unstable, reactive, high flow
+- High fluencyVariance → wildly different typing speeds → unstable, reactive
+- High sessionVolatility → each session drastically different → unstable, high flow
 - Low sessionVolatility → steady, predictable → rhythm, density, low reactivity
 
-LANGUAGE SHAPE (these describe HOW they write, not WHAT they write):
-- High vocabularyRichness → diverse expression, wide range → colorDepth, iridescence, complexity
-- Low vocabularyRichness → circling, repetitive, gravitational → rotation, magnetism, thematic gravity
-- High questionDensity → self-questioning in responses → hollowness, internalLight, searching
+LANGUAGE SHAPE (HOW they write, not WHAT):
+- High lexical diversity (MATTR) → diverse expression → colorDepth, iridescence, complexity
+- Low lexical diversity → circling, repetitive → rotation, magnetism, thematic gravity
+- High questionDensity → self-questioning → hollowness, internalLight, searching
 - Low questionDensity → declarative, certain → density, sharp edges, faceting
-- High firstPersonDensity → intensely self-focused → magnetism, density concentrated at center
-- Low firstPersonDensity → externally oriented or abstract → edgeCharacter, atmosphere
-- High hedgingDensity → qualifying everything, uncertain → edgeCharacter dissolving, flexibility, low density
-- Low hedgingDensity → direct, unqualified, committed → hard surface, faceting, solid density
+- High firstPersonDensity → intensely self-focused → magnetism, density at center
+- Low firstPersonDensity → external or abstract → edgeCharacter, atmosphere
+- High hedgingDensity → qualifying everything → edgeCharacter dissolving, flexibility, low density
+- Low hedgingDensity → direct, committed → hard surface, faceting, solid density
 - High sentenceLengthVariance → chaotic structure → symmetry-breaking, scaleVariation
-- Low sentenceLengthVariance → uniform, controlled → symmetry, consistency
+- Low sentenceLengthVariance → controlled → symmetry, consistency
 
-RELATIONAL (how unusual they are relative to themselves):
-- High latestSessionDeviation → the most recent session was very unusual for them → reactivity, temperature shift, the form should show disturbance
-- Low latestSessionDeviation → they're in their normal range → stability
-- High outlierFrequency → they are fundamentally unpredictable → symmetry-breaking, multiplicity, atmosphere
-- Low outlierFrequency → they are stable, consistent → clean edges, uniform form
+PATTERNS:
+- High thematic density (circling same themes) → rotation, rhythm, magnetism. Obsessive energy.
+- High landed ratio → smoother surface, higher flexibility. Things connecting.
+
+RELATIONAL:
+- High latestSessionDeviation → most recent session was unusual for them → reactivity, temperature shift, disturbance
+- Low latestSessionDeviation → normal range → stability
+- High outlierFrequency → fundamentally unpredictable → symmetry-breaking, multiplicity, atmosphere
+- Low outlierFrequency → stable, consistent → clean edges, uniform form
 
 CRITICAL: Do NOT make everything moderate. Be decisive. Some traits should be near 0, some near 1. A form with all values at 0.4-0.6 has no character. Strong opinions produce strong forms.
 
@@ -150,54 +161,66 @@ async function interpretTraitsInner(sig: BobSignal, entryCount: number): Promise
   try {
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY2 });
 
-    const userMessage = `=== BEHAVIORAL (long-term averages) ===
-- Commitment ratio: ${sig.avgCommitment.toFixed(3)} (how much typed text was kept vs deleted)
-- Hesitation: ${sig.avgHesitation.toFixed(3)} (delay before first keystroke, normalized)
-- Deletion intensity: ${sig.deletionIntensity.toFixed(3)} (proportion of text deleted)
-- Pause frequency: ${sig.pauseFrequency.toFixed(3)} (how often they stop mid-thought)
-- Average duration: ${sig.avgDuration.toFixed(3)} (time spent per session, normalized to 10min)
-- Largest deletion: ${sig.largestDeletion.toFixed(3)} (biggest single erasure, normalized)
-- Tab-away frequency: ${sig.avgTabAways.toFixed(3)} (how often they leave and come back)
-- Tab-away duration: ${sig.avgTabAwayDuration.toFixed(3)} (how long they stay away)
-- Average word count: ${sig.avgWordCount.toFixed(3)} (density of output, normalized)
-- Average sentence count: ${sig.avgSentenceCount.toFixed(3)} (structural complexity)
+    const r = sig._raw;
+    const zCommitment = r.baselineCommitmentStd > 0.001
+      ? ((r.latestCommitmentRatio ?? r.avgCommitmentRatio) - r.baselineCommitmentMean) / r.baselineCommitmentStd : 0;
+    const zCPM = r.baselineCharsPerMinuteStd > 0.001
+      ? ((r.latestCharsPerMinute ?? r.avgCharsPerMinute) - r.baselineCharsPerMinuteMean) / r.baselineCharsPerMinuteStd : 0;
+
+    const userMessage = `=== CORE BEHAVIORAL ===
+- Commitment ratio: ${sig.commitmentRatio.toFixed(3)} percentile (avg ${(r.avgCommitmentRatio * 100).toFixed(0)}% of typed text kept)
+- First-keystroke latency: ${sig.firstKeystrokeLatency.toFixed(3)} percentile (avg ${(r.avgFirstKeystrokeMs / 1000).toFixed(1)}s before first keystroke)
+- Pause rate: ${sig.pauseRatePerMinute.toFixed(3)} percentile (30s+ pauses per active minute)
+- Tab-away rate: ${sig.tabAwayRatePerMinute.toFixed(3)} percentile (tab switches per active minute)
+- Duration: ${sig.avgDurationNorm.toFixed(3)} percentile (avg ${(r.avgDurationMs / 60000).toFixed(1)} minutes per session)
+- Word count: ${sig.avgWordCountNorm.toFixed(3)} percentile (avg ${r.avgWordCount.toFixed(0)} words per session)
 - Total entries: ${sig.sessionCount}
 
+=== PRODUCTION FLUENCY (P-bursts: text between 2s pauses) ===
+- Typing speed: ${sig.charsPerMinuteActive.toFixed(3)} percentile (avg ${r.avgCharsPerMinute.toFixed(0)} chars/min active)${r.latestCharsPerMinute != null ? ` — latest: ${r.latestCharsPerMinute.toFixed(0)} chars/min (z: ${zCPM > 0 ? '+' : ''}${zCPM.toFixed(1)})` : ''}
+- P-burst length: ${sig.avgPBurstLength.toFixed(3)} percentile${r.avgPBurstLengthChars > 0 ? ` (avg ${r.avgPBurstLengthChars.toFixed(0)} chars per burst)` : ' (no burst data yet)'}${r.latestPBurstLength != null ? ` — latest: ${r.latestPBurstLength.toFixed(0)} chars/burst` : ''}
+- Burst count: ${sig.pBurstCountNorm.toFixed(3)} percentile
+
+=== REVISION CHARACTER ===
+- Corrections: ${sig.correctionRate.toFixed(3)} (small deletions <10 chars per 100 typed — typo fixes)${r.latestSmallDeletionCount != null ? ` — latest session: ${r.latestSmallDeletionCount} corrections` : ''}
+- Revisions: ${sig.revisionRate.toFixed(3)} (large deletions >=10 chars per 100 typed — substantive rewrites)${r.latestLargeDeletionCount != null ? ` — latest session: ${r.latestLargeDeletionCount} revisions` : ''}
+- Revision weight: ${sig.revisionWeight.toFixed(3)} (proportion of all typed chars lost to large deletions)${r.latestLargeDeletionChars != null ? ` — latest: ${r.latestLargeDeletionChars} chars removed` : ''}
+- Revision timing: ${sig.revisionTiming.toFixed(3)} (0=revisions happened early/false starts, 1=revisions happened late/gutted after drafting)
+- Largest single revision: ${sig.largestRevisionNorm.toFixed(3)} percentile
+- Latest commitment: ${r.latestCommitmentRatio != null ? `${(r.latestCommitmentRatio * 100).toFixed(0)}% kept` : 'unknown'} (baseline: ${(r.baselineCommitmentMean * 100).toFixed(0)}%, z: ${zCommitment > 0 ? '+' : ''}${zCommitment.toFixed(1)})
+
 === TEMPORAL ===
-- Average hour of day: ${sig.avgHourOfDay.toFixed(3)} (when they show up, 0=midnight, 0.5=noon)
+- Average hour of day: ${sig.avgHourOfDay.toFixed(3)} (0=midnight, 0.5=noon)
 - Day spread: ${sig.daySpread.toFixed(3)} (how many different days of the week)
 - Consistency: ${sig.consistency.toFixed(3)} (regularity of spacing between entries)
 - Days since last entry: ${sig.daysSinceLastEntry}
 
-=== PATTERNS ===
-- Thematic density: ${sig.thematicDensity.toFixed(3)} (higher = more repetitive language)
-- Landed ratio: ${sig.landedRatio.toFixed(3)} (how often AI questions resonated)
-- Feedback count: ${sig.feedbackCount}
+=== MOMENTUM (last 7 sessions vs. all-time, 0.5 = stable) ===
+- Commitment delta: ${sig.commitmentDelta.toFixed(3)}${sig.commitmentDelta > 0.55 ? ' — increasing' : sig.commitmentDelta < 0.45 ? ' — decreasing' : ''}
+- Typing speed delta: ${sig.charsPerMinuteDelta.toFixed(3)}${sig.charsPerMinuteDelta > 0.55 ? ' — speeding up' : sig.charsPerMinuteDelta < 0.45 ? ' — slowing down' : ''}
+- Revision weight delta: ${sig.revisionWeightDelta.toFixed(3)}${sig.revisionWeightDelta > 0.55 ? ' — revising more' : sig.revisionWeightDelta < 0.45 ? ' — revising less' : ''}
+- P-burst length delta: ${sig.pBurstLengthDelta.toFixed(3)}${sig.pBurstLengthDelta > 0.55 ? ' — longer sustained flows' : sig.pBurstLengthDelta < 0.45 ? ' — flows getting shorter' : ''}
 
-=== RECENCY (last 7 sessions vs. long-term) ===
-- Recent commitment: ${sig.recentCommitment.toFixed(3)} (vs long-term ${sig.avgCommitment.toFixed(3)})
-- Commitment delta: ${sig.commitmentDelta.toFixed(3)} (0.5=stable, >0.5=increasing, <0.5=decreasing)
-- Recent hesitation: ${sig.recentHesitation.toFixed(3)} (vs long-term ${sig.avgHesitation.toFixed(3)})
-- Hesitation delta: ${sig.hesitationDelta.toFixed(3)}
-- Recent duration: ${sig.recentDuration.toFixed(3)} (vs long-term ${sig.avgDuration.toFixed(3)})
-- Duration delta: ${sig.durationDelta.toFixed(3)}
-
-=== VARIANCE ===
+=== STABILITY ===
 - Commitment variance: ${sig.commitmentVariance.toFixed(3)} (0=consistent, 1=volatile)
-- Hesitation variance: ${sig.hesitationVariance.toFixed(3)}
-- Duration variance: ${sig.durationVariance.toFixed(3)}
+- Fluency variance: ${sig.fluencyVariance.toFixed(3)} (typing speed consistency)
 - Session volatility: ${sig.sessionVolatility.toFixed(3)} (how different consecutive sessions are)
 
-=== LANGUAGE SHAPE (structure, not content) ===
-- Vocabulary richness: ${sig.vocabularyRichness.toFixed(3)} (type-token ratio, higher=more diverse words)
-- Average sentence length: ${sig.avgSentenceLength.toFixed(3)} (normalized, higher=longer sentences)
-- Sentence length variance: ${sig.sentenceLengthVariance.toFixed(3)} (uniform vs chaotic structure)
-- Question density: ${sig.questionDensity.toFixed(3)} (how often responses contain questions)
+=== LANGUAGE SHAPE (structure, not content — MATTR for lexical diversity) ===
+- Lexical diversity: ${sig.lexicalDiversity.toFixed(3)} (MATTR — higher=more diverse vocabulary, length-corrected)
+- Average sentence length: ${sig.avgSentenceLength.toFixed(3)} (normalized)
+- Sentence length variance: ${sig.sentenceLengthVariance.toFixed(3)} (uniform vs chaotic)
+- Question density: ${sig.questionDensity.toFixed(3)} (questions per sentence)
 - First-person density: ${sig.firstPersonDensity.toFixed(3)} (I/me/my frequency)
 - Hedging density: ${sig.hedgingDensity.toFixed(3)} (maybe/perhaps/guess frequency)
 
+=== PATTERNS ===
+- Thematic density: ${sig.thematicDensity.toFixed(3)} (higher = more repetitive language across entries)
+- Landed ratio: ${sig.landedRatio.toFixed(3)} (how often AI questions resonated)
+- Feedback count: ${sig.feedbackCount}
+
 === RELATIONAL ===
-- Latest session deviation: ${sig.latestSessionDeviation.toFixed(3)} (how unusual the most recent session was)
+- Latest session deviation: ${sig.latestSessionDeviation.toFixed(3)} (how unusual the most recent session was vs. personal baseline)
 - Outlier frequency: ${sig.outlierFrequency.toFixed(3)} (% of all sessions that are statistical outliers)`;
 
     const response = await client.messages.create({
