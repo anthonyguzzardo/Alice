@@ -263,10 +263,10 @@ function parseTraits(text: string): WitnessTraits | null {
 import { computeEntryStates } from './state-engine.ts';
 import { computeDynamics } from './dynamics.ts';
 import { computeEmotionAnalysis } from './emotion-profile.ts';
-import type { BobSignal } from './types.js';
+import type { AliceNegativeSignal } from './types.js';
 
 /** Legacy bridge for scripts/reinterpret.ts — runs full pipeline unconditionally */
-export async function interpretTraits(_sig: BobSignal, entryCount: number): Promise<WitnessTraits> {
+export async function interpretTraits(_sig: AliceNegativeSignal, entryCount: number): Promise<WitnessTraits> {
   const states = computeEntryStates();
   if (states.length < 3) return { ...DEFAULT_TRAITS };
 

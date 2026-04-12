@@ -1,3 +1,5 @@
+> **Note:** This document predates the renames: Marrow → Alice, Bob → Alice Negative, Einstein → Bob (2026-04-12).
+
 # V6 Changelog — Behavioral Dynamics Engine + Linguistic Density Pipeline
 
 ## What Was Wrong

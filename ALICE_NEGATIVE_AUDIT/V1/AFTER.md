@@ -1,3 +1,5 @@
+> **Note:** This document predates the renames: Marrow → Alice, Bob → Alice Negative, Einstein → Bob (2026-04-12).
+
 # Bob
 
 A ritualized confrontation engine. Not a visualization. Not a simulation. Not a cellular automaton. A single evolving presence in a threshold-space that metabolizes your behavioral data and becomes something singular.
@@ -158,9 +160,9 @@ Browser (/bob):
 
 ### Data Integration
 
-Bob only consumes signals that come from you — behavioral and temporal data. No system metadata.
+Bob consumes 36 signals organized into 7 categories. All signals come from you — behavioral, temporal, and structural. No system metadata, no AI observations, no response content (only the shape of your language).
 
-**Behavioral (how you write):**
+**Behavioral (long-term averages of how you write):**
 
 | Signal | What It Measures |
 |---|---|
@@ -185,7 +187,7 @@ Bob only consumes signals that come from you — behavioral and temporal data. N
 | `consistency` | Regularity of spacing between entries |
 | `daysSinceLastEntry` | How long since you last showed up |
 
-**Patterns (what's emerging from your words):**
+**Patterns:**
 
 | Signal | What It Measures |
 |---|---|
@@ -193,7 +195,65 @@ Bob only consumes signals that come from you — behavioral and temporal data. N
 | `landedRatio` | How often AI questions resonated (your feedback) |
 | `feedbackCount` | Total feedback you've given |
 
-The AI interprets these signals into traits. The mapping is not hardcoded — it's a creative act by the interpreter. High commitment might produce density and internal light. Or it might produce something else entirely. The AI decides.
+**Recency (recent window vs. long-term — is the person changing?):**
+
+| Signal | What It Measures |
+|---|---|
+| `recentCommitment` | Commitment ratio over last 7 entries only |
+| `commitmentDelta` | Direction of change (0.5 = stable, >0.5 = increasing, <0.5 = decreasing) |
+| `recentHesitation` | Hesitation over last 7 entries |
+| `hesitationDelta` | Is hesitation trending up or down? |
+| `recentDuration` | Time spent per session recently |
+| `durationDelta` | Is session duration trending up or down? |
+
+These are the most important new signals. Without them, Bob's form converges and freezes as cumulative averages stabilize. With them, Bob stays alive — it can see that commitment was 0.8 for months but dropped to 0.4 this week. The delta between who you were and who you're becoming is where the real form lives.
+
+**Variance (stability vs. volatility):**
+
+| Signal | What It Measures |
+|---|---|
+| `commitmentVariance` | How much commitment swings session to session (0 = consistent, 1 = volatile) |
+| `hesitationVariance` | Consistency of hesitation patterns |
+| `durationVariance` | Consistency of time spent |
+| `sessionVolatility` | How different each session is from the previous one — composite measure |
+
+Same average, completely different forms. A person who's consistently at 0.7 commitment is solid. A person who swings between 0.3 and 0.9 is volatile. Bob can now tell the difference.
+
+**Shape (texture of language structure — not what you said, but how you said it):**
+
+| Signal | What It Measures |
+|---|---|
+| `vocabularyRichness` | Type-token ratio — how diverse is your word choice? |
+| `avgSentenceLength` | Long complex sentences vs. short direct ones |
+| `sentenceLengthVariance` | Uniform structure vs. chaotic structure |
+| `questionDensity` | How often you ask questions in your responses |
+| `firstPersonDensity` | I/me/my frequency — how self-focused is the writing? |
+| `hedgingDensity` | maybe/perhaps/guess frequency — how much do you qualify? |
+
+These read the **shape** of your language without reading the meaning. `hedgingDensity` doesn't know what you're hedging about — just that you hedge. `questionDensity` doesn't know what you're asking — just that you're asking rather than telling. The difference between someone who writes "I think maybe I should consider..." and someone who writes "I'm leaving" is visible here without knowing what either person is talking about.
+
+**Relational (how unusual you are relative to yourself):**
+
+| Signal | What It Measures |
+|---|---|
+| `latestSessionDeviation` | Composite z-score: how unusual was the most recent session compared to your own baseline? |
+| `outlierFrequency` | What percentage of all your sessions are statistical outliers? |
+
+A person with many outlier sessions has a fundamentally different form than someone who's consistent. And `latestSessionDeviation` means Bob can react to your most recent entry — if it was unusual for you, the form should show disturbance.
+
+### Why 36 Signals Matter for Trajectory Analysis
+
+The original 18 signals were all cumulative averages. After 100 entries, a single new entry barely moves them. Bob's form would converge and freeze — not because the person stabilized, but because that's what averages do.
+
+The new signals fix this:
+- **Recency signals** keep moving because they're windowed (last 7 entries only)
+- **Variance signals** capture volatility that averages destroy
+- **Shape signals** add a new data channel (language structure) that's independent of behavioral telemetry
+- **Relational signals** let the form react to individual unusual sessions
+
+This means the 26-trait vectors Bob produces over time carry genuinely more information. The trajectory through trait-space stays alive at month 6 instead of flatting at month 2. Emergent structure (via PCA or similar) has richer raw material to work with.
+
+The AI interprets all 36 signals into 26 traits. The mapping is not hardcoded — it's a creative act by the interpreter. The AI decides what these signals mean for the form. High commitment might produce density and internal light. Or it might produce something else entirely.
 
 ---
 

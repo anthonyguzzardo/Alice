@@ -9,9 +9,9 @@
  * (via the session completion pipeline).
  */
 import type { APIRoute } from 'astro';
-import type { WitnessState } from '../../lib/bob/types.ts';
-import { DEFAULT_WITNESS } from '../../lib/bob/types.ts';
-import { loadPersistedTraits } from '../../lib/bob/interpreter.ts';
+import type { WitnessState } from '../../lib/alice-negative/types.ts';
+import { DEFAULT_WITNESS } from '../../lib/alice-negative/types.ts';
+import { loadPersistedTraits } from '../../lib/alice-negative/interpreter.ts';
 import db from '../../lib/db.ts';
 
 export const GET: APIRoute = async () => {
@@ -43,7 +43,7 @@ export const GET: APIRoute = async () => {
   }
 };
 
-function computeMetadata(currentCount: number, traits: import('../../lib/bob/types.ts').WitnessTraits): WitnessState {
+function computeMetadata(currentCount: number, traits: import('../../lib/alice-negative/types.ts').WitnessTraits): WitnessState {
   const mass = Math.min(1, Math.log(1 + currentCount) / Math.log(501));
 
   const lastEntry = db.prepare(`

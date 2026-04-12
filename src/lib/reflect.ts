@@ -34,8 +34,8 @@ import {
   formatCompactSignals, formatDynamicsContext, formatEnrichedCalibration,
   formatPredictionTrackRecord,
 } from './signals.ts';
-import { computeEntryStates } from './bob/state-engine.ts';
-import { computeDynamics } from './bob/dynamics.ts';
+import { computeEntryStates } from './alice-negative/state-engine.ts';
+import { computeDynamics } from './alice-negative/dynamics.ts';
 import { formatCompactDelta } from './session-delta.ts';
 
 export async function runReflection(): Promise<void> {

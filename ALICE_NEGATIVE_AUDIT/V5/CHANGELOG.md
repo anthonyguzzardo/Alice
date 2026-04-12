@@ -1,3 +1,5 @@
+> **Note:** This document predates the renames: Marrow → Alice, Bob → Alice Negative, Einstein → Bob (2026-04-12).
+
 # V5 Changelog — Prediction Engine
 
 ## What Was Wrong

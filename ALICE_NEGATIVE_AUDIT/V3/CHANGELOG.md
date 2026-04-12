@@ -1,3 +1,5 @@
+> **Note:** This document predates the renames: Marrow → Alice, Bob → Alice Negative, Einstein → Bob (2026-04-12).
+
 # BOB_AUDIT V3 — Signal Pipeline Redesign
 
 ## What Was Wrong With V2

@@ -10,12 +10,12 @@
  */
 import type { APIRoute } from 'astro';
 import db from '../../lib/db.ts';
-import type { BobSignal, BobSignalRaw } from '../../lib/bob/types.ts';
+import type { AliceNegativeSignal, AliceNegativeSignalRaw } from '../../lib/alice-negative/types.ts';
 import {
   avg, variance, stddev, clamp, percentileRank,
   rescaleDelta, normVariance, computeMATTR,
   HEDGING_WORDS, FIRST_PERSON,
-} from '../../lib/bob/helpers.ts';
+} from '../../lib/alice-negative/helpers.ts';
 
 const RECENT_WINDOW = 7;
 
@@ -234,7 +234,7 @@ export const GET: APIRoute = async () => {
 
     if (sc === 0) {
       // Return neutral defaults
-      const emptySignal: BobSignal = {
+      const emptySignal: AliceNegativeSignal = {
         commitmentRatio: 0.5, firstKeystrokeLatency: 0.5, pauseRatePerMinute: 0.5,
         tabAwayRatePerMinute: 0.5, avgDurationNorm: 0.5, avgWordCountNorm: 0.5,
         charsPerMinuteActive: 0.5, avgPBurstLength: 0.5, pBurstCountNorm: 0.5,
@@ -410,7 +410,7 @@ export const GET: APIRoute = async () => {
     const outlierFrequency = computeOutlierFreq(allSessions);
 
     // ── Raw context for interpreter ───────────────────────────────
-    const _raw: BobSignalRaw = {
+    const _raw: AliceNegativeSignalRaw = {
       avgFirstKeystrokeMs: avg(keystrokeValues),
       avgDurationMs: avg(durationValues),
       avgWordCount: avg(wordCountValues),
@@ -435,7 +435,7 @@ export const GET: APIRoute = async () => {
     };
 
     // ── Assemble signal ───────────────────────────────────────────
-    const signal: BobSignal = {
+    const signal: AliceNegativeSignal = {
       commitmentRatio,
       firstKeystrokeLatency,
       pauseRatePerMinute,
@@ -484,7 +484,7 @@ export const GET: APIRoute = async () => {
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (err) {
-    console.error('[bob] Error computing signal:', err);
+    console.error('[alice-negative] Error computing signal:', err);
     return new Response(JSON.stringify({ error: 'Failed to compute signal' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },

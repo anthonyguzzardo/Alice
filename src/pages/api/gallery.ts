@@ -1,5 +1,5 @@
 /**
- * Gallery API — returns all historical witness states for the Bob gallery.
+ * Gallery API — returns all historical witness states for the Alice Negative gallery.
  */
 import type { APIRoute } from 'astro';
 import db from '../../lib/db.ts';

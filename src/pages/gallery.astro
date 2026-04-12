@@ -6,7 +6,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Bob — Gallery</title>
+    <title>Alice Negative — Gallery</title>
     <style is:global>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       html, body {
@@ -79,7 +79,7 @@
         max-width: 800px;
       }
 
-      .bob-cell {
+      .alice-negative-cell {
         position: relative;
         aspect-ratio: 1;
         max-height: 80vh;
@@ -87,36 +87,36 @@
         margin: 0 auto;
         overflow: hidden;
       }
-      .layout-stack .bob-cell {
+      .layout-stack .alice-negative-cell {
         max-width: 100%;
         max-height: none;
       }
-      .bob-cell canvas {
+      .alice-negative-cell canvas {
         width: 100%;
         height: 100%;
         display: block;
       }
 
-      .bob-label {
+      .alice-negative-label {
         position: absolute;
         bottom: 1.2rem;
         left: 1.2rem;
         z-index: 2;
         pointer-events: none;
       }
-      .bob-label .version {
+      .alice-negative-label .version {
         font-size: 0.6rem;
         letter-spacing: 0.2em;
         text-transform: uppercase;
         color: rgba(255,255,255,0.7);
         margin-bottom: 0.2rem;
       }
-      .bob-label .meta {
+      .alice-negative-label .meta {
         font-size: 0.55rem;
         color: rgba(255,255,255,0.5);
       }
 
-      .bob-label-right {
+      .alice-negative-label-right {
         position: absolute;
         bottom: 1.2rem;
         right: 1.2rem;
@@ -124,7 +124,7 @@
         pointer-events: none;
         text-align: right;
       }
-      .bob-label-right .entries {
+      .alice-negative-label-right .entries {
         font-size: 0.6rem;
         color: rgba(255,255,255,0.6);
       }
@@ -150,7 +150,7 @@
     </style>
   </head>
   <body>
-    <a href="/bob" class="back-btn" aria-label="Back to Bob">&larr;</a>
+    <a href="/alice-negative" class="back-btn" aria-label="Back to Alice Negative">&larr;</a>
 
     <div class="gallery-header">
       <h1>Lineage</h1>
@@ -166,9 +166,9 @@
 
     <script>
       import * as THREE from 'three';
-      import type { WitnessTraits } from '../lib/bob/types';
-      import { DEFAULT_WITNESS, TRAIT_KEYS } from '../lib/bob/types';
-      import { deriveShaderWeights, WEIGHT_KEYS, weightUniformName } from '../lib/bob/shader-weights';
+      import type { WitnessTraits } from '../lib/alice-negative/types';
+      import { DEFAULT_WITNESS, TRAIT_KEYS } from '../lib/alice-negative/types';
+      import { deriveShaderWeights, WEIGHT_KEYS, weightUniformName } from '../lib/alice-negative/shader-weights';
 
       import witnessVert from '../assets/shaders/witness.vert?raw';
       import witnessFrag from '../assets/shaders/witness.frag?raw';
@@ -181,7 +181,7 @@
         createdAt: string;
       }
 
-      interface BobInstance {
+      interface AliceNegativeInstance {
         renderer: THREE.WebGLRenderer;
         scene: THREE.Scene;
         camera: THREE.PerspectiveCamera;
@@ -199,11 +199,11 @@
         return 'u' + key.charAt(0).toUpperCase() + key.slice(1);
       }
 
-      function createBobInstance(
+      function createAliceNegativeInstance(
         canvas: HTMLCanvasElement,
         traits: WitnessTraits,
         entryCount: number,
-      ): BobInstance {
+      ): AliceNegativeInstance {
         const w = canvas.clientWidth;
         const h = canvas.clientHeight;
 
@@ -268,7 +268,7 @@
 
       const grid = document.getElementById('grid')!;
       const filters = document.getElementById('filters')!;
-      const instances: BobInstance[] = [];
+      const instances: AliceNegativeInstance[] = [];
 
       // ─── Layout filter toggle ───────────────────────────────
       filters.addEventListener('click', (e) => {
@@ -295,31 +295,31 @@
         const res = await fetch('/api/gallery');
         const entries: GalleryEntry[] = await res.json();
 
-        // Only show filters when there's more than one Bob
+        // Only show filters when there's more than one Alice Negative
         if (entries.length > 1) {
           filters.classList.add('visible');
         }
 
         for (const entry of entries) {
           const cell = document.createElement('div');
-          cell.className = 'bob-cell';
+          cell.className = 'alice-negative-cell';
 
           const canvas = document.createElement('canvas');
           cell.appendChild(canvas);
 
           // Labels
           const label = document.createElement('div');
-          label.className = 'bob-label';
+          label.className = 'alice-negative-label';
           const ts = new Date(entry.createdAt + 'Z');
           const timeStr = ts.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase();
           label.innerHTML = `
-            <div class="version">bob ${entry.version}</div>
+            <div class="version">alice-negative ${entry.version}</div>
             <div class="meta">${timeStr}</div>
           `;
           cell.appendChild(label);
 
           const labelRight = document.createElement('div');
-          labelRight.className = 'bob-label-right';
+          labelRight.className = 'alice-negative-label-right';
           labelRight.innerHTML = `<div class="entries">${entry.entryCount} entries</div>`;
           cell.appendChild(labelRight);
 
@@ -328,7 +328,7 @@
           // Wait for layout so canvas has dimensions
           await new Promise(r => requestAnimationFrame(r));
 
-          const instance = createBobInstance(canvas, entry.traits, entry.entryCount);
+          const instance = createAliceNegativeInstance(canvas, entry.traits, entry.entryCount);
           instances.push(instance);
         }
 
@@ -338,7 +338,7 @@
 
       // ─── Camera Drift (per instance, varied) ────────────────
 
-      function updateInstanceCamera(inst: BobInstance, time: number, idx: number): void {
+      function updateInstanceCamera(inst: AliceNegativeInstance, time: number, idx: number): void {
         // Slightly different frequency per instance for visual variety
         const offset = idx * 1.7;
         const fx = 0.017 + idx * 0.003;
@@ -371,7 +371,7 @@
         for (let i = 0; i < instances.length; i++) {
           const inst = instances[i];
 
-          // Staggered reveal — each Bob fades in 0.3s after the previous
+          // Staggered reveal — each Alice Negative fades in 0.3s after the previous
           const revealDelay = i * 0.3;
           const revealElapsed = elapsed - revealDelay;
           const revealDuration = 3;

@@ -1,4 +1,4 @@
-> **Note:** This document predates the rename from Marrow to Alice (2026-04-12).
+> **Note:** This document predates the renames: Marrow → Alice, Bob → Alice Negative, Einstein → Bob (2026-04-12).
 
 Here is a neutral analysis of the experiment as described in your Marrow document. 
 

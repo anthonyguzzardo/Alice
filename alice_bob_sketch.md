@@ -1,4 +1,4 @@
-# Alice × Einstein — Product Sketch
+# Alice × Bob — Product Sketch
 
 > Two versions. One goal. Build the thing that helps build the thing.
 
@@ -12,13 +12,13 @@
 
 **The two-part system:**
 - **Alice** — the chicken. A slow, monastic thinking journal that helps you discover what you're actually trying to build.
-- **Einstein** — the egg. A longitudinal AI thinking partner that moves you from frozen to flowing, upstream of decisions, at the level of direction and identity.
+- **Bob** — the egg. A longitudinal AI thinking partner that moves you from frozen to flowing, upstream of decisions, at the level of direction and identity.
 
 ---
 
 ## Version A — Alice
 
-*The tool that helps us build Einstein by building us first.*
+*The tool that helps us build Bob by building us first.*
 
 ### Core philosophy
 Alice doesn't wait for you to have a question. It asks first. Every time. Always.
@@ -46,7 +46,7 @@ After a few weeks, Alice reflects patterns back — not insights it generated, b
 
 No advice. No framework. Just: here's what you've been circling.
 
-### What Einstein trait it unlocks
+### What Bob trait it unlocks
 Not intelligence. **Obsessive return to the same deep question over time.** Most people never find their thing because nothing holds space for it long enough. Alice holds space.
 
 ### Version A — MVP spec
@@ -65,12 +65,12 @@ Not intelligence. **Obsessive return to the same deep question over time.** Most
 
 ---
 
-## Version B — Einstein
+## Version B — Bob
 
 *The tool itself. The egg. Build it first and use it to figure out what it should be.*
 
 ### Core philosophy
-Einstein doesn't help you execute. It helps you think. It lives upstream of decisions, at the level of direction and identity — the layers nobody else is touching.
+Bob doesn't help you execute. It helps you think. It lives upstream of decisions, at the level of direction and identity — the layers nobody else is touching.
 
 ### The four layers of value
 | Layer | What it is | Who's here now |
@@ -80,16 +80,16 @@ Einstein doesn't help you execute. It helps you think. It lives upstream of deci
 | **Direction** | Which road are you on | **Barely touched.** |
 | **Identity** | Who's doing the choosing | **Almost nobody.** |
 
-Einstein lives at Layer 3 bleeding into Layer 4.
+Bob lives at Layer 3 bleeding into Layer 4.
 
-### What Einstein is NOT
+### What Bob is NOT
 - Not a chatbot
 - Not a productivity tool
 - Not a smash-and-grab answer machine
 - Not a dashboard
 - Not fast
 
-### What Einstein IS
+### What Bob IS
 - A longitudinal thinking partner
 - A dissent engine that kills your ideas before you waste time on them
 - A pattern recognizer across months of your thinking
@@ -99,16 +99,16 @@ Einstein lives at Layer 3 bleeding into Layer 4.
 ### Core behaviors
 
 **Provocation over answers**
-Before Einstein answers, it attacks the premise. It finds the assumption buried in your question that you haven't examined. The question transforms before the answer arrives.
+Before Bob answers, it attacks the premise. It finds the assumption buried in your question that you haven't examined. The question transforms before the answer arrives.
 
 **The dissent engine**
-You share an idea you're excited about. Before Einstein helps you build it, it tries to kill it — as hard as possible, from every angle. It earns your trust by being the toughest critic first.
+You share an idea you're excited about. Before Bob helps you build it, it tries to kill it — as hard as possible, from every angle. It earns your trust by being the toughest critic first.
 
 **Longitudinal memory**
 Knows your whole arc. Your recurring blind spots. The ideas you keep circling. The fears that show up in how you phrase things. Operates like a decades-long mentor who's been paying attention.
 
 **Silence as a feature**
-Sometimes the most Einstein response is nothing. "Keep thinking — you're not done yet." Knows when not to answer. Almost nobody is building this.
+Sometimes the most Bob response is nothing. "Keep thinking — you're not done yet." Knows when not to answer. Almost nobody is building this.
 
 **Friction by design**
 Occasionally refuses to answer immediately. Forces you to sit with the question first. Instant answers train you to stop thinking. Delayed answers make the question richer.
@@ -119,13 +119,13 @@ Occasionally refuses to answer immediately. Forces you to sit with the question 
 - [ ] Dissent engine — structured idea stress-testing flow
 - [ ] Silence detection — knows when to hold rather than respond
 - [ ] Friction toggle — user can request delayed response mode
-- [ ] No-cursor open state — Einstein speaks first, always
+- [ ] No-cursor open state — Bob speaks first, always
 
 ### Open questions
 - How do you sell something this slow to people trained on instant?
 - What's the onboarding experience for something with no immediate obvious output?
 - How does the memory architecture work without feeling like surveillance?
-- Where does Einstein end and therapy begin — and does that matter?
+- Where does Bob end and therapy begin — and does that matter?
 - What's the first 10-minute experience that makes someone say *oh, I get it now*?
 
 ---
@@ -135,18 +135,18 @@ Occasionally refuses to answer immediately. Forces you to sit with the question 
 ```
 Alice (Version A)
     ↓
-Teaches us what Einstein needs to be
+Teaches us what Bob needs to be
     ↓
-Einstein (Version B)
+Bob (Version B)
     ↓
 Teaches users what they need to build
     ↓
-The thing they build uses Einstein to build the next thing
+The thing they build uses Bob to build the next thing
     ↓
 Recursive. Compounding. Genuinely different.
 ```
 
-Alice is the primitive. Einstein is the mature form. They might eventually be the same product at different stages of the user's relationship with it.
+Alice is the primitive. Bob is the mature form. They might eventually be the same product at different stages of the user's relationship with it.
 
 ---
 
@@ -164,7 +164,7 @@ That's a completely different product. And the interface, the business model, th
 
 ### Immediate
 - [ ] Define the first 10 questions Alice would ask
-- [ ] Sketch the no-cursor open state for Einstein
+- [ ] Sketch the no-cursor open state for Bob
 - [ ] Define what "pattern surfacing" actually looks like in practice
 - [ ] Identify the single first-use moment that makes the value prop click
 
@@ -172,7 +172,7 @@ That's a completely different product. And the interface, the business model, th
 - [ ] Build the simplest possible Alice prototype (could be a bot, a doc, anything)
 - [ ] Run it on ourselves for 30 days
 - [ ] Document what emerges
-- [ ] Let that inform the Einstein spec
+- [ ] Let that inform the Bob spec
 
 ### The north star question
 *What does someone say after 90 days of using this that they couldn't have said before they started?*
@@ -185,4 +185,4 @@ Answer that and you have the product.
 — Albert Einstein
 
 ---
-*Sketch v0.1 — born from a conversation that started with Einstein and ended somewhere much more interesting.*
+*Sketch v0.1 — born from a conversation that started with Bob and ended somewhere much more interesting.*

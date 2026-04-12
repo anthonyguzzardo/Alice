@@ -1,5 +1,5 @@
 /**
- * Reinterpret Bob through the dynamics + emotion pipeline.
+ * Reinterpret Alice Negative through the dynamics + emotion pipeline.
  *
  * Runs the full pipeline against all existing session data:
  *   1. Compute 8D entry states from full history
@@ -13,10 +13,10 @@
  */
 import 'dotenv/config';
 import Database from 'better-sqlite3';
-import { computeEntryStates } from '../src/lib/bob/state-engine.ts';
-import { computeDynamics, formatDynamicsForRenderer } from '../src/lib/bob/dynamics.ts';
-import { computeEmotionAnalysis, formatEmotionForRenderer } from '../src/lib/bob/emotion-profile.ts';
-import { renderTraits } from '../src/lib/bob/interpreter.ts';
+import { computeEntryStates } from '../src/lib/alice-negative/state-engine.ts';
+import { computeDynamics, formatDynamicsForRenderer } from '../src/lib/alice-negative/dynamics.ts';
+import { computeEmotionAnalysis, formatEmotionForRenderer } from '../src/lib/alice-negative/emotion-profile.ts';
+import { renderTraits } from '../src/lib/alice-negative/interpreter.ts';
 import {
   saveEntryState,
   getEntryStateCount,

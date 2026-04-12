@@ -1,4 +1,4 @@
-> **Note:** This document predates the rename from Marrow to Alice (2026-04-12).
+> **Note:** This document predates the renames: Marrow → Alice, Bob → Alice Negative, Einstein → Bob (2026-04-12).
 
 Alright, full critical analysis it is. I'll go through the entire design — behavioral methodology, AI interpretation layer, experimental structure, and underlying assumptions. I'll be direct about what's strong, what's questionable, and what's unsupported.
 

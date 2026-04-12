@@ -1,4 +1,4 @@
-> **Note:** This document predates the rename from Marrow to Alice (2026-04-12).
+> **Note:** This document predates the renames: Marrow → Alice, Bob → Alice Negative, Einstein → Bob (2026-04-12).
 
 Alright — full critical analysis it is. I'll work through the scientific foundations, internal coherence, and blind spots systematically. This is a dense document, so I'll be thorough.
 

@@ -1,7 +1,7 @@
 // ─── Witness Types ──────────────────────────────────────────────────
 
 /**
- * Behavioral signals from /api/bob — percentile-normalized against personal history.
+ * Behavioral signals from /api/alice-negative — percentile-normalized against personal history.
  * All values [0,1] except sessionCount, feedbackCount, daysSinceLastEntry (raw).
  *
  * Research basis:
@@ -10,7 +10,7 @@
  *   Lexical diversity   — McCarthy & Jarvis (2010) MATTR
  *   Pause threshold     — 2s standard (Leijten & Van Waes, 2013)
  */
-export interface BobSignal {
+export interface AliceNegativeSignal {
   // ─── Core Behavioral (percentile-normalized) ──────────────
   commitmentRatio: number;          // avg final/total chars
   firstKeystrokeLatency: number;    // avg first_keystroke_ms
@@ -67,11 +67,11 @@ export interface BobSignal {
   outlierFrequency: number;
 
   // ─── Raw context for interpreter (not for shader pipeline) ─
-  _raw: BobSignalRaw;
+  _raw: AliceNegativeSignalRaw;
 }
 
 /** Un-normalized values the interpreter uses for context-rich formatting */
-export interface BobSignalRaw {
+export interface AliceNegativeSignalRaw {
   avgFirstKeystrokeMs: number;
   avgDurationMs: number;
   avgWordCount: number;

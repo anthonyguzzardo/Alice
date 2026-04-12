@@ -11,8 +11,8 @@
  * Slopes of these densities over time are the signal (Pennebaker, 2011).
  */
 
-import { NRC_CATEGORIES, type NrcCategory } from './bob/nrc-emotions.ts';
-import { COGNITIVE_WORDS, HEDGING_WORDS, FIRST_PERSON } from './bob/helpers.ts';
+import { NRC_CATEGORIES, type NrcCategory } from './alice-negative/nrc-emotions.ts';
+import { COGNITIVE_WORDS, HEDGING_WORDS, FIRST_PERSON } from './alice-negative/helpers.ts';
 
 export interface LinguisticDensities {
   nrcAngerDensity: number;

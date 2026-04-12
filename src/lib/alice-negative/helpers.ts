@@ -1,6 +1,6 @@
 /**
  * Shared math utilities for behavioral signal computation.
- * Used by bob.ts (signal pipeline), trajectory.ts, and signals.ts (formatting).
+ * Used by alice-negative.ts (signal pipeline), trajectory.ts, and signals.ts (formatting).
  *
  * Research basis:
  *   MATTR — McCarthy & Jarvis (2010), validated for short texts

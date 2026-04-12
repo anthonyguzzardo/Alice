@@ -5,7 +5,7 @@
  * No AI involved. Pure math on deterministic signals.
  */
 import type { APIRoute } from 'astro';
-import { computeTrajectory } from '../../lib/bob/trajectory.ts';
+import { computeTrajectory } from '../../lib/alice-negative/trajectory.ts';
 
 export const GET: APIRoute = async () => {
   try {

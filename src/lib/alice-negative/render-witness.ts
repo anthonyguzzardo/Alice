@@ -96,5 +96,5 @@ export async function renderWitnessState(): Promise<void> {
   // Phase 4: Render visual traits (LLM call)
   await renderTraits(dynamics, currentCount, emotionAnalysis);
 
-  console.log(`[witness] New Bob generated for entry count ${currentCount}`);
+  console.log(`[witness] New Alice Negative generated for entry count ${currentCount}`);
 }

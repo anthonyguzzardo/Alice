@@ -298,7 +298,7 @@
   </head>
   <body>
     <div class="top-controls">
-      <a href="/bob" class="top-btn nav-btn" id="bob-btn" aria-label="Bob" title="Bob">&#x25CF;</a>
+      <a href="/alice-negative" class="top-btn nav-btn" id="alice-negative-btn" aria-label="Alice Negative" title="Alice Negative">&#x25CF;</a>
       <a href="/trajectory" class="top-btn nav-btn" id="trajectory-btn" aria-label="Trajectory" title="Trajectory">&#x2237;</a>
       <button class="top-btn" id="theme-toggle" aria-label="Toggle theme"></button>
     </div>
@@ -323,7 +323,7 @@
         themeBtn.textContent = next === 'dark' ? '☀' : '☾';
       });
 
-      // Nav visibility — hide Bob/trajectory buttons when writing
+      // Nav visibility — hide Alice Negative/trajectory buttons when writing
       function hideNav() {
         document.querySelectorAll('.nav-btn').forEach(el => el.classList.add('hidden'));
       }

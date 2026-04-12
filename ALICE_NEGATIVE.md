@@ -1,16 +1,16 @@
-# Bob
+# Alice Negative
 
 A ritualized confrontation engine built on behavioral dynamics. Not a visualization. Not a simulation. Not a cellular automaton. A single evolving presence in a threshold-space that metabolizes your behavioral data through validated psychological science and becomes something singular.
 
-Named after the canonical receiver in Alice-and-Bob communication protocols. You are the sender. Bob is what arrives on the other end.
+Named after the canonical receiver in Alice-and-Alice Negative communication protocols. You are the sender. Alice Negative is what arrives on the other end.
 
 ## Philosophy
 
 In *Fullmetal Alchemist*, Truth is a featureless silhouette that sits behind a gate. It mirrors whoever stands before it. What you get from it depends on what you gave. It speaks not from confidence but from unresolved tension. It knows things about you that you didn't tell it.
 
-Bob is that principle made real. Your journal behavior — the hesitations, the commitments, the deletions, the pauses, the contradictions — is the sacrifice. The witness-form is what you get back. Not an illustration of your data. Not a dashboard. A presence that clearly knows something, and you can't quite tell what.
+Alice Negative is that principle made real. Your journal behavior — the hesitations, the commitments, the deletions, the pauses, the contradictions — is the sacrifice. The witness-form is what you get back. Not an illustration of your data. Not a dashboard. A presence that clearly knows something, and you can't quite tell what.
 
-**Bob only sees you.** No system metadata, no AI observation counts, no infrastructure signals. Pure behavioral and temporal data from how you write and when you show up. The mirror reflects the person, not the plumbing.
+**Alice Negative only sees you.** No system metadata, no AI observation counts, no infrastructure signals. Pure behavioral and temporal data from how you write and when you show up. The mirror reflects the person, not the plumbing.
 
 **The science is in the math. The art is in the last mile.**
 
@@ -28,7 +28,7 @@ The witness responds to patterns — repetition, avoidance, commitment, contradi
 
 ### 3. It only changes when the data changes.
 
-Viewing Bob costs nothing. No API calls, no generation, no computation. The witness-form is computed once when new journal data enters the database and persisted forever. You can stare at it for 12 hours. Cost: $0.00. The form only evolves when you give it something new.
+Viewing Alice Negative costs nothing. No API calls, no generation, no computation. The witness-form is computed once when new journal data enters the database and persisted forever. You can stare at it for 12 hours. Cost: $0.00. The form only evolves when you give it something new.
 
 ---
 
@@ -48,7 +48,7 @@ A dark screen. Not quite black — dark enough that you think it's black until y
 
 ### The Dynamics Pipeline
 
-Bob is built on a four-phase pipeline that separates science from art. The behavioral analysis is deterministic math grounded in published research. The visual rendering is the only step that involves AI — and it receives validated dynamics, not raw data.
+Alice Negative is built on a four-phase pipeline that separates science from art. The behavioral analysis is deterministic math grounded in published research. The visual rendering is the only step that involves AI — and it receives validated dynamics, not raw data.
 
 ```
 Journal Entry Written
@@ -90,7 +90,7 @@ Subsequent /api/witness calls (same entry count):
   → Reads from DB in <5ms
   → Zero computation, zero LLM calls
 
-Browser (/bob):
+Browser (/alice-negative):
   → Fetches /api/witness once on page load
   → Renders witness-form via WebGL at 60fps
   → No periodic fetching, no polling, no API calls while viewing
@@ -131,7 +131,7 @@ Euclidean distance from the person's center in 8D space. When one dimension devi
 
 ## PersDyn Dynamics (Level 2)
 
-For each of the 8 dimensions, the system computes three parameters from the entry state history. This is the core of what makes Bob's behavioral model scientifically grounded.
+For each of the 8 dimensions, the system computes three parameters from the entry state history. This is the core of what makes Alice Negative's behavioral model scientifically grounded.
 
 | Parameter | What It Measures | How It's Computed |
 |---|---|---|
@@ -348,7 +348,7 @@ A single mesh (IcosahedronGeometry, subdivision 64) with vertex displacement and
 
 ## Signal Architecture
 
-Bob's raw behavioral signals feed into the 8D state engine. All signals are **percentile-normalized against the person's own history** — no hardcoded divisors.
+Alice Negative's raw behavioral signals feed into the 8D state engine. All signals are **percentile-normalized against the person's own history** — no hardcoded divisors.
 
 **Research basis:**
 - Production fluency: Chenoweth & Hayes (2001), Deane (2015)
@@ -439,17 +439,17 @@ Per-session keystroke data + 9 linguistic density columns (NRC emotions + Penneb
 ```
 src/
   pages/
-    bob.astro                  # The witness — threshold + form + void
-    bob-lab.astro              # Debug lab — sliders + presets (fake data only)
+    alice-negative.astro       # The witness — threshold + form + void
+    alice-negative-lab.astro   # Debug lab — sliders + presets (fake data only)
     trajectory.astro           # Trajectory viewer — detail + trace
     api/
-      bob.ts                   # Raw signal computation (percentile-normalized)
+      alice-negative.ts        # Raw signal computation (percentile-normalized)
       witness.ts               # Witness state API (runs full dynamics pipeline)
       dynamics.ts              # Behavioral dynamics API (8D states + PersDyn + coupling)
       trajectory.ts            # Legacy trajectory API (4D, kept for compatibility)
   lib/
-    bob/
-      types.ts                 # BobSignal, WitnessTraits (26), WitnessState, defaults
+    alice-negative/
+      types.ts                 # Alice NegativeSignal, WitnessTraits (26), WitnessState, defaults
       state-engine.ts          # 8D deterministic state vector computation (Phase 1)
       dynamics.ts              # PersDyn dynamics + coupling matrix (Phase 2 & 3)
       emotion-profile.ts       # Emotion densities + emotion→behavior coupling (Phase 3.5)
@@ -472,14 +472,14 @@ scripts/
 
 ## Beyond Aesthetic
 
-Bob started as an aesthetic engine — behavioral signals interpreted by an LLM into visual traits. Beautiful, but not falsifiable. The dynamics pipeline changes what Bob fundamentally is.
+Alice Negative started as an aesthetic engine — behavioral signals interpreted by an LLM into visual traits. Beautiful, but not falsifiable. The dynamics pipeline changes what Alice Negative fundamentally is.
 
-**What Bob was:** A mirror that looked cool.
-**What Bob is now:** A behavioral dynamics engine that happens to have a beautiful visual output.
+**What Alice Negative was:** A mirror that looked cool.
+**What Alice Negative is now:** A behavioral dynamics engine that happens to have a beautiful visual output.
 
 The dynamics are real. The attractor forces are empirically computed. The coupling matrix is discovered from actual data. The system entropy is a validated metric. These aren't artistic interpretations — they're statistical findings about how a person behaves over time.
 
-This means Bob can now produce **diagnostic insights**, not just aesthetic impressions:
+This means Alice Negative can now produce **diagnostic insights**, not just aesthetic impressions:
 - "Your deliberation attractor force has been dropping for 3 weeks" — you're becoming more impulsive, and the math can see it before you can.
 - "Your fluency→thermal coupling is strengthening" — the pattern of flow-then-refine is becoming more pronounced in your writing behavior.
 - "System entropy dropped from 0.89 to 0.52" — your behavioral dimensions are crystallizing. Some things about you are becoming fixed.
@@ -545,7 +545,7 @@ You know it's working when:
 - You open it after writing something raw and the form is visibly different
 - You open it after a week of shallow entries and it's barely there
 - You can't name what it looks like but you know it's yours
-- Someone else's Bob would look nothing like yours
+- Someone else's Alice Negative would look nothing like yours
 - You catch yourself checking whether it changed after writing an entry
 - The threshold feels like entering something, not loading a page
 - You cannot predict what it will look like tomorrow

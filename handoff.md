@@ -123,7 +123,7 @@ Delta pipeline is structurally complete. Live testing requires a day with both a
 
 5. **Test suite** — still not built.
 
-6. **Einstein interaction surface** — not started.
+6. **Alice Negative interaction surface** — not started.
 
 7. **Anomaly detection / honesty signal** — the same-day delta is the foundational infrastructure for this. The delta itself IS the detection channel. When delta baseline stabilizes (30-50 days per Fisher 2018), deviations from the delta become the three-way signal: flatline delta (disengagement), spike delta with effort markers (performance/construction), drifting delta (genuine change). This is not a separate feature — it emerges from tracking the delta over time. The system adapts its behavior based on confidence without surfacing any diagnosis.
 
@@ -141,7 +141,7 @@ Extensive literature search across deception detection, digital phenotyping, idi
 - Standard change point detection breaks on permanently shifting baselines (Yoshizawa 2022). The system needs to handle evolving baselines, which is exactly what genuine psychological change looks like.
 - Anthropic's own honesty research (2025) achieved AUROC 0.88 for lie detection — described as "borderline adequate for offline monitoring."
 
-**Key architectural insight:** The anomaly detection idea doesn't require a new system. It falls out of the existing plan: cluster fit distance (from clustering) + calibration-behavior agreement (from session deltas) + prediction confidence drops (from prediction engine) = the anomaly signal, for free. The only future addition is the response layer — how Einstein adjusts behavior when confidence drops.
+**Key architectural insight:** The anomaly detection idea doesn't require a new system. It falls out of the existing plan: cluster fit distance (from clustering) + calibration-behavior agreement (from session deltas) + prediction confidence drops (from prediction engine) = the anomaly signal, for free. The only future addition is the response layer — how Alice Negative adjusts behavior when confidence drops.
 
 ---
 
@@ -164,8 +164,8 @@ Journal session    → tb_session_summaries (reflective metrics)
          [future: delta vectors → clustering feature dimensions]
 ```
 
-The delta module reads from the same `tb_session_summaries` table as Bob (state-engine, dynamics) but they don't interact. They're parallel readers feeding into the same AI prompts from different angles. Bob says "here's where you are in 8D behavioral space." The delta says "here's how today's neutral and real writing differ."
+The delta module reads from the same `tb_session_summaries` table as Alice Negative (state-engine, dynamics) but they don't interact. They're parallel readers feeding into the same AI prompts from different angles. Alice Negative says "here's where you are in 8D behavioral space." The delta says "here's how today's neutral and real writing differ."
 
 ## Pending Rename
 
-System renamed from "Marrow" to "Alice" (Alice sends, Bob receives — the canonical communication protocol metaphor). Naming change only, no product philosophy changes. Executed 2026-04-12.
+System renamed from "Marrow" to "Alice" (Alice sends, Alice Negative receives — the canonical communication protocol metaphor). Naming change only, no product philosophy changes. Executed 2026-04-12.

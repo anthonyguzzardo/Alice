@@ -6,7 +6,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Bob</title>
+    <title>Alice Negative</title>
     <style is:global>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       html, body { height: 100%; background: #000; overflow: hidden; }
@@ -30,20 +30,20 @@
     <a href="/" class="back-btn" id="back" aria-label="Back to journal">&larr;</a>
     <a href="/trajectory" class="back-btn" id="trace-link" style="right: 5rem;" aria-label="Trajectory">&#x2237;</a>
     <a href="/gallery" class="back-btn" id="gallery-link" style="right: 8rem; line-height: 1;" aria-label="Gallery">&#x25A6;</a>
-    <canvas id="bob"></canvas>
+    <canvas id="alice-negative"></canvas>
 
     <script>
       import * as THREE from 'three';
-      import type { WitnessState, WitnessTraits } from '../lib/bob/types';
-      import { DEFAULT_WITNESS, TRAIT_KEYS } from '../lib/bob/types';
-      import { deriveShaderWeights, WEIGHT_KEYS, weightUniformName } from '../lib/bob/shader-weights';
+      import type { WitnessState, WitnessTraits } from '../lib/alice-negative/types';
+      import { DEFAULT_WITNESS, TRAIT_KEYS } from '../lib/alice-negative/types';
+      import { deriveShaderWeights, WEIGHT_KEYS, weightUniformName } from '../lib/alice-negative/shader-weights';
 
       import witnessVert from '../assets/shaders/witness.vert?raw';
       import witnessFrag from '../assets/shaders/witness.frag?raw';
 
       // ─── Setup ──────────────────────────────────────────────────
 
-      const canvas = document.getElementById('bob') as HTMLCanvasElement;
+      const canvas = document.getElementById('alice-negative') as HTMLCanvasElement;
       const backBtn = document.getElementById('back') as HTMLElement;
       let W = window.innerWidth;
       let H = window.innerHeight;

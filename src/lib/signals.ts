@@ -14,9 +14,9 @@
 
 import type { SessionSummaryInput, CalibrationBaseline, OpenPrediction } from './db.ts';
 import { getCalibrationSessionsWithText, getBurstSequence } from './db.ts';
-import type { TrajectoryAnalysis } from './bob/trajectory.ts';
-import type { DynamicsAnalysis } from './bob/dynamics.ts';
-import { avg, stddev, percentileRank, computeMATTR, COGNITIVE_WORDS } from './bob/helpers.ts';
+import type { TrajectoryAnalysis } from './alice-negative/trajectory.ts';
+import type { DynamicsAnalysis } from './alice-negative/dynamics.ts';
+import { avg, stddev, percentileRank, computeMATTR, COGNITIVE_WORDS } from './alice-negative/helpers.ts';
 
 // ─── Internal helpers ──────────────────────────────────────────────
 
