@@ -101,18 +101,32 @@ The interpretation is persisted to `tb_witness_states` in the database. It never
 **Model:** Claude Sonnet (fast enough for single-call, creative enough for interesting interpretation)
 **Cost:** ~$0.01 per interpretation. One call per journal entry.
 
-### The Shader
+### The Shader (v5 — Strategy Architecture)
 
-A single mesh (IcosahedronGeometry, subdivision 64) with vertex displacement and fragment shading driven by all 26 traits.
+A single mesh (IcosahedronGeometry, subdivision 64) with vertex displacement and fragment shading. Instead of stacking 26 independent noise layers, the shader blends between categorically different **deformation strategies** (vertex) and **material strategies** (fragment), with blend weights derived from the 26 traits in JS each frame.
 
-**Vertex shader:** Three displacement layers:
-- Large-scale geological deformation (topology) — breaks the sphere into unrecognizable forms
-- Medium-scale ferrofluid flow (flow) — organic surface movement
-- Fine crystalline detail (faceting) — hard planes and sharp edges
+**Strategy derivation:** A pure function (`deriveShaderWeights`) translates 26 traits into 11 blend weights — 5 shape strategies + 6 material strategies. Different trait combinations produce fundamentally different forms, not just noisy variations of a sphere.
 
-Plus structural features: stretch (genuine elongation), hollowness (inward collapse), symmetry breaking (hemispheric displacement), multiplicity (cluster separation), fragility (displacement discontinuities as cracks), rotation (vertex-space rotation transforms), flexibility (elastic overshoot).
+**Vertex shader — 5 shape strategies:**
+- **Liquid** — overlapping sine waves at irrational ratios. Smooth flowing surface (water, ferrofluid, blob)
+- **Crystal** — pseudo-voronoi quantization. Vertices snap to discrete planes creating flat facets with sharp edges
+- **Organic** — 2-octave simplex noise for geological deformation. Large-scale reshaping (mountains, valleys, bulges)
+- **Shatter** — cluster region identification with gap/crack discontinuities. Pieces separating
+- **Vapor** — edge dissolution + center-collapse hollowing. Dissolves geometry into wisps
 
-**Fragment shader:** Temperature-driven color palette (cold blues to molten reds), subsurface scattering, internal glow, iridescence, atmosphere halo, magnetism distortion, fragility crack lines, reactivity shimmer. Never fully opaque — always some translucency.
+Plus universal modifiers: rotation, breathing/rhythm, stretch, energy tremor, atmosphere push, magnetism warp, scale variation. The implicit "sphere" is the remainder when strategy weights sum to less than 1.
+
+**Fragment shader — 6 material strategies:**
+- **Stone** — Lambertian diffuse, rough matte surface
+- **Liquid** — Schlick fresnel, tight specular, caustic patterns, subsurface
+- **Crystal** — multi-lobe specular sparkle, thin-film iridescence
+- **Metal** — colored specular reflections, anisotropic streaks, chrome
+- **Gas** — forward scattering, wispy internal structure, volumetric
+- **Ember** — emissive crack veins, blackbody glow, incandescent core
+
+Plus universal overlays: internal glow, edge light, atmosphere halo, magnetism chromatic aberration, stored energy pressure glow, reactivity shimmer, subsurface scattering, crack glow.
+
+**Visual range:** The form can be a quiet marble, smoke, a neutron star, a geode, cooling lava, fractured shards, a living cell, a charged mass about to explode, a hollow shell, liquid metal, a soap bubble, a field of distortion, a fossil, a seed, coral, or a glitching static object — depending on what the interpreter decides.
 
 ### Data Flow
 
@@ -176,11 +190,12 @@ src/
     dream/
       types.ts               # WitnessTraits (26 traits), WitnessState
       interpreter.ts         # LLM trait interpretation + DB persistence
+      shader-weights.ts      # Trait-to-strategy weight derivation (v5)
     db.ts                    # Database (includes tb_witness_states table)
   assets/
     shaders/
-      witness.vert           # Vertex displacement (26 trait uniforms)
-      witness.frag           # Fragment shading (SSS, glow, temperature color)
+      witness.vert           # Vertex deformation (5 shape strategies)
+      witness.frag           # Fragment materials (6 material strategies)
 ```
 
 ---
