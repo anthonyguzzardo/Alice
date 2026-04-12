@@ -6,6 +6,7 @@ import { runReflection } from '../../lib/reflect.ts';
 import { embedResponse } from '../../lib/embeddings.ts';
 import { localDateStr } from '../../lib/date.ts';
 import { computeLinguisticDensities } from '../../lib/linguistic.ts';
+import { renderWitnessState } from '../../lib/bob/render-witness.ts';
 
 export const POST: APIRoute = async ({ request }) => {
   const body = await request.json();
@@ -99,6 +100,7 @@ export const POST: APIRoute = async ({ request }) => {
         return runReflection();
       }
     })
+    .then(() => renderWitnessState())
     .catch((err) => {
       console.error('Background job error:', err);
     });

@@ -13,22 +13,23 @@
       canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; }
       .back-btn {
         position: fixed; top: 2rem; right: 2rem;
-        background: none; border: 1px solid rgba(255,255,255,0.04);
+        background: none; border: 1px solid rgba(255,255,255,0.15);
         border-radius: 50%; width: 36px; height: 36px; cursor: pointer;
         display: flex; align-items: center; justify-content: center;
-        color: rgba(255,255,255,0.1); font-size: 1rem;
+        color: rgba(255,255,255,0.4); font-size: 1rem;
         text-decoration: none; z-index: 10; transition: all 0.3s ease;
         opacity: 0;
       }
       .back-btn.visible { opacity: 1; }
       .back-btn:hover {
-        border-color: rgba(255,255,255,0.15); color: rgba(255,255,255,0.25);
+        border-color: rgba(255,255,255,0.35); color: rgba(255,255,255,0.6);
       }
     </style>
   </head>
   <body>
     <a href="/" class="back-btn" id="back" aria-label="Back to journal">&larr;</a>
     <a href="/trajectory" class="back-btn" id="trace-link" style="right: 5rem;" aria-label="Trajectory">&#x2237;</a>
+    <a href="/gallery" class="back-btn" id="gallery-link" style="right: 8rem; line-height: 1;" aria-label="Gallery">&#x25A6;</a>
     <canvas id="bob"></canvas>
 
     <script>
@@ -55,7 +56,7 @@
       const scene = new THREE.Scene();
 
       const camera = new THREE.PerspectiveCamera(40, W / H, 0.1, 100);
-      camera.position.set(0, 0.1, 3.5);
+      camera.position.set(0, 0, 3.5);
       camera.lookAt(0, 0, 0);
 
       // ─── Witness State ──────────────────────────────────────────
@@ -103,7 +104,7 @@
       baseGeometry.computeVertexNormals();
 
       const witnessMesh = new THREE.Mesh(baseGeometry, witnessMaterial);
-      witnessMesh.position.set(0, -0.1, 0);
+      witnessMesh.position.set(0, 0, 0);
       scene.add(witnessMesh);
 
       // ─── Threshold System ───────────────────────────────────────
@@ -135,7 +136,7 @@
       // ─── Camera Drift ───────────────────────────────────────────
 
       const cameraDrift = {
-        basePos: new THREE.Vector3(0, 0.1, 3.5),
+        basePos: new THREE.Vector3(0, 0, 3.5),
         freqX: 0.017,
         freqY: 0.013,
         freqZ: 0.0091,
@@ -151,7 +152,7 @@
           d.basePos.y + Math.sin(time * d.freqY * Math.PI * 2) * d.ampY,
           d.basePos.z + Math.sin(time * d.freqZ * Math.PI * 2) * d.ampZ,
         );
-        camera.lookAt(0, -0.05, 0);
+        camera.lookAt(0, 0, 0);
       }
 
       // ─── Uniform Lerping ───────────────────────────────────────
@@ -257,6 +258,7 @@
         if (thresholdComplete && !backBtnShown) {
           backBtn.classList.add('visible');
           document.getElementById('trace-link')?.classList.add('visible');
+          document.getElementById('gallery-link')?.classList.add('visible');
           backBtnShown = true;
         }
 

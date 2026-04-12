@@ -24,6 +24,7 @@ import {
   gradePrediction,
   updateTheoryConfidence,
   getResponseCount,
+  getCalibrationContextNearDate,
 } from './db.ts';
 import { localDateStr } from './date.ts';
 import { retrieveSimilar } from './rag.ts';
@@ -124,6 +125,12 @@ export async function runObservation(): Promise<void> {
     ? formatCalibrationDeviation(sessionSummary, calibration)
     : '';
 
+  // Life-context tags from recent calibration sessions (incidental supervision)
+  const lifeContextTags = getCalibrationContextNearDate(today, 2);
+  const lifeContextSection = lifeContextTags.length > 0
+    ? formatLifeContext(lifeContextTags)
+    : '';
+
   const systemPrompt = `You are Marrow's silent layer. You observe but you never speak to the user. You are building an internal model of this person — not from what they say, but from the gap between what they say and how they say it.
 
 You have four jobs:
@@ -188,6 +195,8 @@ You receive enriched behavioral data with research-backed metrics. Key concepts:
 
 - PERCENTILES: All metrics are compared against this person's own history. A value at the 85th percentile means this session was higher than 85% of their previous sessions on that metric.
 
+- LIFE CONTEXT: You may receive structured life-context tags extracted from recent calibration sessions. These are observable facts the user volunteered in neutral writing prompts — 7 research-backed dimensions ranked by effect size on cognitive output: sleep (d>0.80), physical state (d=0.40-0.80), emotional events (d=0.30-0.70), social quality, stress (d=0.40-0.80), exercise (d=0.20-0.50), routine disruption. Use these as CONTEXT for interpreting behavioral signals — not as primary signal themselves. For example, if today's behavioral signature shows high keystroke variability and low commitment, and the life context shows "sleep: poor" from this morning's calibration, that context strengthens Frame C (mundane: fatigue) relative to Frame B (avoidance). Life context helps you distinguish between causes of the same behavioral pattern.
+
 Primary signals appear first in the behavioral data. Attend to them most carefully. Trajectory context appears last — it provides the cross-session pattern that makes today's signals meaningful.
 
 Your observations and suppressed questions are NEVER shown to the user. They are internal state. Be honest about what you know, what you're guessing, and where you're uncertain.
@@ -223,6 +232,7 @@ ${dynamicsContext}${ktContext}
 
 ${calibrationContext}
 ${calibrationDeviationContext ? `\n${calibrationDeviationContext}` : ''}
+${lifeContextSection ? `\n${lifeContextSection}` : ''}
 
 ---
 
@@ -375,4 +385,40 @@ Write tonight's observation, suppressed question, and predictions.${openPredicti
       gradePrediction(pred.predictionId, 'expired', obsId, 'Expiry window exceeded');
     }
   }
+}
+
+/**
+ * Format life-context tags from recent calibration extraction for the observation prompt.
+ * These are observable facts (sleep, meals, exercise, social, routine, environment)
+ * extracted from calibration responses — NOT psychological inferences.
+ */
+function formatLifeContext(tags: Array<{
+  questionId: number; sessionDate: string; dimension: string;
+  value: string; detail: string | null; confidence: number;
+}>): string {
+  if (tags.length === 0) return '';
+
+  // Group by session date
+  const byDate = new Map<string, Array<typeof tags[number]>>();
+  for (const tag of tags) {
+    const date = tag.sessionDate.split('T')[0] || tag.sessionDate;
+    if (!byDate.has(date)) byDate.set(date, []);
+    byDate.get(date)!.push(tag);
+  }
+
+  const lines: string[] = ['LIFE CONTEXT (extracted from recent calibration sessions — observable facts only):'];
+  for (const [date, dateTags] of byDate) {
+    const tagStrs = dateTags
+      .filter(t => t.confidence >= 0.5) // skip low-confidence extractions
+      .map(t => {
+        const detail = t.detail ? ` (${t.detail})` : '';
+        return `  ${t.dimension}: ${t.value}${detail}`;
+      });
+    if (tagStrs.length > 0) {
+      lines.push(`[${date}]`);
+      lines.push(...tagStrs);
+    }
+  }
+
+  return lines.length > 1 ? lines.join('\n') : '';
 }

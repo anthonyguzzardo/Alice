@@ -26,5 +26,8 @@ A personal, monastic daily thinking journal. One question per day. No gamificati
 - Do NOT use ALTER TABLE — rewrite the CREATE TABLE
 - Do NOT hard-code proper nouns into column names
 
+## Known Gotchas
+- **VoyageAI types in `embeddings.ts`**: The `voyageai` package is imported via `createRequire` (CJS shim in ESM). TypeScript can't resolve types cleanly through this path. If type errors resurface on `VoyageAIClient` or `result` being `unknown`, the fix is: extract the module ref separately, use `InstanceType<typeof VoyageAIClient>` for the type alias, and cast embed responses to `{ data?: Array<{ embedding?: number[] }> }`.
+
 ## Philosophy
 Every technical decision should serve depth over speed. If it optimizes for engagement or throughput, it's wrong. The design is the philosophy.

@@ -23,6 +23,7 @@ import {
   getRecentGradedPredictions,
   updateQuestionIntent,
   saveQuestionCandidates,
+  getRecentCalibrationContext,
 } from './db.ts';
 import { localDateStr } from './date.ts';
 import { retrieveSimilarMulti, retrieveContrarian } from './rag.ts';
@@ -149,6 +150,12 @@ export async function runGeneration(): Promise<void> {
     ? formatDynamicsContext(dynamics, 'compact')
     : '';
 
+  // Life-context from recent calibration extractions
+  const recentLifeContext = getRecentCalibrationContext(20);
+  const lifeContextSection = recentLifeContext.length > 0
+    ? formatGenerateLifeContext(recentLifeContext)
+    : '';
+
   // Prediction track record
   const predStats = getPredictionStats();
   const theories = getAllTheoryConfidences();
@@ -248,6 +255,7 @@ Pay special attention to the contrarian entries — they represent threads you m
 - Attractor force tells you which dimensions are rigid (snap back fast) vs malleable (shifts persist). Target malleable dimensions — they're where real change happens.
 - Dimension coupling shows which behavioral dimensions influence each other. If a leader dimension is currently deviated, the follower will respond at the discovered lag.
 - Calibration-relative deviations are more meaningful than raw percentiles.
+- Life context tags (from calibration sessions) tell you what's happening in the person's life — 7 research-backed dimensions: sleep, physical state, emotional events, social quality, stress, exercise, routine. Use this to TIME questions appropriately. If life context shows disruption (poor sleep, high stress, pain), a concrete low-friction question may land better than an abstract one. If context shows stability, you have room for deeper challenge.
 - A "no" on "did it land?" means that line of questioning missed.
 - Prediction track record: theory confidence scores tell you which interpretations are reliable. Frame disambiguation questions historically produce more trajectory shifts.
 ${difficultyGuidance}
@@ -314,7 +322,7 @@ ${dynamicsSection ? `\n${dynamicsSection}` : ''}
 ${predictionSection}
 
 ${feedbackSection}
-
+${lifeContextSection ? `\n${lifeContextSection}\n` : ''}
 ---
 
 RECENT QUESTION HISTORY (for spaced repetition — avoid clustering themes):
@@ -410,4 +418,34 @@ Generate 3 candidate questions with your selection, theme tags, uncertainty dime
     observationIds: recentObservations.map(o => o.ai_observation_id),
     tokenEstimate: message.usage?.input_tokens,
   });
+}
+
+/**
+ * Format life-context tags for the generation prompt (compact form).
+ */
+function formatGenerateLifeContext(tags: Array<{
+  questionId: number; sessionDate: string; dimension: string;
+  value: string; detail: string | null; confidence: number;
+}>): string {
+  if (tags.length === 0) return '';
+
+  // Group by date, show most recent first
+  const byDate = new Map<string, Array<typeof tags[number]>>();
+  for (const tag of tags) {
+    const date = tag.sessionDate.split('T')[0] || tag.sessionDate;
+    if (!byDate.has(date)) byDate.set(date, []);
+    byDate.get(date)!.push(tag);
+  }
+
+  const lines: string[] = ['LIFE CONTEXT (from recent calibration sessions — observable facts):'];
+  for (const [date, dateTags] of byDate) {
+    const tagStrs = dateTags
+      .filter(t => t.confidence >= 0.5)
+      .map(t => `${t.dimension}=${t.value}`);
+    if (tagStrs.length > 0) {
+      lines.push(`[${date}] ${tagStrs.join(', ')}`);
+    }
+  }
+
+  return lines.length > 1 ? lines.join('\n') : '';
 }

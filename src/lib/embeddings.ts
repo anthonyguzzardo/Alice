@@ -5,7 +5,9 @@
 import 'dotenv/config';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
-const { VoyageAIClient } = require('voyageai') as typeof import('voyageai');
+const voyageModule = require('voyageai') as typeof import('voyageai');
+const { VoyageAIClient } = voyageModule;
+type VoyageClient = InstanceType<typeof VoyageAIClient>;
 import {
   insertEmbeddingMeta,
   insertVecEmbedding,
@@ -24,9 +26,9 @@ const SOURCE_IDS = {
   reflection: 3,
 } as const;
 
-let voyageClient: VoyageAIClient | null = null;
+let voyageClient: VoyageClient | null = null;
 
-function getVoyageClient(): VoyageAIClient | null {
+function getVoyageClient(): VoyageClient | null {
   if (voyageClient) return voyageClient;
   const apiKey = process.env.VOYAGE_API_KEY;
   if (!apiKey) {
@@ -50,7 +52,7 @@ export async function generateEmbedding(text: string): Promise<number[] | null> 
     const result = await withRetry(() => client.embed({
       input: [text],
       model: VOYAGE_MODEL,
-    }));
+    })) as { data?: Array<{ embedding?: number[] }> };
     return result.data?.[0]?.embedding ?? null;
   } catch (err) {
     console.error('[embeddings] Voyage API error:', err);
@@ -96,7 +98,7 @@ export async function generateEmbeddings(texts: string[]): Promise<(number[] | n
     const result = await withRetry(() => client.embed({
       input: texts,
       model: VOYAGE_MODEL,
-    }));
+    })) as { data?: Array<{ embedding?: number[] }> };
     return texts.map((_, i) => result.data?.[i]?.embedding ?? null);
   } catch (err) {
     console.error('[embeddings] Voyage API batch error:', err);

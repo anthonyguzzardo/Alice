@@ -24,6 +24,7 @@ import {
   getPredictionStats,
   getAllTheoryConfidences,
   getRecentGradedPredictions,
+  getRecentCalibrationContext,
 } from './db.ts';
 import { localDateStr } from './date.ts';
 import { retrieveSimilarMulti, retrieveContrarian } from './rag.ts';
@@ -138,6 +139,12 @@ export async function runReflection(): Promise<void> {
 
   const calibrationContext = formatEnrichedCalibration(calibration);
 
+  // Life-context from calibration extraction (covers the reflection window)
+  const recentLifeContext = getRecentCalibrationContext(30);
+  const lifeContextSection = recentLifeContext.length > 0
+    ? formatReflectLifeContext(recentLifeContext)
+    : '';
+
   const feedbackSection = recentFeedback.length > 0
     ? `Question feedback ("did it land?" responses):\n${recentFeedback.map(f => `[${f.date}] ${f.landed ? 'YES' : 'NO'}`).join('\n')}`
     : 'No question feedback collected yet.';
@@ -170,6 +177,7 @@ Write a reflection that covers:
    - Percentiles compare each metric against this person's own history, not population norms.
    - Keystroke dynamics: inter-key interval patterns, revision chain topology, scroll-back behavior. These are process signals the words don't capture.
    Compare against calibration baselines. Note baseline confidence level. Only flag deviations that are significant relative to their neutral behavior. Flag when you're comparing across mismatched contexts.
+   - Life context tags: structured facts extracted from calibration sessions — 7 research-backed dimensions: sleep, physical state, emotional events, social quality, stress, exercise, routine. Use these to contextualize behavioral patterns — a week of fragmented P-bursts means something different if the person also reported poor sleep every day vs. if their routine was normal.
 
 7. QUESTION FEEDBACK — If any "did it land" data exists, what does it tell you about which questions work and which don't? A "no" is clear signal to recalibrate. A "yes" is ambiguous — it could mean insightful, uncomfortable, or just emotionally loaded.
 
@@ -238,6 +246,7 @@ ${dynamicsSection ? `\n${dynamicsSection}` : ''}
 ---
 
 ${calibrationContext}
+${lifeContextSection ? `\n${lifeContextSection}` : ''}
 
 ---
 
@@ -307,4 +316,33 @@ Be concise and direct. This audit is appended to the reflection for future refer
     observationIds: newObservations.map(o => o.ai_observation_id),
     tokenEstimate: (primaryMessage.usage?.input_tokens ?? 0) + (auditMessage.usage?.input_tokens ?? 0),
   });
+}
+
+/**
+ * Format life-context tags for the reflection prompt (compact form, grouped by date).
+ */
+function formatReflectLifeContext(tags: Array<{
+  questionId: number; sessionDate: string; dimension: string;
+  value: string; detail: string | null; confidence: number;
+}>): string {
+  if (tags.length === 0) return '';
+
+  const byDate = new Map<string, Array<typeof tags[number]>>();
+  for (const tag of tags) {
+    const date = tag.sessionDate.split('T')[0] || tag.sessionDate;
+    if (!byDate.has(date)) byDate.set(date, []);
+    byDate.get(date)!.push(tag);
+  }
+
+  const lines: string[] = ['LIFE CONTEXT (from calibration sessions — observable facts, not interpretations):'];
+  for (const [date, dateTags] of byDate) {
+    const tagStrs = dateTags
+      .filter(t => t.confidence >= 0.5)
+      .map(t => `${t.dimension}=${t.value}`);
+    if (tagStrs.length > 0) {
+      lines.push(`[${date}] ${tagStrs.join(', ')}`);
+    }
+  }
+
+  return lines.length > 1 ? lines.join('\n') : '';
 }

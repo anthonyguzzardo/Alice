@@ -742,6 +742,99 @@ db.exec(`
 `);
 
 // --------------------------------------------------------------------------
+// CALIBRATION CONTENT EXTRACTION TABLES
+// --------------------------------------------------------------------------
+
+db.exec(`
+  -- --------------------------------------------------------------------------
+  -- te_context_dimension
+  -- --------------------------------------------------------------------------
+  -- PURPOSE: Define life-context dimensions extracted from calibration text
+  -- USE CASE: "What kind of life-context tag is this?"
+  -- MUTABILITY: Static
+  -- VALUES: sleep (1), physical_state (2), emotional_event (3),
+  --         social_quality (4), stress (5), exercise (6), routine (7)
+  -- REFERENCED BY: tb_calibration_context.context_dimension_id
+  -- RESEARCH: Dimensions ranked by evidence strength for behavioral prediction:
+  --   sleep           — Pilcher & Huffcutt (1996) d=-1.55; keystroke evidence (Abdullah et al. 2016)
+  --   physical_state  — Moriarty et al. (2011) d=0.40-0.80; Eccleston & Crombez (1999)
+  --   emotional_event — Amabile et al. (2005) 12K diary entries; Fredrickson (2001) broaden-and-build
+  --   social_quality  — Reis et al. (2000) quality > quantity; Sun et al. (2020) PNAS
+  --   stress          — Sliwinski et al. (2009) same-day WM decrement; Almeida (2005) carry-over
+  --   exercise        — Hillman et al. (2008) d=0.20-0.50; temporally bounded acute effect
+  --   routine         — Torous et al. (2016) circadian disruption; partially captured by session metadata
+  --   DROPPED: meals (d=0.12-0.25, Hoyland et al.), environment (no keystroke evidence),
+  --            caffeine (d=0.10-0.20 net for habitual users)
+  -- FOOTER: None
+  -- --------------------------------------------------------------------------
+  CREATE TABLE IF NOT EXISTS te_context_dimension (
+     context_dimension_id  INTEGER PRIMARY KEY
+    ,enum_code             TEXT    UNIQUE NOT NULL
+    ,name                  TEXT    NOT NULL
+  );
+
+  INSERT OR IGNORE INTO te_context_dimension (context_dimension_id, enum_code, name)
+  VALUES
+     (1, 'sleep',           'Sleep')
+    ,(2, 'physical_state',  'Physical State')
+    ,(3, 'emotional_event', 'Emotional Event')
+    ,(4, 'social_quality',  'Social Quality')
+    ,(5, 'stress',          'Stress')
+    ,(6, 'exercise',        'Exercise')
+    ,(7, 'routine',         'Routine');
+
+  -- --------------------------------------------------------------------------
+  -- tb_calibration_context
+  -- --------------------------------------------------------------------------
+  -- PURPOSE: Structured life-context tags extracted from calibration response
+  --          text. The user's neutral descriptions of their morning/day contain
+  --          observable facts (sleep, physical state, emotional events, social
+  --          quality, stress, exercise, routine) that serve as incidental
+  --          supervision for behavioral clustering.
+  -- USE CASE: "What was happening in the user's life around this session?"
+  -- MUTABILITY: Append-only (one set of rows per calibration session)
+  -- LOGICAL FK: question_id → tb_questions.question_id (calibration question)
+  -- LOGICAL FK: context_dimension_id → te_context_dimension.context_dimension_id
+  -- FOOTER: Minimal (append-only)
+  -- --------------------------------------------------------------------------
+  CREATE TABLE IF NOT EXISTS tb_calibration_context (
+     calibration_context_id  INTEGER PRIMARY KEY AUTOINCREMENT
+    ,question_id             INTEGER NOT NULL
+    ,context_dimension_id    INTEGER NOT NULL
+    ,value                   TEXT    NOT NULL          -- e.g., 'poor', 'skipped', 'disrupted'
+    ,detail                  TEXT                      -- optional specifics from the text
+    ,confidence              REAL    NOT NULL DEFAULT 1.0  -- extraction confidence 0-1
+    -- FOOTER
+    ,dttm_created_utc        TEXT    NOT NULL DEFAULT (datetime('now'))
+    ,created_by              TEXT    NOT NULL DEFAULT 'system'
+  );
+`);
+
+// --------------------------------------------------------------------------
+// MIGRATION: Update te_context_dimension to research-backed dimensions
+// --------------------------------------------------------------------------
+try {
+  const existing = db.prepare(
+    `SELECT enum_code FROM te_context_dimension WHERE context_dimension_id = 2`
+  ).get() as { enum_code: string } | null;
+  if (existing && existing.enum_code === 'meals') {
+    // Old schema detected — update to research-backed dimensions
+    db.exec(`
+      UPDATE te_context_dimension SET enum_code = 'physical_state', name = 'Physical State' WHERE context_dimension_id = 2;
+      UPDATE te_context_dimension SET enum_code = 'emotional_event', name = 'Emotional Event' WHERE context_dimension_id = 3;
+      UPDATE te_context_dimension SET enum_code = 'social_quality', name = 'Social Quality' WHERE context_dimension_id = 4;
+      UPDATE te_context_dimension SET enum_code = 'stress', name = 'Stress' WHERE context_dimension_id = 5;
+      UPDATE te_context_dimension SET enum_code = 'exercise', name = 'Exercise' WHERE context_dimension_id = 6;
+      UPDATE te_context_dimension SET enum_code = 'routine', name = 'Routine' WHERE context_dimension_id = 7;
+    `);
+    // Note: ID 1 (sleep) stays the same. Old IDs 2-7 are remapped.
+    // No existing data needs migration — calibration context table is new.
+  }
+} catch {
+  // Safe to ignore — table may not exist yet
+}
+
+// --------------------------------------------------------------------------
 // MIGRATION: Add coverage_through_response_id to tb_reflections
 // --------------------------------------------------------------------------
 try {
@@ -2024,6 +2117,115 @@ export function getQuestionCandidates(questionId: number): QuestionCandidate[] {
     WHERE question_id = ?
     ORDER BY candidate_rank ASC
   `).all(questionId) as QuestionCandidate[];
+}
+
+// ----------------------------------------------------------------------------
+// CALIBRATION CONTEXT EXTRACTION
+// ----------------------------------------------------------------------------
+
+export interface CalibrationContextTag {
+  dimension: 'sleep' | 'physical_state' | 'emotional_event' | 'social_quality' | 'stress' | 'exercise' | 'routine';
+  value: string;
+  detail: string | null;
+  confidence: number;
+}
+
+const DIMENSION_ID_MAP: Record<string, number> = {
+  sleep: 1, physical_state: 2, emotional_event: 3, social_quality: 4,
+  stress: 5, exercise: 6, routine: 7,
+};
+
+export function saveCalibrationContext(questionId: number, tags: CalibrationContextTag[]): void {
+  const stmt = db.prepare(`
+    INSERT INTO tb_calibration_context (
+       question_id, context_dimension_id, value, detail, confidence
+    ) VALUES (?, ?, ?, ?, ?)
+  `);
+  const insertAll = db.transaction((entries: CalibrationContextTag[]) => {
+    for (const tag of entries) {
+      const dimId = DIMENSION_ID_MAP[tag.dimension];
+      if (!dimId) continue;
+      stmt.run(questionId, dimId, tag.value, tag.detail, tag.confidence);
+    }
+  });
+  insertAll(tags);
+}
+
+export function getCalibrationContextForQuestion(questionId: number): Array<CalibrationContextTag & { questionId: number }> {
+  return db.prepare(`
+    SELECT cc.question_id as questionId,
+           d.enum_code as dimension,
+           cc.value,
+           cc.detail,
+           cc.confidence
+    FROM tb_calibration_context cc
+    JOIN te_context_dimension d ON cc.context_dimension_id = d.context_dimension_id
+    WHERE cc.question_id = ?
+    ORDER BY cc.context_dimension_id ASC
+  `).all(questionId) as Array<CalibrationContextTag & { questionId: number }>;
+}
+
+export function getRecentCalibrationContext(limit: number = 10): Array<{
+  questionId: number;
+  promptText: string;
+  sessionDate: string;
+  dimension: string;
+  value: string;
+  detail: string | null;
+  confidence: number;
+}> {
+  return db.prepare(`
+    SELECT cc.question_id as questionId,
+           q.text as promptText,
+           q.dttm_created_utc as sessionDate,
+           d.enum_code as dimension,
+           cc.value,
+           cc.detail,
+           cc.confidence
+    FROM tb_calibration_context cc
+    JOIN te_context_dimension d ON cc.context_dimension_id = d.context_dimension_id
+    JOIN tb_questions q ON cc.question_id = q.question_id
+    ORDER BY q.dttm_created_utc DESC, cc.context_dimension_id ASC
+    LIMIT ?
+  `).all(limit) as Array<{
+    questionId: number;
+    promptText: string;
+    sessionDate: string;
+    dimension: string;
+    value: string;
+    detail: string | null;
+    confidence: number;
+  }>;
+}
+
+export function getCalibrationContextNearDate(targetDate: string, windowDays: number = 1): Array<{
+  questionId: number;
+  sessionDate: string;
+  dimension: string;
+  value: string;
+  detail: string | null;
+  confidence: number;
+}> {
+  return db.prepare(`
+    SELECT cc.question_id as questionId,
+           q.dttm_created_utc as sessionDate,
+           d.enum_code as dimension,
+           cc.value,
+           cc.detail,
+           cc.confidence
+    FROM tb_calibration_context cc
+    JOIN te_context_dimension d ON cc.context_dimension_id = d.context_dimension_id
+    JOIN tb_questions q ON cc.question_id = q.question_id
+    WHERE ABS(julianday(q.dttm_created_utc) - julianday(?)) <= ?
+    ORDER BY ABS(julianday(q.dttm_created_utc) - julianday(?)) ASC, cc.context_dimension_id ASC
+  `).all(targetDate, windowDays, targetDate) as Array<{
+    questionId: number;
+    sessionDate: string;
+    dimension: string;
+    value: string;
+    detail: string | null;
+    confidence: number;
+  }>;
 }
 
 export default db;

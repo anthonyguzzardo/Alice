@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import { saveCalibrationSession, getUsedCalibrationPrompts } from '../../lib/db.ts';
 import { CALIBRATION_PROMPTS } from '../../lib/calibration-prompts.ts';
 import { computeLinguisticDensities } from '../../lib/linguistic.ts';
+import { runCalibrationExtraction } from '../../lib/calibration-extract.ts';
 
 export const GET: APIRoute = () => {
   const used = new Set(getUsedCalibrationPrompts());
@@ -26,7 +27,7 @@ export const POST: APIRoute = async ({ request }) => {
 
   const densities = computeLinguisticDensities(text.trim());
 
-  saveCalibrationSession(prompt, text.trim(), {
+  const questionId = saveCalibrationSession(prompt, text.trim(), {
     questionId: 0,
     firstKeystrokeMs: sessionSummary.firstKeystrokeMs ?? null,
     totalDurationMs: sessionSummary.totalDurationMs ?? null,
@@ -63,6 +64,10 @@ export const POST: APIRoute = async ({ request }) => {
     hourOfDay: sessionSummary.hourOfDay ?? null,
     dayOfWeek: sessionSummary.dayOfWeek ?? null,
   });
+
+  // Fire-and-forget: extract life-context tags from calibration response text.
+  // Non-blocking — extraction failure never prevents calibration from succeeding.
+  runCalibrationExtraction(questionId, text.trim(), prompt);
 
   return new Response(JSON.stringify({ ok: true }), {
     headers: { 'Content-Type': 'application/json' },

@@ -32,20 +32,24 @@ import { getLatestWitnessState, saveWitnessState } from '../db.ts';
 import { type DynamicsAnalysis, formatDynamicsForRenderer } from './dynamics.ts';
 import { type EmotionAnalysis, formatEmotionForRenderer } from './emotion-profile.ts';
 
-/** Load traits from DB, or return null if stale */
-export function loadPersistedTraits(currentEntryCount: number): WitnessTraits | null {
+/** Load the latest persisted traits, regardless of entry count.
+ *  Returns null only if no witness state has ever been generated. */
+export function loadPersistedTraits(): WitnessTraits | null {
   const row = getLatestWitnessState();
   if (!row) return null;
 
-  if (row.entry_count === currentEntryCount) {
-    try {
-      return JSON.parse(row.traits_json) as WitnessTraits;
-    } catch {
-      return null;
-    }
+  try {
+    return JSON.parse(row.traits_json) as WitnessTraits;
+  } catch {
+    return null;
   }
+}
 
-  return null;
+/** Check if a new render is needed (entry count changed since last persist) */
+export function needsNewRender(currentEntryCount: number): boolean {
+  const row = getLatestWitnessState();
+  if (!row) return true;
+  return row.entry_count !== currentEntryCount;
 }
 
 const SYSTEM_PROMPT = `You are a visual renderer for a witness-form — a singular presence that exists in a void. You receive VALIDATED BEHAVIORAL DYNAMICS computed from deterministic math. Your job is to translate those dynamics into 26 visual traits that make the form LOOK like the dynamics FEEL.
@@ -157,15 +161,13 @@ Output ONLY valid JSON — a flat object with all 26 trait keys and float values
 
 let inflight: Promise<WitnessTraits> | null = null;
 
+/** Render new witness traits via LLM. Called ONLY from session completion pipeline.
+ *  This ALWAYS calls the LLM — caller must check needsNewRender() first. */
 export async function renderTraits(
   dynamics: DynamicsAnalysis,
   entryCount: number,
   emotionAnalysis?: EmotionAnalysis,
 ): Promise<WitnessTraits> {
-  // Check DB first
-  const persisted = loadPersistedTraits(entryCount);
-  if (persisted) return persisted;
-
   // Prevent duplicate LLM calls from concurrent requests
   if (inflight) return inflight;
 
@@ -263,12 +265,8 @@ import { computeDynamics } from './dynamics.ts';
 import { computeEmotionAnalysis } from './emotion-profile.ts';
 import type { BobSignal } from './types.js';
 
-export async function interpretTraits(sig: BobSignal, entryCount: number): Promise<WitnessTraits> {
-  // Check DB first (same cache logic)
-  const persisted = loadPersistedTraits(entryCount);
-  if (persisted) return persisted;
-
-  // Run the new pipeline: states → dynamics → emotion → render
+/** Legacy bridge for scripts/reinterpret.ts — runs full pipeline unconditionally */
+export async function interpretTraits(_sig: BobSignal, entryCount: number): Promise<WitnessTraits> {
   const states = computeEntryStates();
   if (states.length < 3) return { ...DEFAULT_TRAITS };
 
