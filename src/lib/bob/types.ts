@@ -2,7 +2,7 @@
 
 /** Raw signals from /api/bob */
 export interface BobSignal {
-  // Behavioral — how you interact
+  // ─── Behavioral (long-term) ──────────────────
   avgCommitment: number;
   avgHesitation: number;
   deletionIntensity: number;
@@ -15,16 +15,42 @@ export interface BobSignal {
   avgSentenceCount: number;
   sessionCount: number;
 
-  // Temporal — when and how consistently
+  // ─── Temporal ────────────────────────────────
   avgHourOfDay: number;
   daySpread: number;
   consistency: number;
   daysSinceLastEntry: number;
 
-  // Patterns
+  // ─── Patterns ────────────────────────────────
   thematicDensity: number;
   landedRatio: number;
   feedbackCount: number;
+
+  // ─── Recency (recent vs. long-term) ──────────
+  recentCommitment: number;
+  commitmentDelta: number;       // 0.5 = stable, >0.5 = increasing, <0.5 = decreasing
+  recentHesitation: number;
+  hesitationDelta: number;
+  recentDuration: number;
+  durationDelta: number;
+
+  // ─── Variance (stability vs. volatility) ─────
+  commitmentVariance: number;    // 0 = perfectly consistent, 1 = wildly volatile
+  hesitationVariance: number;
+  durationVariance: number;
+  sessionVolatility: number;     // how different consecutive sessions are from each other
+
+  // ─── Shape (texture of language, not content) ─
+  vocabularyRichness: number;    // type-token ratio — diverse vs. repetitive word choice
+  avgSentenceLength: number;     // normalized — complex vs. terse structure
+  sentenceLengthVariance: number;// uniform vs. chaotic sentence structure
+  questionDensity: number;       // how often responses contain questions
+  firstPersonDensity: number;    // I/me/my frequency — self-focus
+  hedgingDensity: number;        // maybe/perhaps/guess — qualification frequency
+
+  // ─── Relational (how unusual recent behavior is)
+  latestSessionDeviation: number;// composite z-score of most recent session
+  outlierFrequency: number;      // what % of all sessions are statistical outliers
 }
 
 /** The trait vector that defines the witness-form.

@@ -90,6 +90,40 @@ Guidelines — these are intuitions, not rules:
 - Late-night entries (high hour of day) → temperature shifts, different energy. You decide what it means.
 - High day spread (showing up on many different days) → commitment over time. CreationCost, storedEnergy.
 
+RECENCY AND MOMENTUM:
+- commitmentDelta > 0.5 means commitment is increasing recently → the form is growing, earning substance, densifying
+- commitmentDelta < 0.5 means commitment is dropping → thinning, losing density, edges dissolving
+- hesitationDelta > 0.5 means they're hesitating more lately → cautious, hollowing, cooling
+- hesitationDelta < 0.5 means they're diving in faster → confidence, density, temperature rising
+- durationDelta > 0.5 means they're spending more time → the form is earning weight
+- durationDelta < 0.5 means sessions are getting shorter → the form is losing substance
+- Large deltas in any direction → the form is in transition. Reactivity, temperature, flow should respond.
+- When recent signals diverge sharply from long-term → the form should look different from its "settled" state. Tension between what it was and what it's becoming.
+
+VARIANCE AND VOLATILITY:
+- High commitmentVariance → swings between giving everything and withholding → multiplicity, symmetry-breaking, reactivity
+- Low commitmentVariance → consistent presence → density, smooth surface, stability
+- High sessionVolatility → each session is drastically different from the last → unstable, reactive, high flow
+- Low sessionVolatility → steady, predictable → rhythm, density, low reactivity
+
+LANGUAGE SHAPE (these describe HOW they write, not WHAT they write):
+- High vocabularyRichness → diverse expression, wide range → colorDepth, iridescence, complexity
+- Low vocabularyRichness → circling, repetitive, gravitational → rotation, magnetism, thematic gravity
+- High questionDensity → self-questioning in responses → hollowness, internalLight, searching
+- Low questionDensity → declarative, certain → density, sharp edges, faceting
+- High firstPersonDensity → intensely self-focused → magnetism, density concentrated at center
+- Low firstPersonDensity → externally oriented or abstract → edgeCharacter, atmosphere
+- High hedgingDensity → qualifying everything, uncertain → edgeCharacter dissolving, flexibility, low density
+- Low hedgingDensity → direct, unqualified, committed → hard surface, faceting, solid density
+- High sentenceLengthVariance → chaotic structure → symmetry-breaking, scaleVariation
+- Low sentenceLengthVariance → uniform, controlled → symmetry, consistency
+
+RELATIONAL (how unusual they are relative to themselves):
+- High latestSessionDeviation → the most recent session was very unusual for them → reactivity, temperature shift, the form should show disturbance
+- Low latestSessionDeviation → they're in their normal range → stability
+- High outlierFrequency → they are fundamentally unpredictable → symmetry-breaking, multiplicity, atmosphere
+- Low outlierFrequency → they are stable, consistent → clean edges, uniform form
+
 CRITICAL: Do NOT make everything moderate. Be decisive. Some traits should be near 0, some near 1. A form with all values at 0.4-0.6 has no character. Strong opinions produce strong forms.
 
 Output ONLY valid JSON — a flat object with all 26 trait keys and float values. No explanation.`;
@@ -116,8 +150,7 @@ async function interpretTraitsInner(sig: BobSignal, entryCount: number): Promise
   try {
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY2 });
 
-    const userMessage = `Behavioral signals:
-
+    const userMessage = `=== BEHAVIORAL (long-term averages) ===
 - Commitment ratio: ${sig.avgCommitment.toFixed(3)} (how much typed text was kept vs deleted)
 - Hesitation: ${sig.avgHesitation.toFixed(3)} (delay before first keystroke, normalized)
 - Deletion intensity: ${sig.deletionIntensity.toFixed(3)} (proportion of text deleted)
@@ -129,13 +162,43 @@ async function interpretTraitsInner(sig: BobSignal, entryCount: number): Promise
 - Average word count: ${sig.avgWordCount.toFixed(3)} (density of output, normalized)
 - Average sentence count: ${sig.avgSentenceCount.toFixed(3)} (structural complexity)
 - Total entries: ${sig.sessionCount}
+
+=== TEMPORAL ===
 - Average hour of day: ${sig.avgHourOfDay.toFixed(3)} (when they show up, 0=midnight, 0.5=noon)
 - Day spread: ${sig.daySpread.toFixed(3)} (how many different days of the week)
 - Consistency: ${sig.consistency.toFixed(3)} (regularity of spacing between entries)
 - Days since last entry: ${sig.daysSinceLastEntry}
+
+=== PATTERNS ===
 - Thematic density: ${sig.thematicDensity.toFixed(3)} (higher = more repetitive language)
 - Landed ratio: ${sig.landedRatio.toFixed(3)} (how often AI questions resonated)
-- Feedback count: ${sig.feedbackCount}`;
+- Feedback count: ${sig.feedbackCount}
+
+=== RECENCY (last 7 sessions vs. long-term) ===
+- Recent commitment: ${sig.recentCommitment.toFixed(3)} (vs long-term ${sig.avgCommitment.toFixed(3)})
+- Commitment delta: ${sig.commitmentDelta.toFixed(3)} (0.5=stable, >0.5=increasing, <0.5=decreasing)
+- Recent hesitation: ${sig.recentHesitation.toFixed(3)} (vs long-term ${sig.avgHesitation.toFixed(3)})
+- Hesitation delta: ${sig.hesitationDelta.toFixed(3)}
+- Recent duration: ${sig.recentDuration.toFixed(3)} (vs long-term ${sig.avgDuration.toFixed(3)})
+- Duration delta: ${sig.durationDelta.toFixed(3)}
+
+=== VARIANCE ===
+- Commitment variance: ${sig.commitmentVariance.toFixed(3)} (0=consistent, 1=volatile)
+- Hesitation variance: ${sig.hesitationVariance.toFixed(3)}
+- Duration variance: ${sig.durationVariance.toFixed(3)}
+- Session volatility: ${sig.sessionVolatility.toFixed(3)} (how different consecutive sessions are)
+
+=== LANGUAGE SHAPE (structure, not content) ===
+- Vocabulary richness: ${sig.vocabularyRichness.toFixed(3)} (type-token ratio, higher=more diverse words)
+- Average sentence length: ${sig.avgSentenceLength.toFixed(3)} (normalized, higher=longer sentences)
+- Sentence length variance: ${sig.sentenceLengthVariance.toFixed(3)} (uniform vs chaotic structure)
+- Question density: ${sig.questionDensity.toFixed(3)} (how often responses contain questions)
+- First-person density: ${sig.firstPersonDensity.toFixed(3)} (I/me/my frequency)
+- Hedging density: ${sig.hedgingDensity.toFixed(3)} (maybe/perhaps/guess frequency)
+
+=== RELATIONAL ===
+- Latest session deviation: ${sig.latestSessionDeviation.toFixed(3)} (how unusual the most recent session was)
+- Outlier frequency: ${sig.outlierFrequency.toFixed(3)} (% of all sessions that are statistical outliers)`;
 
     const response = await client.messages.create({
       model: 'claude-opus-4-20250514',
