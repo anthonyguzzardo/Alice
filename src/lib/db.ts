@@ -252,6 +252,14 @@ db.exec(`
     ,cognitive_density          REAL             -- cognitive mechanism words / total (Pennebaker)
     ,hedging_density            REAL             -- hedging words / total
     ,first_person_density       REAL             -- first person pronouns / total
+    -- KEYSTROKE DYNAMICS (Epp et al. 2011; Leijten & Van Waes 2013)
+    ,inter_key_interval_mean    REAL             -- mean ms between keystrokes (capped 5s)
+    ,inter_key_interval_std     REAL             -- std dev of inter-key intervals
+    ,revision_chain_count       INTEGER          -- count of sequential deletion chains
+    ,revision_chain_avg_length  REAL             -- avg keystrokes per revision chain
+    -- SESSION METADATA (Czerwinski et al. 2004)
+    ,scroll_back_count          INTEGER          -- times user scrolled back in textarea
+    ,question_reread_count      INTEGER          -- times user scrolled to re-read question
     -- CONTEXT
     ,device_type                TEXT             -- 'mobile' or 'desktop'
     ,user_agent                 TEXT             -- raw user agent string
@@ -486,6 +494,31 @@ db.exec(`
     ,(4, 'frame_disambiguation',  'Frame Disambiguation')
     ,(5, 'trajectory_probe',      'Trajectory Probe')
     ,(6, 'depth_test',            'Depth Test');
+
+  -- --------------------------------------------------------------------------
+  -- tb_question_candidates
+  -- --------------------------------------------------------------------------
+  -- PURPOSE: Store the candidate questions considered during generation,
+  --          not just the one selected. Harrison et al. (2017) showed the
+  --          sequence of what an adaptive system needed to ask is itself
+  --          diagnostic signal.
+  -- USE CASE: "What alternatives did the system consider? What uncertainty
+  --           dimension drove selection?"
+  -- MUTABILITY: Mutable (append-only, rows per generation run)
+  -- LOGICAL FK: question_id → tb_questions.question_id (the selected question)
+  -- FOOTER: Minimal (append-only)
+  -- --------------------------------------------------------------------------
+  CREATE TABLE IF NOT EXISTS tb_question_candidates (
+     question_candidate_id   INTEGER PRIMARY KEY AUTOINCREMENT
+    ,question_id             INTEGER NOT NULL     -- the question that was selected
+    ,candidate_rank          INTEGER NOT NULL     -- 1=selected, 2-3=runners up
+    ,candidate_text          TEXT    NOT NULL
+    ,selection_rationale     TEXT                 -- why this one was/wasn't selected
+    ,uncertainty_dimension   TEXT                 -- what the system was most uncertain about
+    ,theme_tags              TEXT                 -- comma-separated theme tags
+    ,dttm_created_utc        TEXT    NOT NULL DEFAULT (datetime('now'))
+    ,created_by              TEXT    NOT NULL DEFAULT 'system'
+  );
 
   -- --------------------------------------------------------------------------
   -- tb_predictions
@@ -754,6 +787,27 @@ try {
   // safe to ignore
 }
 
+// MIGRATION: Add keystroke dynamics and session metadata columns
+// --------------------------------------------------------------------------
+try {
+  const cols2 = db.prepare(`PRAGMA table_info(tb_session_summaries)`).all() as Array<{ name: string }>;
+  const keystrokeCols: Array<[string, string]> = [
+    ['inter_key_interval_mean', 'REAL'],
+    ['inter_key_interval_std', 'REAL'],
+    ['revision_chain_count', 'INTEGER'],
+    ['revision_chain_avg_length', 'REAL'],
+    ['scroll_back_count', 'INTEGER'],
+    ['question_reread_count', 'INTEGER'],
+  ];
+  for (const [col, type] of keystrokeCols) {
+    if (!cols2.some(c => c.name === col)) {
+      db.exec(`ALTER TABLE tb_session_summaries ADD COLUMN ${col} ${type}`);
+    }
+  }
+} catch {
+  // safe to ignore
+}
+
 // ----------------------------------------------------------------------------
 // QUERIES
 // ----------------------------------------------------------------------------
@@ -870,6 +924,14 @@ export interface SessionSummaryInput {
   cognitiveDensity: number | null;
   hedgingDensity: number | null;
   firstPersonDensity: number | null;
+  // Keystroke dynamics (Epp et al. 2011; Leijten & Van Waes 2013)
+  interKeyIntervalMean: number | null;
+  interKeyIntervalStd: number | null;
+  revisionChainCount: number | null;
+  revisionChainAvgLength: number | null;
+  // Session metadata (Czerwinski et al. 2004)
+  scrollBackCount: number | null;
+  questionRereadCount: number | null;
   // Context
   deviceType: string | null;
   userAgent: string | null;
@@ -891,8 +953,11 @@ export function saveSessionSummary(s: SessionSummaryInput): void {
        nrc_anger_density, nrc_fear_density, nrc_joy_density,
        nrc_sadness_density, nrc_trust_density, nrc_anticipation_density,
        cognitive_density, hedging_density, first_person_density,
+       inter_key_interval_mean, inter_key_interval_std,
+       revision_chain_count, revision_chain_avg_length,
+       scroll_back_count, question_reread_count,
        device_type, user_agent, hour_of_day, day_of_week
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     s.questionId, s.firstKeystrokeMs, s.totalDurationMs,
     s.totalCharsTyped, s.finalCharCount, s.commitmentRatio,
@@ -905,6 +970,9 @@ export function saveSessionSummary(s: SessionSummaryInput): void {
     s.nrcAngerDensity, s.nrcFearDensity, s.nrcJoyDensity,
     s.nrcSadnessDensity, s.nrcTrustDensity, s.nrcAnticipationDensity,
     s.cognitiveDensity, s.hedgingDensity, s.firstPersonDensity,
+    s.interKeyIntervalMean, s.interKeyIntervalStd,
+    s.revisionChainCount, s.revisionChainAvgLength,
+    s.scrollBackCount, s.questionRereadCount,
     s.deviceType, s.userAgent, s.hourOfDay, s.dayOfWeek
   );
 }
@@ -962,6 +1030,12 @@ const SESSION_SUMMARY_COLS = `
   nrc_trust_density as nrcTrustDensity, nrc_anticipation_density as nrcAnticipationDensity,
   cognitive_density as cognitiveDensity, hedging_density as hedgingDensity,
   first_person_density as firstPersonDensity,
+  inter_key_interval_mean as interKeyIntervalMean,
+  inter_key_interval_std as interKeyIntervalStd,
+  revision_chain_count as revisionChainCount,
+  revision_chain_avg_length as revisionChainAvgLength,
+  scroll_back_count as scrollBackCount,
+  question_reread_count as questionRereadCount,
   device_type as deviceType, user_agent as userAgent,
   hour_of_day as hourOfDay, day_of_week as dayOfWeek
 `;
@@ -1164,6 +1238,12 @@ export function getAllSuppressedQuestions(): Array<{ date: string; question: str
 export function getResponseCount(): number {
   const row = db.prepare(`SELECT COUNT(*) as count FROM tb_responses`).get() as { count: number };
   return row.count;
+}
+
+export function getUsedCalibrationPrompts(): string[] {
+  return (db.prepare(
+    `SELECT text FROM tb_questions WHERE question_source_id = 3`
+  ).all() as Array<{ text: string }>).map(r => r.text);
 }
 
 export function saveCalibrationSession(
@@ -1904,6 +1984,46 @@ export function getQuestionIntent(questionId: number): {
     JOIN te_intervention_intent i ON q.intervention_intent_id = i.intervention_intent_id
     WHERE q.question_id = ?
   `).get(questionId) as { intentCode: string; rationale: string | null } | null;
+}
+
+// ----------------------------------------------------------------------------
+// QUESTION CANDIDATES (Harrison et al. 2017)
+// ----------------------------------------------------------------------------
+
+export interface QuestionCandidate {
+  candidateRank: number;
+  candidateText: string;
+  selectionRationale: string | null;
+  uncertaintyDimension: string | null;
+  themeTags: string | null;
+}
+
+export function saveQuestionCandidates(questionId: number, candidates: QuestionCandidate[]): void {
+  const stmt = db.prepare(`
+    INSERT INTO tb_question_candidates (
+      question_id, candidate_rank, candidate_text,
+      selection_rationale, uncertainty_dimension, theme_tags
+    ) VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  const insertAll = db.transaction((entries: QuestionCandidate[]) => {
+    for (const c of entries) {
+      stmt.run(questionId, c.candidateRank, c.candidateText,
+        c.selectionRationale, c.uncertaintyDimension, c.themeTags);
+    }
+  });
+  insertAll(candidates);
+}
+
+export function getQuestionCandidates(questionId: number): QuestionCandidate[] {
+  return db.prepare(`
+    SELECT candidate_rank as candidateRank, candidate_text as candidateText,
+           selection_rationale as selectionRationale,
+           uncertainty_dimension as uncertaintyDimension,
+           theme_tags as themeTags
+    FROM tb_question_candidates
+    WHERE question_id = ?
+    ORDER BY candidate_rank ASC
+  `).all(questionId) as QuestionCandidate[];
 }
 
 export default db;

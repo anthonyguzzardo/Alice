@@ -92,6 +92,11 @@
         color: var(--text);
         margin-bottom: 3rem;
         font-style: italic;
+        transition: opacity 8s ease;
+      }
+
+      .question.fading {
+        opacity: 0.3;
       }
 
       .response-area {
@@ -109,7 +114,12 @@
         outline: none;
         -webkit-appearance: none;
         appearance: none;
-        transition: border-color 0.3s ease;
+        transition: border-color 0.3s ease, opacity 0.6s ease;
+      }
+
+      .response-area.waiting {
+        opacity: 0.3;
+        cursor: default;
       }
 
       .response-area:focus {
@@ -351,9 +361,14 @@
 
           inputArea.innerHTML = `
             <textarea
-              class="response-area"
+              class="response-area waiting"
               id="response"
               placeholder="Think before you type..."
+              autocomplete="off"
+              autocorrect="off"
+              autocapitalize="off"
+              spellcheck="false"
+              disabled
             ></textarea>
             <div class="submit-row">
               <button class="submit-btn" id="submit" disabled>Submit</button>
@@ -362,6 +377,14 @@
 
           const textarea = document.getElementById('response') as HTMLTextAreaElement;
           const submitBtn = document.getElementById('submit') as HTMLButtonElement;
+
+          // Reflection pause — Hallnäs & Redström (2001, KTH): slow technology
+          // amplifies time for reflection. 4-second pause before writing opens.
+          setTimeout(() => {
+            textarea.disabled = false;
+            textarea.classList.remove('waiting');
+            textarea.focus();
+          }, 4000);
 
           // Behavioral tracking state
           let firstKeystrokeSent = false;
@@ -393,10 +416,76 @@
           const burstLengths: number[] = [];
           const burstSequence: Array<{chars: number; startOffsetMs: number; durationMs: number}> = [];
 
+          // Enriched: keystroke dynamics (Epp et al. 2011, CHI)
+          // Inter-key intervals reveal affect signatures; revision chains reveal cognitive mode
+          let lastKeystrokeTime: number | null = null;
+          const interKeyIntervals: number[] = [];
+          let currentRevisionChainLength = 0;
+          let lastDeletionTime: number | null = null;
+          const revisionChains: number[] = [];
+
+          // Enriched: session metadata (Czerwinski et al. 2004)
+          // Scroll-back and re-read behavior correlate with engagement depth
+          let scrollBackCount = 0;
+          let questionRereadCount = 0;
+          let lastScrollTop = 0;
+
+          textarea.addEventListener('scroll', () => {
+            if (textarea.scrollTop < lastScrollTop && lastScrollTop > 0) {
+              scrollBackCount++;
+            }
+            lastScrollTop = textarea.scrollTop;
+          });
+
+          // Track if user scrolls page up to re-read the question
+          window.addEventListener('scroll', () => {
+            if (window.scrollY < 50 && textarea.value.length > 0) {
+              questionRereadCount++;
+            }
+          }, { passive: true });
+
+          textarea.addEventListener('keydown', (e: KeyboardEvent) => {
+            const now = Date.now();
+
+            // Inter-key interval tracking (Epp et al. 2011)
+            if (lastKeystrokeTime !== null) {
+              const interval = now - lastKeystrokeTime;
+              if (interval < 5000) { // cap at 5s to exclude pauses
+                interKeyIntervals.push(interval);
+              }
+            }
+            lastKeystrokeTime = now;
+
+            // Revision chain detection (Leijten & Van Waes 2013)
+            // Sequential deletions within 500ms = one revision chain
+            if (e.key === 'Backspace' || e.key === 'Delete') {
+              if (lastDeletionTime !== null && (now - lastDeletionTime) < 500) {
+                currentRevisionChainLength++;
+              } else {
+                if (currentRevisionChainLength > 0) {
+                  revisionChains.push(currentRevisionChainLength);
+                }
+                currentRevisionChainLength = 1;
+              }
+              lastDeletionTime = now;
+            } else {
+              if (currentRevisionChainLength > 0) {
+                revisionChains.push(currentRevisionChainLength);
+                currentRevisionChainLength = 0;
+              }
+            }
+          });
+
           textarea.addEventListener('input', () => {
             const now = Date.now();
             const currentLength = textarea.value.length;
             const delta = currentLength - lastTextLength;
+
+            // Question fading — Czerwinski et al. (2004, Microsoft Research):
+            // faded prompts produce more associative, less literal responses
+            if (!firstKeystrokeSent && delta > 0) {
+              questionEl.classList.add('fading');
+            }
 
             if (delta > 0) {
               totalCharsTyped += delta;
@@ -473,14 +562,15 @@
 
           document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
-              tabAwayStartTime = Date.now();
+              const blurTime = Date.now();
+              tabAwayStartTime = blurTime;
               // Close current P-burst on tab-away
               if (currentBurstChars > 0) {
                 burstLengths.push(currentBurstChars);
                 burstSequence.push({
                   chars: currentBurstChars,
-                  startOffsetMs: (burstStartTime ?? now) - pageOpenTime,
-                  durationMs: now - (burstStartTime ?? now),
+                  startOffsetMs: (burstStartTime ?? blurTime) - pageOpenTime,
+                  durationMs: blurTime - (burstStartTime ?? blurTime),
                 });
                 currentBurstChars = 0;
                 burstStartTime = null;
@@ -520,6 +610,11 @@
               });
             }
 
+            // Close final revision chain
+            if (currentRevisionChainLength > 0) {
+              revisionChains.push(currentRevisionChainLength);
+            }
+
             const submitTime = Date.now();
             const finalCharCount = text.length;
             const wordCount = text.split(/\s+/).filter(Boolean).length;
@@ -545,6 +640,18 @@
               if (d.time <= midpoint) firstHalfDeletionChars += d.chars;
               else secondHalfDeletionChars += d.chars;
             }
+
+            // Derived: inter-key interval stats (Epp et al. 2011)
+            const ikiCount = interKeyIntervals.length;
+            const ikiMean = ikiCount > 0
+              ? interKeyIntervals.reduce((a, b) => a + b, 0) / ikiCount : null;
+            const ikiStd = ikiCount > 1
+              ? Math.sqrt(interKeyIntervals.reduce((sum, v) => sum + (v - ikiMean!) ** 2, 0) / (ikiCount - 1)) : null;
+
+            // Derived: revision chain stats (Leijten & Van Waes 2013)
+            const revChainCount = revisionChains.length;
+            const revChainAvgLength = revChainCount > 0
+              ? revisionChains.reduce((a, b) => a + b, 0) / revChainCount : null;
 
             const sessionSummary = {
               questionId,
@@ -573,6 +680,14 @@
               pBurstCount,
               avgPBurstLength,
               burstSequence,
+              // Keystroke dynamics (Epp et al. 2011; Leijten & Van Waes 2013)
+              interKeyIntervalMean: ikiMean,
+              interKeyIntervalStd: ikiStd,
+              revisionChainCount: revChainCount,
+              revisionChainAvgLength: revChainAvgLength,
+              // Session metadata (Czerwinski et al. 2004)
+              scrollBackCount,
+              questionRereadCount,
               // Context
               deviceType,
               userAgent: rawUserAgent,
@@ -599,8 +714,6 @@
               submitBtn.disabled = false;
             }
           });
-
-          textarea.focus();
         }
       }
 
@@ -692,6 +805,10 @@
             class="response-area"
             id="response"
             placeholder="Just write..."
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="off"
+            spellcheck="false"
           ></textarea>
           <div class="submit-row">
             <button class="submit-btn" id="submit" disabled>Submit</button>
@@ -729,6 +846,48 @@
         let lastInputTime: number | null = null;
         let currentBurstChars = 0;
         const calBurstLengths: number[] = [];
+
+        // Enriched: keystroke dynamics (Epp et al. 2011)
+        let lastKeystrokeTime: number | null = null;
+        const calInterKeyIntervals: number[] = [];
+        let calCurrentRevChainLength = 0;
+        let calLastDeletionTime: number | null = null;
+        const calRevisionChains: number[] = [];
+
+        // Session metadata (Czerwinski et al. 2004)
+        let calScrollBackCount = 0;
+        let calLastScrollTop = 0;
+
+        textarea.addEventListener('scroll', () => {
+          if (textarea.scrollTop < calLastScrollTop && calLastScrollTop > 0) {
+            calScrollBackCount++;
+          }
+          calLastScrollTop = textarea.scrollTop;
+        });
+
+        textarea.addEventListener('keydown', (e: KeyboardEvent) => {
+          const now = Date.now();
+          if (lastKeystrokeTime !== null) {
+            const interval = now - lastKeystrokeTime;
+            if (interval < 5000) calInterKeyIntervals.push(interval);
+          }
+          lastKeystrokeTime = now;
+
+          if (e.key === 'Backspace' || e.key === 'Delete') {
+            if (calLastDeletionTime !== null && (now - calLastDeletionTime) < 500) {
+              calCurrentRevChainLength++;
+            } else {
+              if (calCurrentRevChainLength > 0) calRevisionChains.push(calCurrentRevChainLength);
+              calCurrentRevChainLength = 1;
+            }
+            calLastDeletionTime = now;
+          } else {
+            if (calCurrentRevChainLength > 0) {
+              calRevisionChains.push(calCurrentRevChainLength);
+              calCurrentRevChainLength = 0;
+            }
+          }
+        });
 
         textarea.addEventListener('input', () => {
           const now = Date.now();
@@ -801,6 +960,9 @@
           // Close final P-burst
           if (currentBurstChars > 0) calBurstLengths.push(currentBurstChars);
 
+          // Close final revision chain
+          if (calCurrentRevChainLength > 0) calRevisionChains.push(calCurrentRevChainLength);
+
           const submitTime = Date.now();
           const finalCharCount = text.length;
           const wordCount = text.split(/\s+/).filter(Boolean).length;
@@ -827,6 +989,18 @@
             else secondHalfDeletionChars += d.chars;
           }
 
+          // Derived: inter-key interval stats (Epp et al. 2011)
+          const calIkiCount = calInterKeyIntervals.length;
+          const calIkiMean = calIkiCount > 0
+            ? calInterKeyIntervals.reduce((a, b) => a + b, 0) / calIkiCount : null;
+          const calIkiStd = calIkiCount > 1
+            ? Math.sqrt(calInterKeyIntervals.reduce((sum, v) => sum + (v - calIkiMean!) ** 2, 0) / (calIkiCount - 1)) : null;
+
+          // Derived: revision chain stats (Leijten & Van Waes 2013)
+          const calRevChainCount = calRevisionChains.length;
+          const calRevChainAvgLen = calRevChainCount > 0
+            ? calRevisionChains.reduce((a, b) => a + b, 0) / calRevChainCount : null;
+
           const sessionSummary = {
             firstKeystrokeMs,
             totalDurationMs,
@@ -851,6 +1025,14 @@
             charsPerMinute,
             pBurstCount,
             avgPBurstLength,
+            // Keystroke dynamics (Epp et al. 2011; Leijten & Van Waes 2013)
+            interKeyIntervalMean: calIkiMean,
+            interKeyIntervalStd: calIkiStd,
+            revisionChainCount: calRevChainCount,
+            revisionChainAvgLength: calRevChainAvgLen,
+            scrollBackCount: calScrollBackCount,
+            questionRereadCount: 0, // not tracked in calibration — no persistent question to re-read
+            // Context
             deviceType,
             userAgent: rawUserAgent,
             hourOfDay,

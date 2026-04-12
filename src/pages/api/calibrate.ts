@@ -1,10 +1,13 @@
 import type { APIRoute } from 'astro';
-import { saveCalibrationSession } from '../../lib/db.ts';
+import { saveCalibrationSession, getUsedCalibrationPrompts } from '../../lib/db.ts';
 import { CALIBRATION_PROMPTS } from '../../lib/calibration-prompts.ts';
 import { computeLinguisticDensities } from '../../lib/linguistic.ts';
 
 export const GET: APIRoute = () => {
-  const prompt = CALIBRATION_PROMPTS[Math.floor(Math.random() * CALIBRATION_PROMPTS.length)];
+  const used = new Set(getUsedCalibrationPrompts());
+  const available = CALIBRATION_PROMPTS.filter(p => !used.has(p));
+  const pool = available.length > 0 ? available : CALIBRATION_PROMPTS; // cycle if all used
+  const prompt = pool[Math.floor(Math.random() * pool.length)];
   return new Response(JSON.stringify({ prompt }), {
     headers: { 'Content-Type': 'application/json' },
   });
@@ -49,6 +52,12 @@ export const POST: APIRoute = async ({ request }) => {
     pBurstCount: sessionSummary.pBurstCount ?? null,
     avgPBurstLength: sessionSummary.avgPBurstLength ?? null,
     ...densities,
+    interKeyIntervalMean: sessionSummary.interKeyIntervalMean ?? null,
+    interKeyIntervalStd: sessionSummary.interKeyIntervalStd ?? null,
+    revisionChainCount: sessionSummary.revisionChainCount ?? null,
+    revisionChainAvgLength: sessionSummary.revisionChainAvgLength ?? null,
+    scrollBackCount: sessionSummary.scrollBackCount ?? null,
+    questionRereadCount: sessionSummary.questionRereadCount ?? null,
     deviceType: sessionSummary.deviceType ?? null,
     userAgent: sessionSummary.userAgent ?? null,
     hourOfDay: sessionSummary.hourOfDay ?? null,
