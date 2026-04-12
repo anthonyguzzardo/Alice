@@ -11,68 +11,13 @@
 import type { APIRoute } from 'astro';
 import db from '../../lib/db.ts';
 import type { BobSignal, BobSignalRaw } from '../../lib/bob/types.ts';
-
-// ─── Helpers ────────────────────────────────────────────────────────
-
-function avg(values: number[]): number {
-  return values.length > 0 ? values.reduce((s, v) => s + v, 0) / values.length : 0;
-}
-
-function variance(values: number[]): number {
-  if (values.length < 2) return 0;
-  const m = avg(values);
-  return values.reduce((s, v) => s + (v - m) ** 2, 0) / values.length;
-}
-
-function stddev(values: number[]): number {
-  return Math.sqrt(variance(values));
-}
-
-const clamp = (v: number, fallback = 0) => Math.min(1, Math.max(0, v ?? fallback));
-
-/** Personal percentile rank: what fraction of historical values fall below this one */
-function percentileRank(value: number, allValues: number[]): number {
-  if (allValues.length === 0) return 0.5;
-  const below = allValues.filter(v => v < value).length;
-  return below / allValues.length;
-}
-
-/** Rescale a delta from [-1, 1] to [0, 1] where 0.5 = no change */
-function rescaleDelta(delta: number): number {
-  return Math.max(0, Math.min(1, 0.5 + delta));
-}
-
-/** Normalize variance to 0–1 scale */
-function normVariance(v: number, maxExpected: number = 0.25): number {
-  return Math.min(1, v / maxExpected);
-}
+import {
+  avg, variance, stddev, clamp, percentileRank,
+  rescaleDelta, normVariance, computeMATTR,
+  HEDGING_WORDS, FIRST_PERSON,
+} from '../../lib/bob/helpers.ts';
 
 const RECENT_WINDOW = 7;
-
-const HEDGING_WORDS = new Set([
-  'maybe', 'perhaps', 'possibly', 'probably', 'might', 'could',
-  'somewhat', 'guess', 'suppose', 'seem', 'seems', 'seemed',
-  'apparently', 'arguably', 'basically', 'honestly',
-]);
-
-const FIRST_PERSON = new Set(['i', 'me', 'my', 'mine', 'myself']);
-
-// ─── MATTR (Moving-Average Type-Token Ratio) ───────────────────────
-// McCarthy & Jarvis (2010) — validated for short texts, length-independent
-
-function computeMATTR(words: string[], windowSize = 25): number {
-  if (words.length === 0) return 0.5;
-  if (words.length <= windowSize) {
-    return new Set(words).size / words.length;
-  }
-  let sum = 0;
-  const windows = words.length - windowSize + 1;
-  for (let i = 0; i < windows; i++) {
-    const window = words.slice(i, i + windowSize);
-    sum += new Set(window).size / windowSize;
-  }
-  return sum / windows;
-}
 
 // ─── Shape metrics ──────────────────────────────────────────────────
 

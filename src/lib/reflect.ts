@@ -15,6 +15,7 @@ import {
   getObservationsSinceDate,
   getRecentSuppressedQuestions,
   getSessionSummariesForQuestions,
+  getAllSessionSummaries,
   getCalibrationBaselines,
   getRecentFeedback,
   getMaxResponseId,
@@ -24,6 +25,8 @@ import {
 import { localDateStr } from './date.ts';
 import { retrieveSimilarMulti, retrieveContrarian } from './rag.ts';
 import { embedReflection } from './embeddings.ts';
+import { formatCompactSignals, formatTrajectoryContext, formatEnrichedCalibration } from './signals.ts';
+import { computeTrajectory } from './bob/trajectory.ts';
 
 export async function runReflection(): Promise<void> {
   // --- DETERMINE COMPRESSION WINDOW ---
@@ -107,20 +110,19 @@ export async function runReflection(): Promise<void> {
     ? recentSuppressed.map(q => `[${q.date}] ${q.question}`).join('\n')
     : 'No suppressed questions yet.';
 
+  // Enriched behavioral signals (research-backed formatting)
+  const allSummaries = getAllSessionSummaries();
   const behavioralSection = newSummaries.length > 0
-    ? newSummaries.map(s =>
-        `[${s.date}] device=${s.deviceType || '?'} hour=${s.hourOfDay ?? '?'} keystroke_latency=${s.firstKeystrokeMs}ms duration=${s.totalDurationMs}ms commitment=${s.commitmentRatio?.toFixed(2)} pauses=${s.pauseCount} deletions=${s.deletionCount} largest_deletion=${s.largestDeletion} chars_deleted=${s.totalCharsDeleted} tab_aways=${s.tabAwayCount} words=${s.wordCount}`
-      ).join('\n')
+    ? formatCompactSignals(newSummaries, allSummaries)
     : 'No behavioral data available.';
 
-  const calibrationContext = calibration.sessionCount > 0
-    ? `Calibration baselines (confidence: ${calibration.confidence}, from ${calibration.sessionCount} sessions):
-- Avg first keystroke: ${calibration.avgFirstKeystrokeMs?.toFixed(0)}ms
-- Avg commitment ratio: ${calibration.avgCommitmentRatio?.toFixed(2)}
-- Avg session duration: ${calibration.avgDurationMs?.toFixed(0)}ms
-- Avg pause count: ${calibration.avgPauseCount?.toFixed(1)}
-- Avg deletion count: ${calibration.avgDeletionCount?.toFixed(1)}`
-    : 'No calibration baselines available yet.';
+  // Trajectory context (4D behavioral fingerprint)
+  const trajectory = computeTrajectory();
+  const trajectorySection = trajectory.points.length > 0
+    ? formatTrajectoryContext(trajectory, 'compact')
+    : '';
+
+  const calibrationContext = formatEnrichedCalibration(calibration);
 
   const feedbackSection = recentFeedback.length > 0
     ? `Question feedback ("did it land?" responses):\n${recentFeedback.map(f => `[${f.date}] ${f.landed ? 'YES' : 'NO'}`).join('\n')}`
@@ -147,7 +149,12 @@ Write a reflection that covers:
 
 5. THE THREAD — If you had to name the one thing this person is actually trying to figure out, what is it?
 
-6. BEHAVIORAL PATTERNS — What does the behavioral data reveal that the words don't? Compare against calibration baselines. Note baseline confidence level. Only flag deviations that are significant relative to their neutral behavior on the same device type and similar time of day. Flag when you're comparing across mismatched contexts.
+6. BEHAVIORAL PATTERNS — What does the behavioral data reveal that the words don't? You now receive enriched metrics:
+   - Deletion decomposition: corrections (typo fixes <10 chars) vs. revisions (substantive rethinking >=10 chars). Track whether revision counts are increasing or decreasing across the window.
+   - P-burst metrics: production fluency — text between 2s pauses. Are bursts getting longer (finding flow) or shorter (more fragmented)?
+   - Trajectory: a 4D behavioral fingerprint (fluency, deliberation, revision, expression). Phase tells you if writing behavior is stable, shifting, or disrupted. Convergence tells you if multiple dimensions moved together (real shift) or independently (noise).
+   - Percentiles compare each metric against this person's own history, not population norms.
+   Compare against calibration baselines. Note baseline confidence level. Only flag deviations that are significant relative to their neutral behavior. Flag when you're comparing across mismatched contexts.
 
 7. QUESTION FEEDBACK — If any "did it land" data exists, what does it tell you about which questions work and which don't? A "no" is clear signal to recalibrate. A "yes" is ambiguous — it could mean insightful, uncomfortable, or just emotionally loaded.
 
@@ -200,9 +207,10 @@ ${suppressedSection}
 
 ---
 
-=== BEHAVIORAL DATA (for new entries) ===
+=== BEHAVIORAL DATA (enriched with research-backed metrics, for new entries) ===
 
 ${behavioralSection}
+${trajectorySection ? `\n${trajectorySection}` : ''}
 
 ---
 

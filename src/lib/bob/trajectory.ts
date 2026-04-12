@@ -17,6 +17,7 @@
  */
 
 import db from '../db.ts';
+import { avg, stddev, FIRST_PERSON, HEDGING_WORDS } from './helpers.ts';
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -42,24 +43,7 @@ export interface TrajectoryAnalysis {
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
-const FIRST_PERSON = new Set(['i', 'me', 'my', 'mine', 'myself']);
-const HEDGING_WORDS = new Set([
-  'maybe', 'perhaps', 'possibly', 'probably', 'might', 'could',
-  'somewhat', 'guess', 'suppose', 'seem', 'seems', 'seemed',
-  'apparently', 'arguably', 'basically', 'honestly',
-]);
 const MIN_ENTRIES = 3;
-
-function avg(values: number[]): number {
-  return values.length > 0 ? values.reduce((s, v) => s + v, 0) / values.length : 0;
-}
-
-function stddev(values: number[]): number {
-  if (values.length < 2) return 0;
-  const m = avg(values);
-  const variance = values.reduce((s, v) => s + (v - m) ** 2, 0) / values.length;
-  return Math.sqrt(variance);
-}
 
 function zScore(value: number, mean: number, std: number): number {
   if (std < 0.001) return 0;

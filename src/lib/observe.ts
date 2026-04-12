@@ -11,6 +11,7 @@ import {
   getTodaysQuestion,
   getTodaysResponse,
   getSessionSummary,
+  getAllSessionSummaries,
   getRecentObservations,
   getRecentSuppressedQuestions,
   getCalibrationBaselines,
@@ -22,6 +23,8 @@ import {
 import { localDateStr } from './date.ts';
 import { retrieveSimilar } from './rag.ts';
 import { embedObservation } from './embeddings.ts';
+import { formatObserveSignals, formatTrajectoryContext, formatEnrichedCalibration } from './signals.ts';
+import { computeTrajectory } from './bob/trajectory.ts';
 
 export async function runObservation(): Promise<void> {
   const today = localDateStr();
@@ -68,35 +71,19 @@ export async function runObservation(): Promise<void> {
     ? recentSuppressed.map(q => `[${q.date}] ${q.question}`).join('\n')
     : 'None yet.';
 
+  // Enriched behavioral signals (research-backed verbalization)
+  const allSummaries = getAllSessionSummaries();
   const todayBehavior = sessionSummary
-    ? `Today's behavioral signal:
-- Device: ${sessionSummary.deviceType || 'unknown'}
-- Time: ${sessionSummary.hourOfDay != null ? `${sessionSummary.hourOfDay}:00` : 'unknown'} (day ${sessionSummary.dayOfWeek ?? '?'})
-- Time to first keystroke: ${sessionSummary.firstKeystrokeMs}ms
-- Total session duration: ${sessionSummary.totalDurationMs}ms
-- Total characters typed: ${sessionSummary.totalCharsTyped}
-- Final character count: ${sessionSummary.finalCharCount}
-- Commitment ratio: ${sessionSummary.commitmentRatio?.toFixed(2)}
-- Pauses (>30s): ${sessionSummary.pauseCount} (total ${sessionSummary.totalPauseMs}ms)
-- Deletions: ${sessionSummary.deletionCount} (largest: ${sessionSummary.largestDeletion} chars, total: ${sessionSummary.totalCharsDeleted} chars)
-- Tab-aways: ${sessionSummary.tabAwayCount} (total ${sessionSummary.totalTabAwayMs}ms away)
-- Final: ${sessionSummary.wordCount} words, ${sessionSummary.sentenceCount} sentences`
+    ? formatObserveSignals(sessionSummary, allSummaries)
     : 'No behavioral data available for today.';
 
-  const calibrationContext = calibration.sessionCount > 0
-    ? `Calibration baselines (confidence: ${calibration.confidence}, from ${calibration.sessionCount} sessions${sessionSummary?.deviceType ? `, matched to ${sessionSummary.deviceType}` : ''}):
-- Avg first keystroke: ${calibration.avgFirstKeystrokeMs?.toFixed(0)}ms
-- Avg commitment ratio: ${calibration.avgCommitmentRatio?.toFixed(2)}
-- Avg session duration: ${calibration.avgDurationMs?.toFixed(0)}ms
-- Avg pause count: ${calibration.avgPauseCount?.toFixed(1)}
-- Avg deletion count: ${calibration.avgDeletionCount?.toFixed(1)}
+  // Trajectory context (4D behavioral fingerprint)
+  const trajectory = computeTrajectory();
+  const trajectoryContext = trajectory.points.length > 0
+    ? formatTrajectoryContext(trajectory, 'observe')
+    : '';
 
-Baseline confidence is ${calibration.confidence}. ${
-  calibration.confidence === 'low' ? 'Too few calibration sessions to draw strong conclusions. Weight behavioral interpretations toward mundane explanations.' :
-  calibration.confidence === 'moderate' ? 'Baseline is forming but not robust. Flag significant deviations but hold interpretations loosely.' :
-  'Baseline is reliable. Deviations from it are meaningful signal.'
-}`
-    : 'No calibration baselines yet. Baseline confidence: NONE. You cannot distinguish normal typing from emotionally significant behavior. Default to mundane interpretations for all behavioral signals. State this limitation explicitly.';
+  const calibrationContext = formatEnrichedCalibration(calibration, sessionSummary?.deviceType);
 
   const systemPrompt = `You are Marrow's silent layer. You observe but you never speak to the user. You are building an internal model of this person — not from what they say, but from the gap between what they say and how they say it.
 
@@ -126,6 +113,21 @@ After all signals, write a SYNTHESIS:
 Bad suppressed question: "What are you hiding?" (presupposes Frame B)
 Good suppressed question: "When you revise what you've written, what are you usually trying to get closer to?" (helps distinguish A from B)
 
+BEHAVIORAL SIGNAL GUIDE:
+You receive enriched behavioral data with research-backed metrics. Key concepts:
+
+- CORRECTIONS vs. REVISIONS: Small deletions (<10 chars) are corrections — typo fixes, word swaps. Large deletions (>=10 chars) are revisions — substantive rethinking. High correction count is noise. High revision count is signal. (Faigley & Witte, 1981)
+
+- P-BURSTS: Sustained typing between 2-second pauses. Longer bursts = more fluent production. Short bursts = fragmented thinking or careful deliberation. (Chenoweth & Hayes, 2001)
+
+- REVISION TIMING: Where in the session large deletions occurred. Early = false starts (couldn't begin). Late = gutting after drafting (wrote something real, then killed it). This distinction matters for frame analysis.
+
+- TRAJECTORY: A 4-dimensional behavioral fingerprint (fluency, deliberation, revision, expression) tracked across all sessions. High convergence means multiple dimensions moved together — a real behavioral shift, not noise. Phase tells you whether the person's writing behavior is stable, shifting, or disrupted.
+
+- PERCENTILES: All metrics are compared against this person's own history. A value at the 85th percentile means this session was higher than 85% of their previous sessions on that metric.
+
+Primary signals appear first in the behavioral data. Attend to them most carefully. Trajectory context appears last — it provides the cross-session pattern that makes today's signals meaningful.
+
 Your observations and suppressed questions are NEVER shown to the user. They are internal state. Be honest about what you know, what you're guessing, and where you're uncertain.
 
 Format your response EXACTLY as:
@@ -142,7 +144,9 @@ Response: ${response.text}
 
 ---
 
+TODAY'S BEHAVIORAL SIGNAL:
 ${todayBehavior}
+${trajectoryContext}
 
 ---
 

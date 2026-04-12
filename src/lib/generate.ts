@@ -12,6 +12,7 @@ import {
   getRecentSuppressedQuestions,
   getRecentFeedback,
   getSessionSummariesForQuestions,
+  getAllSessionSummaries,
   getAllReflections,
   scheduleQuestion,
   hasQuestionForDate,
@@ -20,6 +21,8 @@ import {
 } from './db.ts';
 import { localDateStr } from './date.ts';
 import { retrieveSimilarMulti, retrieveContrarian } from './rag.ts';
+import { formatCompactSignals, formatTrajectoryContext } from './signals.ts';
+import { computeTrajectory } from './bob/trajectory.ts';
 
 const SEED_DAYS = 30;
 const RECENT_WINDOW = 14;
@@ -123,11 +126,17 @@ export async function runGeneration(): Promise<void> {
     ? recentSuppressed.map(q => `[${q.date}] ${q.question}`).join('\n')
     : 'No suppressed questions yet.';
 
+  // Enriched behavioral signals (research-backed formatting)
+  const allSummaries = getAllSessionSummaries();
   const behavioralSection = recentSummaries.length > 0
-    ? recentSummaries.map(s =>
-        `[${s.date}] device=${s.deviceType || '?'} hour=${s.hourOfDay ?? '?'} keystroke_latency=${s.firstKeystrokeMs}ms duration=${s.totalDurationMs}ms commitment=${s.commitmentRatio?.toFixed(2)} pauses=${s.pauseCount} deletions=${s.deletionCount} largest_deletion=${s.largestDeletion} tab_aways=${s.tabAwayCount} words=${s.wordCount}`
-      ).join('\n')
+    ? formatCompactSignals(recentSummaries, allSummaries)
     : 'No behavioral data available.';
+
+  // Trajectory context (4D behavioral fingerprint)
+  const trajectory = computeTrajectory();
+  const trajectorySection = trajectory.points.length > 0
+    ? formatTrajectoryContext(trajectory, 'compact')
+    : '';
 
   const feedbackSection = recentFeedback.length > 0
     ? `Question feedback ("did it land?"):\n${recentFeedback.map(f => `[${f.date}] ${f.landed ? 'YES' : 'NO'}`).join('\n')}\n\nUse this to calibrate question quality. "NO" means recalibrate — that line of questioning missed. "YES" is weaker signal — could mean insightful, uncomfortable, or just emotionally loaded.`
@@ -161,7 +170,7 @@ Pay special attention to the contrarian entries — they represent threads you m
 
 Weight your sources appropriately:
 - The journal text is your primary signal. What they said matters most.
-- Behavioral data is secondary signal. Only trust patterns across multiple sessions.
+- Behavioral data is secondary signal. It now includes deletion decomposition (corrections vs. revisions), P-burst metrics (production fluency), percentile context, and trajectory phase. Use trajectory phase to detect if writing behavior is shifting or disrupted — this should influence question targeting. A "disrupted" phase means their pattern broke; probe what changed. A "shifting" phase means something is evolving; follow the thread.
 - Recent observations include confidence levels. Weight accordingly.
 - A "no" on "did it land?" means that line of questioning missed.
 
@@ -202,8 +211,9 @@ ${suppressedSection}
 
 === SIGNAL DATA ===
 
-BEHAVIORAL DATA (for recent entries only):
+BEHAVIORAL DATA (enriched with research-backed metrics, for recent entries):
 ${behavioralSection}
+${trajectorySection ? `\n${trajectorySection}` : ''}
 
 ${feedbackSection}
 

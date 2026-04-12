@@ -628,6 +628,13 @@ export interface CalibrationBaseline {
   avgDurationMs: number | null;
   avgPauseCount: number | null;
   avgDeletionCount: number | null;
+  // Enriched (V3): null if all calibration sessions predate enrichment
+  avgSmallDeletionCount: number | null;
+  avgLargeDeletionCount: number | null;
+  avgLargeDeletionChars: number | null;
+  avgCharsPerMinute: number | null;
+  avgPBurstCount: number | null;
+  avgPBurstLength: number | null;
   sessionCount: number;
   confidence: 'none' | 'low' | 'moderate' | 'strong';
 }
@@ -654,11 +661,17 @@ export function getCalibrationBaselines(deviceType?: string | null, hourOfDay?: 
       ,AVG(s.total_duration_ms) as avgDurationMs
       ,AVG(s.pause_count) as avgPauseCount
       ,AVG(s.deletion_count) as avgDeletionCount
+      ,AVG(s.small_deletion_count) as avgSmallDeletionCount
+      ,AVG(s.large_deletion_count) as avgLargeDeletionCount
+      ,AVG(s.large_deletion_chars) as avgLargeDeletionChars
+      ,AVG(s.chars_per_minute) as avgCharsPerMinute
+      ,AVG(s.p_burst_count) as avgPBurstCount
+      ,AVG(s.avg_p_burst_length) as avgPBurstLength
       ,COUNT(*) as sessionCount
     FROM tb_session_summaries s
     JOIN tb_questions q ON s.question_id = q.question_id
     WHERE ${conditions.join(' AND ')}
-  `).get(...params) as { avgFirstKeystrokeMs: number | null; avgCommitmentRatio: number | null; avgDurationMs: number | null; avgPauseCount: number | null; avgDeletionCount: number | null; sessionCount: number };
+  `).get(...params) as Omit<CalibrationBaseline, 'confidence'>;
 
   // Fall back to global if context-matched has too few
   let row = contextRow;
@@ -670,6 +683,12 @@ export function getCalibrationBaselines(deviceType?: string | null, hourOfDay?: 
         ,AVG(s.total_duration_ms) as avgDurationMs
         ,AVG(s.pause_count) as avgPauseCount
         ,AVG(s.deletion_count) as avgDeletionCount
+        ,AVG(s.small_deletion_count) as avgSmallDeletionCount
+        ,AVG(s.large_deletion_count) as avgLargeDeletionCount
+        ,AVG(s.large_deletion_chars) as avgLargeDeletionChars
+        ,AVG(s.chars_per_minute) as avgCharsPerMinute
+        ,AVG(s.p_burst_count) as avgPBurstCount
+        ,AVG(s.avg_p_burst_length) as avgPBurstLength
         ,COUNT(*) as sessionCount
       FROM tb_session_summaries s
       JOIN tb_questions q ON s.question_id = q.question_id
