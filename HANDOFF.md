@@ -2,81 +2,97 @@
 
 ## What Happened This Session
 
-Wired the V3 research-backed behavioral signals into Marrow's AI interpretation layer. The signals (P-bursts, deletion decomposition, MATTR, trajectory) were already captured and stored correctly but were never passed to the three systems that make decisions: observation, generation, and reflection. Now they are.
+Built the prediction engine — the mechanism that turns Marrow's interpretive layer from storytelling into science. Then wired calibration data deeper into the system as the zero point for knowledge-transforming detection and behavioral deviation measurement.
 
-### Signal Pipeline Wiring
+### Prediction Engine
 
-**The problem:** Observation, generation, and reflection were receiving ~11 raw fields in a flat template (`deletions=5 largest_deletion=36 commitment=0.38`). Meanwhile, the database had 28 fields per session and the trajectory engine computed 4D behavioral dimensions — all invisible to the AI layer.
+**The problem:** The system observed, interpreted, and generated questions but never made falsifiable predictions. Without predictions, there was no mechanism to distinguish analysis from storytelling. The AI could claim "this person is avoiding something" and never be proven wrong.
 
-**The fix:** Created `src/lib/signals.ts` — a formatting module that converts raw session data into research-backed verbalized formats for LLM consumption. Four exported functions:
+**The fix:** Every observation now generates 1-2 falsifiable predictions, grades open predictions against current session data, and updates Bayesian confidence scores per theory/topic. Every generated question is tagged with intervention intent. The architecture follows single-case experimental design methodology (Barlow & Hersen, Kazdin) and active inference (Friston, Clark).
 
-- `formatObserveSignals()` — deep verbalized detail for single sessions (observation). Signal hierarchy: primary signals first (deletion decomposition, P-bursts, commitment with percentile context), supporting signals middle, trajectory context last.
-- `formatCompactSignals()` — enriched one-liner per session for generation and reflection. Compact P-notation (`P85`), deletion decomposition inline, P-burst metrics packed.
-- `formatTrajectoryContext()` — two modes: full verbalized (observe) or compact 1-line (generate/reflect). Includes phase, convergence, dimension values, velocity.
-- `formatEnrichedCalibration()` — expanded calibration baselines with enriched metrics.
+**New tables:**
+- `te_prediction_status` — open, confirmed, falsified, expired, indeterminate
+- `te_prediction_type` — behavioral, thematic, phase_transition, frame_resolution
+- `te_intervention_intent` — suppressed_promotion, theme_targeting, contrarian_break, frame_disambiguation, trajectory_probe, depth_test
+- `tb_predictions` — the lab notebook: hypothesis, favored frame, expected/falsification criteria, topic, expiry, grade, KT score
+- `tb_theory_confidence` — Bayesian Beta-Binomial confidence per theory/topic (alpha/beta updating)
 
-**Research informing the format:**
-- Netflix "From Logs to Language" (2026): verbalized > template (92.9% improvement)
-- Anchoring bias (2024): present baseline first, then current value
-- "Lost in the Middle" (TACL 2024): primary signals first, trajectory last (primacy/recency)
-- Numeracy research (2026): percentiles most intuitive for LLMs, not z-scores
-- "Can You See Me Think?" (Zafar et al. 2025): feeding keystroke data to LLMs produces zero hallucinations
-
-**Files created:**
-- `src/lib/bob/helpers.ts` — extracted shared math utilities (avg, stddev, percentileRank, computeMATTR, etc.) from bob.ts
-- `src/lib/signals.ts` — the formatting module
+**New columns on `tb_questions`:**
+- `intervention_intent_id` — why the question was generated
+- `intervention_rationale` — brief explanation
 
 **Files modified:**
-- `src/pages/api/bob.ts` — imports from helpers instead of defining inline
-- `src/lib/bob/trajectory.ts` — imports from helpers instead of defining inline
-- `src/lib/db.ts` — CalibrationBaseline expanded with 6 enriched fields (avgSmallDeletionCount, avgLargeDeletionCount, avgLargeDeletionChars, avgCharsPerMinute, avgPBurstCount, avgPBurstLength). SQL updated in both context-matched and global queries.
-- `src/lib/observe.ts` — wired in formatObserveSignals + formatTrajectoryContext + formatEnrichedCalibration. System prompt updated with BEHAVIORAL SIGNAL GUIDE explaining corrections vs. revisions, P-bursts, revision timing, trajectory, percentiles.
-- `src/lib/generate.ts` — wired in formatCompactSignals + formatTrajectoryContext. System prompt references enriched metrics and trajectory phase for question targeting.
-- `src/lib/reflect.ts` — wired in formatCompactSignals + formatTrajectoryContext + formatEnrichedCalibration. System prompt section 6 (BEHAVIORAL PATTERNS) expanded with deletion decomposition, P-bursts, trajectory, momentum.
-- `README.md` — rewritten to reflect current system. No version labels or changelog language. P-bursts, deletion decomposition, revision timing, MATTR, percentile normalization are now described as how Layer 2 works, not as addenda. Trajectory dimensions fixed from old names to current (fluency, deliberation, revision, expression).
+- `src/lib/db.ts` — 5 new tables, 2 new columns, ~15 new query functions
+- `src/lib/observe.ts` — prediction grading, prediction generation, KT scoring, calibration deviation context. Token limit bumped to 3000.
+- `src/lib/generate.ts` — intervention tagging output, prediction track record + leading indicators in prompt
+- `src/lib/reflect.ts` — prediction analysis section (section 8), leading indicators, prediction track record in prompt
+- `src/lib/signals.ts` — `computeKnowledgeTransformScore()`, `formatOpenPredictions()`, `formatPredictionTrackRecord()`, `formatLeadingIndicators()`, `formatCalibrationDeviation()`
+- `src/lib/bob/helpers.ts` — `crossCorrelation()`, `COGNITIVE_WORDS` set
+- `src/lib/bob/trajectory.ts` — leading indicator analysis via cross-correlation, `leadingIndicators` on TrajectoryAnalysis
+
+### Calibration Floor Wiring
+
+**The problem:** Calibration data was only used for context-matched baselines in observation prompts. Knowledge-transforming detection compared journal entries against other journal entries (all emotionally loaded). Predictions used raw percentiles with no anchoring to neutral behavior.
+
+**The fix:**
+- KT detection now computes a calibration floor from free-write sessions — the score of neutral writing. Real entries are measured by distance above that floor.
+- Observation prompts now include calibration-relative deviation (how far each metric deviates from neutral free-write baselines, not just from journal history).
+- Prediction system prompt instructs AI to prefer calibration-relative thresholds over raw percentiles.
+- `getCalibrationSessionsWithText()` added to db.ts for floor computation.
+
+### Calibration Prompt Expansion
+
+Expanded from 15 to 200 prompts across 12 categories (routines, food, environment, objects, errands, movement, weather, media, conversations, processes, memory recall, numbers). Already randomly selected via `Math.random()`.
 
 ### Re-ran April 12 Observation
 
-Cleared the old observation (generated with the pre-wiring flat format) and re-ran with the new wiring. The new observation correctly uses:
-- Personal percentile rankings ("0th percentile commitment")
-- Deletion decomposition ("174 characters removed in one early revision plus 101 small corrections")
-- Revision timing to resolve between frames ("revision concentrated early slightly favors A or C over B")
-- P-burst context with baseline comparison
-- Frame analysis that uses enriched data to actually distinguish between frames instead of guessing
-
-Old stale observation embedding cleaned from tb_embeddings. New observation embedded on re-run.
-
-### Audit Trail
-
-- `BOB_AUDIT/V4/CHANGELOG.md` — documents what was wrong (signals trapped in Bob's pipeline, AI brain reading old dashboard, suppressed questions targeting false uncertainty, generation blind to trajectory, raw numbers bad for LLMs), what changed, research basis for signal presentation, files changed, what's not done.
-- `README_AUDIT/V7/V7_README.md` — snapshot of README at this point.
+Cleared the old observation and re-ran with the full prediction pipeline. The new observation:
+- Generated 2 predictions (one thematic about mom topic resurfacing, one behavioral about fragmented P-bursts on emotional topics)
+- Computed knowledge-transforming score with calibration floor
+- Embedded via Voyage AI (no errors)
+- Suppressed question targets the mom-topic ambiguity point
 
 ## Current State of the Data
 
 - **3 real entries:** April 10, 11, 12. April 10+11 have no session summaries (submitted before tracking). April 12 has full enriched data.
-- **14 calibration sessions:** 12 pre-V3 (NULL enriched fields), 2 from April 12 with enriched data.
-- **1 observation** (April 12) — generated with new enriched wiring.
-- **4 witness states** in DB. Latest computed with V3 signal format.
+- **16 calibration sessions:** 14 pre-existing (12 pre-V3, 2 enriched) + 2 new from this session. 9 have >=10 words (usable for KT floor), but only 5 have >=20 words (the threshold for reliable floor computation).
+- **1 observation** (April 12) — generated with prediction engine. Includes calibration-relative deviation.
+- **2 open predictions** — one thematic (mom topic resurfacing pattern), one behavioral (fragmented bursts on emotional topics).
+- **0 graded predictions** — grading starts on the next observation.
+- **0 theory confidence entries** — Bayesian tracking starts on first grade.
 - **Trajectory: insufficient** — needs 3 non-calibration entries with session summaries. Has 1 (April 12).
-- **RAG: 11 embeddings** in tb_embeddings. Old stale observation embedding removed.
+- **Leading indicators: insufficient** — needs 10+ trajectory points. Has 1.
+- **KT calibration floor: marginal** — needs 5+ calibration sessions with >=20 words. Has ~5, but several are very short. More calibration sessions with real effort will stabilize the floor.
 - **Generation: no-op** — still in seed phase (seeds scheduled through May 11).
 
 ## What's NOT Done
 
 ### Test Suite
-Discussed in V3 handoff as agreed next step. Still not built. Should simulate sessions and verify: session summary → enriched signals → formatted output → AI interpretation → trajectory.
+Still not built. Should simulate sessions and verify: session summary → enriched signals → formatted output → prediction generation → prediction grading → Bayesian update → theory confidence.
 
-### Trajectory-Aware Question Targeting
-Generation receives trajectory phase but the system prompt doesn't prescribe specific strategies per phase. Claude decides what to do with "phase=disrupted." Whether to make this prescriptive is an open question.
+### Trajectory → Einstein Personality
+Einstein should inherit the prediction track record. A theorist with an 80% hit rate speaks differently than one at 50%. Conceptual — nothing built.
 
-### Shape Metrics in Generation/Reflection
-MATTR, sentence structure, hedging density are computed in bob.ts and used by the interpreter but not passed to generation/reflection. Left out intentionally — moderate context is the sweet spot per research.
+### Micro-Randomized Trial Validation
+The JITAI/MRT framework could formally validate whether intervention-tagged questions produce different trajectory outcomes. Needs enough generated questions (post day 30) for statistical power.
 
-### Trajectory → Einstein
-Einstein's personality should emerge from trajectory data. Conceptual — nothing built.
+### LIWC-style Word Category Tracking
+Pennebaker research shows slopes of cognitive mechanism words matter more than levels. Could track past-tense ratio, cognitive words, emotional valence as time series across entries. Python NLP ecosystem is stronger for this.
+
+### Within-Session KT Granularity
+Current KT detection uses session-level averages. The Baaijen/Galbraith signature is about within-session transitions (short bursts → long bursts). Would need per-burst sequence data from the frontend, not just averages.
+
+### Full DTW Implementation
+Cross-correlation is a proxy for Dynamic Time Warping. Full DTW (Mesbah et al. 2024) would be more robust for non-linear temporal lag relationships. Worth implementing when data density allows.
 
 ### Sound
 Bob is still visual only.
 
 ### April 10 & 11 Missing Session Data
 First two real entries submitted before session tracking. No session summaries, not included in trajectory. Not fixable retroactively.
+
+## README Audit Trail
+
+- `README_AUDIT/V8/V8_README.md` — pre-prediction system (signal wiring era)
+- `README_AUDIT/V9/V9_README.md` — prediction engine, before calibration floor
+- `README_AUDIT/V10/V10_README.md` — current: prediction engine + calibration floor + calibration-relative deviation
