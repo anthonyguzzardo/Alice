@@ -1,128 +1,178 @@
-# Handoff — April 12, 2026
+# Handoff — April 12, 2026 (Session 3)
 
-## Two Parallel Sessions
+## What This Session Did
 
-Two agents worked on Marrow today. One built the Marrow-side linguistic density pipeline and per-burst capture. The other overhauled Bob's entire architecture from LLM-as-interpreter to a deterministic behavioral dynamics engine. The work converged: the linguistic densities computed by the first agent feed into the emotion profile layer built by the second.
+Research-driven overhaul of the data input interface and question generation pipeline. Every change is grounded in peer-reviewed HCI, psycholinguistics, and adaptive assessment research. Also fixed a credit-burning bug in Bob's witness renderer.
 
 ---
 
-## Session 1: Linguistic Density Pipeline + Per-Burst Capture
+## Scientific Research Foundation
 
-### What Was Built
+Conducted deep research across MIT, Harvard, Stanford, Anthropic, Google, CMU, KTH, and UCL on how interface design and question design affect behavioral data quality. Key sources:
 
-**Per-burst sequence capture** — the frontend now tracks timing per burst (character count, duration, start offset) and sends the full array to the server. New `tb_burst_sequences` table stores each burst individually. Previously, burst data was averaged to a single `avg_p_burst_length` at submit time and the sequence was discarded. Every session from April 13 onward captures the within-session temporal structure needed for Baaijen & Galbraith (2012) knowledge-transforming signature detection.
+- **Slow Technology** — Hallnäs & Redström (2001, KTH). Deliberate friction amplifies reflection.
+- **Design Frictions** — Cox et al. (2016, UCL). Micro-frictions increase mindfulness without increasing abandonment.
+- **Audience Effects** — Bernstein et al. (2013, Stanford). Writing for no audience produces richer signal.
+- **Question Fading** — Czerwinski et al. (2004, Microsoft Research). Faded prompts produce more associative responses.
+- **Keystroke Dynamics** — Epp et al. (2011, CHI). Different emotions have distinct keystroke signatures.
+- **Revision Chains** — Leijten & Van Waes (2013, Antwerp). Revision topology reveals cognitive processing modes.
+- **Desirable Difficulties** — Bjork & Bjork (2011, UCLA). Adaptive challenge calibrated to demonstrated capacity.
+- **Deep-Reasoning Questions** — Graesser & Person (1994). Causal/evaluative framing maximizes cognitive processing markers.
+- **Spaced Repetition** — Cepeda et al. (2006, UCSD). Expanding intervals for theme revisitation.
+- **Information-Gain Selection** — Settles (2012). Ask where the model is most uncertain.
+- **Evidence-Centered Design** — Mislevy et al. (2003, ETS). Each question should make a specific signal observable.
+- **Safe Challenge** — Edmondson (1999, Harvard). Invitation over confrontation.
+- **Contextual Anchoring** — Bolger et al. (2003, Columbia). Event-contingent prompts produce 30-50% richer data.
+- **Narrative Identity** — McAdams & McLean (2013, Northwestern). Temporal connection questions produce richer signal.
 
-**NRC Emotion Lexicon integration** — downloaded and parsed the NRC Emotion Lexicon v0.92 (Mohammad & Turney, 2013; National Research Council Canada). 6 emotion categories (~6,660 words): anger, fear, joy, sadness, trust, anticipation. Stored as TypeScript `Set`s in `src/lib/bob/nrc-emotions.ts`.
+Full bibliography added to README.md under "Scientific Foundation" — ~50 citations organized by domain.
 
-**Linguistic density computation** — new module `src/lib/linguistic.ts` computes 9 word category densities in a single pass: 6 NRC emotions + cognitive mechanism words (Pennebaker) + hedging language + first-person pronouns. All computed server-side from response text at save time.
+---
 
-**Database wiring** — 9 new `REAL` columns on `tb_session_summaries` for the density values. Migration block handles existing databases. Both `respond.ts` and `calibrate.ts` compute and persist densities.
+## Interface Changes (the instrument)
 
-**Signal formatting** — new "LINGUISTIC PROFILE" section in observation prompts (deep verbalized with percentile context). Compact emotion notation in generation/reflection prompts. Enables incongruence detection (emotional word profile mismatched with content) and cross-session slope tracking.
+### Deliberate Friction
+- **Reflection pause** — 4-second delay before textarea activates. Textarea starts disabled and translucent, then fades in and focuses. Forces time with the question before writing begins.
+- **Autocomplete/spellcheck disabled** — `autocomplete="off"`, `autocorrect="off"`, `autocapitalize="off"`, `spellcheck="false"` on both journal and calibration textareas. Forces deliberate word choice.
+- **No placeholder text** — Removed from both journal ("Think before you type...") and calibration ("Just write..."). Empty space reduces performance anxiety.
 
-**Backfill** — all 17 existing sessions (3 journal + 14 calibration) backfilled with linguistic densities.
+### Question Fading
+- After first keystroke, the question fades to 30% opacity over 8 seconds via CSS transition. Less literal answering, more associative exploration.
 
-**Re-ran April 12 observation** — cleared the old observation and re-ran with the full linguistic pipeline. Key improvement: the AI detected emotional incongruence (zero anger words in an entry about cutting off a family member, high trust/joy that's incongruent with content). Also used calibration-relative deviation ("27% below calibration baseline" instead of just "0th percentile"). Sharper suppressed question. More specific falsifiable predictions.
+### Deferred Submit Button
+- Submit button is invisible for the first 90 seconds of writing (94s total including reflection pause). Fades in gently over 1.5 seconds. Removes implicit "finish" pressure.
+
+### Generous Writing Space
+- Textarea `min-height` increased from 240px to 400px (~12-15 visible lines). Research shows people unconsciously fill visible space.
+
+### Richer Keystroke Capture
+- **Inter-key intervals** — mean and standard deviation of ms between keystrokes (capped at 5s to exclude pauses). Captured via `keydown` listener on both journal and calibration textareas.
+- **Revision chain detection** — sequential deletions within 500ms grouped as one chain. Chain count and average length stored. Distinguishes surface correction from structural revision.
+- **Scroll-back tracking** — counts how often user scrolls back in textarea (both journal and calibration) and how often they scroll page to re-read the question (journal only).
 
 ### Files Modified
-- `src/pages/index.astro` — per-burst timing capture in frontend
-- `src/lib/db.ts` — `tb_burst_sequences` table, 9 density columns, migration, CRUD functions
-- `src/pages/api/respond.ts` — computes densities, saves burst sequences
-- `src/pages/api/calibrate.ts` — computes densities for calibration
-- `src/lib/observe.ts` — updated fallback SessionSummaryInput
-- `src/lib/signals.ts` — linguistic profile section in prompts
-
-### New Files
-- `src/lib/linguistic.ts` — single-pass density computation
-- `src/lib/bob/nrc-emotions.ts` — NRC word sets (79KB)
+- `src/pages/index.astro` — all UI changes above
 
 ---
 
-## Session 2: Bob Dynamics Engine + Emotion Profile Layer
+## Database Changes
 
-### What Was Built
+### New Columns on `tb_session_summaries`
+- `inter_key_interval_mean` (REAL)
+- `inter_key_interval_std` (REAL)
+- `revision_chain_count` (INTEGER)
+- `revision_chain_avg_length` (REAL)
+- `scroll_back_count` (INTEGER)
+- `question_reread_count` (INTEGER)
 
-Complete architectural overhaul of Bob from LLM-as-interpreter to a four-phase pipeline separating science from art.
+Migration block handles existing databases. All NULL for pre-existing sessions — no backfill needed or possible.
 
-**Phase 1 — 8D State Engine** (`state-engine.ts`): Each entry produces a point in 8D behavioral space (fluency, deliberation, revision, expression, commitment, volatility, thermal, presence). All z-scored. Deterministic. Persisted to `tb_entry_states`.
-
-**Phase 2 — PersDyn Dynamics** (`dynamics.ts`): Per-dimension baseline, variability, and attractor force. Ornstein-Uhlenbeck mean-reversion. Phase detection, velocity, system entropy (ECTO framework). Persisted to `tb_trait_dynamics`.
-
-**Phase 3 — Coupling Matrix** (`dynamics.ts`): Signed lagged cross-correlations across all 28 dimension pairs. Discovers causal relationships between behavioral dimensions. Persisted to `tb_coupling_matrix`.
-
-**Phase 3.5 — Emotion Profile Layer** (`emotion-profile.ts`): Reads the 9 stored linguistic density columns (from Session 1). Computes personal percentiles, z-scores, dominant emotion, intensity, diversity. Cross-correlates 9 emotion × 8 behavioral dimensions to discover emotion→behavior causal chains. Persisted to `tb_emotion_behavior_coupling`. Critical design decision: emotion densities stay SEPARATE from the 8D behavioral state space. Process and content don't mix.
-
-**Phase 4 — LLM Renderer** (`interpreter.ts` rewritten): Claude Opus receives validated dynamics + coupling + emotion profile. Translates into 26 visual traits. The LLM decides what dynamics *look like*, not what they *mean*.
-
-**Shader v5** — strategy architecture with 5 vertex deformation strategies and 6 fragment material strategies.
-
-### New Files
-- `src/lib/bob/state-engine.ts`
-- `src/lib/bob/dynamics.ts`
-- `src/lib/bob/emotion-profile.ts`
-- `src/pages/api/dynamics.ts`
+### New Table: `tb_question_candidates`
+Stores all 3 candidate questions per generation run (Harrison et al. 2017 — the sequence of what the system needed to ask is itself diagnostic signal):
+- `question_id` — the selected question
+- `candidate_rank` — 1=selected, 2-3=runners up
+- `candidate_text`, `selection_rationale`, `uncertainty_dimension`, `theme_tags`
 
 ### Files Modified
-- `src/lib/bob/interpreter.ts` — complete rewrite
-- `src/pages/api/witness.ts` — runs full 4-phase pipeline
-- `src/lib/db.ts` — 4 new tables (`tb_entry_states`, `tb_trait_dynamics`, `tb_coupling_matrix`, `tb_emotion_behavior_coupling`)
-- `scripts/reinterpret.ts` — full pipeline recomputation
-- `BOB.md` — complete rewrite
+- `src/lib/db.ts` — schema, migration, `SessionSummaryInput` interface, `saveSessionSummary()`, `SESSION_SUMMARY_COLS`, `saveQuestionCandidates()`, `getQuestionCandidates()`, `getUsedCalibrationPrompts()`
 
 ---
 
-## How The Two Sessions Connect
+## API Changes
 
-```
-Session 1 built the sensors:
-  linguistic.ts → computes 9 densities from response text
-  respond.ts    → stores densities in tb_session_summaries
-  signals.ts    → feeds densities to observation/prediction AI
+### `src/pages/api/respond.ts`
+- Passes 6 new keystroke/metadata fields through to `saveSessionSummary()`
 
-Session 2 built the consumer:
-  emotion-profile.ts → reads stored densities from tb_session_summaries
-  dynamics.ts        → cross-correlates emotion × behavior
-  interpreter.ts     → renders emotion profile into Bob's visual form
-```
+### `src/pages/api/calibrate.ts`
+- Passes 6 new fields through to `saveSessionSummary()`
+- GET endpoint now excludes previously used calibration prompts (207 prompts, no repeats until all exhausted, then cycles)
 
-The linguistic densities flow two directions:
-1. **Into Marrow's AI layer** — observation, generation, reflection prompts see emotion profiles alongside behavioral signals
-2. **Into Bob's visual form** — emotion profile feeds the renderer (Phase 4) and emotion→behavior coupling is tracked separately from behavioral dynamics
+### `src/lib/observe.ts`
+- Updated fallback `SessionSummaryInput` with new fields
+
+---
+
+## Question Generation Pipeline
+
+### System Prompt Rewrite (`src/lib/generate.ts`)
+
+**Tone fix:** "You are not helpful. You are not kind." replaced with "You are honest in the way a mirror is honest. You don't comfort. You don't perform." Same spine, aligned with safe challenge research.
+
+**Citations stripped:** Academic paper names removed from the LLM prompt — the principles stay, the citations are for us (README), not the model. Saves tokens.
+
+**New principles added:**
+- Causal/evaluative framing ("why", "reconcile" over "describe", "list")
+- Disclosure context (revealing, not recording)
+- Safe challenge (invitation, not confrontation)
+- Information-gain selection (target uncertainty, not interest)
+- Spaced repetition with expanding intervals
+- Interleaving (don't cluster related themes)
+- Contextual anchoring without echoing entries
+- Question length guidance: "Under 15 words. One clause, one demand."
+
+### Adaptive Difficulty
+Computes avg MATTR and cognitive density from recent responses. Injects calibrated guidance:
+- HIGH complexity → escalate (abstract, contradiction-surfacing)
+- LOW complexity → anchor (concrete, personally specific)
+- MODERATE → maintain but vary type
+
+### 3-Candidate Output
+Generation now produces SELECTED + 2 runners-up, each with theme tags. The selected question also gets an uncertainty dimension tag. All stored in `tb_question_candidates`.
+
+### Theme History
+Recent question texts included in prompt for spaced repetition awareness — the model can see what was asked recently and avoid clustering.
+
+### `max_tokens` raised from 200 to 400 to accommodate expanded output.
+
+---
+
+## Bug Fix: Bob Witness Cache
+
+**Problem:** `witness.ts` counted ALL `tb_session_summaries` rows to determine cache key, including calibration sessions. Every calibration session incremented the count, busted the cache, and triggered a full Opus call to re-render Bob's visual traits — even though calibration data doesn't change Bob's form.
+
+**Fix:** Changed count query to `WHERE q.question_source_id != 3` — only journal sessions invalidate the cache.
+
+**Impact:** Was silently burning an Opus call per calibration session. Now Bob only re-renders when actual journal entries change.
+
+### File Modified
+- `src/pages/api/witness.ts`
+
+---
+
+## README.md Updates
+
+- **Scientific Foundation** section added — ~50 citations organized by domain (writing process, linguistic analysis, behavioral dynamics, prediction methodology, interface design, question design, keystroke research, signal formatting, error correction)
+- **The Writing Interface** section added — documents all 7 interface design decisions with research basis
+- **New behavioral signals** documented (inter-key intervals, revision chains, scroll-back)
+- **Generation pipeline** improvements documented (adaptive difficulty, candidate logging, research-backed framing)
+- **Architecture** section updated with new tables, features, and capabilities
+- **Philosophy** section expanded — ties research foundation to design philosophy
+- **Images** added — Bob Day 3, calibration option, calibration question, calibration response
 
 ---
 
 ## Current State of the Data
 
-- **3 real entries:** April 10, 11, 12. April 10+11 have no session summaries. April 12 has full enriched data + linguistic densities.
-- **14 calibration sessions:** All now have linguistic densities (backfilled).
-- **17 total sessions with linguistic densities.** Baselines seeded.
-- **0 sessions with burst sequence data.** Capture starts April 13.
-- **1 observation** (April 12) — re-generated with linguistic pipeline. Includes incongruence detection + calibration-relative deviation.
-- **2 open predictions** — re-generated with linguistic context.
-- **18 entry states** in 8D behavioral space (Phase 1).
-- **21 behavioral couplings** discovered (Phase 3).
-- **53 emotion→behavior couplings** discovered (Phase 3.5).
-- **Generation: still in seed phase** through May 11.
-
----
-
-## Audit Trail
-
-- `README_AUDIT/V11/V11_README.md` — linguistic pipeline + per-burst capture (Session 1)
-- `README_AUDIT/V12/V12_README.md` — dynamics engine + emotion profile (Session 2)
-- `BOB_AUDIT/V6/V6_BOB.md` — current BOB.md snapshot
-- `BOB_AUDIT/V6/CHANGELOG.md` — combined V6 changelog
+- **3 real entries:** April 10, 11, 12. April 12 has full enriched data.
+- **14+ calibration sessions:** All have linguistic densities. New sessions from today onward also have keystroke dynamics and scroll-back tracking.
+- **0 sessions with burst sequence data.** Capture started April 13 (prior session).
+- **0 sessions with keystroke dynamics.** Capture starts next session.
+- **1 observation** (April 12) — re-generated with linguistic pipeline.
+- **2 open predictions.**
+- **Generation: still in seed phase** through ~May 11.
 
 ---
 
 ## What's NOT Done
 
-1. **Within-session KT detection from burst sequences** — data is now captured but the short→long consolidation algorithm isn't built. Needs sessions with burst data to establish a baseline.
+1. **Dynamics not fed into generate/observe/reflect** — the dynamics engine is available but only Bob consumes it. The AI layer still uses the legacy trajectory engine + signals.ts.
 
-2. **Dynamics not fed into generate/observe/reflect** — the dynamics engine is available but only Bob consumes it. The AI layer still uses the legacy trajectory engine + signals.ts.
+2. **Within-session KT detection from burst sequences** — data captured but the consolidation algorithm isn't built.
 
-3. **Full DTW for coupling** — cross-correlation is the proxy. Full Dynamic Time Warping would handle non-linear lag relationships better.
+3. **Full DTW for coupling** — cross-correlation is the proxy.
 
 4. **Test suite** — still not built.
 
-5. **Trajectory → Einstein personality** — Einstein doesn't have an interaction surface yet.
+5. **Einstein interaction surface** — not started.
+
+6. **New keystroke signals not yet consumed by signals.ts** — inter-key intervals, revision chains, and scroll-back are captured and stored but not yet formatted for LLM consumption in observation/generation/reflection prompts. Wire them into `formatObserveSignals()` and `formatCompactSignals()` when ready.
