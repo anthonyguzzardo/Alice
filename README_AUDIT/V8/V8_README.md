@@ -34,13 +34,11 @@ After the seeds run out, the system generates tomorrow's question from a bounded
 - **Contrarian entries** (deliberately dissimilar) — entries that are the *most different* from current themes. These break the echo chamber by forcing the system to remember threads it's been ignoring. If you've been writing about your career for weeks, the contrarian slot surfaces the entry about your dad from three months ago.
 - **Recent reflections** (last 4, in full) — the model's weekly pattern analyses, explicitly marked as hypothesis, not fact. If a reflection contradicts a raw entry, the entry wins.
 - **Resurfaced older reflections** (via semantic retrieval) — older reflections are not permanently included in every prompt. They only reappear if the system detects their themes are relevant to the current moment. An old hypothesis has to earn its way back — but it's never permanently gone.
-- **Recent observations, suppressed questions, behavioral data, prediction track record, and feedback** — scoped to recent context, not the entire archive
+- **Recent observations, suppressed questions, behavioral data, and feedback** — scoped to recent context, not the entire archive
 
 The prompt grows to a fixed size and stays there. Day 50 and day 500 produce prompts of the same scale, but the semantic retrieval ensures the system always reaches back to what's relevant — including entries from months ago that resonate with the current moment. The contrarian retrieval ensures it doesn't only reach back to what's *similar*.
 
 No question is generated in advance. Tomorrow's question doesn't exist until you submit today's response. There is nothing to preview, leak, or game.
-
-Every generated question carries an **intervention intent** — a tag explaining *why* the system chose it. The six intents are: promoting a previously suppressed question, targeting a specific theme, breaking a thematic rut via contrarian retrieval, disambiguating between interpretive frames, probing a specific trajectory dimension, or testing depth on a topic. This metadata turns each question into a labeled intervention in a single-case experiment, so the system can later correlate intent with outcome.
 
 ### Data Collection
 
@@ -72,23 +70,9 @@ Every session also captures **context metadata**: device type (mobile/desktop), 
 
 All behavioral metrics are normalized as personal percentiles — compared against the user's own history, not population norms. A "high" P-burst length means high relative to this person's baseline, not high in absolute terms. When the AI reads behavioral data, it receives each metric verbalized with its percentile rank and personal baseline, structured by signal importance — primary signals first (deletion character, production fluency, commitment), supporting context middle (duration, pauses, tab-aways), trajectory context last.
 
-#### Layer 2.5: Knowledge-Transforming Detection
-
-Each session is scored for whether it produced **new thinking** or **recited existing knowledge** — the distinction Bereiter & Scardamalia (1987) called knowledge-telling vs. knowledge-transforming, extended by Galbraith (1999, 2009).
-
-The detection uses four signals already captured:
-- **Late revision ratio** — revisions concentrated in the second half indicate writing-then-restructuring, the hallmark of knowledge-transforming
-- **Substantive revision count** — large deletions relative to personal baseline
-- **Vocabulary diversification** — MATTR computed from the response text
-- **Cognitive mechanism word density** — words like "because," "realize," "whether," "figure" (Pennebaker LIWC research). Rising density of cognitive words indicates active reasoning, not recitation.
-
-The knowledge-transforming score feeds into both the observation layer and the prediction system as the deepest available measure of whether a question *worked* — not whether it felt good, but whether it produced thinking the person wasn't doing before they sat down.
-
 #### Layer 3: The AI's Silent Layer
 
-Every day after submission, the AI reads the response, the behavioral signal, context-matched calibration baselines, knowledge-transforming score, and all of its own prior observations. It does four things:
-
-**Three-frame analysis.** For every notable signal, the system applies three deliberately opposed interpretive lenses:
+Every day after submission, the AI reads the response, the behavioral signal, context-matched calibration baselines, and all of its own prior observations. It applies **three interpretive frames** to every notable signal:
 
 **Frame A — Charitable:** The user is being thoughtful, careful, honest, or simply editing for quality. Deletions are revisions. Pauses are contemplation. Vagueness is appropriate boundary-setting.
 
@@ -96,38 +80,12 @@ Every day after submission, the AI reads the response, the behavioral signal, co
 
 **Frame C — Mundane:** The behavior has no psychological meaning. The user was distracted, tired, on a different device, dealing with autocorrect, or is just a careful writer. The signal is noise.
 
-These are not three guesses from the same perspective. They are three distinct lenses. For each signal, the system applies all three, then assesses which frame the calibration data and cross-session patterns support. Where the frames genuinely diverge with no clear winner, the system says so and assigns an overall confidence level (HIGH / MODERATE / LOW / INSUFFICIENT DATA).
+These are not three guesses from the same perspective. They are three deliberately opposed lenses. For each signal, the system applies all three, then assesses which frame the calibration data and cross-session patterns support. Where the frames genuinely diverge with no clear winner, the system says so and assigns an overall confidence level (HIGH / MODERATE / LOW / INSUFFICIENT DATA).
 
-**Suppressed question.** The system generates the question it would ask tomorrow if it could. This question must target the highest-uncertainty gap: the place where Frame A and Frame B give equally plausible but contradictory reads. It is designed to *disambiguate*, not to probe the most dramatic interpretation.
+The system also generates a **suppressed question** — the question the AI would ask tomorrow if it could. This question must target the highest-uncertainty gap: the place where Frame A and Frame B give equally plausible but contradictory reads. It is designed to *disambiguate*, not to probe the most dramatic interpretation.
 
 A bad suppressed question: "What are you hiding?" (presupposes Frame B)
 A good suppressed question: "When you revise what you've written, what are you usually trying to get closer to?" (helps distinguish A from B)
-
-**Prediction grading.** The system checks all open predictions from previous observations against today's behavioral data and grades each one as CONFIRMED, FALSIFIED, INDETERMINATE, or EXPIRED. Each grade triggers a Bayesian update on the relevant theory's confidence score.
-
-**New predictions.** The system generates 1-2 falsifiable predictions about future sessions. Each prediction specifies a hypothesis, which interpretive frame it favors, what behavioral signature would confirm it, what would falsify it, a topic tag, and a type (behavioral, thematic, phase transition, or frame resolution). This is how the system learns whether its interpretations are analysis or storytelling. A prediction you never test is not a theory — it's a guess.
-
-### The Prediction Engine
-
-The prediction engine is the mechanism that turns Marrow's interpretive layer from storytelling into science.
-
-Every observation generates predictions. Every subsequent observation grades them. Every grade updates a Bayesian confidence score. Over time, the system accumulates evidence for which of its interpretive patterns are actually predictive and which are stories it tells itself.
-
-The architecture follows single-case experimental design methodology (Barlow & Hersen, 1984; Kazdin, 2011) and the predictive processing framework (Friston, 2006; Clark, 2013):
-
-**Baseline.** The trajectory engine's "stable phase" detection establishes behavioral baselines — the SCED requirement before any intervention effect can be attributed.
-
-**Prediction.** Each observation generates hypotheses with specific, falsifiable behavioral criteria. A prediction that says "the user is avoiding something" is useless. A prediction that says "next time this topic comes up, commitment ratio will drop below the 30th percentile and deliberation will spike above the 70th" is testable.
-
-**Intervention.** The daily question is the intervention. Each generated question is tagged with one of six strategic intents: suppressed question promotion, theme targeting, contrarian break, frame disambiguation, trajectory probe, or depth test. This tag is the independent variable.
-
-**Measurement.** The next session's behavioral data, trajectory shift, and knowledge-transforming score are the dependent variables — measured by a system (the trajectory engine) that is completely independent of the AI interpretation layer.
-
-**Grading.** The observation pipeline grades predictions against the new data. CONFIRMED means the predicted behavioral signature appeared. FALSIFIED means the opposite appeared. INDETERMINATE means the data doesn't clearly support either. EXPIRED means the prediction's time window passed without a relevant session.
-
-**Bayesian updating.** Each grade updates a Beta-Binomial confidence score per theory/topic/frame combination. Alpha increments on confirmation, beta on falsification. The posterior mean starts at 0.5 (no evidence) and moves toward 0 or 1 as predictions accumulate. The system knows — with a number, not a feeling — how reliable its predictions about any given topic or frame have been.
-
-The prediction track record feeds into both question generation and weekly reflection, creating a feedback loop where the system's awareness of its own reliability shapes its future behavior.
 
 ### Calibration
 
@@ -143,7 +101,7 @@ The daily question always comes first. You cannot access free writes until you'v
 
 ### Error Correction
 
-The system is designed to catch its own mistakes. Eight mechanisms prevent interpretive drift:
+The system is designed to catch its own mistakes. Seven mechanisms prevent interpretive drift:
 
 **1. Context-matched calibration baselines.** The system knows what your "normal" looks like on the same device at a similar time of day. It only flags behavioral metrics that deviate significantly from your personal baseline in that context. A 47-second pause is not "meaningful" if your baseline on the same device at the same hour is 40 seconds.
 
@@ -169,8 +127,6 @@ One model generating three interpretations is structured self-disagreement. Two 
 
 **7. Reflection decay.** Old reflections can become self-reinforcing. A hypothesis from month 2 — "this person is avoiding a career decision" — could sit in every prompt at month 8, shaping how the model reads new entries even if the pattern is long gone. The system includes only the last 4 reflections in full. Older reflections are stored and embedded but only resurface via semantic retrieval when their themes are relevant to the current moment. An old hypothesis has to earn its way back into the prompt — but it's never permanently gone.
 
-**8. Falsifiable predictions with Bayesian grading.** The strongest error correction mechanism. The system must commit to testable predictions before seeing the next session's data. Predictions that fail update the theory's confidence score downward. Over time, the system accumulates a track record that tells it — with numbers, not vibes — which of its interpretive patterns are reliable and which are stories. A system that only explains post hoc never actually learns (Clark, 2013). A system that predicts and gets graded does.
-
 ### Event-Driven Architecture
 
 Everything fires on a single event: the user hitting submit.
@@ -178,10 +134,10 @@ Everything fires on a single event: the user hitting submit.
 #### On Submission (Daily Question)
 
 1. **Response + session summary + context metadata saved** — the response text, all derived behavioral metrics, and device/time context are written to the database.
-2. **AI observation runs** — reads today's data with context-matched calibration baselines and knowledge-transforming score. Grades any open predictions against today's behavioral data. Applies three interpretive frames. Generates a disambiguating suppressed question. Generates 1-2 new falsifiable predictions. Updates Bayesian theory confidence scores. Skipped on calibration sessions.
+2. **AI observation runs** — reads today's data with context-matched calibration baselines. Applies three interpretive frames. Generates a disambiguating suppressed question. Skipped on calibration sessions.
 3. **Response embedding runs** — the new entry is vectorized via Voyage AI and stored in sqlite-vec for future semantic retrieval. Failures are non-blocking — the system degrades to recency-only retrieval if the embedding service is unavailable.
-4. **Question generation runs** — during the seed phase (days 1-30), this is a no-op. After day 30, it assembles a bounded context window via semantic retrieval (recent entries + resonant older entries + reflections as hypothesis layer), receives the prediction track record and theory confidence scores, generates tomorrow's question, and tags it with intervention intent.
-5. **Weekly reflection + audit runs** — every 7th response. Primary reflection on Opus, then secondary audit on Sonnet. The reflection now includes a prediction analysis section reviewing which prediction types are most reliable, patterns in hits vs. misses, and leading indicator usefulness. After saving, the reflection is embedded and its coverage boundary is recorded so future prompts know which entries have been digested.
+4. **Question generation runs** — during the seed phase (days 1-30), this is a no-op. After day 30, it assembles a bounded context window via semantic retrieval (recent entries + resonant older entries + reflections as hypothesis layer) and generates tomorrow's question.
+5. **Weekly reflection + audit runs** — every 7th response. Primary reflection on Opus, then secondary audit on Sonnet. The reflection only processes entries since the last reflection (its "compression window"), augmented with RAG-retrieved older entries for long-range pattern detection. After saving, the reflection is embedded and its coverage boundary is recorded so future prompts know which entries have been digested.
 
 #### On Submission (Free Write)
 
@@ -194,9 +150,7 @@ There are no cron jobs, no scheduled tasks, no server dependencies. The system i
 
 ### What Marrow Feeds
 
-Marrow is the data layer for [Einstein](https://github.com/anthonyguzzardo/Einstein), a longitudinal thinking partner. Einstein consumes everything Marrow collects — response text, behavioral signals with context, AI observations with three-frame analysis, suppressed questions, weekly reflections with multi-model audits, question feedback, prediction track records with Bayesian confidence scores, intervention-tagged questions, knowledge-transforming scores, and trajectory data with leading indicators — as persistent context. Where Marrow asks, Einstein converses. The depth of that conversation is bounded by the depth of the data Marrow has accumulated.
-
-Einstein is not a chatbot that knows you well. Einstein is a theorist whose subject happens to be you. The prediction engine gives him a lab notebook with a track record. The trajectory engine gives him a measurement instrument he can't manipulate. The intervention tags give him experimental metadata. When Einstein says "I think X about you," it's not a cold read — it's a theory with evidence, tested against a non-AI measurement instrument, graded by its own prediction history.
+Marrow is the data layer for [Einstein](https://github.com/anthonyguzzardo/Einstein), a longitudinal thinking partner. Einstein consumes everything Marrow collects — response text, behavioral signals with context, AI observations with three-frame analysis, suppressed questions, weekly reflections with multi-model audits, and question feedback — as persistent context. Where Marrow asks, Einstein converses. The depth of that conversation is bounded by the depth of the data Marrow has accumulated.
 
 ## What This Looks Like
 
@@ -212,9 +166,8 @@ You open the page on your laptop at 9pm. Stare at it for 47 seconds before typin
 - Device: desktop, 21:00, Friday
 - First-keystroke latency: 47,000ms
 - Commitment ratio: 0.38 (you typed 140 characters, kept 53)
-- 1 revision (36 characters — a full sentence replaced with a vague one), 2 corrections
-- Revision timing: early (false start)
-- Knowledge-transforming score: 0.31 (low — recitation, not new thinking)
+- Largest deletion: 36 characters (a full sentence, retracted)
+- Total session: 4 minutes
 
 **What the AI wrote (you never see this):**
 
@@ -235,15 +188,7 @@ You open the page on your laptop at 9pm. Stare at it for 47 seconds before typin
 **Suppressed question:**
 > *"When you revise what you've written, what are you usually trying to get closer to?"*
 
-**Prediction:**
-> TYPE: FRAME_RESOLUTION
-> HYPOTHESIS: Next time a question touches career/work, commitment ratio will drop below the 30th percentile and at least one large deletion will occur — the specificity gap will repeat.
-> FRAME: B
-> TOPIC: career
-> CONFIRMS: commitment ratio <0.5, large_deletion_count >= 1, vague language replacing specific language
-> FALSIFIES: commitment ratio >0.8, no large deletions, direct/specific language maintained
-
-This prediction doesn't presuppose avoidance. It says: *if* Frame B is right about the career topic, *then* a specific behavioral signature should repeat. If it doesn't, Frame B loses confidence on this topic.
+This question doesn't presuppose avoidance. It helps the system distinguish Frame A (editing toward accuracy) from Frame B (editing away from honesty) on future sessions.
 
 ### After Day 3 — Free Write
 
@@ -265,7 +210,7 @@ You tap "no." One bit of signal. The system knows this question missed. When it 
 
 The question: *"What have you outgrown but haven't let go of yet?"*
 
-You type fast on your phone during lunch. No pauses. No deletions. 280 words in 6 minutes. Commitment ratio: 0.97. Knowledge-transforming score: 0.22 (low — fluent recitation of a processed answer).
+You type fast on your phone during lunch. No pauses. No deletions. 280 words in 6 minutes. Commitment ratio: 0.97.
 
 **What the AI wrote:**
 
@@ -287,11 +232,9 @@ The AI runs its weekly reflection on Opus. Then Sonnet audits it.
 
 ### Day 31
 
-Seeds are done. The AI has 30 observations with three-frame analysis. 30 suppressed questions designed to disambiguate, not dramatize. A behavioral fingerprint calibrated across devices and times of day. Four self-correction cycles with multi-model audits. A prediction track record with Bayesian confidence scores for each theory. Question feedback data on which questions landed and which didn't.
+Seeds are done. The AI has 30 observations with three-frame analysis. 30 suppressed questions designed to disambiguate, not dramatize. A behavioral fingerprint calibrated across devices and times of day. Four self-correction cycles with multi-model audits. Question feedback data on which questions landed and which didn't.
 
-It generates tomorrow's question. Not from a single confident narrative. From a model that knows what it's sure about, what it's guessing, where its calibration is weak, where an independent auditor disagreed with its read, and which of its predictions have held up.
-
-The question is tagged: FRAME_DISAMBIGUATION. The system chose it because its career-topic predictions have a posterior mean of 0.62 — leaning confirmed but not strong. It needs more data. The question is designed to produce that data.
+It generates tomorrow's question. Not from a single confident narrative. From a model that knows what it's sure about, what it's guessing, where its calibration is weak, and where an independent auditor disagreed with its read.
 
 ## Stack
 
@@ -321,11 +264,7 @@ The question is tagged: FRAME_DISAMBIGUATION. The system chose it because its ca
 - Graceful degradation — if Voyage AI is unavailable, falls back to recency-only retrieval
 - All analysis triggered on submit — no cron, no scheduler
 - **Bob** — a witness-form rendered as a 3D object from 36 behavioral signals interpreted into a 26-trait genome by Opus. See `BOB.md` for full documentation.
-- **Trajectory engine** — pure math on raw per-session data (no AI). Collapses behavioral and language-shape metrics into 4 z-scored dimensions validated by writing process research: fluency (P-burst length, Chenoweth & Hayes 2001), deliberation (hesitation + pause rate + revision weight, Deane 2015), revision (commitment ratio + substantive deletion rate, Baaijen et al. 2012), expression (linguistic deviation from personal norm). Computes convergence (Euclidean distance in 4D — did multiple dimensions move together?) and phase detection (stable/shifting/disrupted). Cross-correlates dimension pairs with lag to discover leading indicators — which dimensions move first for this specific person (Mesbah et al. 2024). Feeds into observation, generation, and reflection as cross-session context. See `BOB.md` for details.
-- **Signal formatting module** (`src/lib/signals.ts`) — research-backed verbalization of behavioral data for LLM consumption. Converts raw session metrics into percentile-contextualized, baseline-anchored, importance-hierarchied natural language. Informed by Netflix "From Logs to Language" (2026), anchoring bias research (2024), "Lost in the Middle" positional attention (TACL 2024), and LLM numeracy studies (2026).
-- **Prediction engine** — falsifiable predictions generated by the observation layer, graded against future behavioral data. Each prediction carries a hypothesis, favored frame, expected/falsification criteria, topic tag, and type. Grades update Bayesian Beta-Binomial confidence scores per theory/topic combination. Track record feeds into generation and reflection prompts. Follows SCED methodology (Barlow & Hersen 1984, Kazdin 2011) and active inference (Friston 2006, Clark 2013).
-- **Knowledge-transforming detection** — scores each session for whether it produced new thinking (Bereiter & Scardamalia 1987, Galbraith 1999). Uses late revision ratio, substantive revision count, MATTR vocabulary diversity, and cognitive mechanism word density (Pennebaker LIWC). The deepest available measure of whether a question *worked*.
-- **Intervention tagging** — every generated question is tagged with strategic intent (suppressed promotion, theme targeting, contrarian break, frame disambiguation, trajectory probe, depth test). Correlating intent with trajectory outcome is how the system learns which types of questions produce depth.
+- **Trajectory engine** — pure math on raw per-session data (no AI). Collapses behavioral and language-shape metrics into 4 z-scored dimensions: fluency (P-burst length), deliberation (hesitation + pause rate + revision weight), revision (commitment ratio + substantive deletion rate), expression (linguistic deviation from personal norm). Computes convergence (Euclidean distance in 4D — did multiple dimensions move together?) and phase detection (stable/shifting/disrupted). Feeds into observation, generation, and reflection as cross-session context. See `BOB.md` for details.
 
 ## Commands
 
@@ -351,13 +290,13 @@ The system currently has no way to evaluate whether it is getting better. It gen
 
 ### Planned Modes
 
-1. **Question audit** — reviews generated questions for thematic diversity, presupposition load, feedback correlation, whether suppressed questions are consistently sharper than actual questions, and whether contrarian retrieval is changing output. Now additionally: correlates intervention intent tags with trajectory outcomes to measure which question strategies produce depth.
+1. **Question audit** — reviews generated questions for thematic diversity, presupposition load, feedback correlation, whether suppressed questions are consistently sharper than actual questions, and whether contrarian retrieval is changing output.
 2. **Discrepancy scan** — searches for contradictions across raw entries, reflections, observations, and self-critiques. Flags where the system's claims don't fit the data.
-3. **System audit** — inspects architecture, retrieval patterns, and confidence language. Evaluates whether philosophy and implementation have diverged. Now additionally: reviews prediction hit rates by type and identifies systematic biases in the prediction engine.
+3. **System audit** — inspects architecture, retrieval patterns, and confidence language. Evaluates whether philosophy and implementation have diverged.
 
 ### Why Not Now
 
-At 30 entries there is nothing meaningful to audit. No question-generation history, no retrieval bias to detect, no narrative drift to catch. The prediction engine needs density before its track record is statistically meaningful. The Lab becomes valuable at day 60-120, when real patterns exist. The prompt tracing infrastructure (`tb_prompt_traces`) is already recording what goes into every AI call, and the prediction registry (`tb_predictions`) is recording every hypothesis and its outcome, so when the Lab is built, the evidence trail is waiting.
+At 30 entries there is nothing meaningful to audit. No question-generation history, no retrieval bias to detect, no narrative drift to catch. The Lab becomes valuable at day 60-120, when real patterns exist. The prompt tracing infrastructure (`tb_prompt_traces`) is already recording what goes into every AI call, so when the Lab is built, the evidence trail is waiting.
 
 ## Philosophy
 

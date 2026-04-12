@@ -12,9 +12,9 @@
  *   Structure        — Prompt formatting (2024): labeled sections > flat lists
  */
 
-import type { SessionSummaryInput, CalibrationBaseline } from './db.ts';
+import type { SessionSummaryInput, CalibrationBaseline, OpenPrediction } from './db.ts';
 import type { TrajectoryAnalysis } from './bob/trajectory.ts';
-import { avg, stddev, percentileRank } from './bob/helpers.ts';
+import { avg, stddev, percentileRank, computeMATTR, COGNITIVE_WORDS } from './bob/helpers.ts';
 
 // ─── Internal helpers ──────────────────────────────────────────────
 
@@ -353,5 +353,167 @@ export function formatEnrichedCalibration(calibration: CalibrationBaseline, devi
     'Baseline confidence is strong. Baseline is reliable. Deviations from it are meaningful signal.'
   );
 
+  return lines.join('\n');
+}
+
+// ─── Knowledge-transforming detection ─────────────────────────────
+// Baaijen, Galbraith & de Glopper (2012): knowledge-transforming episodes
+// produce shorter initial bursts → longer subsequent bursts, more revisions,
+// vocabulary diversification, and revision clustering late in session.
+
+export interface KnowledgeTransformResult {
+  score: number;    // 0-1, higher = more knowledge-transforming
+  signals: string[];
+}
+
+/**
+ * Detect whether a session shows the knowledge-transforming signature
+ * (generating new understanding through writing, not just reciting).
+ * Uses available session summary data + response text.
+ */
+export function computeKnowledgeTransformScore(
+  session: SessionSummaryInput,
+  responseText: string,
+  allSummaries: SessionSummaryInput[],
+): KnowledgeTransformResult {
+  const signals: string[] = [];
+  let scoreSum = 0;
+  let componentCount = 0;
+
+  // 1. Late revision ratio — writing then restructuring
+  if (session.firstHalfDeletionChars != null && session.secondHalfDeletionChars != null) {
+    const total = session.firstHalfDeletionChars + session.secondHalfDeletionChars;
+    if (total > 0) {
+      const lateRatio = session.secondHalfDeletionChars / total;
+      const lateScore = Math.min(1, lateRatio / 0.7); // 0.7+ = full score
+      scoreSum += lateScore;
+      componentCount++;
+      if (lateRatio > 0.6) signals.push('late revisions (wrote then restructured)');
+    }
+  }
+
+  // 2. Substantive revisions present
+  if (session.largeDeletionCount != null) {
+    const revBaseline = allSummaries
+      .filter(s => s.largeDeletionCount != null)
+      .map(s => s.largeDeletionCount!);
+    if (revBaseline.length > 1 && session.largeDeletionCount > 0) {
+      const revPct = percentileRank(session.largeDeletionCount, revBaseline);
+      scoreSum += revPct;
+      componentCount++;
+      if (revPct > 0.6) signals.push('above-baseline substantive revisions');
+    }
+  }
+
+  // 3. MATTR — vocabulary diversification
+  const words = responseText.toLowerCase()
+    .replace(/[^a-z'\s-]/g, '')
+    .split(/\s+/)
+    .filter(w => w.length > 1);
+  if (words.length >= 25) {
+    const mattr = computeMATTR(words);
+    // Compare against personal MATTR history (approximate from past response texts)
+    // For now, raw threshold: MATTR > 0.7 is high diversity
+    const mattrScore = Math.min(1, (mattr - 0.5) / 0.3); // 0.5-0.8 range → 0-1
+    scoreSum += Math.max(0, mattrScore);
+    componentCount++;
+    if (mattr > 0.7) signals.push('high vocabulary diversity (MATTR)');
+  }
+
+  // 4. Cognitive mechanism words (Pennebaker) — thinking/reasoning language
+  const cogCount = words.filter(w => COGNITIVE_WORDS.has(w)).length;
+  const cogDensity = words.length > 0 ? cogCount / words.length : 0;
+  if (cogDensity > 0.04) { // >4% cognitive words
+    scoreSum += Math.min(1, cogDensity / 0.08);
+    componentCount++;
+    signals.push('high cognitive mechanism word density');
+  }
+
+  const score = componentCount > 0 ? scoreSum / componentCount : 0;
+  return { score, signals };
+}
+
+// ─── Prediction formatting for LLM consumption ───────────────────
+
+/**
+ * Format open predictions for the observation prompt so the AI can grade them.
+ */
+export function formatOpenPredictions(predictions: OpenPrediction[]): string {
+  if (predictions.length === 0) return '';
+
+  const lines: string[] = [];
+  lines.push('=== OPEN PREDICTIONS (grade these against today\'s data) ===');
+  lines.push('');
+  lines.push('For each prediction below, assess whether today\'s session data CONFIRMS, FALSIFIES, or is INDETERMINATE. If the prediction\'s expiry window has passed, mark it EXPIRED.');
+  lines.push('');
+
+  for (const p of predictions) {
+    lines.push(`[Prediction #${p.predictionId}] (created ${p.dttmCreatedUtc})`);
+    lines.push(`  Hypothesis: ${p.hypothesis}`);
+    if (p.favoredFrame) lines.push(`  Favored frame: ${p.favoredFrame}`);
+    if (p.targetTopic) lines.push(`  Topic: ${p.targetTopic}`);
+    lines.push(`  Would confirm: ${p.expectedSignature}`);
+    lines.push(`  Would falsify: ${p.falsificationCriteria}`);
+    lines.push(`  Expires after: ${p.expirySessions} sessions`);
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * Format prediction track record + theory confidence for generation/reflection prompts.
+ */
+export function formatPredictionTrackRecord(
+  stats: { total: number; confirmed: number; falsified: number; expired: number; open: number },
+  theories: Array<{ theoryKey: string; description: string; posteriorMean: number; totalPredictions: number }>,
+  recentGraded: Array<{ hypothesis: string; statusCode: string; gradeRationale: string | null }>,
+): string {
+  if (stats.total === 0) return '';
+
+  const lines: string[] = [];
+  lines.push('=== PREDICTION TRACK RECORD ===');
+  lines.push('');
+  lines.push(`Total predictions: ${stats.total} | Confirmed: ${stats.confirmed} | Falsified: ${stats.falsified} | Expired: ${stats.expired} | Open: ${stats.open}`);
+
+  if (stats.confirmed + stats.falsified > 0) {
+    const hitRate = stats.confirmed / (stats.confirmed + stats.falsified);
+    lines.push(`Hit rate (excluding expired/open): ${(hitRate * 100).toFixed(0)}%`);
+  }
+  lines.push('');
+
+  if (theories.length > 0) {
+    lines.push('Theory confidence (Bayesian posterior, 0.5 = no evidence):');
+    for (const t of theories) {
+      const bar = t.posteriorMean > 0.65 ? 'strong' : t.posteriorMean > 0.5 ? 'leaning confirmed' : t.posteriorMean > 0.35 ? 'leaning falsified' : 'weak';
+      lines.push(`  ${t.theoryKey}: ${t.posteriorMean.toFixed(2)} (${bar}, n=${t.totalPredictions}) — ${t.description}`);
+    }
+    lines.push('');
+  }
+
+  if (recentGraded.length > 0) {
+    lines.push('Recent graded predictions:');
+    for (const g of recentGraded.slice(0, 5)) {
+      lines.push(`  [${g.statusCode}] ${g.hypothesis}${g.gradeRationale ? ` — ${g.gradeRationale}` : ''}`);
+    }
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * Format leading indicator findings for trajectory context.
+ */
+export function formatLeadingIndicators(
+  indicators: Array<{ leader: string; follower: string; lagSessions: number; correlation: number }>,
+): string {
+  if (indicators.length === 0) return '';
+
+  const lines: string[] = [];
+  lines.push('Leading indicators (which dimensions predict others for this person):');
+  for (const ind of indicators) {
+    lines.push(`  ${ind.leader} leads ${ind.follower} by ${ind.lagSessions} session${ind.lagSessions !== 1 ? 's' : ''} (r=${ind.correlation.toFixed(2)})`);
+  }
   return lines.join('\n');
 }

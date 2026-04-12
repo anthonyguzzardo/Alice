@@ -18,10 +18,17 @@ import {
   hasQuestionForDate,
   getResponseCount,
   savePromptTrace,
+  getPredictionStats,
+  getAllTheoryConfidences,
+  getRecentGradedPredictions,
+  updateQuestionIntent,
 } from './db.ts';
 import { localDateStr } from './date.ts';
 import { retrieveSimilarMulti, retrieveContrarian } from './rag.ts';
-import { formatCompactSignals, formatTrajectoryContext } from './signals.ts';
+import {
+  formatCompactSignals, formatTrajectoryContext,
+  formatPredictionTrackRecord, formatLeadingIndicators,
+} from './signals.ts';
 import { computeTrajectory } from './bob/trajectory.ts';
 
 const SEED_DAYS = 30;
@@ -138,6 +145,16 @@ export async function runGeneration(): Promise<void> {
     ? formatTrajectoryContext(trajectory, 'compact')
     : '';
 
+  const leadingIndicatorSection = trajectory.leadingIndicators.length > 0
+    ? formatLeadingIndicators(trajectory.leadingIndicators)
+    : '';
+
+  // Prediction track record
+  const predStats = getPredictionStats();
+  const theories = getAllTheoryConfidences();
+  const recentGraded = getRecentGradedPredictions(5);
+  const predictionSection = formatPredictionTrackRecord(predStats, theories, recentGraded);
+
   const feedbackSection = recentFeedback.length > 0
     ? `Question feedback ("did it land?"):\n${recentFeedback.map(f => `[${f.date}] ${f.landed ? 'YES' : 'NO'}`).join('\n')}\n\nUse this to calibrate question quality. "NO" means recalibrate — that line of questioning missed. "YES" is weaker signal — could mean insightful, uncomfortable, or just emotionally loaded.`
     : '';
@@ -171,10 +188,23 @@ Pay special attention to the contrarian entries — they represent threads you m
 Weight your sources appropriately:
 - The journal text is your primary signal. What they said matters most.
 - Behavioral data is secondary signal. It now includes deletion decomposition (corrections vs. revisions), P-burst metrics (production fluency), percentile context, and trajectory phase. Use trajectory phase to detect if writing behavior is shifting or disrupted — this should influence question targeting. A "disrupted" phase means their pattern broke; probe what changed. A "shifting" phase means something is evolving; follow the thread.
+- Leading indicators show which behavioral dimensions move first for this specific person. If deliberation leads expression, a deliberation spike signals an upcoming expression change — target that.
 - Recent observations include confidence levels. Weight accordingly.
 - A "no" on "did it land?" means that line of questioning missed.
+- If a prediction track record is provided, use it. Questions that target areas where frames A and B diverge (frame disambiguation) have historically produced more trajectory shifts. The theory confidence scores tell you which interpretive patterns are reliable.
 
-Do NOT explain the question. Do NOT add commentary. Output ONLY the question text, nothing else.`;
+After the question, output your INTERVENTION INTENT — one line explaining why you chose this question. Use exactly one of these tags:
+- SUPPRESSED_PROMOTION — you promoted a previously suppressed question
+- THEME_TARGETING — you targeted a specific thematic thread
+- CONTRARIAN_BREAK — you deliberately broke a thematic rut
+- FRAME_DISAMBIGUATION — you designed the question to resolve a frame A/B divergence
+- TRAJECTORY_PROBE — you targeted a specific trajectory dimension
+- DEPTH_TEST — you tested whether the user will go deeper on a topic
+
+Format:
+[question text]
+
+INTENT: [TAG] — [brief rationale]`;
 
   const userContent = `=== WHAT THEY SAID (SOURCE OF TRUTH) ===
 
@@ -214,12 +244,15 @@ ${suppressedSection}
 BEHAVIORAL DATA (enriched with research-backed metrics, for recent entries):
 ${behavioralSection}
 ${trajectorySection ? `\n${trajectorySection}` : ''}
+${leadingIndicatorSection ? `\n${leadingIndicatorSection}` : ''}
+
+${predictionSection}
 
 ${feedbackSection}
 
 ---
 
-Generate tomorrow's question.`;
+Generate tomorrow's question with intervention intent.`;
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY2 });
 
@@ -230,8 +263,26 @@ Generate tomorrow's question.`;
     messages: [{ role: 'user', content: userContent }],
   });
 
-  const questionText = (message.content[0] as { type: 'text'; text: string }).text.trim();
+  const rawOutput = (message.content[0] as { type: 'text'; text: string }).text.trim();
+
+  // Parse intervention intent if present
+  const intentMatch = rawOutput.match(/INTENT\s*:\s*(SUPPRESSED_PROMOTION|THEME_TARGETING|CONTRARIAN_BREAK|FRAME_DISAMBIGUATION|TRAJECTORY_PROBE|DEPTH_TEST)\s*[—\-]\s*(.*)/i);
+  const questionText = rawOutput.replace(/\n*INTENT\s*:.*/i, '').trim();
   scheduleQuestion(questionText, tomorrowStr, 'generated');
+
+  // Tag the question with intervention intent
+  if (intentMatch) {
+    const intentCode = intentMatch[1].toLowerCase();
+    const rationale = intentMatch[2].trim();
+    // Get the question ID we just scheduled — use hasQuestionForDate's underlying table
+    const { default: db } = await import('./db.ts');
+    const scheduledQ = db
+      .prepare('SELECT question_id FROM tb_questions WHERE scheduled_for = ?')
+      .get(tomorrowStr) as { question_id: number } | null;
+    if (scheduledQ) {
+      updateQuestionIntent(scheduledQ.question_id, intentCode, rationale);
+    }
+  }
 
   // Log what went into this prompt for future auditability
   savePromptTrace({

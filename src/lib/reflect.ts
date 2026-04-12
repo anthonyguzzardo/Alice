@@ -21,11 +21,17 @@ import {
   getMaxResponseId,
   saveReflection,
   savePromptTrace,
+  getPredictionStats,
+  getAllTheoryConfidences,
+  getRecentGradedPredictions,
 } from './db.ts';
 import { localDateStr } from './date.ts';
 import { retrieveSimilarMulti, retrieveContrarian } from './rag.ts';
 import { embedReflection } from './embeddings.ts';
-import { formatCompactSignals, formatTrajectoryContext, formatEnrichedCalibration } from './signals.ts';
+import {
+  formatCompactSignals, formatTrajectoryContext, formatEnrichedCalibration,
+  formatPredictionTrackRecord, formatLeadingIndicators,
+} from './signals.ts';
 import { computeTrajectory } from './bob/trajectory.ts';
 
 export async function runReflection(): Promise<void> {
@@ -122,6 +128,16 @@ export async function runReflection(): Promise<void> {
     ? formatTrajectoryContext(trajectory, 'compact')
     : '';
 
+  const leadingIndicatorSection = trajectory.leadingIndicators.length > 0
+    ? formatLeadingIndicators(trajectory.leadingIndicators)
+    : '';
+
+  // Prediction track record
+  const predStats = getPredictionStats();
+  const theories = getAllTheoryConfidences();
+  const recentGraded = getRecentGradedPredictions(10);
+  const predictionSection = formatPredictionTrackRecord(predStats, theories, recentGraded);
+
   const calibrationContext = formatEnrichedCalibration(calibration);
 
   const feedbackSection = recentFeedback.length > 0
@@ -158,7 +174,15 @@ Write a reflection that covers:
 
 7. QUESTION FEEDBACK — If any "did it land" data exists, what does it tell you about which questions work and which don't? A "no" is clear signal to recalibrate. A "yes" is ambiguous — it could mean insightful, uncomfortable, or just emotionally loaded.
 
-8. SELF-CORRECTION — This section is mandatory. Review your nightly observations from this period and answer honestly:
+8. PREDICTION ANALYSIS — If a prediction track record exists, review it:
+   - Which prediction types (behavioral, thematic, phase_transition, frame_resolution) are most reliable?
+   - Which theory confidence scores are strongest? Which are weakest?
+   - Are there patterns in what you get right vs. wrong?
+   - Which leading indicators (if any) have been most useful for prediction?
+   - Are suppressed questions, when eventually promoted, producing more trajectory shifts than normal questions?
+   Skip this section if no predictions have been made yet.
+
+9. SELF-CORRECTION — This section is mandatory. Review your nightly observations from this period and answer honestly:
    - Which observations were likely WRONG? Where did the charitable or mundane frame fit better than the avoidance frame you may have leaned toward?
    - Where did the three frames converge too much — producing "decorated confirmation bias" rather than genuine disagreement?
    - Which suppressed questions presupposed an interpretation rather than disambiguating between frames?
@@ -167,7 +191,7 @@ Write a reflection that covers:
 
 If you cannot identify at least one error or over-interpretation, you are not being honest. Every model drifts. Name the drift.
 
-9. REVISED MODEL — Given your self-corrections, state your current best understanding of this person. What are you confident about? What are you uncertain about? What do you need more data to determine?
+10. REVISED MODEL — Given your self-corrections, state your current best understanding of this person. What are you confident about? What are you uncertain about? What do you need more data to determine?
 
 Be direct. No hedging. No "it seems like" or "you might." State what you see — including what you see about your own errors.`;
 
@@ -211,6 +235,7 @@ ${suppressedSection}
 
 ${behavioralSection}
 ${trajectorySection ? `\n${trajectorySection}` : ''}
+${leadingIndicatorSection ? `\n${leadingIndicatorSection}` : ''}
 
 ---
 
@@ -218,11 +243,15 @@ ${calibrationContext}
 
 ---
 
+${predictionSection}
+
+---
+
 ${feedbackSection}
 
 ---
 
-Write your weekly reflection with self-correction.`;
+Write your weekly reflection with self-correction.${predStats.total > 0 ? ' Include a section on PREDICTION ANALYSIS: review the prediction track record, identify which types of predictions are most/least reliable, and note any patterns in what the system gets right vs. wrong.' : ''}`;
 
   const primaryMessage = await client.messages.create({
     model: 'claude-opus-4-6',

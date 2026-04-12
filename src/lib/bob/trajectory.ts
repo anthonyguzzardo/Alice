@@ -17,7 +17,7 @@
  */
 
 import db from '../db.ts';
-import { avg, stddev, FIRST_PERSON, HEDGING_WORDS } from './helpers.ts';
+import { avg, stddev, FIRST_PERSON, HEDGING_WORDS, crossCorrelation, type LeadLagResult } from './helpers.ts';
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -39,6 +39,7 @@ export interface TrajectoryAnalysis {
   phase: 'insufficient' | 'stable' | 'shifting' | 'disrupted';
   recentSpikes: number[];
   totalEntries: number;
+  leadingIndicators: LeadLagResult[];
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────
@@ -319,6 +320,38 @@ function computeVelocity(points: TrajectoryPoint[]): number {
   return Math.min(1, avgDist / 2);
 }
 
+// ─── Leading indicator analysis ────────────────────────────────────
+// Cross-correlate pairs of trajectory dimensions to discover which
+// dimension moves first for this specific person (Mesbah et al. 2024).
+
+function findLeadingIndicators(points: TrajectoryPoint[]): LeadLagResult[] {
+  if (points.length < 10) return []; // need density for meaningful correlations
+
+  const dims = ['fluency', 'deliberation', 'revision', 'expression'] as const;
+  const series: Record<string, number[]> = {};
+  for (const dim of dims) {
+    series[dim] = points.map(p => p[dim]);
+  }
+
+  const results: LeadLagResult[] = [];
+  for (let i = 0; i < dims.length; i++) {
+    for (let j = i + 1; j < dims.length; j++) {
+      const result = crossCorrelation(
+        dims[i], series[dims[i]],
+        dims[j], series[dims[j]],
+        3,
+      );
+      if (result && result.lagSessions > 0) {
+        results.push(result);
+      }
+    }
+  }
+
+  // Sort by correlation strength
+  results.sort((a, b) => b.correlation - a.correlation);
+  return results;
+}
+
 // ─── Public API ─────────────────────────────────────────────────────
 
 export function computeTrajectory(): TrajectoryAnalysis {
@@ -331,6 +364,7 @@ export function computeTrajectory(): TrajectoryAnalysis {
       phase: 'insufficient',
       recentSpikes: [],
       totalEntries: sessions.length,
+      leadingIndicators: [],
     };
   }
 
@@ -340,6 +374,7 @@ export function computeTrajectory(): TrajectoryAnalysis {
   const recentSpikes = points
     .filter(p => p.convergenceLevel === 'high')
     .map(p => p.entryIndex);
+  const leadingIndicators = findLeadingIndicators(points);
 
   return {
     points,
@@ -347,5 +382,6 @@ export function computeTrajectory(): TrajectoryAnalysis {
     phase,
     recentSpikes,
     totalEntries: sessions.length,
+    leadingIndicators,
   };
 }
