@@ -29,10 +29,11 @@ import { localDateStr } from './date.ts';
 import { retrieveSimilarMulti, retrieveContrarian } from './rag.ts';
 import { embedReflection } from './embeddings.ts';
 import {
-  formatCompactSignals, formatTrajectoryContext, formatEnrichedCalibration,
-  formatPredictionTrackRecord, formatLeadingIndicators,
+  formatCompactSignals, formatDynamicsContext, formatEnrichedCalibration,
+  formatPredictionTrackRecord,
 } from './signals.ts';
-import { computeTrajectory } from './bob/trajectory.ts';
+import { computeEntryStates } from './bob/state-engine.ts';
+import { computeDynamics } from './bob/dynamics.ts';
 
 export async function runReflection(): Promise<void> {
   // --- DETERMINE COMPRESSION WINDOW ---
@@ -122,14 +123,11 @@ export async function runReflection(): Promise<void> {
     ? formatCompactSignals(newSummaries, allSummaries)
     : 'No behavioral data available.';
 
-  // Trajectory context (4D behavioral fingerprint)
-  const trajectory = computeTrajectory();
-  const trajectorySection = trajectory.points.length > 0
-    ? formatTrajectoryContext(trajectory, 'compact')
-    : '';
-
-  const leadingIndicatorSection = trajectory.leadingIndicators.length > 0
-    ? formatLeadingIndicators(trajectory.leadingIndicators)
+  // Dynamics context (8D PersDyn behavioral dynamics)
+  const entryStates = computeEntryStates();
+  const dynamics = computeDynamics(entryStates);
+  const dynamicsSection = dynamics.entryCount > 0
+    ? formatDynamicsContext(dynamics, 'compact')
     : '';
 
   // Prediction track record
@@ -168,8 +166,9 @@ Write a reflection that covers:
 6. BEHAVIORAL PATTERNS — What does the behavioral data reveal that the words don't? You now receive enriched metrics:
    - Deletion decomposition: corrections (typo fixes <10 chars) vs. revisions (substantive rethinking >=10 chars). Track whether revision counts are increasing or decreasing across the window.
    - P-burst metrics: production fluency — text between 2s pauses. Are bursts getting longer (finding flow) or shorter (more fragmented)?
-   - Trajectory: a 4D behavioral fingerprint (fluency, deliberation, revision, expression). Phase tells you if writing behavior is stable, shifting, or disrupted. Convergence tells you if multiple dimensions moved together (real shift) or independently (noise).
+   - Behavioral dynamics: an 8D PersDyn model (fluency, deliberation, revision, expression, commitment, volatility, thermal, presence) with attractor force per dimension. Rigid dimensions snap back fast; malleable dimensions show persistent shifts. Phase tells you if behavior is stable, shifting, or disrupted. System entropy measures behavioral predictability. Dimension coupling shows which dimensions causally influence each other.
    - Percentiles compare each metric against this person's own history, not population norms.
+   - Keystroke dynamics: inter-key interval patterns, revision chain topology, scroll-back behavior. These are process signals the words don't capture.
    Compare against calibration baselines. Note baseline confidence level. Only flag deviations that are significant relative to their neutral behavior. Flag when you're comparing across mismatched contexts.
 
 7. QUESTION FEEDBACK — If any "did it land" data exists, what does it tell you about which questions work and which don't? A "no" is clear signal to recalibrate. A "yes" is ambiguous — it could mean insightful, uncomfortable, or just emotionally loaded.
@@ -234,8 +233,7 @@ ${suppressedSection}
 === BEHAVIORAL DATA (enriched with research-backed metrics, for new entries) ===
 
 ${behavioralSection}
-${trajectorySection ? `\n${trajectorySection}` : ''}
-${leadingIndicatorSection ? `\n${leadingIndicatorSection}` : ''}
+${dynamicsSection ? `\n${dynamicsSection}` : ''}
 
 ---
 

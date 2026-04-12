@@ -27,10 +27,11 @@ import {
 import { localDateStr } from './date.ts';
 import { retrieveSimilarMulti, retrieveContrarian } from './rag.ts';
 import {
-  formatCompactSignals, formatTrajectoryContext,
-  formatPredictionTrackRecord, formatLeadingIndicators,
+  formatCompactSignals, formatDynamicsContext,
+  formatPredictionTrackRecord,
 } from './signals.ts';
-import { computeTrajectory } from './bob/trajectory.ts';
+import { computeEntryStates } from './bob/state-engine.ts';
+import { computeDynamics } from './bob/dynamics.ts';
 import { computeMATTR } from './bob/helpers.ts';
 
 const SEED_DAYS = 30;
@@ -141,14 +142,11 @@ export async function runGeneration(): Promise<void> {
     ? formatCompactSignals(recentSummaries, allSummaries)
     : 'No behavioral data available.';
 
-  // Trajectory context (4D behavioral fingerprint)
-  const trajectory = computeTrajectory();
-  const trajectorySection = trajectory.points.length > 0
-    ? formatTrajectoryContext(trajectory, 'compact')
-    : '';
-
-  const leadingIndicatorSection = trajectory.leadingIndicators.length > 0
-    ? formatLeadingIndicators(trajectory.leadingIndicators)
+  // Dynamics context (8D PersDyn behavioral dynamics)
+  const entryStates = computeEntryStates();
+  const dynamics = computeDynamics(entryStates);
+  const dynamicsSection = dynamics.entryCount > 0
+    ? formatDynamicsContext(dynamics, 'compact')
     : '';
 
   // Prediction track record
@@ -245,9 +243,10 @@ Pay special attention to the contrarian entries — they represent threads you m
 === SIGNAL WEIGHTING ===
 
 - Journal text is primary signal. What they said matters most.
-- Behavioral data is secondary: deletion decomposition, P-burst metrics, keystroke dynamics, percentile context, trajectory phase.
-- Trajectory phase: "disrupted" = pattern broke, probe what changed. "shifting" = something evolving, follow the thread.
-- Leading indicators show which behavioral dimensions move first. Use them to anticipate shifts.
+- Behavioral data is secondary: deletion decomposition, P-burst metrics, keystroke dynamics, percentile context, 8D behavioral dynamics.
+- Dynamics phase: "disrupted" = pattern broke, probe what changed. "shifting" = something evolving, follow the thread.
+- Attractor force tells you which dimensions are rigid (snap back fast) vs malleable (shifts persist). Target malleable dimensions — they're where real change happens.
+- Dimension coupling shows which behavioral dimensions influence each other. If a leader dimension is currently deviated, the follower will respond at the discovered lag.
 - Calibration-relative deviations are more meaningful than raw percentiles.
 - A "no" on "did it land?" means that line of questioning missed.
 - Prediction track record: theory confidence scores tell you which interpretations are reliable. Frame disambiguation questions historically produce more trajectory shifts.
@@ -310,8 +309,7 @@ ${suppressedSection}
 
 BEHAVIORAL DATA (enriched with research-backed metrics, for recent entries):
 ${behavioralSection}
-${trajectorySection ? `\n${trajectorySection}` : ''}
-${leadingIndicatorSection ? `\n${leadingIndicatorSection}` : ''}
+${dynamicsSection ? `\n${dynamicsSection}` : ''}
 
 ${predictionSection}
 

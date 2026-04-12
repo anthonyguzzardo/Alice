@@ -29,11 +29,12 @@ import { localDateStr } from './date.ts';
 import { retrieveSimilar } from './rag.ts';
 import { embedObservation } from './embeddings.ts';
 import {
-  formatObserveSignals, formatTrajectoryContext, formatEnrichedCalibration,
+  formatObserveSignals, formatDynamicsContext, formatEnrichedCalibration,
   formatOpenPredictions, computeKnowledgeTransformScore,
-  formatLeadingIndicators, formatCalibrationDeviation,
+  formatCalibrationDeviation,
 } from './signals.ts';
-import { computeTrajectory } from './bob/trajectory.ts';
+import { computeEntryStates } from './bob/state-engine.ts';
+import { computeDynamics } from './bob/dynamics.ts';
 
 export async function runObservation(): Promise<void> {
   const today = localDateStr();
@@ -86,10 +87,11 @@ export async function runObservation(): Promise<void> {
     ? formatObserveSignals(sessionSummary, allSummaries)
     : 'No behavioral data available for today.';
 
-  // Trajectory context (4D behavioral fingerprint)
-  const trajectory = computeTrajectory();
-  const trajectoryContext = trajectory.points.length > 0
-    ? formatTrajectoryContext(trajectory, 'observe')
+  // Dynamics context (8D PersDyn behavioral dynamics)
+  const entryStates = computeEntryStates();
+  const dynamics = computeDynamics(entryStates);
+  const dynamicsContext = dynamics.entryCount > 0
+    ? formatDynamicsContext(dynamics, 'observe')
     : '';
 
   const calibrationContext = formatEnrichedCalibration(calibration, sessionSummary?.deviceType);
@@ -105,10 +107,8 @@ export async function runObservation(): Promise<void> {
     allSummaries,
   );
 
-  // Leading indicator context
-  const leadingIndicatorContext = trajectory.leadingIndicators.length > 0
-    ? '\n' + formatLeadingIndicators(trajectory.leadingIndicators)
-    : '';
+  // Coupling context (replaces legacy leading indicators)
+  // Coupling data is already included in dynamicsContext
 
   // Predictions section
   const predictionsSection = openPredictions.length > 0
@@ -176,9 +176,11 @@ You receive enriched behavioral data with research-backed metrics. Key concepts:
 
 - REVISION TIMING: Where in the session large deletions occurred. Early = false starts (couldn't begin). Late = gutting after drafting (wrote something real, then killed it). This distinction matters for frame analysis.
 
-- TRAJECTORY: A 4-dimensional behavioral fingerprint (fluency, deliberation, revision, expression) tracked across all sessions. High convergence means multiple dimensions moved together — a real behavioral shift, not noise. Phase tells you whether the person's writing behavior is stable, shifting, or disrupted.
+- BEHAVIORAL DYNAMICS (8D PersDyn model): An 8-dimensional behavioral state tracked across all sessions: fluency, deliberation, revision, expression, commitment, volatility, thermal (editing heat), presence (inverse distraction). Each dimension has three parameters: baseline (rolling mean), variability, and ATTRACTOR FORCE — how quickly deviations snap back. Rigid dimensions (high attractor) snap back fast; malleable dimensions (low attractor) show persistent shifts. System entropy measures how uniformly variable all dimensions are — high entropy = unpredictable, low entropy = structured behavioral signature.
 
-- LEADING INDICATORS: If reported, these show which trajectory dimensions move first for this specific person. If deliberation leads expression by 2 sessions, a deliberation spike today predicts an expression change in 2 sessions.
+- DIMENSION COUPLING: Empirically discovered cross-correlations between dimension pairs. If fluency → deliberation at lag 1, a fluency spike today predicts a deliberation change next session. Active coupling predictions flag dimensions where the leader is currently deviated.
+
+- KEYSTROKE DYNAMICS (Epp et al. 2011): Inter-key interval mean and variability. Fast uniform keystrokes suggest confidence or flow. High variability suggests cognitive switching or hesitation. Revision chains (Leijten & Van Waes 2013) distinguish surface correction (short chains) from structural revision (long chains). Scroll-back and question re-read counts (Czerwinski et al. 2004) indicate re-engagement depth.
 
 - KNOWLEDGE-TRANSFORMING: A score indicating whether the writing session produced new thinking (knowledge-transforming) vs. recited existing knowledge (knowledge-telling). Based on late revisions, vocabulary diversity, and cognitive mechanism word density (Baaijen, Galbraith & de Glopper, 2012). The score is measured relative to a CALIBRATION FLOOR — the KT score of neutral free-write sessions (describing breakfast, weather, etc.). The "above floor" value is the real signal: how far above boring-writing levels this session reached. If the floor is 0.30 and today's score is 0.65, the session produced 0.35 units of thinking beyond what neutral writing produces.
 
@@ -215,7 +217,7 @@ Response: ${response.text}
 
 TODAY'S BEHAVIORAL SIGNAL:
 ${todayBehavior}
-${trajectoryContext}${leadingIndicatorContext}${ktContext}
+${dynamicsContext}${ktContext}
 
 ---
 

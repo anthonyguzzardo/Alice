@@ -13,8 +13,9 @@
  */
 
 import type { SessionSummaryInput, CalibrationBaseline, OpenPrediction } from './db.ts';
-import { getCalibrationSessionsWithText } from './db.ts';
+import { getCalibrationSessionsWithText, getBurstSequence } from './db.ts';
 import type { TrajectoryAnalysis } from './bob/trajectory.ts';
+import type { DynamicsAnalysis } from './bob/dynamics.ts';
 import { avg, stddev, percentileRank, computeMATTR, COGNITIVE_WORDS } from './bob/helpers.ts';
 
 // ─── Internal helpers ──────────────────────────────────────────────
@@ -33,6 +34,12 @@ interface PersonalBaselines {
   largeDeletionCounts: number[];
   pauseCounts: number[];
   wordCounts: number[];
+  interKeyIntervalMeans: number[];
+  interKeyIntervalStds: number[];
+  revisionChainCounts: number[];
+  revisionChainAvgLengths: number[];
+  scrollBackCounts: number[];
+  questionRereadCounts: number[];
 }
 
 function computePersonalBaselines(allSummaries: SessionSummaryInput[]): PersonalBaselines {
@@ -46,6 +53,12 @@ function computePersonalBaselines(allSummaries: SessionSummaryInput[]): Personal
     largeDeletionCounts: allSummaries.filter(s => s.largeDeletionCount != null).map(s => s.largeDeletionCount!),
     pauseCounts: allSummaries.map(s => s.pauseCount),
     wordCounts: allSummaries.map(s => s.wordCount),
+    interKeyIntervalMeans: allSummaries.filter(s => s.interKeyIntervalMean != null).map(s => s.interKeyIntervalMean!),
+    interKeyIntervalStds: allSummaries.filter(s => s.interKeyIntervalStd != null).map(s => s.interKeyIntervalStd!),
+    revisionChainCounts: allSummaries.filter(s => s.revisionChainCount != null).map(s => s.revisionChainCount!),
+    revisionChainAvgLengths: allSummaries.filter(s => s.revisionChainAvgLength != null).map(s => s.revisionChainAvgLength!),
+    scrollBackCounts: allSummaries.filter(s => s.scrollBackCount != null).map(s => s.scrollBackCount!),
+    questionRereadCounts: allSummaries.filter(s => s.questionRereadCount != null).map(s => s.questionRereadCount!),
   };
 }
 
@@ -205,6 +218,74 @@ export function formatObserveSignals(
   const wordPct = percentileRank(session.wordCount, baselines.wordCounts);
   lines.push(`- Final: ${session.wordCount} words, ${session.sentenceCount} sentences (${verbalizePercentile(wordPct)})`);
 
+  // Keystroke dynamics (Epp et al. 2011; Leijten & Van Waes 2013; Czerwinski et al. 2004)
+  const hasKeystrokeDynamics = session.interKeyIntervalMean != null;
+  if (hasKeystrokeDynamics) {
+    lines.push('');
+    lines.push('=== KEYSTROKE DYNAMICS ===');
+    lines.push('');
+
+    // Inter-key intervals
+    const ikiMean = session.interKeyIntervalMean!;
+    const ikiStd = session.interKeyIntervalStd!;
+    const ikiCv = ikiMean > 0 ? ikiStd / ikiMean : 0;
+
+    lines.push('Inter-key interval dynamics (Epp et al. 2011):');
+    lines.push(`- Mean: ${ikiMean.toFixed(0)}ms between keystrokes, std: ${ikiStd.toFixed(0)}ms`);
+    if (baselines.interKeyIntervalMeans.length > 1) {
+      const meanPct = percentileRank(ikiMean, baselines.interKeyIntervalMeans);
+      const stdPct = percentileRank(ikiStd, baselines.interKeyIntervalStds);
+      lines.push(`- Mean interval: ${verbalizePercentile(meanPct)}. Variability: ${verbalizePercentile(stdPct)}.`);
+    }
+    if (ikiCv > 0.8) {
+      lines.push('- High interval variability relative to mean — indicates cognitive switching or hesitation patterns');
+    } else if (ikiCv < 0.4) {
+      lines.push('- Low interval variability — uniform rhythm, suggests flow state or automatic writing');
+    }
+
+    // Revision chains
+    if (session.revisionChainCount != null) {
+      const chains = session.revisionChainCount;
+      const avgLen = session.revisionChainAvgLength ?? 0;
+      lines.push('');
+      lines.push('Revision chain topology (Leijten & Van Waes 2013):');
+      lines.push(`- ${chains} revision chain${chains !== 1 ? 's' : ''}, averaging ${avgLen.toFixed(1)} deletions per chain`);
+      if (baselines.revisionChainCounts.length > 1) {
+        const chainPct = percentileRank(chains, baselines.revisionChainCounts);
+        lines.push(`- Chain count: ${verbalizePercentile(chainPct)}.`);
+      }
+      if (baselines.revisionChainAvgLengths.length > 1 && avgLen > 0) {
+        const lenPct = percentileRank(avgLen, baselines.revisionChainAvgLengths);
+        lines.push(`- Avg chain length: ${verbalizePercentile(lenPct)}.`);
+      }
+      if (avgLen > 5) {
+        lines.push('- Long chains suggest deep structural revision — rethinking, not fixing typos');
+      } else if (chains > 0 && avgLen <= 2) {
+        lines.push('- Short chains suggest surface correction — typo fixing, minor word swaps');
+      }
+    }
+
+    // Scroll-back behavior
+    if (session.scrollBackCount != null || session.questionRereadCount != null) {
+      lines.push('');
+      lines.push('Re-engagement behavior (Czerwinski et al. 2004):');
+      if (session.scrollBackCount != null) {
+        lines.push(`- Scroll-back in own text: ${session.scrollBackCount} time${session.scrollBackCount !== 1 ? 's' : ''}`);
+        if (baselines.scrollBackCounts.length > 1) {
+          const sbPct = percentileRank(session.scrollBackCount, baselines.scrollBackCounts);
+          lines.push(`  ${verbalizePercentile(sbPct)}. Re-reading own text mid-session correlates with deeper engagement.`);
+        }
+      }
+      if (session.questionRereadCount != null) {
+        lines.push(`- Question re-reads: ${session.questionRereadCount} time${session.questionRereadCount !== 1 ? 's' : ''}`);
+        if (baselines.questionRereadCounts.length > 1) {
+          const qrPct = percentileRank(session.questionRereadCount, baselines.questionRereadCounts);
+          lines.push(`  ${verbalizePercentile(qrPct)}. Re-reading the question suggests recalibrating against the prompt.`);
+        }
+      }
+    }
+  }
+
   // Linguistic densities (NRC Emotion Lexicon + Pennebaker)
   if (session.nrcAngerDensity != null) {
     lines.push('');
@@ -275,7 +356,17 @@ export function formatCompactSignals(
         ? `emo=[ang=${(s.nrcAngerDensity*100).toFixed(0)} fear=${(s.nrcFearDensity!*100).toFixed(0)} joy=${(s.nrcJoyDensity!*100).toFixed(0)} sad=${(s.nrcSadnessDensity!*100).toFixed(0)} trust=${(s.nrcTrustDensity!*100).toFixed(0)}%] cog=${(s.cognitiveDensity!*100).toFixed(1)}% hedge=${(s.hedgingDensity!*100).toFixed(1)}% fp=${(s.firstPersonDensity!*100).toFixed(1)}%`
         : '';
 
-      return `[${s.date}] device=${s.deviceType || '?'} hour=${s.hourOfDay ?? '?'} duration=${dur} ${cpmStr} ${commitStr} ${revStr} ${burstStr} pauses=${s.pauseCount} tabs=${s.tabAwayCount} words=${s.wordCount} ${lingStr}`.replace(/  +/g, ' ').trim();
+      const ikiStr = s.interKeyIntervalMean != null
+        ? `iki=${s.interKeyIntervalMean.toFixed(0)}ms(std=${s.interKeyIntervalStd?.toFixed(0) ?? '?'})`
+        : '';
+      const chainStr = s.revisionChainCount != null
+        ? `chains=${s.revisionChainCount}x${(s.revisionChainAvgLength ?? 0).toFixed(1)}avg`
+        : '';
+      const scrollStr = s.scrollBackCount != null || s.questionRereadCount != null
+        ? `scrollback=${s.scrollBackCount ?? '?'} rereads=${s.questionRereadCount ?? '?'}`
+        : '';
+
+      return `[${s.date}] device=${s.deviceType || '?'} hour=${s.hourOfDay ?? '?'} duration=${dur} ${cpmStr} ${commitStr} ${revStr} ${burstStr} ${ikiStr} ${chainStr} ${scrollStr} pauses=${s.pauseCount} tabs=${s.tabAwayCount} words=${s.wordCount} ${lingStr}`.replace(/  +/g, ' ').trim();
     } else {
       // Pre-V3 fallback
       return `[${s.date}] device=${s.deviceType || '?'} hour=${s.hourOfDay ?? '?'} duration=${dur} commitment=${s.commitmentRatio?.toFixed(2) ?? '?'} deletions=${s.deletionCount}(largest=${s.largestDeletion}) pauses=${s.pauseCount} tabs=${s.tabAwayCount} words=${s.wordCount} [pre-V3]`;
@@ -346,6 +437,157 @@ export function formatTrajectoryContext(
   return [
     `Trajectory: phase=${analysis.phase} velocity=${analysis.velocity.toFixed(2)} convergence=${latest.convergenceLevel}(${latest.convergence.toFixed(2)}) | flu=${latest.fluency.toFixed(1)} del=${latest.deliberation.toFixed(1)} rev=${latest.revision.toFixed(1)} exp=${latest.expression.toFixed(1)} [${arrow(latest.fluency)}${arrow(latest.deliberation)}${arrow(latest.revision)}${arrow(latest.expression)}]`,
   ].join('\n');
+}
+
+/**
+ * 8D behavioral dynamics context block (PersDyn model).
+ * Replaces the legacy 4D trajectory context with the full dynamics engine:
+ * 8 dimensions + attractor force + empirical coupling + system entropy.
+ *
+ * @param mode 'observe' for full verbalized block, 'compact' for summary
+ */
+export function formatDynamicsContext(
+  analysis: DynamicsAnalysis,
+  mode: 'observe' | 'compact',
+): string {
+  if (analysis.entryCount === 0) return '';
+
+  if (analysis.phase === 'insufficient') {
+    return mode === 'observe'
+      ? '\n=== BEHAVIORAL DYNAMICS ===\nInsufficient data for dynamics analysis (need 5+ entries).'
+      : 'Dynamics: insufficient data';
+  }
+
+  const latest = analysis.dimensions;
+
+  // Find notable deviations (>1.5σ from baseline)
+  const extremes = latest
+    .filter(d => Math.abs(d.deviation) >= 1.5)
+    .sort((a, b) => Math.abs(b.deviation) - Math.abs(a.deviation));
+
+  const phaseDesc: Record<string, string> = {
+    'stable': 'Stable — writing behavior is consistent across recent sessions.',
+    'shifting': 'Shifting — a consistent trend is emerging in at least one dimension.',
+    'disrupted': 'Disrupted — sharp behavioral spike after stability. Something real just happened.',
+    'insufficient': 'Insufficient data.',
+  };
+
+  const velocityDesc =
+    analysis.velocity > 0.6 ? 'volatile — behavioral state changing rapidly'
+    : analysis.velocity > 0.3 ? 'moderate — some session-to-session variation'
+    : 'stable — behavior consistent across recent sessions';
+
+  const entropyDesc =
+    analysis.systemEntropy >= 0.85 ? 'HIGH — all dimensions similarly variable, behavior unpredictable'
+    : analysis.systemEntropy <= 0.5 ? 'LOW — structured: some dimensions rigid, others volatile'
+    : 'MODERATE — mixed structure';
+
+  if (mode === 'observe') {
+    const lines: string[] = [];
+    lines.push('');
+    lines.push(`=== BEHAVIORAL DYNAMICS (8D PersDyn model, ${analysis.entryCount} entries) ===`);
+    lines.push('');
+    lines.push(`Phase: ${phaseDesc[analysis.phase]}`);
+    lines.push(`Velocity: ${analysis.velocity.toFixed(2)} — ${velocityDesc}`);
+    lines.push(`System entropy: ${analysis.systemEntropy.toFixed(2)} — ${entropyDesc}`);
+    lines.push('');
+
+    // Dimension states
+    lines.push('Dimension states (current z-score, baseline, attractor force):');
+    for (const d of latest) {
+      const attractorLabel =
+        d.attractorForce >= 0.7 ? 'rigid' :
+        d.attractorForce >= 0.4 ? 'moderate' : 'malleable';
+      const deviationLabel =
+        Math.abs(d.deviation) >= 2.0 ? 'EXTREME' :
+        Math.abs(d.deviation) >= 1.5 ? 'notable' :
+        Math.abs(d.deviation) >= 1.0 ? 'mild' : 'normal';
+
+      lines.push(
+        `  ${d.dimension.padEnd(14)} current=${d.currentState > 0 ? '+' : ''}${d.currentState.toFixed(2)}  ` +
+        `baseline=${d.baseline > 0 ? '+' : ''}${d.baseline.toFixed(2)}  ` +
+        `variability=${d.variability.toFixed(2)}  ` +
+        `attractor=${d.attractorForce.toFixed(2)}(${attractorLabel})  ` +
+        `deviation=${d.deviation > 0 ? '+' : ''}${d.deviation.toFixed(1)}σ(${deviationLabel})`
+      );
+    }
+
+    // Notable deviations
+    if (extremes.length > 0) {
+      lines.push('');
+      lines.push('Notable deviations from baseline:');
+      for (const e of extremes) {
+        const dir = e.deviation > 0 ? 'above' : 'below';
+        lines.push(`  - ${e.dimension} is ${Math.abs(e.deviation).toFixed(1)}σ ${dir} baseline`);
+        if (e.attractorForce >= 0.7) {
+          lines.push(`    → Rigid dimension — this deviation is unusual and likely to snap back`);
+        } else if (e.attractorForce <= 0.3) {
+          lines.push(`    → Malleable dimension — deviation may represent a genuine, persistent shift`);
+        }
+      }
+    }
+
+    // Coupling
+    if (analysis.coupling.length > 0) {
+      lines.push('');
+      lines.push('Dimension coupling (empirically discovered — which dimensions influence each other for this person):');
+      for (const c of analysis.coupling.slice(0, 8)) {
+        const sign = c.direction > 0 ? '+' : '−';
+        const lagLabel = c.lagSessions === 0 ? 'concurrent' : `${c.lagSessions}-entry lag`;
+        lines.push(`  ${c.leader} → ${c.follower}  r=${sign}${c.correlation.toFixed(2)} (${lagLabel})`);
+      }
+
+      // Call out active coupling effects (leader currently deviated)
+      const activeCouplings = analysis.coupling.filter(c => {
+        const leaderDyn = latest.find(d => d.dimension === c.leader);
+        return leaderDyn && Math.abs(leaderDyn.deviation) >= 1.0;
+      });
+      if (activeCouplings.length > 0) {
+        lines.push('');
+        lines.push('Active coupling predictions (leader dimension currently deviated):');
+        for (const c of activeCouplings.slice(0, 4)) {
+          const leaderDyn = latest.find(d => d.dimension === c.leader)!;
+          const dir = c.direction > 0 ? 'same direction' : 'opposite direction';
+          const lagLabel = c.lagSessions === 0 ? 'concurrently' : `in ~${c.lagSessions} entries`;
+          lines.push(
+            `  - ${c.leader} deviated ${leaderDyn.deviation > 0 ? '+' : ''}${leaderDyn.deviation.toFixed(1)}σ → ` +
+            `expect ${c.follower} to respond ${dir} ${lagLabel} (r=${c.correlation.toFixed(2)})`
+          );
+        }
+      }
+    }
+
+    // Attractor structure summary
+    const rigid = latest.filter(d => d.attractorForce >= 0.7);
+    const malleable = latest.filter(d => d.attractorForce <= 0.3);
+    if (rigid.length > 0 || malleable.length > 0) {
+      lines.push('');
+      if (rigid.length > 0) {
+        lines.push(`Rigid dimensions (deviations snap back fast): ${rigid.map(d => d.dimension).join(', ')}`);
+      }
+      if (malleable.length > 0) {
+        lines.push(`Malleable dimensions (shifts tend to persist): ${malleable.map(d => d.dimension).join(', ')}`);
+      }
+    }
+
+    return lines.join('\n');
+  }
+
+  // Compact mode for generate/reflect
+  const dimStr = latest.map(d => {
+    const arrow = Math.abs(d.deviation) >= 1.5 ? (d.deviation > 0 ? '++' : '--') :
+                  Math.abs(d.deviation) >= 1.0 ? (d.deviation > 0 ? '+' : '-') : '=';
+    return `${d.dimension.slice(0, 3)}=${d.currentState.toFixed(1)}${arrow}`;
+  }).join(' ');
+
+  const couplingStr = analysis.coupling.length > 0
+    ? ` | coupling: ${analysis.coupling.slice(0, 3).map(c => {
+        const sign = c.direction > 0 ? '+' : '-';
+        return `${c.leader.slice(0,3)}→${c.follower.slice(0,3)}(${sign}${c.correlation.toFixed(2)},lag${c.lagSessions})`;
+      }).join(' ')}`
+    : '';
+
+  return `Dynamics(8D): phase=${analysis.phase} velocity=${analysis.velocity.toFixed(2)} entropy=${analysis.systemEntropy.toFixed(2)} | ${dimStr}${couplingStr}`;
 }
 
 /**
@@ -487,6 +729,47 @@ function computeRawKTScore(
     scoreSum += Math.min(1, cogDensity / 0.08);
     componentCount++;
     signals.push('high cognitive mechanism word density');
+  }
+
+  // 5. Burst sequence consolidation (Baaijen & Galbraith 2012)
+  // The KT signature: short fragmented bursts early → longer sustained bursts later
+  // as thinking consolidates during writing.
+  try {
+    const bursts = getBurstSequence(session.questionId);
+    if (bursts.length >= 4) {
+      const mid = Math.floor(bursts.length / 2);
+      const firstHalfBursts = bursts.slice(0, mid);
+      const secondHalfBursts = bursts.slice(mid);
+
+      const firstHalfAvg = avg(firstHalfBursts.map(b => b.chars));
+      const secondHalfAvg = avg(secondHalfBursts.map(b => b.chars));
+
+      if (firstHalfAvg > 0) {
+        const consolidationRatio = secondHalfAvg / firstHalfAvg;
+
+        if (consolidationRatio > 1.2) {
+          // Bursts got at least 20% longer in second half — consolidation signal
+          const burstScore = Math.min(1, (consolidationRatio - 1) / 1.0);
+          scoreSum += burstScore;
+          componentCount++;
+
+          if (consolidationRatio > 1.5) {
+            signals.push(`strong burst consolidation (${consolidationRatio.toFixed(1)}x longer bursts in second half — Baaijen & Galbraith KT signature)`);
+          } else {
+            signals.push(`mild burst consolidation (${consolidationRatio.toFixed(1)}x longer bursts in second half)`);
+          }
+        } else if (consolidationRatio < 0.7) {
+          // Reverse pattern: bursts got shorter — fragmentation, not consolidation
+          // This is anti-KT signal, score 0 for this component
+          scoreSum += 0;
+          componentCount++;
+          signals.push(`burst fragmentation (bursts got shorter in second half — opposite of KT signature)`);
+        }
+        // Between 0.7 and 1.2: no meaningful pattern, skip this component
+      }
+    }
+  } catch {
+    // getBurstSequence may fail if no burst data exists — not an error, just skip
   }
 
   const rawScore = componentCount > 0 ? scoreSum / componentCount : 0;
