@@ -255,6 +255,81 @@ The AI interprets all 36 signals into 26 traits. The mapping is not hardcoded �
 
 ---
 
+## The Trajectory Engine
+
+Bob has two outputs. The **visual form** is what you see — artistic, interpretive, rendered by a shader. The **trajectory** is what you don't see — mathematical, deterministic, computed from raw data.
+
+### Why Two Branches
+
+The visual form is produced by Opus interpreting 36 signals into 26 traits. That interpretation is non-deterministic — give Opus the same signals twice, you might get different traits. Non-deterministic data can't be used for trajectory analysis because the same state might produce different coordinates.
+
+The trajectory engine bypasses the AI entirely. It goes directly to the raw per-session data in `tb_session_summaries` and `tb_responses` — frozen at submission time, deterministic, never changes.
+
+```
+User writes
+  → 36 aggregated signals (shift over time)
+      → Opus interprets → 26 traits → shader → visual form (art)
+
+  → Per-session raw data (frozen at submission)
+      → Trajectory engine (pure math) → 4 dimensions + convergence
+          → feeds Marrow question generation
+          → becomes Einstein's foundation
+```
+
+### Four Dimensions
+
+Individual behavioral signals are noisy. A pause could mean contemplation, distraction, or a cat on the keyboard. The trajectory engine doesn't use raw signals as coordinates. It collapses correlated metrics into composite dimensions and z-scores everything against the person's own baseline.
+
+| Dimension | What It Combines | What It Measures |
+|---|---|---|
+| **Engagement** | duration + word count + sentence count | How much did you give? |
+| **Processing** | first-keystroke latency | How hard was it to start? |
+| **Revision** | commitment ratio (inverted) + deletion intensity | How much did you change your mind? |
+| **Structure** | sentence length + question density + first-person density | How differently did you write vs. your norm? |
+
+Each dimension is a z-score against the person's own mean. A value of 0 means "normal for you." Positive or negative means deviation from your personal baseline in that dimension.
+
+### Convergence
+
+The meta-signal. Euclidean distance from the person's center in 4D space.
+
+When one dimension deviates, it's probably noise. When four dimensions deviate together, something real happened. Convergence separates the two.
+
+- **Low** — normal session, nothing unusual
+- **Moderate** — some dimensions moved, worth noting
+- **High** — multiple dimensions deviated simultaneously — something shifted
+
+### Phase Detection
+
+The engine detects the current phase of the trajectory:
+
+- **insufficient** — fewer than 3 entries, no baseline yet
+- **stable** — low velocity, low convergence, person is in their normal range
+- **shifting** — consistent directional movement in one or more dimensions
+- **disrupted** — sudden high-convergence spike after a period of stability
+
+### Trajectory Viewer
+
+Available at `/trajectory`. Two views (click to toggle):
+
+- **Detail** — 4 panels, one per dimension, z-scores plotted over time
+- **Trace** — single plot, all 4 dimensions collapsed to 2 via PCA, showing the actual path through space
+
+Navigation between journal (`/`), Bob (`/bob`), and trajectory (`/trajectory`) via buttons on each page.
+
+### What This Produces for Marrow and Einstein
+
+The trajectory is the data Bob generates. Not the visual form — the mathematical path through 4D space over time. That path contains:
+
+- **Velocity** — how fast the person is changing
+- **Phase** — stable, shifting, or disrupted
+- **Convergence spikes** — moments where something coherent happened
+- **Direction** — which dimensions are moving and which way
+
+This is the bridge between Marrow and Einstein. Marrow uses the trajectory to decide what to ask next. Einstein uses it to decide how to be.
+
+---
+
 ## File Structure
 
 ```
@@ -262,13 +337,16 @@ src/
   pages/
     bob.astro                # The witness — threshold + form + void
     bob-lab.astro            # Debug lab — sliders + presets (fake data only)
+    trajectory.astro         # Trajectory viewer — detail (4 panels) + trace (PCA)
     api/
-      bob.ts                 # Behavioral signal computation
+      bob.ts                 # Behavioral signal computation (36 signals)
       witness.ts             # Witness state API (traits + metadata)
+      trajectory.ts          # Trajectory analysis API (4 dimensions + convergence)
   lib/
     bob/
       types.ts               # BobSignal, WitnessTraits (26 traits), WitnessState
       interpreter.ts         # LLM trait interpretation + DB persistence
+      trajectory.ts          # Trajectory computation — z-scores, dimensions, convergence, phase
       shader-weights.ts      # Trait-to-strategy weight derivation (v5)
     db.ts                    # Database (includes tb_witness_states table)
   assets/
