@@ -1,12 +1,12 @@
 /**
- * Returns abstract signals derived from real system state.
+ * Returns behavioral signals derived from the user's writing patterns.
  * No content is exposed — only shapes, intensities, and patterns.
- * The visual is reverse-engineerable from the data, like Hawking radiation.
+ * Bob is a mirror of the person, not the system.
  */
 import type { APIRoute } from 'astro';
 import db from '../../lib/db.ts';
 
-import type { BlackboxSignal } from '../../lib/dream/types.ts';
+import type { BobSignal } from '../../lib/bob/types.ts';
 
 export const GET: APIRoute = async () => {
   try {
@@ -65,24 +65,6 @@ export const GET: APIRoute = async () => {
       consistency = meanGap > 0 ? Math.max(0, Math.min(1, 1 - stddev / (meanGap + 1))) : 0.5;
     }
 
-    // System state counts
-    const obsCount = (db.prepare(`SELECT COUNT(*) as c FROM tb_ai_observations`).get() as any).c;
-    const refCount = (db.prepare(`SELECT COUNT(*) as c FROM tb_reflections`).get() as any).c;
-    const supCount = (db.prepare(`SELECT COUNT(*) as c FROM tb_ai_suppressed_questions`).get() as any).c;
-    const embCount = (db.prepare(`SELECT COUNT(*) as c FROM tb_embeddings`).get() as any).c;
-
-    // Latest observation confidence
-    const latestObs = db.prepare(`
-      SELECT observation_text FROM tb_ai_observations
-      ORDER BY observation_date DESC LIMIT 1
-    `).get() as { observation_text: string } | null;
-
-    let latestConfidence: string | null = null;
-    if (latestObs) {
-      const match = latestObs.observation_text.match(/confidence[:\s]*(HIGH|MODERATE|LOW|INSUFFICIENT DATA)/i);
-      latestConfidence = match?.[1]?.toUpperCase() ?? null;
-    }
-
     // Thematic density from last 7 entries
     const recentTexts = db.prepare(`
       SELECT r.text FROM tb_responses r
@@ -110,7 +92,7 @@ export const GET: APIRoute = async () => {
     const clamp = (v: number, fallback = 0) => Math.min(1, Math.max(0, v ?? fallback));
     const sc = behavioral.sessionCount ?? 0;
 
-    const signal: BlackboxSignal = {
+    const signal: BobSignal = {
       // Behavioral
       avgCommitment: clamp(behavioral.avgCommitment, 0.5),
       avgHesitation: clamp(behavioral.avgHesitation, 0.5),
@@ -129,13 +111,6 @@ export const GET: APIRoute = async () => {
       daySpread: clamp((behavioral.uniqueDays ?? 1) / 7),
       consistency,
       daysSinceLastEntry,
-
-      // System state
-      observationCount: obsCount,
-      reflectionCount: refCount,
-      suppressedCount: supCount,
-      embeddingCount: embCount,
-      latestConfidence,
 
       // Patterns
       thematicDensity: clamp(thematicDensity),

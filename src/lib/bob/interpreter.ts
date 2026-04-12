@@ -4,7 +4,7 @@
 
 import 'dotenv/config';
 import Anthropic from '@anthropic-ai/sdk';
-import type { WitnessTraits, BlackboxSignal } from './types.js';
+import type { WitnessTraits, BobSignal } from './types.js';
 import { DEFAULT_TRAITS, TRAIT_KEYS } from './types.js';
 import { getLatestWitnessState, saveWitnessState } from '../db.ts';
 
@@ -73,17 +73,14 @@ Guidelines — these are intuitions, not rules:
 - High commitment + low hesitation → more density, internalLight, lower edgeCharacter. They gave something real.
 - Low commitment + high deletion → higher edgeCharacter, surface roughness, fragility, lower density. They withheld.
 - High thematic density (circling same themes) → higher rotation, rhythm, magnetism. Obsessive energy.
-- High suppressed count → higher hollowness, atmosphere. Things held back create voids and pressure.
-- Low confidence (frames disagreeing) → higher symmetry-breaking, multiplicity, reactivity. Internal conflict.
-- Many reflections → higher internalLight, colorDepth. Depth of processing.
 - High landed ratio → lower symmetry-breaking, smoother surface, higher flexibility. Things connecting.
 - Few entries → keep most values low/modest. The form hasn't earned complexity yet.
 - Many entries + high commitment → earn everything. Dense, glowing, complex, alive.
+- High commitment + many entries over time → higher storedEnergy. Deep accumulated charge.
 - High hesitation + high commitment (slow but deliberate) → high density, low flow, high temperature. Molten.
 - High deletion intensity → high fragility, high reactivity. The form is unstable.
 - High pause frequency → could mean depth (high internalLight) or avoidance (high hollowness). You decide.
 - Many entries over time → higher creationCost. This thing took time to build.
-- High commitment + many reflections → higher storedEnergy. Deep accumulated charge.
 - Long duration + high word count → they spent time. Reward that with density, creationCost.
 - Large deletions → they wrote something and killed it. That's fragility, reactivity, possibly hollowness.
 - Frequent tab-aways → distraction or avoidance. Consider edgeCharacter, symmetry-breaking.
@@ -99,7 +96,7 @@ Output ONLY valid JSON — a flat object with all 26 trait keys and float values
 
 let inflight: Promise<WitnessTraits> | null = null;
 
-export async function interpretTraits(sig: BlackboxSignal, entryCount: number): Promise<WitnessTraits> {
+export async function interpretTraits(sig: BobSignal, entryCount: number): Promise<WitnessTraits> {
   // Check DB first
   const persisted = loadPersistedTraits(entryCount);
   if (persisted) return persisted;
@@ -115,7 +112,7 @@ export async function interpretTraits(sig: BlackboxSignal, entryCount: number): 
   }
 }
 
-async function interpretTraitsInner(sig: BlackboxSignal, entryCount: number): Promise<WitnessTraits> {
+async function interpretTraitsInner(sig: BobSignal, entryCount: number): Promise<WitnessTraits> {
   try {
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY2 });
 
@@ -136,11 +133,6 @@ async function interpretTraitsInner(sig: BlackboxSignal, entryCount: number): Pr
 - Day spread: ${sig.daySpread.toFixed(3)} (how many different days of the week)
 - Consistency: ${sig.consistency.toFixed(3)} (regularity of spacing between entries)
 - Days since last entry: ${sig.daysSinceLastEntry}
-- AI observations generated: ${sig.observationCount}
-- Reflections generated: ${sig.reflectionCount}
-- Suppressed questions: ${sig.suppressedCount}
-- Embedded chunks: ${sig.embeddingCount}
-- AI confidence in its read: ${sig.latestConfidence ?? 'UNKNOWN'}
 - Thematic density: ${sig.thematicDensity.toFixed(3)} (higher = more repetitive language)
 - Landed ratio: ${sig.landedRatio.toFixed(3)} (how often AI questions resonated)
 - Feedback count: ${sig.feedbackCount}`;

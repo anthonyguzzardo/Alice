@@ -6,7 +6,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>The Black Box</title>
+    <title>Bob</title>
     <style is:global>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       html, body { height: 100%; background: #000; overflow: hidden; }
@@ -28,20 +28,20 @@
   </head>
   <body>
     <a href="/" class="back-btn" id="back" aria-label="Back to journal">&larr;</a>
-    <canvas id="blackbox"></canvas>
+    <canvas id="bob"></canvas>
 
     <script>
       import * as THREE from 'three';
-      import type { WitnessState, WitnessTraits } from '../lib/dream/types';
-      import { DEFAULT_WITNESS, TRAIT_KEYS } from '../lib/dream/types';
-      import { deriveShaderWeights, WEIGHT_KEYS, weightUniformName } from '../lib/dream/shader-weights';
+      import type { WitnessState, WitnessTraits } from '../lib/bob/types';
+      import { DEFAULT_WITNESS, TRAIT_KEYS } from '../lib/bob/types';
+      import { deriveShaderWeights, WEIGHT_KEYS, weightUniformName } from '../lib/bob/shader-weights';
 
       import witnessVert from '../assets/shaders/witness.vert?raw';
       import witnessFrag from '../assets/shaders/witness.frag?raw';
 
       // ─── Setup ──────────────────────────────────────────────────
 
-      const canvas = document.getElementById('blackbox') as HTMLCanvasElement;
+      const canvas = document.getElementById('bob') as HTMLCanvasElement;
       const backBtn = document.getElementById('back') as HTMLElement;
       let W = window.innerWidth;
       let H = window.innerHeight;

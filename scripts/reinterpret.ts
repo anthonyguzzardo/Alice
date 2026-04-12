@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import Database from 'better-sqlite3';
-import { interpretTraits } from '../src/lib/dream/interpreter.ts';
+import { interpretTraits } from '../src/lib/bob/interpreter.ts';
 
 const db = new Database('./data/marrow.db');
 
@@ -56,15 +56,6 @@ if (entryDates.length >= 3) {
   consistency = meanGap > 0 ? Math.max(0, Math.min(1, 1 - stddev / (meanGap + 1))) : 0.5;
 }
 
-// System state
-const obsCount = (db.prepare('SELECT COUNT(*) as c FROM tb_ai_observations').get() as any).c;
-const refCount = (db.prepare('SELECT COUNT(*) as c FROM tb_reflections').get() as any).c;
-const supCount = (db.prepare('SELECT COUNT(*) as c FROM tb_ai_suppressed_questions').get() as any).c;
-const embCount = (db.prepare('SELECT COUNT(*) as c FROM tb_embeddings').get() as any).c;
-
-const latestObs = db.prepare('SELECT observation_text FROM tb_ai_observations ORDER BY ai_observation_id DESC LIMIT 1').get() as any;
-const latestConfidence = latestObs?.observation_text?.match(/confidence:\s*(HIGH|MODERATE|LOW|INSUFFICIENT DATA)/i)?.[1] ?? null;
-
 // Thematic density
 const recent = db.prepare('SELECT text FROM tb_responses ORDER BY response_id DESC LIMIT 7').all() as any[];
 const allWords = recent.map((r: any) => r.text).join(' ').toLowerCase().split(/\s+/).filter((w: string) => w.length > 0);
@@ -92,17 +83,12 @@ const sig = {
   daySpread: clamp((behavioral.uniqueDays ?? 1) / 7),
   consistency,
   daysSinceLastEntry,
-  observationCount: obsCount,
-  reflectionCount: refCount,
-  suppressedCount: supCount,
-  embeddingCount: embCount,
-  latestConfidence,
   thematicDensity: clamp(thematicDensity),
   landedRatio: feedback.total > 0 ? (feedback.landed ?? 0) / feedback.total : 0.5,
   feedbackCount: feedback.total ?? 0,
 };
 
-console.log('Calling Opus with 24 signals for entry count:', count);
+console.log('Calling Opus with 18 signals for entry count:', count);
 const traits = await interpretTraits(sig, count);
 console.log('Done. Opus interpretation saved.');
 db.close();

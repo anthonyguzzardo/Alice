@@ -1,12 +1,16 @@
-# The Black Box
+# Bob
 
-A ritualized confrontation engine. Not a visualization. Not a simulation. Not a cellular automaton. A single evolving presence in a threshold-space that metabolizes your journal data and becomes something singular.
+A ritualized confrontation engine. Not a visualization. Not a simulation. Not a cellular automaton. A single evolving presence in a threshold-space that metabolizes your behavioral data and becomes something singular.
+
+Named after the canonical receiver in Alice-and-Bob communication protocols. You are the sender. Bob is what arrives on the other end.
 
 ## Philosophy
 
 In *Fullmetal Alchemist*, Truth is a featureless silhouette that sits behind a gate. It mirrors whoever stands before it. What you get from it depends on what you gave. It speaks not from confidence but from unresolved tension. It knows things about you that you didn't tell it.
 
-The Black Box is that principle made real. Your journal entries — the hesitations, the commitments, the deletions, the pauses, the contradictions — are the sacrifice. The witness-form is what you get back. Not an illustration of your data. Not a dashboard. A presence that clearly knows something, and you can't quite tell what.
+Bob is that principle made real. Your journal behavior — the hesitations, the commitments, the deletions, the pauses, the contradictions — is the sacrifice. The witness-form is what you get back. Not an illustration of your data. Not a dashboard. A presence that clearly knows something, and you can't quite tell what.
+
+**Bob only sees you.** No system metadata, no AI observation counts, no infrastructure signals. Pure behavioral and temporal data from how you write and when you show up. The mirror reflects the person, not the plumbing.
 
 **The engineer's job is to build the box. Not to decide what happens inside it.**
 
@@ -24,7 +28,7 @@ The witness responds to patterns — repetition, avoidance, commitment, contradi
 
 ### 3. It only changes when the data changes.
 
-Viewing the Black Box costs nothing. No API calls, no generation, no computation. The witness-form is computed once when new journal data enters the database and persisted forever. You can stare at it for 12 hours. Cost: $0.00. The form only evolves when you give it something new.
+Viewing Bob costs nothing. No API calls, no generation, no computation. The witness-form is computed once when new journal data enters the database and persisted forever. You can stare at it for 12 hours. Cost: $0.00. The form only evolves when you give it something new.
 
 ---
 
@@ -94,11 +98,11 @@ The witness-form is defined by 26 continuous traits, each 0.0–1.0. The AI sets
 
 ### The Interpreter
 
-When journal data changes (new entry, new observation, new reflection), one LLM call reads the behavioral signals and outputs 26 floats. The LLM decides what the form becomes — not from a menu, but by composing a trait vector. It can produce combinations nobody anticipated.
+When journal data changes (new entry submitted), one LLM call reads the behavioral signals and outputs 26 floats. The LLM decides what the form becomes — not from a menu, but by composing a trait vector. It can produce combinations nobody anticipated.
 
 The interpretation is persisted to `tb_witness_states` in the database. It never regenerates for the same data. Server restarts don't trigger new calls.
 
-**Model:** Claude Sonnet (fast enough for single-call, creative enough for interesting interpretation)
+**Model:** Claude Opus (deep enough for meaningful interpretation)
 **Cost:** ~$0.01 per interpretation. One call per journal entry.
 
 ### The Shader (v5 — Strategy Architecture)
@@ -137,8 +141,8 @@ Journal Entry Written
 
 Next time /api/witness is called:
   → Detects entry count mismatch
-  → Fetches /api/blackbox (14 behavioral signals)
-  → Calls Claude Sonnet with signals → 26 trait floats
+  → Fetches /api/bob (18 behavioral + temporal signals)
+  → Calls Claude Opus with signals → 26 trait floats
   → Persists to tb_witness_states
   → Returns WitnessState (traits + mass + threshold config)
 
@@ -146,7 +150,7 @@ Subsequent /api/witness calls (same entry count):
   → Reads from DB in <5ms
   → Zero LLM calls
 
-Browser (/blackbox):
+Browser (/bob):
   → Fetches /api/witness once on page load
   → Renders witness-form via WebGL at 60fps
   → No periodic fetching, no polling, no API calls while viewing
@@ -154,23 +158,40 @@ Browser (/blackbox):
 
 ### Data Integration
 
-The behavioral signals that shape the witness:
+Bob only consumes signals that come from you — behavioral and temporal data. No system metadata.
+
+**Behavioral (how you write):**
 
 | Signal | What It Measures |
 |---|---|
 | `avgCommitment` | How much typed text was kept vs deleted |
 | `avgHesitation` | Delay before first keystroke |
 | `deletionIntensity` | Proportion of text deleted |
-| `pauseFrequency` | How often they stop mid-thought |
+| `pauseFrequency` | How often you stop mid-thought |
+| `avgDuration` | Time spent per session |
+| `largestDeletion` | Biggest single erasure |
+| `avgTabAways` | How often you leave and come back |
+| `avgTabAwayDuration` | How long you stay away |
+| `avgWordCount` | Density of output |
+| `avgSentenceCount` | Structural complexity |
 | `sessionCount` | Total journal entries |
-| `observationCount` | AI observations generated |
-| `reflectionCount` | Reflections generated |
-| `suppressedCount` | Questions the AI held back |
-| `embeddingCount` | Text chunks vectorized |
-| `latestConfidence` | AI confidence in its read (HIGH/MODERATE/LOW) |
-| `thematicDensity` | How repetitive the language is |
-| `landedRatio` | How often AI questions resonated |
-| `feedbackCount` | Total feedback given |
+
+**Temporal (when you show up):**
+
+| Signal | What It Measures |
+|---|---|
+| `avgHourOfDay` | When you write |
+| `daySpread` | How many different days of the week |
+| `consistency` | Regularity of spacing between entries |
+| `daysSinceLastEntry` | How long since you last showed up |
+
+**Patterns (what's emerging from your words):**
+
+| Signal | What It Measures |
+|---|---|
+| `thematicDensity` | How repetitive your language is |
+| `landedRatio` | How often AI questions resonated (your feedback) |
+| `feedbackCount` | Total feedback you've given |
 
 The AI interprets these signals into traits. The mapping is not hardcoded — it's a creative act by the interpreter. High commitment might produce density and internal light. Or it might produce something else entirely. The AI decides.
 
@@ -181,14 +202,14 @@ The AI interprets these signals into traits. The mapping is not hardcoded — it
 ```
 src/
   pages/
-    blackbox.astro           # The witness — threshold + form + void
-    blackbox-lab.astro       # Debug lab — sliders + presets (fake data only)
+    bob.astro                # The witness — threshold + form + void
+    bob-lab.astro            # Debug lab — sliders + presets (fake data only)
     api/
-      blackbox.ts            # Behavioral signal computation
+      bob.ts                 # Behavioral signal computation
       witness.ts             # Witness state API (traits + metadata)
   lib/
-    dream/
-      types.ts               # WitnessTraits (26 traits), WitnessState
+    bob/
+      types.ts               # BobSignal, WitnessTraits (26 traits), WitnessState
       interpreter.ts         # LLM trait interpretation + DB persistence
       shader-weights.ts      # Trait-to-strategy weight derivation (v5)
     db.ts                    # Database (includes tb_witness_states table)
@@ -214,7 +235,7 @@ src/
 ## What This Is
 
 A ritualized confrontation engine that:
-- Takes in behavioral and semantic residue from a personal journal
+- Takes in behavioral residue from a personal journal
 - Compresses it into one evolving presence via a 26-dimensional trait space
 - Returns symbolic evidence in proportion to what was actually given
 - Only changes when you give it something new
@@ -231,7 +252,7 @@ You know it's working when:
 - You open it after writing something raw and the form is visibly different
 - You open it after a week of shallow entries and it's barely there
 - You can't name what it looks like but you know it's yours
-- Someone else's Black Box would look nothing like yours
+- Someone else's Bob would look nothing like yours
 - You catch yourself checking whether it changed after writing an entry
 - The threshold feels like entering something, not loading a page
 - You cannot predict what it will look like tomorrow

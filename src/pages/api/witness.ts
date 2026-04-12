@@ -4,9 +4,9 @@
  * Traits are persisted in DB. LLM only fires when entry count changes.
  */
 import type { APIRoute } from 'astro';
-import type { WitnessState, BlackboxSignal } from '../../lib/dream/types.ts';
-import { DEFAULT_WITNESS } from '../../lib/dream/types.ts';
-import { interpretTraits } from '../../lib/dream/interpreter.ts';
+import type { WitnessState, BobSignal } from '../../lib/bob/types.ts';
+import { DEFAULT_WITNESS } from '../../lib/bob/types.ts';
+import { interpretTraits } from '../../lib/bob/interpreter.ts';
 import db from '../../lib/db.ts';
 
 export const GET: APIRoute = async ({ url }) => {
@@ -17,9 +17,9 @@ export const GET: APIRoute = async ({ url }) => {
 
     // Fetch signals
     const origin = url.origin;
-    const sigRes = await fetch(`${origin}/api/blackbox`);
+    const sigRes = await fetch(`${origin}/api/bob`);
     if (!sigRes.ok) throw new Error('Failed to fetch signals');
-    const sig: BlackboxSignal = await sigRes.json();
+    const sig: BobSignal = await sigRes.json();
 
     // Get traits — reads from DB if persisted, calls LLM only if needed
     const traits = await interpretTraits(sig, currentCount);

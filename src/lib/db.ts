@@ -384,7 +384,7 @@ db.exec(`
   -- tb_witness_states
   -- --------------------------------------------------------------------------
   -- PURPOSE: Store the witness-form's AI-generated trait vectors
-  -- USE CASE: "What did the Black Box look like after entry N?"
+  -- USE CASE: "What did Bob look like after entry N?"
   -- MUTABILITY: Append-only — one row per data change event
   -- REFERENCED BY: /api/witness reads the latest row
   -- FOOTER: dttm_created_utc, created_by

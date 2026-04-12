@@ -1,7 +1,7 @@
 // ─── Witness Types ──────────────────────────────────────────────────
 
-/** Raw signals from /api/blackbox */
-export interface BlackboxSignal {
+/** Raw signals from /api/bob */
+export interface BobSignal {
   // Behavioral — how you interact
   avgCommitment: number;
   avgHesitation: number;
@@ -20,13 +20,6 @@ export interface BlackboxSignal {
   daySpread: number;
   consistency: number;
   daysSinceLastEntry: number;
-
-  // System state
-  observationCount: number;
-  reflectionCount: number;
-  suppressedCount: number;
-  embeddingCount: number;
-  latestConfidence: string | null;
 
   // Patterns
   thematicDensity: number;
