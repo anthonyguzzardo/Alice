@@ -266,12 +266,18 @@
         border-color: var(--border-focus);
         color: var(--text);
       }
+
+      .nav-btn.hidden {
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.3s ease;
+      }
     </style>
   </head>
   <body>
     <div class="top-controls">
-      <a href="/bob" class="top-btn" aria-label="Bob" title="Bob">&#x25CF;</a>
-      <a href="/trajectory" class="top-btn" aria-label="Trajectory" title="Trajectory">&#x2237;</a>
+      <a href="/bob" class="top-btn nav-btn" id="bob-btn" aria-label="Bob" title="Bob">&#x25CF;</a>
+      <a href="/trajectory" class="top-btn nav-btn" id="trajectory-btn" aria-label="Trajectory" title="Trajectory">&#x2237;</a>
       <button class="top-btn" id="theme-toggle" aria-label="Toggle theme"></button>
     </div>
     <div class="container">
@@ -294,6 +300,14 @@
         localStorage.setItem('marrow-theme', next);
         themeBtn.textContent = next === 'dark' ? '☀' : '☾';
       });
+
+      // Nav visibility — hide Bob/trajectory buttons when writing
+      function hideNav() {
+        document.querySelectorAll('.nav-btn').forEach(el => el.classList.add('hidden'));
+      }
+      function showNav() {
+        document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('hidden'));
+      }
 
       // Device context — captured once per page load
       const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
@@ -330,6 +344,7 @@
           questionEl.textContent = '';
           showDoneState();
         } else {
+          hideNav();
           const questionId = data.question.id;
           const pageOpenTime = Date.now();
           trackEvent(questionId, 'page_open');
@@ -594,6 +609,7 @@
       }
 
       function showDoneState(feedbackQuestionId: number | null = null) {
+        showNav();
         let feedbackHtml = '';
         if (feedbackQuestionId) {
           feedbackHtml = `
@@ -633,6 +649,7 @@
         const data = await res.json();
         const prompt = data.prompt;
 
+        hideNav();
         questionEl.textContent = '';
         inputArea.innerHTML = '';
 
@@ -821,6 +838,7 @@
           });
 
           if (calRes.ok) {
+            showNav();
             promptDiv.textContent = '';
             inputArea.innerHTML = `
               <div class="done-message">Noted.</div>
