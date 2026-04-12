@@ -389,7 +389,9 @@
           // Enriched: P-burst tracking (Chenoweth & Hayes, 2s threshold)
           let lastInputTime: number | null = null;
           let currentBurstChars = 0;
+          let burstStartTime: number | null = null;
           const burstLengths: number[] = [];
+          const burstSequence: Array<{chars: number; startOffsetMs: number; durationMs: number}> = [];
 
           textarea.addEventListener('input', () => {
             const now = Date.now();
@@ -401,9 +403,18 @@
 
               // P-burst tracking: 2s gap = new burst
               if (lastInputTime !== null && (now - lastInputTime) > 2000) {
-                if (currentBurstChars > 0) burstLengths.push(currentBurstChars);
+                if (currentBurstChars > 0) {
+                  burstLengths.push(currentBurstChars);
+                  burstSequence.push({
+                    chars: currentBurstChars,
+                    startOffsetMs: (burstStartTime ?? now) - pageOpenTime,
+                    durationMs: lastInputTime - (burstStartTime ?? lastInputTime),
+                  });
+                }
                 currentBurstChars = 0;
+                burstStartTime = now;
               }
+              if (burstStartTime === null) burstStartTime = now;
               currentBurstChars += delta;
               lastInputTime = now;
             } else if (delta < 0) {
@@ -466,7 +477,13 @@
               // Close current P-burst on tab-away
               if (currentBurstChars > 0) {
                 burstLengths.push(currentBurstChars);
+                burstSequence.push({
+                  chars: currentBurstChars,
+                  startOffsetMs: (burstStartTime ?? now) - pageOpenTime,
+                  durationMs: now - (burstStartTime ?? now),
+                });
                 currentBurstChars = 0;
+                burstStartTime = null;
               }
               trackEvent(questionId, 'tab_blur');
             } else {
@@ -493,7 +510,15 @@
             }
 
             // Close final P-burst
-            if (currentBurstChars > 0) burstLengths.push(currentBurstChars);
+            if (currentBurstChars > 0) {
+              const now = Date.now();
+              burstLengths.push(currentBurstChars);
+              burstSequence.push({
+                chars: currentBurstChars,
+                startOffsetMs: (burstStartTime ?? now) - pageOpenTime,
+                durationMs: now - (burstStartTime ?? now),
+              });
+            }
 
             const submitTime = Date.now();
             const finalCharCount = text.length;
@@ -547,6 +572,7 @@
               charsPerMinute,
               pBurstCount,
               avgPBurstLength,
+              burstSequence,
               // Context
               deviceType,
               userAgent: rawUserAgent,

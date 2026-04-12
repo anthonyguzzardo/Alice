@@ -205,6 +205,40 @@ export function formatObserveSignals(
   const wordPct = percentileRank(session.wordCount, baselines.wordCounts);
   lines.push(`- Final: ${session.wordCount} words, ${session.sentenceCount} sentences (${verbalizePercentile(wordPct)})`);
 
+  // Linguistic densities (NRC Emotion Lexicon + Pennebaker)
+  if (session.nrcAngerDensity != null) {
+    lines.push('');
+    lines.push('=== LINGUISTIC PROFILE (NRC Emotion Lexicon + Pennebaker) ===');
+    lines.push('');
+
+    const emotionEntries = [
+      { label: 'anger', density: session.nrcAngerDensity, baselines: allSummaries.map(s => s.nrcAngerDensity).filter((v): v is number => v != null) },
+      { label: 'fear', density: session.nrcFearDensity!, baselines: allSummaries.map(s => s.nrcFearDensity).filter((v): v is number => v != null) },
+      { label: 'joy', density: session.nrcJoyDensity!, baselines: allSummaries.map(s => s.nrcJoyDensity).filter((v): v is number => v != null) },
+      { label: 'sadness', density: session.nrcSadnessDensity!, baselines: allSummaries.map(s => s.nrcSadnessDensity).filter((v): v is number => v != null) },
+      { label: 'trust', density: session.nrcTrustDensity!, baselines: allSummaries.map(s => s.nrcTrustDensity).filter((v): v is number => v != null) },
+      { label: 'anticipation', density: session.nrcAnticipationDensity!, baselines: allSummaries.map(s => s.nrcAnticipationDensity).filter((v): v is number => v != null) },
+    ];
+
+    const emotionParts = emotionEntries.map(e => {
+      const pct = e.baselines.length > 1 ? compactPercentile(percentileRank(e.density, e.baselines)) : '';
+      return `${e.label}=${(e.density * 100).toFixed(1)}%${pct ? `(${pct})` : ''}`;
+    });
+    lines.push(`Emotion word densities: ${emotionParts.join(', ')}`);
+
+    const cogBaselines = allSummaries.map(s => s.cognitiveDensity).filter((v): v is number => v != null);
+    const hedgeBaselines = allSummaries.map(s => s.hedgingDensity).filter((v): v is number => v != null);
+    const fpBaselines = allSummaries.map(s => s.firstPersonDensity).filter((v): v is number => v != null);
+
+    const cogPct = cogBaselines.length > 1 ? ` (${verbalizePercentile(percentileRank(session.cognitiveDensity!, cogBaselines))})` : '';
+    const hedgePct = hedgeBaselines.length > 1 ? ` (${verbalizePercentile(percentileRank(session.hedgingDensity!, hedgeBaselines))})` : '';
+    const fpPct = fpBaselines.length > 1 ? ` (${verbalizePercentile(percentileRank(session.firstPersonDensity!, fpBaselines))})` : '';
+
+    lines.push(`Cognitive mechanism words: ${(session.cognitiveDensity! * 100).toFixed(1)}%${cogPct}`);
+    lines.push(`Hedging language: ${(session.hedgingDensity! * 100).toFixed(1)}%${hedgePct}`);
+    lines.push(`First-person density: ${(session.firstPersonDensity! * 100).toFixed(1)}%${fpPct}`);
+  }
+
   return lines.join('\n');
 }
 
@@ -237,7 +271,11 @@ export function formatCompactSignals(
       const timing = revisionTimingLabel(s.firstHalfDeletionChars, s.secondHalfDeletionChars);
       const revStr = `corrections=${s.smallDeletionCount} revisions=${s.largeDeletionCount}(${s.largeDeletionChars}chars,${timing})`;
 
-      return `[${s.date}] device=${s.deviceType || '?'} hour=${s.hourOfDay ?? '?'} duration=${dur} ${cpmStr} ${commitStr} ${revStr} ${burstStr} pauses=${s.pauseCount} tabs=${s.tabAwayCount} words=${s.wordCount}`.replace(/  +/g, ' ').trim();
+      const lingStr = s.nrcAngerDensity != null
+        ? `emo=[ang=${(s.nrcAngerDensity*100).toFixed(0)} fear=${(s.nrcFearDensity!*100).toFixed(0)} joy=${(s.nrcJoyDensity!*100).toFixed(0)} sad=${(s.nrcSadnessDensity!*100).toFixed(0)} trust=${(s.nrcTrustDensity!*100).toFixed(0)}%] cog=${(s.cognitiveDensity!*100).toFixed(1)}% hedge=${(s.hedgingDensity!*100).toFixed(1)}% fp=${(s.firstPersonDensity!*100).toFixed(1)}%`
+        : '';
+
+      return `[${s.date}] device=${s.deviceType || '?'} hour=${s.hourOfDay ?? '?'} duration=${dur} ${cpmStr} ${commitStr} ${revStr} ${burstStr} pauses=${s.pauseCount} tabs=${s.tabAwayCount} words=${s.wordCount} ${lingStr}`.replace(/  +/g, ' ').trim();
     } else {
       // Pre-V3 fallback
       return `[${s.date}] device=${s.deviceType || '?'} hour=${s.hourOfDay ?? '?'} duration=${dur} commitment=${s.commitmentRatio?.toFixed(2) ?? '?'} deletions=${s.deletionCount}(largest=${s.largestDeletion}) pauses=${s.pauseCount} tabs=${s.tabAwayCount} words=${s.wordCount} [pre-V3]`;

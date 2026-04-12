@@ -242,6 +242,16 @@ db.exec(`
     ,chars_per_minute           REAL             -- total_chars_typed / active_minutes
     ,p_burst_count              INTEGER          -- 2s-bounded production bursts
     ,avg_p_burst_length         REAL             -- mean burst length in chars
+    -- LINGUISTIC: NRC Emotion Lexicon densities (Mohammad & Turney, 2013)
+    ,nrc_anger_density          REAL             -- anger word count / total words
+    ,nrc_fear_density           REAL             -- fear word count / total words
+    ,nrc_joy_density            REAL             -- joy word count / total words
+    ,nrc_sadness_density        REAL             -- sadness word count / total words
+    ,nrc_trust_density          REAL             -- trust word count / total words
+    ,nrc_anticipation_density   REAL             -- anticipation word count / total words
+    ,cognitive_density          REAL             -- cognitive mechanism words / total (Pennebaker)
+    ,hedging_density            REAL             -- hedging words / total
+    ,first_person_density       REAL             -- first person pronouns / total
     -- CONTEXT
     ,device_type                TEXT             -- 'mobile' or 'desktop'
     ,user_agent                 TEXT             -- raw user agent string
@@ -551,6 +561,30 @@ db.exec(`
   -- REFERENCED BY: /api/witness reads the latest row
   -- FOOTER: dttm_created_utc, created_by
   -- --------------------------------------------------------------------------
+  -- --------------------------------------------------------------------------
+  -- tb_burst_sequences
+  -- --------------------------------------------------------------------------
+  -- PURPOSE: Store per-burst production data for within-session KT analysis.
+  --          Each row is one P-burst (Chenoweth & Hayes, 2s threshold).
+  --          The full sequence captures the short→long burst transition
+  --          signature identified by Baaijen & Galbraith (2012).
+  -- USE CASE: "Did the writer start fragmented and consolidate, or stay even?"
+  -- MUTABILITY: Append-only (one set of rows per session)
+  -- LOGICAL FK: question_id → tb_questions.question_id
+  -- FOOTER: Minimal (append-only)
+  -- --------------------------------------------------------------------------
+  CREATE TABLE IF NOT EXISTS tb_burst_sequences (
+     burst_sequence_id    INTEGER PRIMARY KEY AUTOINCREMENT
+    ,question_id          INTEGER NOT NULL
+    ,burst_index          INTEGER NOT NULL          -- 0-based order within session
+    ,burst_char_count     INTEGER NOT NULL          -- chars produced in this burst
+    ,burst_duration_ms    INTEGER NOT NULL          -- ms from first to last keystroke in burst
+    ,burst_start_offset_ms INTEGER NOT NULL         -- ms from page open to burst start
+    -- FOOTER
+    ,dttm_created_utc     TEXT    NOT NULL DEFAULT (datetime('now'))
+    ,created_by           TEXT    NOT NULL DEFAULT 'client'
+  );
+
   CREATE TABLE IF NOT EXISTS tb_witness_states (
      witness_state_id    INTEGER PRIMARY KEY AUTOINCREMENT
     ,entry_count         INTEGER NOT NULL
@@ -559,6 +593,118 @@ db.exec(`
     ,model_name          TEXT    DEFAULT 'claude-sonnet-4-20250514'
     ,dttm_created_utc    TEXT    DEFAULT (datetime('now'))
     ,created_by          TEXT    DEFAULT 'system'
+  );
+
+  -- --------------------------------------------------------------------------
+  -- tb_entry_states
+  -- --------------------------------------------------------------------------
+  -- PURPOSE: Per-entry 8D deterministic state vector. Each entry produces one
+  --          state measurement — pure math, no AI interpretation.
+  -- USE CASE: "What was the behavioral state for entry N?"
+  -- MUTABILITY: Append-only (one row per journal entry)
+  -- REFERENCED BY: dynamics engine reads full history for trait inference
+  -- RESEARCH: Dimensions validated for independence:
+  --   fluency      — Chenoweth & Hayes (2001), Deane (2015) P-burst length
+  --   deliberation — Deane (2015) cognitive load composite
+  --   revision     — Baaijen et al. (2012) commitment + substantive deletion
+  --   expression   — linguistic deviation from personal norm
+  --   commitment   — final/typed ratio z-scored
+  --   volatility   — session-to-session behavioral distance
+  --   thermal      — correction rate + revision timing composite
+  --   presence     — inverse distraction (tab-away + pause rate)
+  -- FOOTER: dttm_created_utc, created_by
+  -- --------------------------------------------------------------------------
+  CREATE TABLE IF NOT EXISTS tb_entry_states (
+     entry_state_id    INTEGER PRIMARY KEY AUTOINCREMENT
+    ,response_id       INTEGER NOT NULL
+    ,fluency           REAL    NOT NULL
+    ,deliberation      REAL    NOT NULL
+    ,revision          REAL    NOT NULL
+    ,expression        REAL    NOT NULL
+    ,commitment        REAL    NOT NULL
+    ,volatility        REAL    NOT NULL
+    ,thermal           REAL    NOT NULL
+    ,presence          REAL    NOT NULL
+    ,convergence       REAL    NOT NULL
+    ,dttm_created_utc  TEXT    DEFAULT (datetime('now'))
+    ,created_by        TEXT    DEFAULT 'system'
+  );
+
+  -- --------------------------------------------------------------------------
+  -- tb_trait_dynamics
+  -- --------------------------------------------------------------------------
+  -- PURPOSE: PersDyn model parameters per behavioral dimension.
+  --          Three parameters per dimension: baseline (stable set point),
+  --          variability (fluctuation width), attractor_force (snap-back speed).
+  -- USE CASE: "How rigid/malleable is this person on each dimension?"
+  -- RESEARCH: Sosnowska, Kuppens, De Fruyt & Hofmans (KU Leuven, 2019)
+  --           PersDyn: A Unified Dynamic Systems Model
+  -- MUTABILITY: Recomputed when entry count changes (latest row is canonical)
+  -- REFERENCED BY: /api/witness reads latest dynamics set for rendering
+  -- FOOTER: dttm_created_utc, created_by
+  -- --------------------------------------------------------------------------
+  CREATE TABLE IF NOT EXISTS tb_trait_dynamics (
+     trait_dynamic_id   INTEGER PRIMARY KEY AUTOINCREMENT
+    ,entry_count        INTEGER NOT NULL
+    ,dimension          TEXT    NOT NULL
+    ,baseline           REAL    NOT NULL
+    ,variability        REAL    NOT NULL
+    ,attractor_force    REAL    NOT NULL
+    ,current_state      REAL    NOT NULL
+    ,deviation          REAL    NOT NULL
+    ,window_size        INTEGER NOT NULL
+    ,dttm_created_utc   TEXT    DEFAULT (datetime('now'))
+    ,created_by         TEXT    DEFAULT 'system'
+  );
+
+  -- --------------------------------------------------------------------------
+  -- tb_coupling_matrix
+  -- --------------------------------------------------------------------------
+  -- PURPOSE: Empirically-discovered causal coupling between behavioral dimensions.
+  --          Lagged cross-correlations reveal which dimensions lead/follow.
+  -- USE CASE: "When deliberation spikes, what happens to revision 2 entries later?"
+  -- RESEARCH: Critcher (Berkeley xLab) causal trait theories;
+  --           Mesbah et al. (2024) leading indicator analysis
+  -- MUTABILITY: Recomputed when entry count changes
+  -- REFERENCED BY: /api/witness uses coupling for visual rendering context
+  -- FOOTER: dttm_created_utc, created_by
+  -- --------------------------------------------------------------------------
+  CREATE TABLE IF NOT EXISTS tb_coupling_matrix (
+     coupling_id        INTEGER PRIMARY KEY AUTOINCREMENT
+    ,entry_count        INTEGER NOT NULL
+    ,leader             TEXT    NOT NULL
+    ,follower           TEXT    NOT NULL
+    ,lag_sessions       INTEGER NOT NULL
+    ,correlation        REAL    NOT NULL
+    ,direction          REAL    NOT NULL
+    ,dttm_created_utc   TEXT    DEFAULT (datetime('now'))
+    ,created_by         TEXT    DEFAULT 'system'
+  );
+
+  -- --------------------------------------------------------------------------
+  -- tb_emotion_behavior_coupling
+  -- --------------------------------------------------------------------------
+  -- PURPOSE: Cross-domain causal coupling between emotion word densities
+  --          and behavioral state dimensions. Discovers whether emotional
+  --          register predicts future behavioral shifts.
+  -- USE CASE: "When anger word density spikes, does deliberation follow?"
+  -- RESEARCH: Extends Critcher (Berkeley xLab) causal trait theories
+  --           across the content/behavior boundary.
+  --           Pennebaker (2011) word category slopes as predictors.
+  -- MUTABILITY: Recomputed when entry count changes
+  -- REFERENCED BY: /api/witness uses for visual rendering context
+  -- FOOTER: dttm_created_utc, created_by
+  -- --------------------------------------------------------------------------
+  CREATE TABLE IF NOT EXISTS tb_emotion_behavior_coupling (
+     emotion_coupling_id  INTEGER PRIMARY KEY AUTOINCREMENT
+    ,entry_count          INTEGER NOT NULL
+    ,emotion_dim          TEXT    NOT NULL
+    ,behavior_dim         TEXT    NOT NULL
+    ,lag_sessions         INTEGER NOT NULL
+    ,correlation          REAL    NOT NULL
+    ,direction            REAL    NOT NULL
+    ,dttm_created_utc     TEXT    DEFAULT (datetime('now'))
+    ,created_by           TEXT    DEFAULT 'system'
   );
 `);
 
@@ -584,6 +730,25 @@ try {
   }
   if (!cols.some(c => c.name === 'intervention_rationale')) {
     db.exec(`ALTER TABLE tb_questions ADD COLUMN intervention_rationale TEXT`);
+  }
+} catch {
+  // safe to ignore
+}
+
+// --------------------------------------------------------------------------
+// MIGRATION: Add linguistic density columns to tb_session_summaries
+// --------------------------------------------------------------------------
+try {
+  const cols = db.prepare(`PRAGMA table_info(tb_session_summaries)`).all() as Array<{ name: string }>;
+  const densityCols = [
+    'nrc_anger_density', 'nrc_fear_density', 'nrc_joy_density',
+    'nrc_sadness_density', 'nrc_trust_density', 'nrc_anticipation_density',
+    'cognitive_density', 'hedging_density', 'first_person_density',
+  ];
+  for (const col of densityCols) {
+    if (!cols.some(c => c.name === col)) {
+      db.exec(`ALTER TABLE tb_session_summaries ADD COLUMN ${col} REAL`);
+    }
   }
 } catch {
   // safe to ignore
@@ -695,6 +860,16 @@ export interface SessionSummaryInput {
   charsPerMinute: number | null;
   pBurstCount: number | null;
   avgPBurstLength: number | null;
+  // Linguistic: NRC emotion densities + Pennebaker categories
+  nrcAngerDensity: number | null;
+  nrcFearDensity: number | null;
+  nrcJoyDensity: number | null;
+  nrcSadnessDensity: number | null;
+  nrcTrustDensity: number | null;
+  nrcAnticipationDensity: number | null;
+  cognitiveDensity: number | null;
+  hedgingDensity: number | null;
+  firstPersonDensity: number | null;
   // Context
   deviceType: string | null;
   userAgent: string | null;
@@ -713,8 +888,11 @@ export function saveSessionSummary(s: SessionSummaryInput): void {
        small_deletion_count, large_deletion_count, large_deletion_chars,
        first_half_deletion_chars, second_half_deletion_chars,
        active_typing_ms, chars_per_minute, p_burst_count, avg_p_burst_length,
+       nrc_anger_density, nrc_fear_density, nrc_joy_density,
+       nrc_sadness_density, nrc_trust_density, nrc_anticipation_density,
+       cognitive_density, hedging_density, first_person_density,
        device_type, user_agent, hour_of_day, day_of_week
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     s.questionId, s.firstKeystrokeMs, s.totalDurationMs,
     s.totalCharsTyped, s.finalCharCount, s.commitmentRatio,
@@ -724,8 +902,44 @@ export function saveSessionSummary(s: SessionSummaryInput): void {
     s.smallDeletionCount, s.largeDeletionCount, s.largeDeletionChars,
     s.firstHalfDeletionChars, s.secondHalfDeletionChars,
     s.activeTypingMs, s.charsPerMinute, s.pBurstCount, s.avgPBurstLength,
+    s.nrcAngerDensity, s.nrcFearDensity, s.nrcJoyDensity,
+    s.nrcSadnessDensity, s.nrcTrustDensity, s.nrcAnticipationDensity,
+    s.cognitiveDensity, s.hedgingDensity, s.firstPersonDensity,
     s.deviceType, s.userAgent, s.hourOfDay, s.dayOfWeek
   );
+}
+
+// ----------------------------------------------------------------------------
+// BURST SEQUENCES
+// ----------------------------------------------------------------------------
+
+export interface BurstEntry {
+  chars: number;
+  startOffsetMs: number;
+  durationMs: number;
+}
+
+export function saveBurstSequence(questionId: number, bursts: BurstEntry[]): void {
+  const stmt = db.prepare(`
+    INSERT INTO tb_burst_sequences (question_id, burst_index, burst_char_count, burst_duration_ms, burst_start_offset_ms)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+  const insertAll = db.transaction((entries: BurstEntry[]) => {
+    for (let i = 0; i < entries.length; i++) {
+      stmt.run(questionId, i, entries[i].chars, entries[i].durationMs, entries[i].startOffsetMs);
+    }
+  });
+  insertAll(bursts);
+}
+
+export function getBurstSequence(questionId: number): Array<BurstEntry & { burstIndex: number }> {
+  return db.prepare(`
+    SELECT burst_index as burstIndex, burst_char_count as chars,
+           burst_duration_ms as durationMs, burst_start_offset_ms as startOffsetMs
+    FROM tb_burst_sequences
+    WHERE question_id = ?
+    ORDER BY burst_index ASC
+  `).all(questionId) as Array<BurstEntry & { burstIndex: number }>;
 }
 
 const SESSION_SUMMARY_COLS = `
@@ -743,6 +957,11 @@ const SESSION_SUMMARY_COLS = `
   second_half_deletion_chars as secondHalfDeletionChars,
   active_typing_ms as activeTypingMs, chars_per_minute as charsPerMinute,
   p_burst_count as pBurstCount, avg_p_burst_length as avgPBurstLength,
+  nrc_anger_density as nrcAngerDensity, nrc_fear_density as nrcFearDensity,
+  nrc_joy_density as nrcJoyDensity, nrc_sadness_density as nrcSadnessDensity,
+  nrc_trust_density as nrcTrustDensity, nrc_anticipation_density as nrcAnticipationDensity,
+  cognitive_density as cognitiveDensity, hedging_density as hedgingDensity,
+  first_person_density as firstPersonDensity,
   device_type as deviceType, user_agent as userAgent,
   hour_of_day as hourOfDay, day_of_week as dayOfWeek
 `;
@@ -771,6 +990,11 @@ export function getAllSessionSummaries(): Array<SessionSummaryInput & { date: st
            s.second_half_deletion_chars as secondHalfDeletionChars,
            s.active_typing_ms as activeTypingMs, s.chars_per_minute as charsPerMinute,
            s.p_burst_count as pBurstCount, s.avg_p_burst_length as avgPBurstLength,
+           s.nrc_anger_density as nrcAngerDensity, s.nrc_fear_density as nrcFearDensity,
+           s.nrc_joy_density as nrcJoyDensity, s.nrc_sadness_density as nrcSadnessDensity,
+           s.nrc_trust_density as nrcTrustDensity, s.nrc_anticipation_density as nrcAnticipationDensity,
+           s.cognitive_density as cognitiveDensity, s.hedging_density as hedgingDensity,
+           s.first_person_density as firstPersonDensity,
            s.device_type as deviceType,
            s.user_agent as userAgent, s.hour_of_day as hourOfDay, s.day_of_week as dayOfWeek
     FROM tb_session_summaries s
@@ -881,6 +1105,11 @@ export function getCalibrationSessionsWithText(): Array<SessionSummaryInput & { 
            s.second_half_deletion_chars as secondHalfDeletionChars,
            s.active_typing_ms as activeTypingMs, s.chars_per_minute as charsPerMinute,
            s.p_burst_count as pBurstCount, s.avg_p_burst_length as avgPBurstLength,
+           s.nrc_anger_density as nrcAngerDensity, s.nrc_fear_density as nrcFearDensity,
+           s.nrc_joy_density as nrcJoyDensity, s.nrc_sadness_density as nrcSadnessDensity,
+           s.nrc_trust_density as nrcTrustDensity, s.nrc_anticipation_density as nrcAnticipationDensity,
+           s.cognitive_density as cognitiveDensity, s.hedging_density as hedgingDensity,
+           s.first_person_density as firstPersonDensity,
            s.device_type as deviceType,
            s.user_agent as userAgent, s.hour_of_day as hourOfDay, s.day_of_week as dayOfWeek
     FROM tb_session_summaries s
@@ -1117,6 +1346,11 @@ export function getSessionSummariesForQuestions(questionIds: number[]): Array<Se
            s.second_half_deletion_chars as secondHalfDeletionChars,
            s.active_typing_ms as activeTypingMs, s.chars_per_minute as charsPerMinute,
            s.p_burst_count as pBurstCount, s.avg_p_burst_length as avgPBurstLength,
+           s.nrc_anger_density as nrcAngerDensity, s.nrc_fear_density as nrcFearDensity,
+           s.nrc_joy_density as nrcJoyDensity, s.nrc_sadness_density as nrcSadnessDensity,
+           s.nrc_trust_density as nrcTrustDensity, s.nrc_anticipation_density as nrcAnticipationDensity,
+           s.cognitive_density as cognitiveDensity, s.hedging_density as hedgingDensity,
+           s.first_person_density as firstPersonDensity,
            s.device_type as deviceType,
            s.user_agent as userAgent, s.hour_of_day as hourOfDay, s.day_of_week as dayOfWeek
     FROM tb_session_summaries s
@@ -1289,6 +1523,164 @@ export function getLatestWitnessState(): { witness_state_id: number; entry_count
     FROM tb_witness_states
     ORDER BY witness_state_id DESC LIMIT 1
   `).get() as { witness_state_id: number; entry_count: number; traits_json: string; signals_json: string } | null;
+}
+
+// ----------------------------------------------------------------------------
+// ENTRY STATES (8D deterministic state vectors)
+// ----------------------------------------------------------------------------
+
+export interface EntryStateRow {
+  entry_state_id: number;
+  response_id: number;
+  fluency: number;
+  deliberation: number;
+  revision: number;
+  expression: number;
+  commitment: number;
+  volatility: number;
+  thermal: number;
+  presence: number;
+  convergence: number;
+}
+
+export function saveEntryState(state: Omit<EntryStateRow, 'entry_state_id'>): number {
+  const result = db.prepare(`
+    INSERT INTO tb_entry_states (
+       response_id, fluency, deliberation, revision, expression,
+       commitment, volatility, thermal, presence, convergence
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    state.response_id, state.fluency, state.deliberation,
+    state.revision, state.expression, state.commitment,
+    state.volatility, state.thermal, state.presence, state.convergence,
+  );
+  return Number(result.lastInsertRowid);
+}
+
+export function getAllEntryStates(): EntryStateRow[] {
+  return db.prepare(`
+    SELECT * FROM tb_entry_states ORDER BY entry_state_id ASC
+  `).all() as EntryStateRow[];
+}
+
+export function getEntryStateCount(): number {
+  return (db.prepare(
+    `SELECT COUNT(*) as c FROM tb_entry_states`
+  ).get() as { c: number }).c;
+}
+
+// ----------------------------------------------------------------------------
+// TRAIT DYNAMICS (PersDyn model)
+// ----------------------------------------------------------------------------
+
+export interface TraitDynamicRow {
+  trait_dynamic_id: number;
+  entry_count: number;
+  dimension: string;
+  baseline: number;
+  variability: number;
+  attractor_force: number;
+  current_state: number;
+  deviation: number;
+  window_size: number;
+}
+
+export function saveTraitDynamics(dynamics: Omit<TraitDynamicRow, 'trait_dynamic_id'>[]): void {
+  const stmt = db.prepare(`
+    INSERT INTO tb_trait_dynamics (
+       entry_count, dimension, baseline, variability,
+       attractor_force, current_state, deviation, window_size
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const tx = db.transaction(() => {
+    for (const d of dynamics) {
+      stmt.run(
+        d.entry_count, d.dimension, d.baseline, d.variability,
+        d.attractor_force, d.current_state, d.deviation, d.window_size,
+      );
+    }
+  });
+  tx();
+}
+
+export function getLatestTraitDynamics(entryCount: number): TraitDynamicRow[] {
+  return db.prepare(`
+    SELECT * FROM tb_trait_dynamics
+    WHERE entry_count = ?
+    ORDER BY trait_dynamic_id ASC
+  `).all(entryCount) as TraitDynamicRow[];
+}
+
+// ----------------------------------------------------------------------------
+// COUPLING MATRIX
+// ----------------------------------------------------------------------------
+
+export interface CouplingRow {
+  coupling_id: number;
+  entry_count: number;
+  leader: string;
+  follower: string;
+  lag_sessions: number;
+  correlation: number;
+  direction: number;
+}
+
+export function saveCouplingMatrix(couplings: Omit<CouplingRow, 'coupling_id'>[]): void {
+  const stmt = db.prepare(`
+    INSERT INTO tb_coupling_matrix (
+       entry_count, leader, follower, lag_sessions, correlation, direction
+    ) VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  const tx = db.transaction(() => {
+    for (const c of couplings) {
+      stmt.run(c.entry_count, c.leader, c.follower, c.lag_sessions, c.correlation, c.direction);
+    }
+  });
+  tx();
+}
+
+export function getLatestCouplingMatrix(entryCount: number): CouplingRow[] {
+  return db.prepare(`
+    SELECT * FROM tb_coupling_matrix
+    WHERE entry_count = ?
+    ORDER BY correlation DESC
+  `).all(entryCount) as CouplingRow[];
+}
+
+// ----------------------------------------------------------------------------
+// EMOTION-BEHAVIOR COUPLING
+// ----------------------------------------------------------------------------
+
+export interface EmotionBehaviorCouplingRow {
+  emotion_coupling_id: number;
+  entry_count: number;
+  emotion_dim: string;
+  behavior_dim: string;
+  lag_sessions: number;
+  correlation: number;
+  direction: number;
+}
+
+export function saveEmotionBehaviorCoupling(couplings: Omit<EmotionBehaviorCouplingRow, 'emotion_coupling_id'>[]): void {
+  const stmt = db.prepare(`
+    INSERT INTO tb_emotion_behavior_coupling (
+       entry_count, emotion_dim, behavior_dim, lag_sessions, correlation, direction
+    ) VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  const tx = db.transaction(() => {
+    for (const c of couplings) {
+      stmt.run(c.entry_count, c.emotion_dim, c.behavior_dim, c.lag_sessions, c.correlation, c.direction);
+    }
+  });
+  tx();
+}
+
+export function getLatestEmotionBehaviorCoupling(entryCount: number): EmotionBehaviorCouplingRow[] {
+  return db.prepare(`
+    SELECT * FROM tb_emotion_behavior_coupling
+    WHERE entry_count = ?
+    ORDER BY correlation DESC
+  `).all(entryCount) as EmotionBehaviorCouplingRow[];
 }
 
 // ----------------------------------------------------------------------------

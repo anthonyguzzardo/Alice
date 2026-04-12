@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { saveCalibrationSession } from '../../lib/db.ts';
 import { CALIBRATION_PROMPTS } from '../../lib/calibration-prompts.ts';
+import { computeLinguisticDensities } from '../../lib/linguistic.ts';
 
 export const GET: APIRoute = () => {
   const prompt = CALIBRATION_PROMPTS[Math.floor(Math.random() * CALIBRATION_PROMPTS.length)];
@@ -19,6 +20,8 @@ export const POST: APIRoute = async ({ request }) => {
       headers: { 'Content-Type': 'application/json' },
     });
   }
+
+  const densities = computeLinguisticDensities(text.trim());
 
   saveCalibrationSession(prompt, text.trim(), {
     questionId: 0,
@@ -45,6 +48,7 @@ export const POST: APIRoute = async ({ request }) => {
     charsPerMinute: sessionSummary.charsPerMinute ?? null,
     pBurstCount: sessionSummary.pBurstCount ?? null,
     avgPBurstLength: sessionSummary.avgPBurstLength ?? null,
+    ...densities,
     deviceType: sessionSummary.deviceType ?? null,
     userAgent: sessionSummary.userAgent ?? null,
     hourOfDay: sessionSummary.hourOfDay ?? null,

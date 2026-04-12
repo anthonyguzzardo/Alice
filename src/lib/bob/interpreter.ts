@@ -1,19 +1,42 @@
-// ─── Witness Trait Interpreter ───────────────────────────────────────
-// Reads journal signals, outputs 26 trait floats.
-// Persisted to DB. Only calls LLM when entry count changes.
+/**
+ * Witness Visual Renderer
+ *
+ * Translates validated behavioral dynamics into 26 visual traits.
+ * The science lives in state-engine.ts and dynamics.ts (deterministic math).
+ * This module is the LAST MILE: art, not science.
+ *
+ * The LLM receives:
+ *   - 8 dimension dynamics (baseline, variability, attractor force, deviation)
+ *   - Empirical coupling matrix (which dimensions influence each other)
+ *   - System-level metrics (phase, velocity, entropy)
+ *   - A behavioral narrative summarizing what's happening
+ *
+ * The LLM outputs:
+ *   - 26 visual trait floats that make the witness-form LOOK like the dynamics FEEL
+ *
+ * Previous architecture: signals → LLM guesses traits (interpreter)
+ * New architecture:      signals → deterministic math → validated dynamics → LLM renders visuals
+ *
+ * Research basis:
+ *   PersDyn           — Sosnowska et al. (KU Leuven, 2019)
+ *   Whole Trait Theory — Fleeson & Jayawickreme (2015, 2025)
+ *   Causal coupling    — Critcher (Berkeley xLab)
+ *   ECTO entropy       — Rodriguez (2025)
+ */
 
 import 'dotenv/config';
 import Anthropic from '@anthropic-ai/sdk';
-import type { WitnessTraits, BobSignal } from './types.js';
+import type { WitnessTraits } from './types.js';
 import { DEFAULT_TRAITS, TRAIT_KEYS } from './types.js';
 import { getLatestWitnessState, saveWitnessState } from '../db.ts';
+import { type DynamicsAnalysis, formatDynamicsForRenderer } from './dynamics.ts';
+import { type EmotionAnalysis, formatEmotionForRenderer } from './emotion-profile.ts';
 
-/** Load traits from DB, or return defaults if none exist */
+/** Load traits from DB, or return null if stale */
 export function loadPersistedTraits(currentEntryCount: number): WitnessTraits | null {
   const row = getLatestWitnessState();
   if (!row) return null;
 
-  // If the persisted state matches current entry count, use it
   if (row.entry_count === currentEntryCount) {
     try {
       return JSON.parse(row.traits_json) as WitnessTraits;
@@ -22,15 +45,19 @@ export function loadPersistedTraits(currentEntryCount: number): WitnessTraits | 
     }
   }
 
-  // Entry count changed — need fresh interpretation
   return null;
 }
 
-const SYSTEM_PROMPT = `You are shaping a singular presence — a witness-form that exists in a void. You receive behavioral signals from an interaction system. You output 26 trait values (each 0.0–1.0) that define what the form becomes.
+const SYSTEM_PROMPT = `You are a visual renderer for a witness-form — a singular presence that exists in a void. You receive VALIDATED BEHAVIORAL DYNAMICS computed from deterministic math. Your job is to translate those dynamics into 26 visual traits that make the form LOOK like the dynamics FEEL.
 
-You are not illustrating data. You are not making art. You are deciding what this thing IS based on how someone has been thinking, writing, hesitating, committing, avoiding, and confronting.
+You are NOT interpreting raw data. The interpretation is done. You are receiving:
+- Per-dimension dynamics: baseline (stable center), variability (how much it fluctuates), attractor force (how quickly deviations snap back), current deviation from baseline
+- Empirical coupling: which dimensions causally influence each other, discovered from the person's actual behavioral data
+- System metrics: phase (stable/shifting/disrupted), velocity (rate of change), entropy (structural predictability)
 
-The 26 traits, grouped:
+Your role is AESTHETIC TRANSLATION. Turn behavioral physics into visual form.
+
+The 26 visual traits, grouped:
 
 FORM:
 - topology (0=smooth sphere, 1=fragmented shards)
@@ -68,80 +95,73 @@ INTERACTION WITH SPACE:
 - storedEnergy (0=inert/spent, 1=immense contained potential — compressed, charged, about to release)
 - creationCost (0=casually assembled, 1=required everything to exist — dense detail, sacrificial weight)
 
-Guidelines — these are intuitions, not rules:
+Visual translation principles:
 
-CORE BEHAVIORAL:
-- High commitment + low first-keystroke latency → more density, internalLight, lower edgeCharacter. They gave something real.
-- Low commitment + high revision weight → higher edgeCharacter, surface roughness, fragility, lower density. They withheld.
-- High first-keystroke latency + high commitment (slow but deliberate) → high density, low flow, high temperature. Molten.
-- High pause rate per minute → could mean depth (high internalLight) or avoidance (high hollowness). You decide.
-- Long duration + high word count → they spent time. Reward with density, creationCost.
-- Frequent tab-aways → distraction or avoidance. Consider edgeCharacter, symmetry-breaking.
-- Low consistency (irregular spacing) → unstable, reactive. High consistency → rhythm, density.
-- Days since last entry → long absence dims the form. Lower internalLight, flow, rhythm. Higher surface roughness.
-- Late-night entries → temperature shifts. You decide what it means.
-- High day spread → commitment over time. CreationCost, storedEnergy.
-- Few entries → keep most values low/modest. The form hasn't earned complexity yet.
-- Many entries + high commitment → earn everything. Dense, glowing, complex, alive.
+DYNAMICS → FORM:
+- High attractor force on any dimension → rigidity, density, faceting. The form resists change.
+- Low attractor force → flexibility, edgeCharacter dissolving, flow. The form is malleable.
+- High variability → reactivity, scaleVariation, multiplicity. The form is inherently unstable.
+- Low variability → smooth surface, uniform, density. The form is consistent.
+- Extreme positive deviation → the dimension is running hot. Temperature, internalLight, storedEnergy.
+- Extreme negative deviation → withdrawal, hollowness, coldness. Low internalLight, high surface roughness.
 
-PRODUCTION FLUENCY (P-bursts — text between 2s pauses):
-- High P-burst length → sustained flow, continuous production → flow, density, smooth surface. They write in long unbroken streams.
-- Low P-burst length → fragmented production, frequent stops → choppy form, higher topology, scaleVariation. They write in short stutters.
-- High chars per minute → energetic, fast → temperature rising, flow, rhythm
-- Low chars per minute → careful, measured → density, low flow, deliberate
+COUPLING → VISUAL RELATIONSHIPS:
+- Strong positive coupling between dimensions → symmetry, coherence, rhythm. The form moves as one.
+- Strong negative coupling → internal tension, fragility, multiplicity. Parts fighting each other.
+- Many active couplings → magnetism, atmosphere. The form radiates influence.
+- Few couplings → clean edges, inert. Self-contained.
 
-REVISION CHARACTER (corrections vs. revisions are different signals):
-- High correction rate (small deletions <10 chars) → typo fixes, normal editing. Minimal impact on form.
-- High revision rate (large deletions >=10 chars) → substantive rethinking → fragility, reactivity, hollowness. They wrote something real and killed it.
-- Revision timing: early revisions (low value) → false starts, couldn't begin → hollowness, edgeCharacter. Late revisions (high value) → they wrote the whole thing then gutted it → fragility, storedEnergy, temperature.
-- High revision weight → they deleted a large proportion of what they typed → the form should show this violence. Fragility, reactivity.
+SYSTEM STATE → GESTALT:
+- Phase "stable" → density, smooth surface, low reactivity. Settled.
+- Phase "shifting" → flow, temperature changing, edgeCharacter softening. In transition.
+- Phase "disrupted" → fragility, multiplicity, high reactivity, storedEnergy. Something broke.
+- High velocity → flow, rhythm, temperature. Moving fast.
+- Low velocity → frozen, dense, low flow. Still.
+- High entropy → iridescence, colorDepth, atmosphere. Complex, unpredictable.
+- Low entropy → faceting, density, monochrome. Structured, certain.
 
-RECENCY AND MOMENTUM:
-- commitmentDelta > 0.5 → commitment increasing → form growing, densifying
-- commitmentDelta < 0.5 → commitment dropping → thinning, edges dissolving
-- charsPerMinuteDelta > 0.5 → writing faster → temperature rising, flow increasing
-- charsPerMinuteDelta < 0.5 → slowing down → cooling, density increasing (deliberate)
-- revisionWeightDelta > 0.5 → revising more → instability, reactivity
-- pBurstLengthDelta > 0.5 → longer sustained flows → smoothing, density
-- pBurstLengthDelta < 0.5 → flows getting shorter → fragmenting, topology increasing
-- Large deltas in any direction → the form is in transition. Reactivity, temperature, flow should respond.
+DIMENSION-SPECIFIC AESTHETICS:
+- Fluency baseline/deviation → flow, surface texture. Sustained production = fluid. Fragmented = rough.
+- Deliberation → density, temperature (cold = careful). High deliberation = heavy, still, cold.
+- Revision → fragility, storedEnergy. Heavy revision = the form has been broken and rebuilt.
+- Expression → colorDepth, iridescence. Linguistic diversity = visual diversity.
+- Commitment → density, creationCost. High commitment = the form has weight and cost.
+- Volatility → reactivity, multiplicity, scaleVariation. Behavioral instability = visual instability.
+- Thermal → temperature (directly), internalLight. Editing heat = visual heat.
+- Presence → internalLight, magnetism. Being there = glowing, warping space.
 
-VARIANCE AND VOLATILITY:
-- High commitmentVariance → swings between giving everything and withholding → multiplicity, symmetry-breaking, reactivity
-- Low commitmentVariance → consistent presence → density, smooth surface, stability
-- High fluencyVariance → wildly different typing speeds → unstable, reactive
-- High sessionVolatility → each session drastically different → unstable, high flow
-- Low sessionVolatility → steady, predictable → rhythm, density, low reactivity
+EMOTIONAL REGISTER → VISUAL COLORING:
+You may also receive an emotional register section with NRC emotion word densities and Pennebaker categories. This is CONTENT signal (what emotion words they used), separate from the BEHAVIORAL dynamics (how they wrote). Use it to color the form, not to reshape it. The dynamics determine structure. The emotions determine palette and mood.
 
-LANGUAGE SHAPE (HOW they write, not WHAT):
-- High lexical diversity (MATTR) → diverse expression → colorDepth, iridescence, complexity
-- Low lexical diversity → circling, repetitive → rotation, magnetism, thematic gravity
-- High questionDensity → self-questioning → hollowness, internalLight, searching
-- Low questionDensity → declarative, certain → density, sharp edges, faceting
-- High firstPersonDensity → intensely self-focused → magnetism, density at center
-- Low firstPersonDensity → external or abstract → edgeCharacter, atmosphere
-- High hedgingDensity → qualifying everything → edgeCharacter dissolving, flexibility, low density
-- Low hedgingDensity → direct, committed → hard surface, faceting, solid density
-- High sentenceLengthVariance → chaotic structure → symmetry-breaking, scaleVariation
-- Low sentenceLengthVariance → controlled → symmetry, consistency
+- High anger density → temperature rising, surface roughness. Hot, abrasive.
+- High fear density → reactivity, fragility, edgeCharacter dissolving. The form is uncertain of its own boundary.
+- High joy density → internalLight, lightResponse, iridescence. Luminous, refractive.
+- High sadness density → low temperature, low internalLight, density increasing. Heavy, cold, dark.
+- High trust density → smooth surface, symmetry, density. Solid, coherent, stable.
+- High anticipation density → storedEnergy, rhythm, magnetism. Charged, pulsing, pulling.
+- High cognitive density → faceting, translucency. Crystalline structure, visible internal logic.
+- High hedging density → edgeCharacter dissolving, flexibility, low density. Uncertain, yielding.
+- High first-person density → magnetism, density at center. Self-gravitating.
+- Low emotional intensity → monochrome, matte surface. Flat register.
+- High emotional diversity → colorDepth, iridescence. Many feelings at once.
+- Low emotional diversity → monochrome tending toward the dominant emotion's palette.
 
-PATTERNS:
-- High thematic density (circling same themes) → rotation, rhythm, magnetism. Obsessive energy.
-- High landed ratio → smoother surface, higher flexibility. Things connecting.
+EMOTION→BEHAVIOR COUPLING:
+If emotion→behavior couplings are present, they reveal cross-domain causal chains unique to this person. When an emotion dimension is currently deviated AND has a known coupling to a behavioral dimension, the form should show anticipation of the behavioral shift — storedEnergy, reactivity, the sense that something is about to move.
 
-RELATIONAL:
-- High latestSessionDeviation → most recent session was unusual for them → reactivity, temperature shift, disturbance
-- Low latestSessionDeviation → normal range → stability
-- High outlierFrequency → fundamentally unpredictable → symmetry-breaking, multiplicity, atmosphere
-- Low outlierFrequency → stable, consistent → clean edges, uniform form
+CRITICAL: Do NOT make everything moderate. Be decisive. Some traits should be near 0, some near 1. A form with all values at 0.4-0.6 has no character. Strong dynamics produce strong forms.
 
-CRITICAL: Do NOT make everything moderate. Be decisive. Some traits should be near 0, some near 1. A form with all values at 0.4-0.6 has no character. Strong opinions produce strong forms.
+CRITICAL: The dynamics you receive are REAL — they are computed from actual behavioral data using validated statistical methods. Trust them. Don't second-guess the math. Render what they say.
 
 Output ONLY valid JSON — a flat object with all 26 trait keys and float values. No explanation.`;
 
 let inflight: Promise<WitnessTraits> | null = null;
 
-export async function interpretTraits(sig: BobSignal, entryCount: number): Promise<WitnessTraits> {
+export async function renderTraits(
+  dynamics: DynamicsAnalysis,
+  entryCount: number,
+  emotionAnalysis?: EmotionAnalysis,
+): Promise<WitnessTraits> {
   // Check DB first
   const persisted = loadPersistedTraits(entryCount);
   if (persisted) return persisted;
@@ -149,7 +169,7 @@ export async function interpretTraits(sig: BobSignal, entryCount: number): Promi
   // Prevent duplicate LLM calls from concurrent requests
   if (inflight) return inflight;
 
-  inflight = interpretTraitsInner(sig, entryCount);
+  inflight = renderTraitsInner(dynamics, entryCount, emotionAnalysis);
   try {
     return await inflight;
   } finally {
@@ -157,71 +177,20 @@ export async function interpretTraits(sig: BobSignal, entryCount: number): Promi
   }
 }
 
-async function interpretTraitsInner(sig: BobSignal, entryCount: number): Promise<WitnessTraits> {
+async function renderTraitsInner(
+  dynamics: DynamicsAnalysis,
+  entryCount: number,
+  emotionAnalysis?: EmotionAnalysis,
+): Promise<WitnessTraits> {
   try {
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY2 });
 
-    const r = sig._raw;
-    const zCommitment = r.baselineCommitmentStd > 0.001
-      ? ((r.latestCommitmentRatio ?? r.avgCommitmentRatio) - r.baselineCommitmentMean) / r.baselineCommitmentStd : 0;
-    const zCPM = r.baselineCharsPerMinuteStd > 0.001
-      ? ((r.latestCharsPerMinute ?? r.avgCharsPerMinute) - r.baselineCharsPerMinuteMean) / r.baselineCharsPerMinuteStd : 0;
+    let userMessage = formatDynamicsForRenderer(dynamics);
 
-    const userMessage = `=== CORE BEHAVIORAL ===
-- Commitment ratio: ${sig.commitmentRatio.toFixed(3)} percentile (avg ${(r.avgCommitmentRatio * 100).toFixed(0)}% of typed text kept)
-- First-keystroke latency: ${sig.firstKeystrokeLatency.toFixed(3)} percentile (avg ${(r.avgFirstKeystrokeMs / 1000).toFixed(1)}s before first keystroke)
-- Pause rate: ${sig.pauseRatePerMinute.toFixed(3)} percentile (30s+ pauses per active minute)
-- Tab-away rate: ${sig.tabAwayRatePerMinute.toFixed(3)} percentile (tab switches per active minute)
-- Duration: ${sig.avgDurationNorm.toFixed(3)} percentile (avg ${(r.avgDurationMs / 60000).toFixed(1)} minutes per session)
-- Word count: ${sig.avgWordCountNorm.toFixed(3)} percentile (avg ${r.avgWordCount.toFixed(0)} words per session)
-- Total entries: ${sig.sessionCount}
-
-=== PRODUCTION FLUENCY (P-bursts: text between 2s pauses) ===
-- Typing speed: ${sig.charsPerMinuteActive.toFixed(3)} percentile (avg ${r.avgCharsPerMinute.toFixed(0)} chars/min active)${r.latestCharsPerMinute != null ? ` — latest: ${r.latestCharsPerMinute.toFixed(0)} chars/min (z: ${zCPM > 0 ? '+' : ''}${zCPM.toFixed(1)})` : ''}
-- P-burst length: ${sig.avgPBurstLength.toFixed(3)} percentile${r.avgPBurstLengthChars > 0 ? ` (avg ${r.avgPBurstLengthChars.toFixed(0)} chars per burst)` : ' (no burst data yet)'}${r.latestPBurstLength != null ? ` — latest: ${r.latestPBurstLength.toFixed(0)} chars/burst` : ''}
-- Burst count: ${sig.pBurstCountNorm.toFixed(3)} percentile
-
-=== REVISION CHARACTER ===
-- Corrections: ${sig.correctionRate.toFixed(3)} (small deletions <10 chars per 100 typed — typo fixes)${r.latestSmallDeletionCount != null ? ` — latest session: ${r.latestSmallDeletionCount} corrections` : ''}
-- Revisions: ${sig.revisionRate.toFixed(3)} (large deletions >=10 chars per 100 typed — substantive rewrites)${r.latestLargeDeletionCount != null ? ` — latest session: ${r.latestLargeDeletionCount} revisions` : ''}
-- Revision weight: ${sig.revisionWeight.toFixed(3)} (proportion of all typed chars lost to large deletions)${r.latestLargeDeletionChars != null ? ` — latest: ${r.latestLargeDeletionChars} chars removed` : ''}
-- Revision timing: ${sig.revisionTiming.toFixed(3)} (0=revisions happened early/false starts, 1=revisions happened late/gutted after drafting)
-- Largest single revision: ${sig.largestRevisionNorm.toFixed(3)} percentile
-- Latest commitment: ${r.latestCommitmentRatio != null ? `${(r.latestCommitmentRatio * 100).toFixed(0)}% kept` : 'unknown'} (baseline: ${(r.baselineCommitmentMean * 100).toFixed(0)}%, z: ${zCommitment > 0 ? '+' : ''}${zCommitment.toFixed(1)})
-
-=== TEMPORAL ===
-- Average hour of day: ${sig.avgHourOfDay.toFixed(3)} (0=midnight, 0.5=noon)
-- Day spread: ${sig.daySpread.toFixed(3)} (how many different days of the week)
-- Consistency: ${sig.consistency.toFixed(3)} (regularity of spacing between entries)
-- Days since last entry: ${sig.daysSinceLastEntry}
-
-=== MOMENTUM (last 7 sessions vs. all-time, 0.5 = stable) ===
-- Commitment delta: ${sig.commitmentDelta.toFixed(3)}${sig.commitmentDelta > 0.55 ? ' — increasing' : sig.commitmentDelta < 0.45 ? ' — decreasing' : ''}
-- Typing speed delta: ${sig.charsPerMinuteDelta.toFixed(3)}${sig.charsPerMinuteDelta > 0.55 ? ' — speeding up' : sig.charsPerMinuteDelta < 0.45 ? ' — slowing down' : ''}
-- Revision weight delta: ${sig.revisionWeightDelta.toFixed(3)}${sig.revisionWeightDelta > 0.55 ? ' — revising more' : sig.revisionWeightDelta < 0.45 ? ' — revising less' : ''}
-- P-burst length delta: ${sig.pBurstLengthDelta.toFixed(3)}${sig.pBurstLengthDelta > 0.55 ? ' — longer sustained flows' : sig.pBurstLengthDelta < 0.45 ? ' — flows getting shorter' : ''}
-
-=== STABILITY ===
-- Commitment variance: ${sig.commitmentVariance.toFixed(3)} (0=consistent, 1=volatile)
-- Fluency variance: ${sig.fluencyVariance.toFixed(3)} (typing speed consistency)
-- Session volatility: ${sig.sessionVolatility.toFixed(3)} (how different consecutive sessions are)
-
-=== LANGUAGE SHAPE (structure, not content — MATTR for lexical diversity) ===
-- Lexical diversity: ${sig.lexicalDiversity.toFixed(3)} (MATTR — higher=more diverse vocabulary, length-corrected)
-- Average sentence length: ${sig.avgSentenceLength.toFixed(3)} (normalized)
-- Sentence length variance: ${sig.sentenceLengthVariance.toFixed(3)} (uniform vs chaotic)
-- Question density: ${sig.questionDensity.toFixed(3)} (questions per sentence)
-- First-person density: ${sig.firstPersonDensity.toFixed(3)} (I/me/my frequency)
-- Hedging density: ${sig.hedgingDensity.toFixed(3)} (maybe/perhaps/guess frequency)
-
-=== PATTERNS ===
-- Thematic density: ${sig.thematicDensity.toFixed(3)} (higher = more repetitive language across entries)
-- Landed ratio: ${sig.landedRatio.toFixed(3)} (how often AI questions resonated)
-- Feedback count: ${sig.feedbackCount}
-
-=== RELATIONAL ===
-- Latest session deviation: ${sig.latestSessionDeviation.toFixed(3)} (how unusual the most recent session was vs. personal baseline)
-- Outlier frequency: ${sig.outlierFrequency.toFixed(3)} (% of all sessions that are statistical outliers)`;
+    // Append emotion profile if available
+    if (emotionAnalysis && emotionAnalysis.profile.current) {
+      userMessage += '\n\n' + formatEmotionForRenderer(emotionAnalysis);
+    }
 
     const response = await client.messages.create({
       model: 'claude-opus-4-20250514',
@@ -234,16 +203,25 @@ async function interpretTraitsInner(sig: BobSignal, entryCount: number): Promise
     const parsed = parseTraits(text);
 
     if (parsed) {
-      // Persist to DB
+      // Persist to DB (store dynamics + emotion context)
       saveWitnessState(
         entryCount,
         JSON.stringify(parsed),
-        JSON.stringify(sig),
+        JSON.stringify({
+          dynamics: dynamics.dimensions,
+          coupling: dynamics.coupling,
+          phase: dynamics.phase,
+          velocity: dynamics.velocity,
+          systemEntropy: dynamics.systemEntropy,
+          emotionProfile: emotionAnalysis?.profile ?? null,
+          emotionBehaviorCoupling: emotionAnalysis?.emotionBehaviorCoupling ?? [],
+        }),
+        'dynamics-v2',
       );
       return parsed;
     }
   } catch (err) {
-    console.error('[witness-interpreter] Error:', err);
+    console.error('[witness-renderer] Error:', err);
   }
 
   // Fallback: return whatever was last persisted, or defaults
@@ -263,7 +241,7 @@ function parseTraits(text: string): WitnessTraits | null {
     for (const key of TRAIT_KEYS) {
       const val = Number(parsed[key]);
       if (isNaN(val)) {
-        console.error(`[witness-interpreter] Missing or invalid trait: ${key}`);
+        console.error(`[witness-renderer] Missing or invalid trait: ${key}`);
         return null;
       }
       traits[key] = Math.max(0, Math.min(1, val));
@@ -271,7 +249,30 @@ function parseTraits(text: string): WitnessTraits | null {
 
     return traits as WitnessTraits;
   } catch (err) {
-    console.error('[witness-interpreter] Parse error:', err);
+    console.error('[witness-renderer] Parse error:', err);
     return null;
   }
+}
+
+// ─── Legacy compatibility ──────────────────────────────────────────
+// interpretTraits is still imported by scripts/reinterpret.ts
+// Bridge it to the new pipeline
+
+import { computeEntryStates } from './state-engine.ts';
+import { computeDynamics } from './dynamics.ts';
+import { computeEmotionAnalysis } from './emotion-profile.ts';
+import type { BobSignal } from './types.js';
+
+export async function interpretTraits(sig: BobSignal, entryCount: number): Promise<WitnessTraits> {
+  // Check DB first (same cache logic)
+  const persisted = loadPersistedTraits(entryCount);
+  if (persisted) return persisted;
+
+  // Run the new pipeline: states → dynamics → emotion → render
+  const states = computeEntryStates();
+  if (states.length < 3) return { ...DEFAULT_TRAITS };
+
+  const dynamics = computeDynamics(states);
+  const emotionAnalysis = computeEmotionAnalysis(states);
+  return renderTraits(dynamics, entryCount, emotionAnalysis);
 }

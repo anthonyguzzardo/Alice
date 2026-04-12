@@ -1,10 +1,11 @@
 import type { APIRoute } from 'astro';
-import { saveResponse, getTodaysQuestion, getTodaysResponse, saveSessionSummary, getResponseCount } from '../../lib/db.ts';
+import { saveResponse, getTodaysQuestion, getTodaysResponse, saveSessionSummary, saveBurstSequence, getResponseCount } from '../../lib/db.ts';
 import { runObservation } from '../../lib/observe.ts';
 import { runGeneration } from '../../lib/generate.ts';
 import { runReflection } from '../../lib/reflect.ts';
 import { embedResponse } from '../../lib/embeddings.ts';
 import { localDateStr } from '../../lib/date.ts';
+import { computeLinguisticDensities } from '../../lib/linguistic.ts';
 
 export const POST: APIRoute = async ({ request }) => {
   const body = await request.json();
@@ -39,7 +40,13 @@ export const POST: APIRoute = async ({ request }) => {
   embedResponse(responseId, question.text, text.trim(), localDateStr())
     .catch(err => console.error('[respond] Embedding error:', err));
 
+  // Compute linguistic densities server-side from response text
+  const densities = computeLinguisticDensities(text.trim());
+
   if (sessionSummary) {
+    if (Array.isArray(sessionSummary.burstSequence) && sessionSummary.burstSequence.length > 0) {
+      saveBurstSequence(questionId, sessionSummary.burstSequence);
+    }
     saveSessionSummary({
       questionId: sessionSummary.questionId,
       firstKeystrokeMs: sessionSummary.firstKeystrokeMs ?? null,
@@ -65,6 +72,7 @@ export const POST: APIRoute = async ({ request }) => {
       charsPerMinute: sessionSummary.charsPerMinute ?? null,
       pBurstCount: sessionSummary.pBurstCount ?? null,
       avgPBurstLength: sessionSummary.avgPBurstLength ?? null,
+      ...densities,
       deviceType: sessionSummary.deviceType ?? null,
       userAgent: sessionSummary.userAgent ?? null,
       hourOfDay: sessionSummary.hourOfDay ?? null,

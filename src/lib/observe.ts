@@ -100,7 +100,7 @@ export async function runObservation(): Promise<void> {
 
   // Knowledge-transforming score for this session
   const ktResult = computeKnowledgeTransformScore(
-    sessionSummary ?? { questionId: question.question_id, firstKeystrokeMs: null, totalDurationMs: null, totalCharsTyped: 0, finalCharCount: 0, commitmentRatio: null, pauseCount: 0, totalPauseMs: 0, deletionCount: 0, largestDeletion: 0, totalCharsDeleted: 0, tabAwayCount: 0, totalTabAwayMs: 0, wordCount: 0, sentenceCount: 0, smallDeletionCount: null, largeDeletionCount: null, largeDeletionChars: null, firstHalfDeletionChars: null, secondHalfDeletionChars: null, activeTypingMs: null, charsPerMinute: null, pBurstCount: null, avgPBurstLength: null, deviceType: null, userAgent: null, hourOfDay: null, dayOfWeek: null },
+    sessionSummary ?? { questionId: question.question_id, firstKeystrokeMs: null, totalDurationMs: null, totalCharsTyped: 0, finalCharCount: 0, commitmentRatio: null, pauseCount: 0, totalPauseMs: 0, deletionCount: 0, largestDeletion: 0, totalCharsDeleted: 0, tabAwayCount: 0, totalTabAwayMs: 0, wordCount: 0, sentenceCount: 0, smallDeletionCount: null, largeDeletionCount: null, largeDeletionChars: null, firstHalfDeletionChars: null, secondHalfDeletionChars: null, activeTypingMs: null, charsPerMinute: null, pBurstCount: null, avgPBurstLength: null, nrcAngerDensity: null, nrcFearDensity: null, nrcJoyDensity: null, nrcSadnessDensity: null, nrcTrustDensity: null, nrcAnticipationDensity: null, cognitiveDensity: null, hedgingDensity: null, firstPersonDensity: null, deviceType: null, userAgent: null, hourOfDay: null, dayOfWeek: null },
     response.text,
     allSummaries,
   );

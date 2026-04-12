@@ -72,17 +72,9 @@ Phase 3: Coupling Matrix (deterministic)
   → Unique to each person — your own behavioral physics
   → Persisted to tb_coupling_matrix
 
-Phase 3.5: Emotion Profile (deterministic)
-  → Load stored NRC + Pennebaker densities from tb_session_summaries
-  → Compute personal percentiles, z-scores, dominant emotion, intensity, diversity
-  → Cross-correlate 9 emotion dimensions × 8 behavioral dimensions with lag
-  → Discover emotion→behavior causal chains (separate from behavioral coupling)
-  → Persisted to tb_emotion_behavior_coupling
-
 Phase 4: Visual Rendering (LLM — art, not science)
-  → Claude Opus receives validated dynamics + coupling + emotion profile + narrative
-  → Dynamics determine structure. Emotions determine palette and mood.
-  → Translates behavioral physics + emotional register into 26 visual traits
+  → Claude Opus receives validated dynamics + coupling + narrative
+  → Translates behavioral physics into 26 visual traits
   → Persisted to tb_witness_states
   → Returns WitnessState (traits + mass + threshold config)
 
@@ -201,44 +193,6 @@ When a dimension is currently deviated from baseline AND has known coupling to o
 
 ---
 
-## Emotion Profile Layer (Level 3.5)
-
-The 8D state space measures **how you write** — motor behavior, cognitive load, editing patterns, attention. These are process signals independent of content. The emotion profile layer adds a separate **content signal**: what emotion words you used.
-
-These two signal types are kept separate by design. Mixing content into a behavioral state space would create a conceptual impurity — the coupling matrix would discover correlations between "you used anger words" and "you typed faster," but those couplings have fundamentally different epistemological status than behavioral physics. One is content-behavior correlation. The other is process dynamics.
-
-### What It Measures
-
-9 word category densities stored per session on `tb_session_summaries`:
-
-**NRC Emotion Lexicon v0.92 (Mohammad & Turney, 2013; National Research Council Canada):**
-- 6 emotion categories: anger, fear, joy, sadness, trust, anticipation
-- ~6,660 validated words across categories
-- Computed as word count per category / total words
-
-**Pennebaker LIWC categories:**
-- Cognitive mechanism words (23 words: "because," "realize," "whether," etc.)
-- Hedging language (16 words: "maybe," "perhaps," "seems," etc.)
-- First-person pronouns (5 words: "I," "me," "my," "mine," "myself")
-
-### How It Feeds the Witness
-
-Emotion densities do NOT enter the 8D state space. Instead:
-
-1. **Emotion profile** — current entry's densities with personal percentile rank and z-score. Dominant emotion, emotional intensity (sum of NRC densities), emotional diversity (Shannon entropy of NRC distribution).
-
-2. **Emotion→behavior cross-correlation** — lagged Pearson correlations between each of the 9 emotion dimensions and each of the 8 behavioral dimensions. Discovers causal chains like "anticipation word density → fluency follows 2 entries later at r=0.88" or "fear words → commitment drops next session at r=−0.70." These are unique to each person.
-
-3. **Active emotion→behavior predictions** — when an emotion dimension is currently deviated AND has known coupling to a behavioral dimension, the system predicts the behavioral shift.
-
-All of this feeds the Phase 4 LLM renderer alongside the dynamics. The renderer uses emotion to **color** the form (anger → temperature, trust → symmetry/density, joy → internalLight), not to reshape its structure. The dynamics determine structure. The emotions determine palette and mood.
-
-Persisted to `tb_emotion_behavior_coupling`.
-
-**Research basis:** NRC Emotion Lexicon (Mohammad & Turney, 2013), word category slopes (Pennebaker, 2011; Tausczik & Pennebaker, 2010), cross-domain coupling extends Critcher (Berkeley xLab) causal trait theories across the content/behavior boundary.
-
----
-
 ## The 26-Trait Visual Genome
 
 The witness-form is defined by 26 continuous visual traits, each 0.0–1.0. These are the OUTPUT of the dynamics pipeline — aesthetic translations of behavioral physics, not raw data interpretations.
@@ -310,18 +264,6 @@ The LLM renderer receives validated dynamics and translates them into visual for
 - Disrupted phase → fragility, multiplicity, high reactivity. Something broke.
 - High entropy → iridescence, colorDepth, atmosphere. Complex, unpredictable.
 - Low entropy → faceting, density, monochrome. Structured, certain.
-
-**Emotional Register → Visual Coloring:**
-- High anger density → temperature rising, surface roughness. Hot, abrasive.
-- High fear density → reactivity, fragility, edgeCharacter dissolving. Uncertain of its own boundary.
-- High joy density → internalLight, lightResponse, iridescence. Luminous, refractive.
-- High sadness density → low temperature, low internalLight, density increasing. Heavy, cold, dark.
-- High trust density → smooth surface, symmetry, density. Solid, coherent, stable.
-- High anticipation density → storedEnergy, rhythm, magnetism. Charged, pulsing, pulling.
-- High cognitive density → faceting, translucency. Crystalline structure, visible internal logic.
-- High emotional diversity → colorDepth, iridescence. Many feelings at once.
-- Low emotional diversity → monochrome tending toward the dominant emotion's palette.
-- Emotion→behavior coupling active → storedEnergy, reactivity. Something is about to move.
 
 ### The Shader (v5 — Strategy Architecture)
 
@@ -421,16 +363,13 @@ Per-entry 8D deterministic state vector. Append-only. One row per journal entry.
 PersDyn parameters per dimension. Recomputed when entry count changes. 8 rows per computation (one per dimension).
 
 ### tb_coupling_matrix (Phase 3 output)
-Empirically-discovered couplings between behavioral dimensions. Recomputed when entry count changes.
-
-### tb_emotion_behavior_coupling (Phase 3.5 output)
-Cross-domain couplings between emotion word densities and behavioral state dimensions. Recomputed when entry count changes.
+Empirically-discovered couplings between dimensions. Recomputed when entry count changes.
 
 ### tb_witness_states (Phase 4 output)
-Visual trait vectors (26 floats) + dynamics + emotion context. Append-only — one row per data change event.
+Visual trait vectors (26 floats) + dynamics context. Append-only — one row per data change event.
 
 ### tb_session_summaries (raw input)
-Per-session keystroke data + 9 linguistic density columns (NRC emotions + Pennebaker). The foundation everything is computed from.
+Per-session keystroke data. The foundation everything is computed from.
 
 ---
 
@@ -452,13 +391,10 @@ src/
       types.ts                 # BobSignal, WitnessTraits (26), WitnessState, defaults
       state-engine.ts          # 8D deterministic state vector computation (Phase 1)
       dynamics.ts              # PersDyn dynamics + coupling matrix (Phase 2 & 3)
-      emotion-profile.ts       # Emotion densities + emotion→behavior coupling (Phase 3.5)
-      nrc-emotions.ts          # NRC Emotion Lexicon word sets (6 categories, ~6,660 words)
       interpreter.ts           # LLM visual renderer (Phase 4) — art, not science
       trajectory.ts            # Legacy 4D trajectory engine
       shader-weights.ts        # Trait-to-strategy weight derivation (v5)
       helpers.ts               # Statistics (MATTR, percentile rank, cross-correlation)
-    linguistic.ts              # Single-pass word category density computation
     db.ts                      # Database (all tables, all CRUD helpers)
   assets/
     shaders/
@@ -505,8 +441,6 @@ The visual rendering is the last mile. Everything before it is science.
 | Keystroke dynamics | BiAffect / Zulueta et al. (2018) | Behavioral signal validation |
 | Generative agents | Park et al. (Stanford/DeepMind, 2024) | Personality from persistent context, not trait parameters |
 | Personality nuances | Matz et al. (Columbia, 2024) | Item-level > facets > factors for prediction |
-| NRC Emotion Lexicon | Mohammad & Turney (NRC Canada, 2013) | 6 emotion word categories for density tracking |
-| Word category slopes | Pennebaker (2011), Tausczik & Pennebaker (2010) | Emotion/cognitive density slopes as processing predictors |
 
 ---
 
