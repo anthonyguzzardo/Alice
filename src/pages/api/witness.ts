@@ -30,8 +30,12 @@ import db, {
 
 export const GET: APIRoute = async () => {
   try {
+    // Only count journal sessions (not calibration) — calibration shouldn't
+    // invalidate Bob's cached visual traits or trigger an LLM re-render
     const currentCount = (db.prepare(
-      `SELECT COUNT(*) as c FROM tb_session_summaries`
+      `SELECT COUNT(*) as c FROM tb_session_summaries ss
+       JOIN tb_questions q ON ss.question_id = q.question_id
+       WHERE q.question_source_id != 3`
     ).get() as { c: number }).c;
 
     if (currentCount === 0) {
