@@ -74,6 +74,12 @@ TypeScript compiles clean — zero errors in any modified file. Only pre-existin
 
 ---
 
+## Minor
+
+- Calibration prompts expanded from 170 to 207. Added: spatial awareness, textures/materials, clothing, sounds/ambient, transportation, time/sequence. All neutral knowledge-telling.
+
+---
+
 ## Current State of the Data
 
 - **3 real entries:** April 10, 11, 12. April 12 has full enriched data.
