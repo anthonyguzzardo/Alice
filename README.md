@@ -55,29 +55,20 @@ The system silently captures raw input events throughout the session — keystro
 The variables that contribute to signal:
 
 - **First-keystroke latency** — how long you sat with the question before starting. Only meaningful relative to your calibration baseline *on the same device type and similar time of day*. A 47-second pause on your phone at midnight is a different signal than 47 seconds on your laptop at 9am.
-- **Velocity curve** — not average typing speed, but how speed changes within a session. Starting fast and slowing down is gaining resistance. Starting slow and accelerating means you found your thread.
+- **P-burst metrics** (Chenoweth & Hayes, 2001) — text produced between 2-second pauses. Burst count and average burst length measure production fluency. Long, sustained bursts indicate flow states. Short, fragmented bursts indicate cognitive load or deliberate composition. The single strongest behavioral predictor of writing quality in process research.
 - **Commitment ratio** — total characters typed vs. final character count. Heavy editing could mean avoidance, or it could mean careful writing. The system applies three interpretive frames to determine which is more likely.
-- **Deletion behavior** — single-character backspaces are typo corrections (noise). Deleting 20+ characters could be a retraction, or it could be restructuring a sentence. The system cannot tell the difference from deletion data alone — it needs cross-session context, calibration comparison, and frame analysis.
+- **Deletion decomposition** (Faigley & Witte, 1981) — small deletions (<10 characters) are corrections (typo fixes, word swaps). Large deletions (>=10 characters) are revisions (substantive rethinking, sentence-level rewrites). The system tracks counts, character volumes, and timing of each type independently. The distinction matters: 50 small backspaces is noise, 2 large deletions where someone wrote a paragraph and killed it is signal.
+- **Revision timing** — whether large deletions occurred in the first or second half of the session. Early revisions indicate false starts — couldn't settle on an opening. Late revisions indicate writing a draft and then gutting sections — a qualitatively different signal that changes how the three frames interpret the same commitment ratio.
+- **Active typing speed** — characters per minute measured only during active typing time (excluding pauses and tab-aways). Removes session length as a confound.
 - **Pause topology** — where in the response you stall matters, but only relative to where you normally stall on the same device in similar conditions.
 - **Session rhythm** — the temporal shape of the session. Burst-pause-burst is a different thinking mode than slow-and-steady.
 - **Tab-away behavior** — leaving the page and returning. Duration of absence. Whether typing speed changes after return.
+- **Lexical diversity** (McCarthy & Jarvis, 2010) — MATTR (moving-average type-token ratio) with a 25-word window. Length-independent, validated for short texts. Tracks whether vocabulary is narrowing or expanding across sessions.
 - **Punctuation and structure** — tracked but interpreted cautiously. Punctuation habits are shaped by device, platform, and personal style as much as by psychological state.
 
 Every session also captures **context metadata**: device type (mobile/desktop), user agent, hour of day, and day of week. This prevents the system from comparing your exhausted Friday-night phone session against your focused Tuesday-morning laptop session and concluding you were "avoidant."
 
-**Enriched Metrics (V3 pipeline):**
-
-The system also computes research-backed derived metrics from raw input events:
-
-- **P-burst metrics** (Chenoweth & Hayes, 2001) — text produced between 2-second pauses. Burst count and average burst length measure production fluency. Long, sustained bursts indicate flow states. Short, fragmented bursts indicate cognitive load or deliberate composition.
-- **Deletion decomposition** (Faigley & Witte, 1981) — small deletions (<10 characters) are corrections (typo fixes, word swaps). Large deletions (>=10 characters) are revisions (substantive rethinking, sentence-level rewrites). The system tracks counts, character volumes, and timing of each type independently.
-- **Revision timing** — whether large deletions occurred in the first or second half of the session. Early revisions indicate false starts. Late revisions indicate writing a draft and then gutting sections — a qualitatively different signal.
-- **Active typing metrics** — typing speed measured only during active typing time (excluding pauses and tab-aways), reported as characters per minute.
-- **MATTR** (McCarthy & Jarvis, 2010) — moving-average type-token ratio for length-independent lexical diversity measurement, validated for short texts.
-
-All enriched metrics are normalized as personal percentiles — compared against the user's own history, not population norms. A "high" P-burst length means high relative to this person's baseline, not high in absolute terms. This normalization follows research showing LLMs reason more accurately with percentile-contextualized values than raw numbers (Netflix "From Logs to Language," 2026).
-
-The enriched metrics, trajectory data, and percentile context are passed to all three AI systems (observation, generation, reflection) in a verbalized format optimized for LLM interpretation, with primary signals presented first and trajectory context last.
+All behavioral metrics are normalized as personal percentiles — compared against the user's own history, not population norms. A "high" P-burst length means high relative to this person's baseline, not high in absolute terms. When the AI reads behavioral data, it receives each metric verbalized with its percentile rank and personal baseline, structured by signal importance — primary signals first (deletion character, production fluency, commitment), supporting context middle (duration, pauses, tab-aways), trajectory context last.
 
 #### Layer 3: The AI's Silent Layer
 
@@ -273,7 +264,7 @@ It generates tomorrow's question. Not from a single confident narrative. From a 
 - Graceful degradation — if Voyage AI is unavailable, falls back to recency-only retrieval
 - All analysis triggered on submit — no cron, no scheduler
 - **Bob** — a witness-form rendered as a 3D object from 36 behavioral signals interpreted into a 26-trait genome by Opus. See `BOB.md` for full documentation.
-- **Trajectory engine** — pure math on raw per-session data (no AI). Collapses behavioral and language-shape metrics into 4 z-scored dimensions validated by writing process research: fluency (P-burst length, Chenoweth & Hayes 2001), deliberation (hesitation + pause rate + revision weight, Deane 2015), revision (commitment ratio + substantive deletion rate, Baaijen et al. 2012), expression (linguistic deviation from personal norm). Computes convergence (Euclidean distance in 4D �� did multiple dimensions move together?) and phase detection (stable/shifting/disrupted). Feeds into observation, generation, and reflection as cross-session context. See `BOB.md` for details.
+- **Trajectory engine** — pure math on raw per-session data (no AI). Collapses behavioral and language-shape metrics into 4 z-scored dimensions: fluency (P-burst length), deliberation (hesitation + pause rate + revision weight), revision (commitment ratio + substantive deletion rate), expression (linguistic deviation from personal norm). Computes convergence (Euclidean distance in 4D — did multiple dimensions move together?) and phase detection (stable/shifting/disrupted). Feeds into observation, generation, and reflection as cross-session context. See `BOB.md` for details.
 
 ## Commands
 
