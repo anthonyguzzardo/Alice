@@ -128,7 +128,7 @@ async function interpretTraitsInner(sig: BlackboxSignal, entryCount: number): Pr
 - Feedback count: ${sig.feedbackCount}`;
 
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-opus-4-20250514',
       max_tokens: 500,
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userMessage }],
