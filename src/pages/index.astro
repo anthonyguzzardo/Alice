@@ -659,6 +659,7 @@
         const textarea = document.getElementById('response') as HTMLTextAreaElement;
         const submitBtn = document.getElementById('submit') as HTMLButtonElement;
 
+        // Behavioral tracking state
         let firstKeystrokeSent = false;
         let firstKeystrokeTime: number | null = null;
         let pauseTimer: number | null = null;
@@ -675,17 +676,46 @@
         let tabAwayStartTime: number | null = null;
         let totalTabAwayMs = 0;
 
+        // Enriched: deletion decomposition (Faigley & Witte)
+        let smallDeletionCount = 0;
+        let largeDeletionCount = 0;
+        let largeDeletionChars = 0;
+        const calDeletionTimestamps: Array<{chars: number; time: number}> = [];
+
+        // Enriched: P-burst tracking (Chenoweth & Hayes, 2s threshold)
+        let lastInputTime: number | null = null;
+        let currentBurstChars = 0;
+        const calBurstLengths: number[] = [];
+
         textarea.addEventListener('input', () => {
+          const now = Date.now();
           const currentLength = textarea.value.length;
           const delta = currentLength - lastTextLength;
 
           if (delta > 0) {
             totalCharsTyped += delta;
+
+            // P-burst tracking: 2s gap = new burst
+            if (lastInputTime !== null && (now - lastInputTime) > 2000) {
+              if (currentBurstChars > 0) calBurstLengths.push(currentBurstChars);
+              currentBurstChars = 0;
+            }
+            currentBurstChars += delta;
+            lastInputTime = now;
           } else if (delta < 0) {
             const deleted = Math.abs(delta);
             totalCharsDeleted += deleted;
             deletionCount++;
             if (deleted > largestDeletion) largestDeletion = deleted;
+
+            // Deletion decomposition
+            if (deleted < 10) {
+              smallDeletionCount++;
+            } else {
+              largeDeletionCount++;
+              largeDeletionChars += deleted;
+            }
+            calDeletionTimestamps.push({ chars: deleted, time: now });
           }
 
           lastTextLength = currentLength;
@@ -725,6 +755,9 @@
             totalPauseMs += Date.now() - pauseStartTime;
           }
 
+          // Close final P-burst
+          if (currentBurstChars > 0) calBurstLengths.push(currentBurstChars);
+
           const submitTime = Date.now();
           const finalCharCount = text.length;
           const wordCount = text.split(/\s+/).filter(Boolean).length;
@@ -732,6 +765,24 @@
           const totalDurationMs = submitTime - pageOpenTime;
           const firstKeystrokeMs = firstKeystrokeTime ? firstKeystrokeTime - pageOpenTime : null;
           const commitmentRatio = totalCharsTyped > 0 ? finalCharCount / totalCharsTyped : null;
+
+          // Derived: active typing time and speed
+          const activeTypingMs = Math.max(0, totalDurationMs - totalPauseMs - totalTabAwayMs);
+          const charsPerMinute = activeTypingMs > 0 ? totalCharsTyped / (activeTypingMs / 60000) : null;
+
+          // Derived: P-burst stats
+          const pBurstCount = calBurstLengths.length;
+          const avgPBurstLength = pBurstCount > 0
+            ? calBurstLengths.reduce((a, b) => a + b, 0) / pBurstCount : null;
+
+          // Derived: deletion timing
+          const midpoint = pageOpenTime + totalDurationMs / 2;
+          let firstHalfDeletionChars = 0;
+          let secondHalfDeletionChars = 0;
+          for (const d of calDeletionTimestamps) {
+            if (d.time <= midpoint) firstHalfDeletionChars += d.chars;
+            else secondHalfDeletionChars += d.chars;
+          }
 
           const sessionSummary = {
             firstKeystrokeMs,
@@ -748,6 +799,15 @@
             totalTabAwayMs,
             wordCount,
             sentenceCount,
+            smallDeletionCount,
+            largeDeletionCount,
+            largeDeletionChars,
+            firstHalfDeletionChars,
+            secondHalfDeletionChars,
+            activeTypingMs,
+            charsPerMinute,
+            pBurstCount,
+            avgPBurstLength,
             deviceType,
             userAgent: rawUserAgent,
             hourOfDay,
