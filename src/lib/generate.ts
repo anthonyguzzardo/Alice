@@ -4,6 +4,7 @@
  * After day 30: generates from RAG-augmented context with reflections
  * as hypothesis layer and raw entries as source of truth.
  */
+import 'dotenv/config';
 import Anthropic from '@anthropic-ai/sdk';
 import {
   getRecentResponses,

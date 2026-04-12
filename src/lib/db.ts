@@ -1008,18 +1008,23 @@ export function searchVecEmbeddings(queryVector: Buffer, k: number): Array<{
   embedding_id: number; distance: number; embedding_source_id: number;
   source_record_id: number; embedded_text: string; source_date: string | null;
 }> {
-  return db.prepare(`
-    SELECT e.embedding_id, e.embedding_source_id, e.source_record_id,
-           e.embedded_text, e.source_date, v.distance
-    FROM vec_embeddings v
-    JOIN tb_embeddings e ON v.rowid = e.embedding_id
-    WHERE v.embedding MATCH ?
-      AND k = ?
-    ORDER BY v.distance
-  `).all(queryVector, k) as Array<{
-    embedding_id: number; distance: number; embedding_source_id: number;
-    source_record_id: number; embedded_text: string; source_date: string | null;
-  }>;
+  try {
+    return db.prepare(`
+      SELECT e.embedding_id, e.embedding_source_id, e.source_record_id,
+             e.embedded_text, e.source_date, v.distance
+      FROM vec_embeddings v
+      JOIN tb_embeddings e ON v.embedding_id = e.embedding_id
+      WHERE v.embedding MATCH ?
+        AND k = ?
+      ORDER BY v.distance
+    `).all(queryVector, k) as Array<{
+      embedding_id: number; distance: number; embedding_source_id: number;
+      source_record_id: number; embedded_text: string; source_date: string | null;
+    }>;
+  } catch (err) {
+    console.error('[searchVecEmbeddings] Vector search failed, returning empty:', (err as Error).message);
+    return [];
+  }
 }
 
 // ----------------------------------------------------------------------------

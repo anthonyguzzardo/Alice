@@ -2,6 +2,7 @@
  * Embedding pipeline — Voyage AI embeddings stored in sqlite-vec.
  * All Voyage calls gracefully degrade: failures are logged, never fatal.
  */
+import 'dotenv/config';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { VoyageAIClient } = require('voyageai') as typeof import('voyageai');

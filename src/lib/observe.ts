@@ -5,6 +5,7 @@
  * suppressed question targeting the highest-uncertainty gap for disambiguation.
  * Runs after every submission from day 1.
  */
+import 'dotenv/config';
 import Anthropic from '@anthropic-ai/sdk';
 import {
   getTodaysQuestion,
@@ -177,11 +178,18 @@ Write tonight's observation and suppressed question.`;
 
   const output = (message.content[0] as { type: 'text'; text: string }).text.trim();
 
-  const observationMatch = output.match(/OBSERVATION:\s*([\s\S]*?)(?=SUPPRESSED QUESTION:)/);
-  const suppressedMatch = output.match(/SUPPRESSED QUESTION:\s*([\s\S]*?)$/);
+  // Split on SUPPRESSED QUESTION: header — handle various formatting
+  const parts = output.split(/SUPPRESSED\s*QUESTION\s*:/i);
+  const rawObservation = parts[0] || '';
+  const rawSuppressed = parts[1] || '';
 
-  const observationText = observationMatch?.[1]?.trim();
-  const suppressedText = suppressedMatch?.[1]?.trim();
+  // Strip the OBSERVATION: prefix
+  const observationText = rawObservation.replace(/^OBSERVATION:\s*/i, '').trim();
+  const suppressedText = rawSuppressed.trim();
+
+  if (!observationText) {
+    console.error('[observe] Failed to parse observation. First 500 chars:', output.slice(0, 500));
+  }
 
   if (observationText) {
     const obsId = saveAiObservation(question.question_id, observationText, today);

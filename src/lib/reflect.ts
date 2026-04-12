@@ -5,6 +5,7 @@
  * Tracks coverage so future prompts know which entries have been digested.
  * Triggers every 7th response.
  */
+import 'dotenv/config';
 import Anthropic from '@anthropic-ai/sdk';
 import {
   getRecentResponses,
