@@ -130,19 +130,17 @@ Plus universal modifiers: rotation, breathing/rhythm, stretch, energy tremor, at
 
 Plus universal overlays: internal glow, edge light, atmosphere halo, magnetism chromatic aberration, stored energy pressure glow, reactivity shimmer, subsurface scattering, crack glow.
 
-**Visual range:** The form can be a quiet marble, smoke, a neutron star, a geode, cooling lava, fractured shards, a living cell, a charged mass about to explode, a hollow shell, liquid metal, a soap bubble, a field of distortion, a fossil, a seed, coral, or a glitching static object — depending on what the interpreter decides.
-
 ### Data Flow
 
 ```
 Journal Entry Written
-  → /api/respond saves response + session metrics
+  → /api/respond saves response + session metrics (including P-burst data)
   → Entry count changes in DB
 
 Next time /api/witness is called:
   → Detects entry count mismatch
-  → Fetches /api/bob (18 behavioral + temporal signals)
-  → Calls Claude Opus with signals → 26 trait floats
+  → Fetches /api/bob (behavioral signals, percentile-normalized)
+  → Calls Claude Opus with signals + personal context → 26 trait floats
   → Persists to tb_witness_states
   → Returns WitnessState (traits + mass + threshold config)
 
@@ -156,102 +154,117 @@ Browser (/bob):
   → No periodic fetching, no polling, no API calls while viewing
 ```
 
-### Data Integration
+---
 
-Bob consumes 36 signals organized into 7 categories. All signals come from you — behavioral, temporal, and structural. No system metadata, no AI observations, no response content (only the shape of your language).
+## Signal Architecture (V3)
 
-**Behavioral (long-term averages of how you write):**
+Bob's signals are organized into 8 categories. All signals are **percentile-normalized against the person's own history** — no hardcoded divisors. The interpreter receives each signal with its raw value, personal baseline, and z-score so it can make unambiguous decisions.
 
-| Signal | What It Measures |
-|---|---|
-| `avgCommitment` | How much typed text was kept vs deleted |
-| `avgHesitation` | Delay before first keystroke |
-| `deletionIntensity` | Proportion of text deleted |
-| `pauseFrequency` | How often you stop mid-thought |
-| `avgDuration` | Time spent per session |
-| `largestDeletion` | Biggest single erasure |
-| `avgTabAways` | How often you leave and come back |
-| `avgTabAwayDuration` | How long you stay away |
-| `avgWordCount` | Density of output |
-| `avgSentenceCount` | Structural complexity |
-| `sessionCount` | Total journal entries |
+**Research basis:**
+- Production fluency from Chenoweth & Hayes (2001) and Deane (2015)
+- Revision taxonomy from Faigley & Witte (1981) and Baaijen et al. (2012)
+- Lexical diversity from McCarthy & Jarvis (2010) MATTR
+- Backspace rate validated by BiAffect / Zulueta et al. (2018)
 
-**Temporal (when you show up):**
+### Core Behavioral
 
 | Signal | What It Measures |
 |---|---|
-| `avgHourOfDay` | When you write |
+| `commitmentRatio` | How much typed text was kept vs deleted (percentile) |
+| `firstKeystrokeLatency` | Delay before first keystroke (percentile) |
+| `pauseRatePerMinute` | 30s+ pauses per active minute — time-normalized (percentile) |
+| `tabAwayRatePerMinute` | Tab switches per active minute — time-normalized (percentile) |
+| `avgDurationNorm` | Session duration (percentile) |
+| `avgWordCountNorm` | Words per session (percentile) |
+
+### Production Fluency
+
+P-bursts (text produced between 2-second pauses) are the standard unit of analysis in writing process research. Burst length is the single strongest behavioral predictor of writing quality.
+
+| Signal | What It Measures |
+|---|---|
+| `charsPerMinuteActive` | Typing speed during active time, excluding pauses and tab-aways (percentile) |
+| `avgPBurstLength` | Mean P-burst length in characters — sustained production flow (percentile) |
+| `pBurstCountNorm` | Number of 2s-bounded bursts per session (percentile) |
+
+### Revision Character
+
+Small deletions (<10 chars) are corrections — typo fixes, spelling. Large deletions (>=10 chars) are revisions — substantive rethinking. These are different psychological signals that the old system conflated into one ratio.
+
+| Signal | What It Measures |
+|---|---|
+| `correctionRate` | Small deletions per 100 chars typed |
+| `revisionRate` | Large deletions per 100 chars typed |
+| `revisionWeight` | Proportion of all typed chars lost to large deletions |
+| `revisionTiming` | Where revisions happened: 0=early (false starts), 1=late (gutted after drafting) |
+| `largestRevisionNorm` | Biggest single deletion (percentile) |
+
+### Temporal
+
+| Signal | What It Measures |
+|---|---|
+| `avgHourOfDay` | When you write (0=midnight, 0.5=noon) |
 | `daySpread` | How many different days of the week |
 | `consistency` | Regularity of spacing between entries |
 | `daysSinceLastEntry` | How long since you last showed up |
 
-**Patterns:**
+### Linguistic Shape
+
+Measures the structure of language without reading its meaning. Uses MATTR (Moving-Average Type-Token Ratio) instead of raw TTR — validated as length-independent for short texts.
 
 | Signal | What It Measures |
 |---|---|
-| `thematicDensity` | How repetitive your language is |
-| `landedRatio` | How often AI questions resonated (your feedback) |
-| `feedbackCount` | Total feedback you've given |
-
-**Recency (recent window vs. long-term — is the person changing?):**
-
-| Signal | What It Measures |
-|---|---|
-| `recentCommitment` | Commitment ratio over last 7 entries only |
-| `commitmentDelta` | Direction of change (0.5 = stable, >0.5 = increasing, <0.5 = decreasing) |
-| `recentHesitation` | Hesitation over last 7 entries |
-| `hesitationDelta` | Is hesitation trending up or down? |
-| `recentDuration` | Time spent per session recently |
-| `durationDelta` | Is session duration trending up or down? |
-
-These are the most important new signals. Without them, Bob's form converges and freezes as cumulative averages stabilize. With them, Bob stays alive — it can see that commitment was 0.8 for months but dropped to 0.4 this week. The delta between who you were and who you're becoming is where the real form lives.
-
-**Variance (stability vs. volatility):**
-
-| Signal | What It Measures |
-|---|---|
-| `commitmentVariance` | How much commitment swings session to session (0 = consistent, 1 = volatile) |
-| `hesitationVariance` | Consistency of hesitation patterns |
-| `durationVariance` | Consistency of time spent |
-| `sessionVolatility` | How different each session is from the previous one — composite measure |
-
-Same average, completely different forms. A person who's consistently at 0.7 commitment is solid. A person who swings between 0.3 and 0.9 is volatile. Bob can now tell the difference.
-
-**Shape (texture of language structure — not what you said, but how you said it):**
-
-| Signal | What It Measures |
-|---|---|
-| `vocabularyRichness` | Type-token ratio — how diverse is your word choice? |
+| `lexicalDiversity` | MATTR — vocabulary diversity, corrected for text length |
 | `avgSentenceLength` | Long complex sentences vs. short direct ones |
 | `sentenceLengthVariance` | Uniform structure vs. chaotic structure |
-| `questionDensity` | How often you ask questions in your responses |
-| `firstPersonDensity` | I/me/my frequency — how self-focused is the writing? |
-| `hedgingDensity` | maybe/perhaps/guess frequency — how much do you qualify? |
+| `questionDensity` | Questions per sentence — asking vs. telling |
+| `firstPersonDensity` | I/me/my frequency — self-focus |
+| `hedgingDensity` | maybe/perhaps/guess frequency — tentativeness |
 
-These read the **shape** of your language without reading the meaning. `hedgingDensity` doesn't know what you're hedging about — just that you hedge. `questionDensity` doesn't know what you're asking — just that you're asking rather than telling. The difference between someone who writes "I think maybe I should consider..." and someone who writes "I'm leaving" is visible here without knowing what either person is talking about.
+### Momentum
 
-**Relational (how unusual you are relative to yourself):**
+Recent 7 sessions vs. all-time average. 0.5 = stable, >0.5 = increasing, <0.5 = decreasing.
 
 | Signal | What It Measures |
 |---|---|
-| `latestSessionDeviation` | Composite z-score: how unusual was the most recent session compared to your own baseline? |
-| `outlierFrequency` | What percentage of all your sessions are statistical outliers? |
+| `commitmentDelta` | Is commitment trending up or down? |
+| `charsPerMinuteDelta` | Is typing speed trending up or down? |
+| `revisionWeightDelta` | Is revision intensity trending up or down? |
+| `pBurstLengthDelta` | Are sustained flows getting longer or shorter? |
 
-A person with many outlier sessions has a fundamentally different form than someone who's consistent. And `latestSessionDeviation` means Bob can react to your most recent entry — if it was unusual for you, the form should show disturbance.
+### Stability
 
-### Why 36 Signals Matter for Trajectory Analysis
+| Signal | What It Measures |
+|---|---|
+| `commitmentVariance` | How much commitment swings session to session |
+| `fluencyVariance` | Typing speed consistency |
+| `sessionVolatility` | How different consecutive sessions are from each other |
 
-The original 18 signals were all cumulative averages. After 100 entries, a single new entry barely moves them. Bob's form would converge and freeze — not because the person stabilized, but because that's what averages do.
+### Relational
 
-The new signals fix this:
-- **Recency signals** keep moving because they're windowed (last 7 entries only)
-- **Variance signals** capture volatility that averages destroy
-- **Shape signals** add a new data channel (language structure) that's independent of behavioral telemetry
-- **Relational signals** let the form react to individual unusual sessions
+| Signal | What It Measures |
+|---|---|
+| `latestSessionDeviation` | How unusual the most recent session was vs. personal baseline |
+| `outlierFrequency` | What % of all sessions are statistical outliers |
 
-This means the 26-trait vectors Bob produces over time carry genuinely more information. The trajectory through trait-space stays alive at month 6 instead of flatting at month 2. Emergent structure (via PCA or similar) has richer raw material to work with.
+### Context for the Interpreter
 
-The AI interprets all 36 signals into 26 traits. The mapping is not hardcoded — it's a creative act by the interpreter. The AI decides what these signals mean for the form. High commitment might produce density and internal light. Or it might produce something else entirely.
+Every signal is accompanied by a `_raw` object carrying un-normalized values — actual milliseconds, actual chars per minute, personal baseline mean and standard deviation. The interpreter sees:
+
+```
+Commitment ratio: 0.72 (personal baseline: 0.81, z: -1.4 — kept less than usual)
+Revisions: 1 large deletion (84 chars — substantive rewrite)
+Corrections: 3 small deletions (<10 chars — typo fixes)
+```
+
+Instead of the old format:
+
+```
+Commitment ratio: 0.720
+Deletion intensity: 0.310
+```
+
+The interpreter doesn't have to guess what a float means. It knows whether a value is unusual for this person, which direction it deviated, and what the raw measurement was.
 
 ---
 
@@ -261,13 +274,13 @@ Bob has two outputs. The **visual form** is what you see — artistic, interpret
 
 ### Why Two Branches
 
-The visual form is produced by Opus interpreting 36 signals into 26 traits. That interpretation is non-deterministic — give Opus the same signals twice, you might get different traits. Non-deterministic data can't be used for trajectory analysis because the same state might produce different coordinates.
+The visual form is produced by Opus interpreting signals into 26 traits. That interpretation is non-deterministic — give Opus the same signals twice, you might get different traits. Non-deterministic data can't be used for trajectory analysis because the same state might produce different coordinates.
 
 The trajectory engine bypasses the AI entirely. It goes directly to the raw per-session data in `tb_session_summaries` and `tb_responses` — frozen at submission time, deterministic, never changes.
 
 ```
 User writes
-  → 36 aggregated signals (shift over time)
+  → Percentile-normalized signals (shift over time)
       → Opus interprets → 26 traits → shader → visual form (art)
 
   → Per-session raw data (frozen at submission)
@@ -276,32 +289,26 @@ User writes
           → becomes Einstein's foundation
 ```
 
-### Four Dimensions
+### Four Independent Dimensions
 
-Individual behavioral signals are noisy. A pause could mean contemplation, distraction, or a cat on the keyboard. The trajectory engine doesn't use raw signals as coordinates. It collapses correlated metrics into composite dimensions and z-scores everything against the person's own baseline.
+V2 used Engagement (duration + word count + sentence count) as a trajectory dimension. Those three are near-perfectly correlated — they're all proxies for output volume. Processing was a single signal (first-keystroke latency). These weren't truly independent.
 
-| Dimension | What It Combines | What It Measures |
-|---|---|---|
-| **Engagement** | duration + word count + sentence count | How much did you give? |
-| **Processing** | first-keystroke latency | How hard was it to start? |
-| **Revision** | commitment ratio (inverted) + deletion intensity | How much did you change your mind? |
-| **Structure** | sentence length + question density + first-person density | How differently did you write vs. your norm? |
+V3 dimensions are based on validated research: Baaijen et al. (2012) PCA on keystroke logs, Deane (2015) factor analysis, Chenoweth & Hayes (2001) P-burst analysis.
 
-Each dimension is a z-score against the person's own mean. A value of 0 means "normal for you." Positive or negative means deviation from your personal baseline in that dimension.
+| Dimension | What It Combines | What It Measures | Independence |
+|---|---|---|---|
+| **Fluency** | P-burst length (or chars/min fallback) | Sustained production flow — how fluidly you produce text | Motor + cognitive flow. Independent of whether you deliberate. |
+| **Deliberation** | first-keystroke latency + pause rate/min + revision weight | Cognitive load and care — how much you stop, think, rework | Independent of fluency: you can pause a lot and still write fluidly between pauses. |
+| **Revision** | commitment ratio (inverted) + large deletion rate | Substantive editing — how much you reworked (not typo corrections) | Independent of deliberation: you can revise impulsively (low pause, high delete) or thoughtfully. |
+| **Expression** | |z(sentence length)| + |z(question density)| + |z(first-person density)| + |z(hedging density)| | Linguistic deviation from personal norm — how differently you wrote | Orthogonal to all three: you can write in your normal voice whether you're fluent or halting, deliberate or impulsive. |
+
+Each dimension is a z-score against the person's own mean. A value of 0 means "normal for you."
 
 ### Convergence
 
-The meta-signal. Euclidean distance from the person's center in 4D space.
-
-When one dimension deviates, it's probably noise. When four dimensions deviate together, something real happened. Convergence separates the two.
-
-- **Low** — normal session, nothing unusual
-- **Moderate** — some dimensions moved, worth noting
-- **High** — multiple dimensions deviated simultaneously — something shifted
+Euclidean distance from the person's center in 4D space. When one dimension deviates, it's probably noise. When four dimensions deviate together, something real happened.
 
 ### Phase Detection
-
-The engine detects the current phase of the trajectory:
 
 - **insufficient** — fewer than 3 entries, no baseline yet
 - **stable** — low velocity, low convergence, person is in their normal range
@@ -315,19 +322,6 @@ Available at `/trajectory`. Two views (click to toggle):
 - **Detail** — 4 panels, one per dimension, z-scores plotted over time
 - **Trace** — single plot, all 4 dimensions collapsed to 2 via PCA, showing the actual path through space
 
-Navigation between journal (`/`), Bob (`/bob`), and trajectory (`/trajectory`) via buttons on each page.
-
-### What This Produces for Marrow and Einstein
-
-The trajectory is the data Bob generates. Not the visual form — the mathematical path through 4D space over time. That path contains:
-
-- **Velocity** — how fast the person is changing
-- **Phase** — stable, shifting, or disrupted
-- **Convergence spikes** — moments where something coherent happened
-- **Direction** — which dimensions are moving and which way
-
-This is the bridge between Marrow and Einstein. Marrow uses the trajectory to decide what to ask next. Einstein uses it to decide how to be.
-
 ---
 
 ## File Structure
@@ -339,20 +333,22 @@ src/
     bob-lab.astro            # Debug lab — sliders + presets (fake data only)
     trajectory.astro         # Trajectory viewer — detail (4 panels) + trace (PCA)
     api/
-      bob.ts                 # Behavioral signal computation (36 signals)
+      bob.ts                 # Signal computation (percentile-normalized, MATTR, P-bursts)
       witness.ts             # Witness state API (traits + metadata)
       trajectory.ts          # Trajectory analysis API (4 dimensions + convergence)
   lib/
     bob/
-      types.ts               # BobSignal, WitnessTraits (26 traits), WitnessState
-      interpreter.ts         # LLM trait interpretation + DB persistence
-      trajectory.ts          # Trajectory computation — z-scores, dimensions, convergence, phase
+      types.ts               # BobSignal, BobSignalRaw, WitnessTraits (26), WitnessState
+      interpreter.ts         # LLM trait interpretation — context-rich input format
+      trajectory.ts          # Trajectory engine — z-scores, dimensions, convergence, phase
       shader-weights.ts      # Trait-to-strategy weight derivation (v5)
-    db.ts                    # Database (includes tb_witness_states table)
+    db.ts                    # Database (includes tb_witness_states, tb_session_summaries)
   assets/
     shaders/
       witness.vert           # Vertex deformation (5 shape strategies)
       witness.frag           # Fragment materials (6 material strategies)
+scripts/
+  migrate-session-summaries.ts  # V3 migration — adds enriched columns
 ```
 
 ---
