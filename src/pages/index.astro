@@ -101,7 +101,7 @@
 
       .response-area {
         width: 100%;
-        min-height: 240px;
+        min-height: 400px;
         background-color: var(--bg-input);
         border: 1px solid var(--border);
         border-radius: 4px;
@@ -161,6 +161,18 @@
       .submit-btn:disabled {
         opacity: 0.4;
         cursor: default;
+      }
+
+      .submit-row.hidden {
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 1.5s ease;
+      }
+
+      .submit-row.visible {
+        opacity: 1;
+        pointer-events: auto;
+        transition: opacity 1.5s ease;
       }
 
       .done-message {
@@ -363,20 +375,21 @@
             <textarea
               class="response-area waiting"
               id="response"
-              placeholder="Think before you type..."
               autocomplete="off"
               autocorrect="off"
               autocapitalize="off"
               spellcheck="false"
               disabled
             ></textarea>
-            <div class="submit-row">
+            <div class="submit-row hidden" id="submit-row">
               <button class="submit-btn" id="submit" disabled>Submit</button>
             </div>
           `;
 
           const textarea = document.getElementById('response') as HTMLTextAreaElement;
           const submitBtn = document.getElementById('submit') as HTMLButtonElement;
+
+          const submitRow = document.getElementById('submit-row')!;
 
           // Reflection pause — Hallnäs & Redström (2001, KTH): slow technology
           // amplifies time for reflection. 4-second pause before writing opens.
@@ -385,6 +398,13 @@
             textarea.classList.remove('waiting');
             textarea.focus();
           }, 4000);
+
+          // Submit button delay — hidden until 90s after writing opens.
+          // Removes implicit "finish" pressure (Hallnäs & Redström 2001).
+          setTimeout(() => {
+            submitRow.classList.remove('hidden');
+            submitRow.classList.add('visible');
+          }, 94000); // 4s reflection pause + 90s writing
 
           // Behavioral tracking state
           let firstKeystrokeSent = false;
@@ -804,7 +824,6 @@
           <textarea
             class="response-area"
             id="response"
-            placeholder="Just write..."
             autocomplete="off"
             autocorrect="off"
             autocapitalize="off"
