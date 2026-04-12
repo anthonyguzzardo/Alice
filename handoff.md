@@ -166,6 +166,23 @@ Journal session    → tb_session_summaries (reflective metrics)
 
 The delta module reads from the same `tb_session_summaries` table as Alice Negative (state-engine, dynamics) but they don't interact. They're parallel readers feeding into the same AI prompts from different angles. Alice Negative says "here's where you are in 8D behavioral space." The delta says "here's how today's neutral and real writing differ."
 
-## Pending Rename
+## Rename (Executed 2026-04-12)
 
-System renamed from "Marrow" to "Alice" (Alice sends, Alice Negative receives — the canonical communication protocol metaphor). Naming change only, no product philosophy changes. Executed 2026-04-12.
+Full system rename. No product philosophy, system prompts, or voice changes — naming only.
+
+| Before | After | Role |
+|--------|-------|------|
+| Marrow | **Alice** | The journal. The sender. |
+| Einstein | **Bob** | The thinking partner. The receiver. |
+| Bob | **Alice Negative** | The behavioral signal visualization. A mirror of Alice's data. |
+
+Naming follows the Alice-and-Bob cryptography metaphor: Alice sends, Bob receives.
+
+**Scope of changes:**
+- All live source code (imports, types, routes, system prompts, CSS, HTML IDs)
+- Database file: `data/marrow.db` → `data/alice.db`
+- Package name: `marrow` → `alice`
+- Files/directories: `src/lib/bob/` → `src/lib/alice-negative/`, `BOB.md` → `ALICE_NEGATIVE.md`, `BOB_AUDIT/` → `ALICE_NEGATIVE_AUDIT/`, etc.
+- Types: `BobSignal` → `AliceNegativeSignal`, `BobSignalRaw` → `AliceNegativeSignalRaw`
+- Remote: `https://github.com/anthonyguzzardo/Alice.git`
+- Historical audit files (`README_AUDIT/`, `ALICE_NEGATIVE_AUDIT/`) left intact with a note at the top of each file
