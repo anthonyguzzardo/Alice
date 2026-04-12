@@ -204,4 +204,53 @@ export const CALIBRATION_PROMPTS: string[] = [
   "How many times did you leave the house today? Where did you go each time?",
   "Count the electronics in the room. Describe what each one does.",
   "List every surface in the room you're in.",
+
+  // --- Spatial awareness ---
+  "Describe the layout of the room you're in right now.",
+  "If you walked out your front door and turned left, what would you see?",
+  "Describe the view from the nearest window.",
+  "Walk through the path from your bed to your kitchen.",
+  "Describe the parking lot or street where you usually park.",
+  "What does the entrance to your building look like?",
+  "Describe the closest intersection to where you live.",
+
+  // --- Textures and materials ---
+  "Describe what the surface you're sitting on feels like.",
+  "What's the oldest object in the room? Describe its condition.",
+  "Pick up the nearest object. Describe its weight and texture.",
+  "What's the floor made of where you're sitting? Describe it.",
+  "Describe the wall closest to you. Color, texture, anything on it.",
+
+  // --- Clothing and personal items ---
+  "Describe what you're wearing right now, piece by piece.",
+  "What's in your pockets or bag right now?",
+  "Describe the shoes you wore most recently.",
+  "What does your keychain look like? Describe each item on it.",
+  "Describe the case on your phone, or what your phone looks like without one.",
+
+  // --- Sounds and ambient ---
+  "What sounds can you hear right now? List all of them.",
+  "Describe the last song or music you heard. What did it sound like?",
+  "What's the loudest sound you've heard today?",
+  "Describe the ambient noise in the room right now.",
+
+  // --- Transportation ---
+  "Describe your commute or the last drive you took.",
+  "Walk through the steps of how you start your car or get on your bike.",
+  "Describe the inside of your car or the vehicle you use most.",
+  "What route do you take to the nearest grocery store?",
+  "Describe the last time you waited for something — a bus, a line, an elevator.",
+
+  // --- Time and sequence ---
+  "What three things did you do right before sitting down here?",
+  "Describe the last errand you ran, from leaving to returning.",
+  "Walk through how you pay for something at a store.",
+  "Describe the last time you filled something up — gas, water bottle, anything.",
+  "What's the last thing you cleaned? Describe how you did it.",
+  "Walk through how you take a shower from start to finish.",
+  "Describe the steps of making your bed, if you make it.",
+  "What did you do in the five minutes before opening this page?",
+  "Describe the last time you opened a cabinet or drawer. What was inside?",
+  "Walk through how you dry off after a shower.",
+  "Describe the nearest plant or tree you can see, real or artificial.",
 ];
