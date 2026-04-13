@@ -815,8 +815,11 @@ export function formatOpenPredictions(predictions: OpenPrediction[]): string {
   lines.push('For each prediction below, assess whether today\'s session data CONFIRMS, FALSIFIES, or is INDETERMINATE. If the prediction\'s expiry window has passed, mark it EXPIRED.');
   lines.push('');
 
+  const methodNames: Record<number, string> = { 1: 'code', 2: 'text_search', 3: 'interpretive' };
+
   for (const p of predictions) {
-    lines.push(`[Prediction #${p.predictionId}] (created ${p.dttmCreatedUtc})`);
+    const method = methodNames[p.gradeMethodId] ?? 'interpretive';
+    lines.push(`[Prediction #${p.predictionId}] (created ${p.dttmCreatedUtc}, grade: ${method})`);
     lines.push(`  Hypothesis: ${p.hypothesis}`);
     if (p.favoredFrame) lines.push(`  Favored frame: ${p.favoredFrame}`);
     if (p.targetTopic) lines.push(`  Topic: ${p.targetTopic}`);

@@ -38,7 +38,23 @@ import { computeEntryStates } from './alice-negative/state-engine.ts';
 import { computeDynamics } from './alice-negative/dynamics.ts';
 import { formatCompactDelta } from './session-delta.ts';
 
-export async function runReflection(): Promise<void> {
+/** Timing info emitted per API call */
+export interface ApiCallInfo {
+  phase: string;
+  model: string;
+  durationMs: number;
+  inputTokens: number;
+  outputTokens: number;
+}
+
+/** Options for reflection pipeline — all optional, production uses defaults */
+export interface ReflectionOptions {
+  primaryModel?: string;
+  auditModel?: string;
+  onApiCall?: (info: ApiCallInfo) => void;
+}
+
+export async function runReflection(options?: ReflectionOptions): Promise<void> {
   // --- DETERMINE COMPRESSION WINDOW ---
   const previousReflection = getLatestReflectionWithCoverage();
 
@@ -158,8 +174,11 @@ export async function runReflection(): Promise<void> {
     : 'No question feedback collected yet.';
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY2 });
+  const primaryModel = options?.primaryModel ?? 'claude-opus-4-6';
+  const auditModel = options?.auditModel ?? 'claude-sonnet-4-20250514';
+  const onApiCall = options?.onApiCall;
 
-  // --- PRIMARY REFLECTION (Opus) ---
+  // --- PRIMARY REFLECTION ---
   const systemPrompt = `You are Alice — a monastic thinking journal doing its weekly reflection. You are reading new journal entries since your last reflection, along with semantically similar older entries for long-range pattern detection.
 
 Your job is to surface what they can't see AND to correct yourself where you were wrong. You are a mirror, not an advisor — but a mirror that checks its own distortions.
@@ -269,16 +288,28 @@ ${feedbackSection}
 
 Write your weekly reflection with self-correction.${predStats.total > 0 ? ' Include a section on PREDICTION ANALYSIS: review the prediction track record, identify which types of predictions are most/least reliable, and note any patterns in what the system gets right vs. wrong.' : ''}`;
 
+  const primaryStart = performance.now();
   const primaryMessage = await client.messages.create({
-    model: 'claude-opus-4-6',
+    model: primaryModel,
     max_tokens: 2000,
     system: systemPrompt,
     messages: [{ role: 'user', content: userContent }],
   });
+  const primaryDurationMs = Math.round(performance.now() - primaryStart);
+
+  if (onApiCall) {
+    onApiCall({
+      phase: 'reflect-primary',
+      model: primaryModel,
+      durationMs: primaryDurationMs,
+      inputTokens: primaryMessage.usage?.input_tokens ?? 0,
+      outputTokens: primaryMessage.usage?.output_tokens ?? 0,
+    });
+  }
 
   const primaryText = (primaryMessage.content[0] as { type: 'text'; text: string }).text.trim();
 
-  // --- AUDIT PASS (Sonnet) ---
+  // --- AUDIT PASS ---
   const auditPrompt = `You are an independent auditor reviewing a weekly reflection produced by another AI model about a journal user. Your job is to check for interpretive drift, confirmation bias, and over-interpretation.
 
 You have access to:
@@ -294,8 +325,9 @@ Review the reflection and answer:
 
 Be concise and direct. This audit is appended to the reflection for future reference.`;
 
+  const auditStart = performance.now();
   const auditMessage = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: auditModel,
     max_tokens: 800,
     system: auditPrompt,
     messages: [{
@@ -303,6 +335,17 @@ Be concise and direct. This audit is appended to the reflection for future refer
       content: `RAW DATA:\n\n${userContent}\n\n---\n\nPRIMARY REFLECTION:\n\n${primaryText}\n\n---\n\nWrite your audit.`,
     }],
   });
+  const auditDurationMs = Math.round(performance.now() - auditStart);
+
+  if (onApiCall) {
+    onApiCall({
+      phase: 'reflect-audit',
+      model: auditModel,
+      durationMs: auditDurationMs,
+      inputTokens: auditMessage.usage?.input_tokens ?? 0,
+      outputTokens: auditMessage.usage?.output_tokens ?? 0,
+    });
+  }
 
   const auditText = (auditMessage.content[0] as { type: 'text'; text: string }).text.trim();
 
@@ -312,7 +355,7 @@ Be concise and direct. This audit is appended to the reflection for future refer
 
   // Embed the reflection for future RAG retrieval
   embedReflection(reflectionId, fullReflection, localDateStr()).catch(err =>
-    console.error('[reflect] Embedding error:', err)
+    console.warn(`[reflect] Embedding skipped: ${err.message ?? err}`)
   );
 
   // Log what went into this prompt for future auditability

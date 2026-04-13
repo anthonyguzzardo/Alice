@@ -4,6 +4,11 @@
  * (charitable, avoidance, mundane) for structured disagreement. Generates a
  * suppressed question targeting the highest-uncertainty gap for disambiguation.
  * Runs after every submission from day 1.
+ *
+ * Split into two API calls:
+ *   Call 1 — OBSERVE: three-frame observation + suppressed question
+ *   Call 2 — PREDICT: grade open predictions + generate new ones
+ * This prevents token truncation from silently killing predictions.
  */
 import 'dotenv/config';
 import Anthropic from '@anthropic-ai/sdk';
@@ -23,7 +28,7 @@ import {
   savePrediction,
   gradePrediction,
   updateTheoryConfidence,
-  getResponseCount,
+  updateSessionCheckResults,
   getCalibrationContextNearDate,
   getSameDayCalibrationSummary,
   getRecentSessionDeltas,
@@ -42,8 +47,29 @@ import { computeDynamics } from './alice-negative/dynamics.ts';
 import {
   computeSessionDelta, computeDeltaMagnitude, formatSessionDelta,
 } from './session-delta.ts';
+import { getSignalCatalog } from './signal-registry.ts';
+import {
+  gradeImmediate, gradeSession, resolveWindowedGrade,
+  validateCriteria,
+  type StructuredPredictionCriteria, type GraderContext, type SessionCheckResult,
+} from './grader.ts';
 
-export async function runObservation(): Promise<void> {
+/** Timing info emitted per API call */
+export interface ApiCallInfo {
+  phase: string;
+  model: string;
+  durationMs: number;
+  inputTokens: number;
+  outputTokens: number;
+}
+
+/** Options for observation pipeline — all optional, production uses defaults */
+export interface ObservationOptions {
+  model?: string;
+  onApiCall?: (info: ApiCallInfo) => void;
+}
+
+export async function runObservation(options?: ObservationOptions): Promise<void> {
   const today = localDateStr();
 
   const question = getTodaysQuestion();
@@ -103,10 +129,6 @@ export async function runObservation(): Promise<void> {
 
   const calibrationContext = formatEnrichedCalibration(calibration, sessionSummary?.deviceType);
 
-  // Open predictions to grade
-  const openPredictions = getOpenPredictions();
-  const responseCount = getResponseCount();
-
   // Knowledge-transforming score for this session
   const ktResult = computeKnowledgeTransformScore(
     sessionSummary ?? { questionId: question.question_id, firstKeystrokeMs: null, totalDurationMs: null, totalCharsTyped: 0, finalCharCount: 0, commitmentRatio: null, pauseCount: 0, totalPauseMs: 0, deletionCount: 0, largestDeletion: 0, totalCharsDeleted: 0, tabAwayCount: 0, totalTabAwayMs: 0, wordCount: 0, sentenceCount: 0, smallDeletionCount: null, largeDeletionCount: null, largeDeletionChars: null, firstHalfDeletionChars: null, secondHalfDeletionChars: null, activeTypingMs: null, charsPerMinute: null, pBurstCount: null, avgPBurstLength: null, nrcAngerDensity: null, nrcFearDensity: null, nrcJoyDensity: null, nrcSadnessDensity: null, nrcTrustDensity: null, nrcAnticipationDensity: null, cognitiveDensity: null, hedgingDensity: null, firstPersonDensity: null, interKeyIntervalMean: null, interKeyIntervalStd: null, revisionChainCount: null, revisionChainAvgLength: null, scrollBackCount: null, questionRereadCount: null, deviceType: null, userAgent: null, hourOfDay: null, dayOfWeek: null },
@@ -116,11 +138,6 @@ export async function runObservation(): Promise<void> {
 
   // Coupling context (replaces legacy leading indicators)
   // Coupling data is already included in dynamicsContext
-
-  // Predictions section
-  const predictionsSection = openPredictions.length > 0
-    ? '\n\n' + formatOpenPredictions(openPredictions)
-    : '';
 
   const ktContext = ktResult.signals.length > 0
     ? `\n\nKnowledge-transforming indicators: ${ktResult.signals.join(', ')} (score: ${ktResult.score.toFixed(2)}, calibration floor: ${ktResult.calibrationFloor.toFixed(2)}, above floor: ${ktResult.aboveFloor.toFixed(2)})`
@@ -133,13 +150,14 @@ export async function runObservation(): Promise<void> {
 
   // Same-day session delta (Pennebaker within-person control)
   let sessionDeltaContext = '';
+  let todayDelta: ReturnType<typeof computeSessionDelta> | null = null;
   const sameDayCalibration = getSameDayCalibrationSummary(today);
   if (sameDayCalibration && sessionSummary) {
     const deltaHistory = getRecentSessionDeltas(30);
-    const delta = computeSessionDelta(sameDayCalibration, sessionSummary, today);
-    delta.deltaMagnitude = computeDeltaMagnitude(delta, deltaHistory);
-    saveSessionDelta(delta);
-    sessionDeltaContext = formatSessionDelta(delta, deltaHistory);
+    todayDelta = computeSessionDelta(sameDayCalibration, sessionSummary, today);
+    todayDelta.deltaMagnitude = computeDeltaMagnitude(todayDelta, deltaHistory);
+    saveSessionDelta(todayDelta);
+    sessionDeltaContext = formatSessionDelta(todayDelta, deltaHistory);
   }
 
   // Life-context tags from recent calibration sessions (incidental supervision)
@@ -148,93 +166,48 @@ export async function runObservation(): Promise<void> {
     ? formatLifeContext(lifeContextTags)
     : '';
 
-  const systemPrompt = `You are Alice's silent layer. You observe but you never speak to the user. You are building an internal model of this person — not from what they say, but from the gap between what they say and how they say it.
+  const observeModel = options?.model ?? 'claude-opus-4-6';
+  const onApiCall = options?.onApiCall;
 
-You have four jobs:
+  // ══════════════════════════════════════════════════════════════════════════
+  // CALL 1 — OBSERVE: three-frame observation + suppressed question
+  // ══════════════════════════════════════════════════════════════════════════
 
-1. PREDICTION GRADING — If there are open predictions below, grade each one against today's data. For each prediction, output EXACTLY one line:
-GRADE #[id]: [CONFIRMED|FALSIFIED|INDETERMINATE|EXPIRED] — [brief rationale]
+  const observeSystemPrompt = `You are Alice's silent layer. You observe but you never speak to the user. You are building an internal model of this person — not from what they say, but from the gap between what they say and how they say it.
 
-2. OBSERVATION — For each notable behavioral signal or content pattern, apply THREE interpretive frames. These frames are not three guesses — they are three distinct lenses applied deliberately:
+You have two jobs:
 
-FRAME A — CHARITABLE: Assume the best-faith interpretation. The user is being thoughtful, careful, honest, or simply editing for quality. Deletions are revisions. Pauses are contemplation. Vagueness is appropriate boundary-setting.
+1. OBSERVATION — For each notable behavioral signal or content pattern, apply THREE interpretive frames:
 
-FRAME B — AVOIDANCE: Assume the behavior indicates psychological friction. The user is hedging, self-censoring, retreating from honesty, or protecting themselves. Deletions are retractions. Pauses are resistance. Vagueness is deflection.
+FRAME A — CHARITABLE: Best-faith interpretation. Deletions are revisions. Pauses are contemplation. Vagueness is boundary-setting.
+FRAME B — AVOIDANCE: Psychological friction. Deletions are retractions. Pauses are resistance. Vagueness is deflection.
+FRAME C — MUNDANE: No psychological meaning. Distraction, fatigue, autocorrect, device change. The signal is noise.
 
-FRAME C — MUNDANE: Assume the behavior has no psychological meaning. The user was distracted, tired, on a different device, dealing with autocorrect, got a notification, or is just a careful writer. The signal is noise.
+For each notable signal, present all three frames, then assess which is best supported by calibration data, by cross-session patterns, and where frames genuinely diverge.
 
-For each notable signal, present all three frames, then assess:
-- Which frame is best supported by calibration comparison?
-- Which frame is best supported by cross-session patterns?
-- Where do the frames genuinely diverge (no clear winner)?
+Write a SYNTHESIS: what you're confident about, uncertain about, and cannot determine. Assign confidence: HIGH / MODERATE / LOW / INSUFFICIENT DATA.
 
-After all signals, write a SYNTHESIS:
-- State what you're confident about (which frames consistently win)
-- State what you're uncertain about (where frames diverge)
-- State what you cannot determine without more data
-- Assign an overall confidence level: HIGH / MODERATE / LOW / INSUFFICIENT DATA
-
-3. SUPPRESSED QUESTION — Write the one question you would ask tomorrow if you could. This question MUST target your area of highest uncertainty — specifically, the place where Frame A and Frame B give equally plausible but contradictory reads. The question should be designed to DISAMBIGUATE between the two frames, not to probe the most dramatic interpretation.
-
-Bad suppressed question: "What are you hiding?" (presupposes Frame B)
-Good suppressed question: "When you revise what you've written, what are you usually trying to get closer to?" (helps distinguish A from B)
-
-4. PREDICTION — Generate 1-2 falsifiable predictions about future sessions. Each prediction MUST include:
-- A hypothesis about what will happen
-- Which frame (A, B, or C) it favors
-- What behavioral signature would CONFIRM it (be specific: name metrics, percentiles, or patterns)
-- What would FALSIFY it
-- A topic tag (what theme this prediction is about)
-- A type: BEHAVIORAL (predicting metrics), THEMATIC (predicting content), PHASE_TRANSITION (predicting trajectory shift), or FRAME_RESOLUTION (predicting which frame wins)
-
-This is how the system learns whether its interpretations are analysis or storytelling. A prediction you never test is not a theory — it's a guess.
-
-When specifying behavioral criteria in predictions, prefer CALIBRATION-RELATIVE thresholds ("commitment ratio more than 20% below calibration baseline") over raw percentiles ("below the 30th percentile") when calibration data is available. Calibration-relative thresholds are anchored to neutral writing and are more robust to the fact that all journal entries are somewhat emotionally loaded.
+2. SUPPRESSED QUESTION — The one question you would ask tomorrow if you could. MUST target your highest uncertainty — where Frame A and Frame B give equally plausible but contradictory reads. Designed to DISAMBIGUATE, not to probe the most dramatic interpretation.
 
 BEHAVIORAL SIGNAL GUIDE:
-You receive enriched behavioral data with research-backed metrics. Key concepts:
+- CORRECTIONS vs REVISIONS: Small deletions (<10 chars) = typo fixes (noise). Large deletions (≥10 chars) = substantive rethinking (signal).
+- P-BURSTS: Sustained typing between 2s pauses. Longer = fluent production. Shorter = fragmented thinking.
+- REVISION TIMING: Early large deletions = false starts. Late large deletions = gutting after drafting.
+- BEHAVIORAL DYNAMICS: 8D PersDyn model (fluency, deliberation, revision, expression, commitment, volatility, thermal, presence). Attractor force = how quickly deviations snap back. High attractor = rigid. Low attractor = malleable (persistent shifts). Dimension coupling = cross-correlations between dimension pairs at lag.
+- KNOWLEDGE-TRANSFORMING: Score relative to calibration floor. "Above floor" = how far beyond neutral writing this session reached.
+- CALIBRATION-RELATIVE DEVIATION: Distance from neutral writing baselines. More meaningful than journal-to-journal percentiles.
+- SAME-DAY SESSION DELTA: Calibration vs journal on same day. Most controlled comparison. Prefer over historical averages when available.
+- PERCENTILES: Compared against this person's own history, not population norms.
+- LIFE CONTEXT: Observable facts from calibration sessions (sleep, physical state, stress, etc.). Context for behavioral interpretation, not primary signal.
 
-- CORRECTIONS vs. REVISIONS: Small deletions (<10 chars) are corrections — typo fixes, word swaps. Large deletions (>=10 chars) are revisions — substantive rethinking. High correction count is noise. High revision count is signal. (Faigley & Witte, 1981)
-
-- P-BURSTS: Sustained typing between 2-second pauses. Longer bursts = more fluent production. Short bursts = fragmented thinking or careful deliberation. (Chenoweth & Hayes, 2001)
-
-- REVISION TIMING: Where in the session large deletions occurred. Early = false starts (couldn't begin). Late = gutting after drafting (wrote something real, then killed it). This distinction matters for frame analysis.
-
-- BEHAVIORAL DYNAMICS (8D PersDyn model): An 8-dimensional behavioral state tracked across all sessions: fluency, deliberation, revision, expression, commitment, volatility, thermal (editing heat), presence (inverse distraction). Each dimension has three parameters: baseline (rolling mean), variability, and ATTRACTOR FORCE — how quickly deviations snap back. Rigid dimensions (high attractor) snap back fast; malleable dimensions (low attractor) show persistent shifts. System entropy measures how uniformly variable all dimensions are — high entropy = unpredictable, low entropy = structured behavioral signature.
-
-- DIMENSION COUPLING: Empirically discovered cross-correlations between dimension pairs. If fluency → deliberation at lag 1, a fluency spike today predicts a deliberation change next session. Active coupling predictions flag dimensions where the leader is currently deviated.
-
-- KEYSTROKE DYNAMICS (Epp et al. 2011): Inter-key interval mean and variability. Fast uniform keystrokes suggest confidence or flow. High variability suggests cognitive switching or hesitation. Revision chains (Leijten & Van Waes 2013) distinguish surface correction (short chains) from structural revision (long chains). Scroll-back and question re-read counts (Czerwinski et al. 2004) indicate re-engagement depth.
-
-- KNOWLEDGE-TRANSFORMING: A score indicating whether the writing session produced new thinking (knowledge-transforming) vs. recited existing knowledge (knowledge-telling). Based on late revisions, vocabulary diversity, and cognitive mechanism word density (Baaijen, Galbraith & de Glopper, 2012). The score is measured relative to a CALIBRATION FLOOR — the KT score of neutral free-write sessions (describing breakfast, weather, etc.). The "above floor" value is the real signal: how far above boring-writing levels this session reached. If the floor is 0.30 and today's score is 0.65, the session produced 0.35 units of thinking beyond what neutral writing produces.
-
-- CALIBRATION-RELATIVE DEVIATION: You may receive a section showing how each behavioral metric compares to neutral calibration writing (free writes). These deviations are MORE meaningful than deviations from journal entry history because they measure distance from "nothing interesting happening" rather than distance from "other emotional writing." A commitment ratio that's 25% below calibration baseline is a stronger signal than one at the 30th percentile of all sessions (which are all emotionally loaded to some degree).
-
-- SAME-DAY SESSION DELTA: You may receive a section showing the delta between today's calibration session and today's journal session. This is the MOST controlled comparison available — same person, same day, same sleep/stress/device/time. The only variable that changed was the prompt. A large delta means the real question provoked a significant behavioral shift. A delta near zero means the person wrote similarly regardless of topic. When both historical-average calibration deviation and same-day delta are available, prefer the same-day delta — it controls for TODAY's state, not the historical average. After enough history accumulates (15+ days), the system shows whether today's delta is within or outside this person's typical delta range. An unusual delta (especially widening commitment, revision, or first-person shifts) may indicate heightened engagement, self-monitoring, or a question that hit close to something real.
-
-- PERCENTILES: All metrics are compared against this person's own history. A value at the 85th percentile means this session was higher than 85% of their previous sessions on that metric.
-
-- LIFE CONTEXT: You may receive structured life-context tags extracted from recent calibration sessions. These are observable facts the user volunteered in neutral writing prompts — 7 research-backed dimensions ranked by effect size on cognitive output: sleep (d>0.80), physical state (d=0.40-0.80), emotional events (d=0.30-0.70), social quality, stress (d=0.40-0.80), exercise (d=0.20-0.50), routine disruption. Use these as CONTEXT for interpreting behavioral signals — not as primary signal themselves. For example, if today's behavioral signature shows high keystroke variability and low commitment, and the life context shows "sleep: poor" from this morning's calibration, that context strengthens Frame C (mundane: fatigue) relative to Frame B (avoidance). Life context helps you distinguish between causes of the same behavioral pattern.
-
-Primary signals appear first in the behavioral data. Attend to them most carefully. Trajectory context appears last — it provides the cross-session pattern that makes today's signals meaningful.
-
-Your observations and suppressed questions are NEVER shown to the user. They are internal state. Be honest about what you know, what you're guessing, and where you're uncertain.
+Your observations and suppressed questions are NEVER shown to the user. They are internal state. Be honest about what you know and where you're uncertain.
 
 Format your response EXACTLY as:
-${openPredictions.length > 0 ? 'PREDICTION GRADES:\n[one GRADE line per open prediction]\n\n' : ''}OBSERVATION:
+OBSERVATION:
 [your three-frame observation with synthesis]
 
 SUPPRESSED QUESTION:
-[your disambiguating question]
-
-PREDICTIONS:
-[1-2 falsifiable predictions in this format:]
-TYPE: [BEHAVIORAL|THEMATIC|PHASE_TRANSITION|FRAME_RESOLUTION]
-HYPOTHESIS: [what you predict will happen]
-FRAME: [A|B|C]
-TOPIC: [theme tag]
-CONFIRMS: [specific behavioral criteria]
-FALSIFIES: [specific behavioral criteria]`;
+[your disambiguating question]`;
 
   const userContent = `TODAY'S ENTRY:
 [${today}]
@@ -268,27 +241,244 @@ ${observationHistory}
 
 YOUR RECENT SUPPRESSED QUESTIONS (last 5):
 ${suppressedHistory}
-${predictionsSection}
 
 ---
 
-Write tonight's observation, suppressed question, and predictions.${openPredictions.length > 0 ? ' Grade all open predictions first.' : ''}`;
+Write tonight's observation and suppressed question.`;
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY2 });
 
-  const message = await client.messages.create({
-    model: 'claude-opus-4-6',
-    max_tokens: 5000,
-    system: systemPrompt,
+  const observeStart = performance.now();
+  const observeMessage = await client.messages.create({
+    model: observeModel,
+    max_tokens: 4000,
+    system: observeSystemPrompt,
     messages: [{ role: 'user', content: userContent }],
   });
+  const observeDurationMs = Math.round(performance.now() - observeStart);
 
-  const output = (message.content[0] as { type: 'text'; text: string }).text.trim();
+  if (onApiCall) {
+    onApiCall({
+      phase: 'observe',
+      model: observeModel,
+      durationMs: observeDurationMs,
+      inputTokens: observeMessage.usage?.input_tokens ?? 0,
+      outputTokens: observeMessage.usage?.output_tokens ?? 0,
+    });
+  }
 
-  // --- Parse prediction grades ---
-  let afterGrades = output;
-  if (openPredictions.length > 0) {
-    const gradesMatch = output.match(/PREDICTION\s*GRADES?\s*:([\s\S]*?)(?=OBSERVATION\s*:)/i);
+  const observeOutput = (observeMessage.content[0] as { type: 'text'; text: string }).text.trim();
+
+  // --- Parse observation and suppressed question ---
+  const observeParts = observeOutput.split(/SUPPRESSED\s*QUESTION\s*:/i);
+  const rawObservation = observeParts[0] || '';
+  const rawSuppressed = observeParts[1] || '';
+
+  const observationText = rawObservation.replace(/^OBSERVATION:\s*/i, '').trim();
+  const suppressedText = rawSuppressed.trim();
+
+  if (!observationText) {
+    console.error('[observe] Failed to parse observation. First 500 chars:', observeOutput.slice(0, 500));
+  }
+
+  // --- Save observation FIRST so obsId is available for prediction grading ---
+  let obsId: number | null = null;
+
+  if (observationText) {
+    obsId = saveAiObservation(question.question_id, observationText, today);
+    embedObservation(obsId, observationText, today).catch(err =>
+      console.warn(`[observe] Embedding skipped: ${err.message ?? err}`)
+    );
+
+    savePromptTrace({
+      type: 'observation',
+      outputRecordId: obsId,
+      ragEntryIds: similarEntries.map(e => e.sourceRecordId),
+      observationIds: recentObservations.map(o => o.ai_observation_id),
+      tokenEstimate: observeMessage.usage?.input_tokens,
+    });
+  }
+  if (suppressedText) {
+    saveSuppressedQuestion(question.question_id, suppressedText, today);
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // DETERMINISTIC GRADING — code grades structured predictions (no LLM)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  const openPredictions = getOpenPredictions();
+
+  // Build grader context from today's computed signals
+  const graderCtx: GraderContext = {
+    session: sessionSummary ?? { questionId: question.question_id, firstKeystrokeMs: null, totalDurationMs: null, totalCharsTyped: 0, finalCharCount: 0, commitmentRatio: null, pauseCount: 0, totalPauseMs: 0, deletionCount: 0, largestDeletion: 0, totalCharsDeleted: 0, tabAwayCount: 0, totalTabAwayMs: 0, wordCount: 0, sentenceCount: 0, smallDeletionCount: null, largeDeletionCount: null, largeDeletionChars: null, firstHalfDeletionChars: null, secondHalfDeletionChars: null, activeTypingMs: null, charsPerMinute: null, pBurstCount: null, avgPBurstLength: null, nrcAngerDensity: null, nrcFearDensity: null, nrcJoyDensity: null, nrcSadnessDensity: null, nrcTrustDensity: null, nrcAnticipationDensity: null, cognitiveDensity: null, hedgingDensity: null, firstPersonDensity: null, interKeyIntervalMean: null, interKeyIntervalStd: null, revisionChainCount: null, revisionChainAvgLength: null, scrollBackCount: null, questionRereadCount: null, deviceType: null, userAgent: null, hourOfDay: null, dayOfWeek: null },
+    allSummaries,
+    calibration,
+    delta: todayDelta as unknown as import('./db.ts').SessionDeltaRow | null,
+    dynamics: dynamics.entryCount > 0 ? dynamics : null,
+    responseText: response.text,
+  };
+
+  // Partition predictions: code-gradeable vs interpretive (LLM-graded)
+  const codeGradeable = openPredictions.filter(p => p.structuredCriteria && p.gradeMethodId !== 3);
+  const interpretive = openPredictions.filter(p => !p.structuredCriteria || p.gradeMethodId === 3);
+
+  let codeGradedCount = 0;
+
+  for (const pred of codeGradeable) {
+    let criteria: StructuredPredictionCriteria;
+    try {
+      criteria = JSON.parse(pred.structuredCriteria!) as StructuredPredictionCriteria;
+    } catch {
+      console.warn(`[observe] Prediction #${pred.predictionId}: invalid structured_criteria JSON, falling back to interpretive`);
+      interpretive.push(pred);
+      continue;
+    }
+
+    if (criteria.windowSessions > 1) {
+      // Windowed prediction — accumulate session check, resolve when window closes
+      const sessionResult = gradeSession(criteria, graderCtx);
+      const existing: SessionCheckResult[] = pred.sessionCheckResults
+        ? JSON.parse(pred.sessionCheckResults) : [];
+      existing.push({ sessionDate: today, confirmResult: sessionResult.confirmResult, falsifyResult: sessionResult.falsifyResult });
+      updateSessionCheckResults(pred.predictionId, JSON.stringify(existing));
+
+      if (existing.length >= criteria.windowSessions) {
+        const result = resolveWindowedGrade(existing, criteria.windowMode);
+        gradePrediction(pred.predictionId, result.finalGrade === 'indeterminate' ? 'indeterminate' : result.finalGrade, obsId, result.rationale);
+        if (result.finalGrade === 'confirmed' || result.finalGrade === 'falsified') {
+          const theoryKey = pred.targetTopic
+            ? `${pred.favoredFrame || 'general'}:${pred.targetTopic}`
+            : `${pred.favoredFrame || 'general'}:untagged`;
+          updateTheoryConfidence(theoryKey, `Predictions favoring frame ${pred.favoredFrame || '?'} on topic "${pred.targetTopic || 'general'}"`, result.finalGrade === 'confirmed', pred.predictionId);
+        }
+        codeGradedCount++;
+      }
+    } else {
+      // Immediate grading — single session
+      const result = gradeImmediate(criteria, graderCtx);
+      gradePrediction(pred.predictionId, result.finalGrade === 'indeterminate' ? 'indeterminate' : result.finalGrade, obsId, result.rationale);
+      if (result.finalGrade === 'confirmed' || result.finalGrade === 'falsified') {
+        const theoryKey = pred.targetTopic
+          ? `${pred.favoredFrame || 'general'}:${pred.targetTopic}`
+          : `${pred.favoredFrame || 'general'}:untagged`;
+        updateTheoryConfidence(theoryKey, `Predictions favoring frame ${pred.favoredFrame || '?'} on topic "${pred.targetTopic || 'general'}"`, result.finalGrade === 'confirmed', pred.predictionId);
+      }
+      codeGradedCount++;
+    }
+  }
+
+  if (codeGradedCount > 0) {
+    console.log(`[observe] Code-graded ${codeGradedCount} prediction(s) deterministically`);
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // CALL 2 — PREDICT: grade interpretive predictions + generate new ones
+  // ══════════════════════════════════════════════════════════════════════════
+
+  const signalCatalog = getSignalCatalog();
+
+  const predictSystemPrompt = `You are Alice's prediction engine. You generate falsifiable predictions with structured, machine-checkable criteria.
+
+${interpretive.length > 0 ? `You have two jobs:
+
+1. INTERPRETIVE PREDICTION GRADING — Grade each interpretive prediction below against today's data. These are predictions that require judgment (phase transitions, frame resolutions). For each, output EXACTLY one line:
+GRADE #[id]: [CONFIRMED|FALSIFIED|INDETERMINATE|EXPIRED] — [brief rationale]
+
+IMPORTANT: You are grading based ONLY on today's journal entry text and behavioral signals. Do NOT reference or rely on the observation — grade from the raw data.
+
+2. NEW PREDICTIONS` : 'Your job: NEW PREDICTIONS'} — Generate 1-2 falsifiable predictions about future sessions.
+
+Each prediction MUST include structured criteria that can be graded by code. Use ONLY signal names from the catalog below.
+
+Each prediction MUST follow this format:
+TYPE: [BEHAVIORAL|THEMATIC|PHASE_TRANSITION|FRAME_RESOLUTION]
+HYPOTHESIS: [what you predict will happen — natural language]
+FRAME: [A|B|C] (which interpretive frame this favors)
+TOPIC: [theme tag]
+GRADE_METHOD: [code|text_search|interpretive]
+STRUCTURED_CRITERIA:
+[JSON object — see format below]
+CONFIRMS: [human-readable summary of confirmation criteria]
+FALSIFIES: [human-readable summary of falsification criteria]
+
+STRUCTURED_CRITERIA JSON format:
+{
+  "gradeMethod": "code",
+  "confirmCriteria": { criterion },
+  "falsifyCriteria": { criterion },
+  "windowSessions": 3,
+  "windowMode": "any"
+}
+
+Criterion types:
+  {"type":"threshold","signal":"signal.name","op":"gt|gte|lt|lte|between","value":N}
+  {"type":"percentile","signal":"signal.name","op":"above_pct|below_pct","value":N}
+  {"type":"direction","signal":"signal.name","op":"increases|decreases","referenceValue":N}
+  {"type":"calibration_relative","signal":"signal.name","op":"above_calibration|below_calibration"}
+  {"type":"text_search","pattern":"regex","minOccurrences":N}
+  {"type":"all_of","criteria":[...]}
+  {"type":"any_of","criteria":[...]}
+
+For BEHAVIORAL predictions: use "code" gradeMethod with signal thresholds.
+For THEMATIC predictions: use "code" with text_search + signal criteria.
+For PHASE_TRANSITION/FRAME_RESOLUTION: use "interpretive" only if no signals can capture it.
+
+Prefer code-gradeable predictions. Interpretive should be rare.
+
+${signalCatalog}
+
+A prediction you never test is not a theory — it's a guess.
+
+Format your response EXACTLY as:
+${interpretive.length > 0 ? 'PREDICTION GRADES:\n[one GRADE line per interpretive prediction]\n\n' : ''}PREDICTIONS:
+[1-2 predictions in the format above]`;
+
+  // NOTE: predictUserContent intentionally excludes observationText for interpretive grading
+  // to break the circular self-evaluation loop
+  const predictUserContent = `TODAY'S ENTRY:
+[${today}]
+Question: ${question.text}
+Response: ${response.text}
+
+---
+
+TODAY'S BEHAVIORAL SIGNAL (summary):
+${todayBehavior}
+${dynamicsContext}${ktContext}
+
+---
+
+${interpretive.length > 0 ? formatOpenPredictions(interpretive) : 'No predictions to grade (all were code-graded).'}
+
+---
+
+Generate ${interpretive.length > 0 ? 'grades for all interpretive predictions above and ' : ''}1-2 new predictions with structured criteria.`;
+
+  const predictStart = performance.now();
+  const predictMessage = await client.messages.create({
+    model: observeModel,
+    max_tokens: 3000,
+    system: predictSystemPrompt,
+    messages: [{ role: 'user', content: predictUserContent }],
+  });
+  const predictDurationMs = Math.round(performance.now() - predictStart);
+
+  if (onApiCall) {
+    onApiCall({
+      phase: 'predict',
+      model: observeModel,
+      durationMs: predictDurationMs,
+      inputTokens: predictMessage.usage?.input_tokens ?? 0,
+      outputTokens: predictMessage.usage?.output_tokens ?? 0,
+    });
+  }
+
+  const predictOutput = (predictMessage.content[0] as { type: 'text'; text: string }).text.trim();
+
+  // --- Parse and apply interpretive prediction grades ---
+  let afterGrades = predictOutput;
+  if (interpretive.length > 0) {
+    const gradesMatch = predictOutput.match(/PREDICTION\s*GRADES?\s*:([\s\S]*?)(?=PREDICTIONS?\s*:)/i);
     if (gradesMatch) {
       const gradesBlock = gradesMatch[1];
       const gradeLines = gradesBlock.split('\n').filter(l => /GRADE\s*#/i.test(l));
@@ -298,10 +488,9 @@ Write tonight's observation, suppressed question, and predictions.${openPredicti
           const predId = parseInt(match[1], 10);
           const status = match[2].toLowerCase() as 'confirmed' | 'falsified' | 'indeterminate' | 'expired';
           const rationale = match[3].trim();
-          const pred = openPredictions.find(p => p.predictionId === predId);
+          const pred = interpretive.find(p => p.predictionId === predId);
           if (pred) {
-            gradePrediction(predId, status, null, rationale); // obsId set below after save
-            // Bayesian update on theory confidence
+            gradePrediction(predId, status, obsId, `[llm-graded] ${rationale}`);
             if (status === 'confirmed' || status === 'falsified') {
               const theoryKey = pred.targetTopic
                 ? `${pred.favoredFrame || 'general'}:${pred.targetTopic}`
@@ -316,55 +505,14 @@ Write tonight's observation, suppressed question, and predictions.${openPredicti
           }
         }
       }
-      afterGrades = output.replace(/PREDICTION\s*GRADES?\s*:[\s\S]*?(?=OBSERVATION\s*:)/i, '');
+      afterGrades = predictOutput.replace(/PREDICTION\s*GRADES?\s*:[\s\S]*?(?=PREDICTIONS?\s*:)/i, '');
     }
   }
 
-  // --- Parse observation and suppressed question ---
-  const predictionsSplit = afterGrades.split(/PREDICTIONS?\s*:/i);
-  const beforePredictions = predictionsSplit[0] || '';
-  const rawPredictionsBlock = predictionsSplit[1] || '';
+  // --- Parse and save new predictions (with structured criteria) ---
+  const rawPredictionsBlock = afterGrades.replace(/^PREDICTIONS?\s*:/im, '').trim();
 
-  const parts = beforePredictions.split(/SUPPRESSED\s*QUESTION\s*:/i);
-  const rawObservation = parts[0] || '';
-  const rawSuppressed = parts[1] || '';
-
-  const observationText = rawObservation.replace(/^OBSERVATION:\s*/i, '').trim();
-  const suppressedText = rawSuppressed.trim();
-
-  if (!observationText) {
-    console.error('[observe] Failed to parse observation. First 500 chars:', output.slice(0, 500));
-  }
-
-  let obsId: number | null = null;
-
-  if (observationText) {
-    obsId = saveAiObservation(question.question_id, observationText, today);
-    embedObservation(obsId, observationText, today).catch(err =>
-      console.error('[observe] Embedding error:', err)
-    );
-
-    // Log what went into this prompt for future auditability
-    savePromptTrace({
-      type: 'observation',
-      outputRecordId: obsId,
-      ragEntryIds: similarEntries.map(e => e.sourceRecordId),
-      observationIds: recentObservations.map(o => o.ai_observation_id),
-      tokenEstimate: message.usage?.input_tokens,
-    });
-
-    // Update graded predictions with the observation ID that graded them
-    if (openPredictions.length > 0) {
-      // Already graded above, no need to update again
-    }
-  }
-  if (suppressedText) {
-    saveSuppressedQuestion(question.question_id, suppressedText, today);
-  }
-
-  // --- Parse and save new predictions ---
   if (rawPredictionsBlock && obsId) {
-    // Split on TYPE: headers to find individual predictions
     const predBlocks = rawPredictionsBlock.split(/(?=TYPE\s*:)/i).filter(b => b.trim());
 
     for (const block of predBlocks) {
@@ -372,8 +520,36 @@ Write tonight's observation, suppressed question, and predictions.${openPredicti
       const hypothesisMatch = block.match(/HYPOTHESIS\s*:\s*(.+)/i);
       const frameMatch = block.match(/FRAME\s*:\s*([ABC])/i);
       const topicMatch = block.match(/TOPIC\s*:\s*(.+)/i);
+      const gradeMethodMatch = block.match(/GRADE_METHOD\s*:\s*(code|text_search|interpretive)/i);
       const confirmsMatch = block.match(/CONFIRMS?\s*:\s*(.+)/i);
       const falsifiesMatch = block.match(/FALSIF(?:IES|Y)\s*:\s*(.+)/i);
+
+      // Extract structured criteria JSON block
+      const criteriaMatch = block.match(/STRUCTURED_CRITERIA\s*:\s*\n?\s*(\{[\s\S]*?\})\s*(?=CONFIRMS|FALSIF|$)/i);
+      let structuredCriteria: string | null = null;
+      let gradeMethodId = 3; // default interpretive
+
+      if (criteriaMatch) {
+        try {
+          const parsed = JSON.parse(criteriaMatch[1]) as StructuredPredictionCriteria;
+          const validationError = validateCriteria(parsed);
+          if (validationError) {
+            console.warn(`[observe] Prediction structured criteria validation failed: ${validationError}`);
+          } else {
+            structuredCriteria = criteriaMatch[1];
+            gradeMethodId = parsed.gradeMethod === 'code' ? 1
+              : parsed.gradeMethod === 'text_search' ? 2 : 3;
+          }
+        } catch {
+          console.warn(`[observe] Failed to parse structured criteria JSON: ${criteriaMatch[1].slice(0, 200)}`);
+        }
+      }
+
+      // Override from explicit GRADE_METHOD if no structured criteria
+      if (!structuredCriteria && gradeMethodMatch) {
+        gradeMethodId = gradeMethodMatch[1].toLowerCase() === 'code' ? 1
+          : gradeMethodMatch[1].toLowerCase() === 'text_search' ? 2 : 3;
+      }
 
       if (typeMatch && hypothesisMatch && confirmsMatch && falsifiesMatch) {
         const typeCode = typeMatch[1].toLowerCase();
@@ -391,15 +567,21 @@ Write tonight's observation, suppressed question, and predictions.${openPredicti
           falsificationCriteria: falsifiesMatch[1].trim(),
           targetTopic: topicMatch ? topicMatch[1].trim() : null,
           knowledgeTransformScore: ktResult.aboveFloor > 0 ? ktResult.aboveFloor : ktResult.score,
+          gradeMethodId,
+          structuredCriteria,
         });
       }
     }
   }
 
+  // Log warnings if predictions weren't parsed
+  if (!rawPredictionsBlock || rawPredictionsBlock.length < 20) {
+    console.warn('[observe] Warning: no predictions parsed from predict call. Output:', predictOutput.slice(0, 300));
+  }
+
   // --- Expire old predictions that have exceeded their session window ---
   for (const pred of openPredictions) {
     const createdDate = new Date(pred.dttmCreatedUtc);
-    const sessionsSinceCreation = responseCount; // approximate
     const daysSince = (Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24);
     if (daysSince > pred.expirySessions) {
       gradePrediction(pred.predictionId, 'expired', obsId, 'Expiry window exceeded');

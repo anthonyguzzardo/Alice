@@ -13,6 +13,24 @@ sqliteVec.load(db);
 db.pragma('journal_mode = WAL');
 
 // ----------------------------------------------------------------------------
+// DATE OVERRIDE (for simulation — production never calls this)
+// ----------------------------------------------------------------------------
+// When set, save functions use this instead of datetime('now').
+// This fixes the wall-clock timestamp bug where SQLite's datetime('now')
+// ignores JavaScript's monkey-patched Date during simulation.
+let _dateOverride: string | null = null;
+
+/** Set a date override for all save functions. Pass null to clear. */
+export function setDateOverride(dateStr: string | null): void {
+  _dateOverride = dateStr;
+}
+
+/** Get the current datetime string — override if set, otherwise datetime('now'). */
+function nowStr(): string {
+  return _dateOverride ? `${_dateOverride}T12:00:00` : new Date().toISOString().replace('T', ' ').slice(0, 19);
+}
+
+// ----------------------------------------------------------------------------
 // SCHEMA
 // ----------------------------------------------------------------------------
 // Standards (adapted from project conventions for SQLite):
@@ -470,6 +488,29 @@ db.exec(`
     ,(4, 'frame_resolution', 'Frame Resolution');
 
   -- --------------------------------------------------------------------------
+  -- te_grade_method
+  -- --------------------------------------------------------------------------
+  -- PURPOSE: How a prediction gets graded — code (deterministic), text search,
+  --          or interpretive (LLM-based, isolated from observer)
+  -- USE CASE: "Was this prediction graded by code or by the LLM?"
+  -- MUTABILITY: Static
+  -- VALUES: code (1), text_search (2), interpretive (3)
+  -- REFERENCED BY: tb_predictions.grade_method_id
+  -- FOOTER: None
+  -- --------------------------------------------------------------------------
+  CREATE TABLE IF NOT EXISTS te_grade_method (
+     grade_method_id  INTEGER PRIMARY KEY
+    ,enum_code        TEXT    UNIQUE NOT NULL
+    ,name             TEXT    NOT NULL
+  );
+
+  INSERT OR IGNORE INTO te_grade_method (grade_method_id, enum_code, name)
+  VALUES
+     (1, 'code',         'Code-Graded')
+    ,(2, 'text_search',  'Text Search')
+    ,(3, 'interpretive', 'Interpretive');
+
+  -- --------------------------------------------------------------------------
   -- te_intervention_intent
   -- --------------------------------------------------------------------------
   -- PURPOSE: Tag why a generated question was chosen
@@ -532,6 +573,7 @@ db.exec(`
   -- LOGICAL FK: question_id → tb_questions.question_id
   -- LOGICAL FK: prediction_type_id → te_prediction_type.prediction_type_id
   -- LOGICAL FK: prediction_status_id → te_prediction_status.prediction_status_id
+  -- LOGICAL FK: grade_method_id → te_grade_method.grade_method_id
   -- LOGICAL FK: graded_by_observation_id → tb_ai_observations.ai_observation_id
   -- FOOTER: Full
   -- --------------------------------------------------------------------------
@@ -547,6 +589,9 @@ db.exec(`
     ,falsification_criteria    TEXT    NOT NULL
     ,target_topic              TEXT
     ,expiry_sessions           INTEGER NOT NULL DEFAULT 14
+    ,grade_method_id           INTEGER NOT NULL DEFAULT 3
+    ,structured_criteria       TEXT                          -- JSON: StructuredPredictionCriteria
+    ,session_check_results     TEXT                          -- JSON array for windowed predictions
     ,graded_by_observation_id  INTEGER
     ,grade_rationale           TEXT
     ,knowledge_transform_score REAL
@@ -983,8 +1028,8 @@ export function getTodaysResponse(): { response_id: number; text: string } | nul
 
 export function saveResponse(questionId: number, text: string): number {
   const result = db.prepare(
-    `INSERT INTO tb_responses (question_id, text) VALUES (?, ?)`
-  ).run(questionId, text);
+    `INSERT INTO tb_responses (question_id, text, dttm_created_utc) VALUES (?, ?, ?)`
+  ).run(questionId, text, nowStr());
   return Number(result.lastInsertRowid);
 }
 
@@ -1013,8 +1058,8 @@ export function getLatestReflection(): { text: string; dttm_created_utc: string 
 export function saveReflection(text: string, type: 'weekly' | 'monthly' = 'weekly', coverageThroughResponseId?: number): number {
   const typeId = type === 'monthly' ? 2 : 1;
   const result = db.prepare(
-    `INSERT INTO tb_reflections (text, reflection_type_id, coverage_through_response_id) VALUES (?, ?, ?)`
-  ).run(text, typeId, coverageThroughResponseId ?? null);
+    `INSERT INTO tb_reflections (text, reflection_type_id, coverage_through_response_id, dttm_created_utc) VALUES (?, ?, ?, ?)`
+  ).run(text, typeId, coverageThroughResponseId ?? null, nowStr());
   return Number(result.lastInsertRowid);
 }
 
@@ -1360,15 +1405,15 @@ export function isCalibrationQuestion(questionId: number): boolean {
 
 export function saveAiObservation(questionId: number, text: string, date: string): number {
   const result = db.prepare(
-    `INSERT OR IGNORE INTO tb_ai_observations (question_id, observation_text, observation_date) VALUES (?, ?, ?)`
-  ).run(questionId, text, date);
+    `INSERT OR IGNORE INTO tb_ai_observations (question_id, observation_text, observation_date, dttm_created_utc) VALUES (?, ?, ?, ?)`
+  ).run(questionId, text, date, nowStr());
   return Number(result.lastInsertRowid);
 }
 
 export function saveSuppressedQuestion(questionId: number, text: string, date: string): void {
   db.prepare(
-    `INSERT OR IGNORE INTO tb_ai_suppressed_questions (question_id, suppressed_text, suppressed_date) VALUES (?, ?, ?)`
-  ).run(questionId, text, date);
+    `INSERT OR IGNORE INTO tb_ai_suppressed_questions (question_id, suppressed_text, suppressed_date, dttm_created_utc) VALUES (?, ?, ?, ?)`
+  ).run(questionId, text, date, nowStr());
 }
 
 export function getAllAiObservations(): Array<{ date: string; observation: string }> {
@@ -1930,6 +1975,8 @@ export interface PredictionInput {
   targetTopic: string | null;
   expirySessions?: number;
   knowledgeTransformScore?: number | null;
+  gradeMethodId?: number;              // 1=code, 2=text_search, 3=interpretive (default 3)
+  structuredCriteria?: string | null;  // JSON: StructuredPredictionCriteria
 }
 
 export function savePrediction(p: PredictionInput): number {
@@ -1938,13 +1985,15 @@ export function savePrediction(p: PredictionInput): number {
        ai_observation_id, question_id, prediction_type_id,
        hypothesis, favored_frame, expected_signature,
        falsification_criteria, target_topic, expiry_sessions,
-       knowledge_transform_score
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       grade_method_id, structured_criteria,
+       knowledge_transform_score, dttm_created_utc
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     p.aiObservationId, p.questionId, p.predictionTypeId,
     p.hypothesis, p.favoredFrame, p.expectedSignature,
     p.falsificationCriteria, p.targetTopic, p.expirySessions ?? 14,
-    p.knowledgeTransformScore ?? null,
+    p.gradeMethodId ?? 3, p.structuredCriteria ?? null,
+    p.knowledgeTransformScore ?? null, nowStr(),
   );
   return Number(result.lastInsertRowid);
 }
@@ -1960,6 +2009,9 @@ export interface OpenPrediction {
   falsificationCriteria: string;
   targetTopic: string | null;
   expirySessions: number;
+  gradeMethodId: number;
+  structuredCriteria: string | null;
+  sessionCheckResults: string | null;
   dttmCreatedUtc: string;
 }
 
@@ -1976,11 +2028,25 @@ export function getOpenPredictions(): OpenPrediction[] {
       ,falsification_criteria as falsificationCriteria
       ,target_topic as targetTopic
       ,expiry_sessions as expirySessions
+      ,grade_method_id as gradeMethodId
+      ,structured_criteria as structuredCriteria
+      ,session_check_results as sessionCheckResults
       ,dttm_created_utc as dttmCreatedUtc
     FROM tb_predictions
     WHERE prediction_status_id = 1
     ORDER BY dttm_created_utc ASC
   `).all() as OpenPrediction[];
+}
+
+/** Update session check results for windowed predictions */
+export function updateSessionCheckResults(predictionId: number, results: string): void {
+  db.prepare(`
+    UPDATE tb_predictions
+    SET session_check_results = ?
+       ,dttm_modified_utc = ?
+       ,modified_by = 'system'
+    WHERE prediction_id = ?
+  `).run(results, nowStr(), predictionId);
 }
 
 export function gradePrediction(
@@ -1992,16 +2058,17 @@ export function gradePrediction(
   const statusId = statusCode === 'confirmed' ? 2
     : statusCode === 'falsified' ? 3
     : statusCode === 'expired' ? 4 : 5;
+  const now = nowStr();
   db.prepare(`
     UPDATE tb_predictions
     SET prediction_status_id = ?
        ,graded_by_observation_id = ?
        ,grade_rationale = ?
-       ,dttm_graded_utc = datetime('now')
-       ,dttm_modified_utc = datetime('now')
+       ,dttm_graded_utc = ?
+       ,dttm_modified_utc = ?
        ,modified_by = 'system'
     WHERE prediction_id = ?
-  `).run(statusId, gradedByObservationId, rationale, predictionId);
+  `).run(statusId, gradedByObservationId, rationale, now, now, predictionId);
 }
 
 export function getPredictionStats(): {
@@ -2080,10 +2147,10 @@ export function updateTheoryConfidence(
       SET ${col} = ${col} + 1
          ,total_predictions = total_predictions + 1
          ,last_prediction_id = ?
-         ,dttm_modified_utc = datetime('now')
+         ,dttm_modified_utc = ?
          ,modified_by = 'system'
       WHERE theory_key = ?
-    `).run(predictionId, theoryKey);
+    `).run(predictionId, nowStr(), theoryKey);
   } else {
     db.prepare(`
       INSERT INTO tb_theory_confidence (theory_key, description, alpha, beta, total_predictions, last_prediction_id)
@@ -2122,9 +2189,9 @@ export function updateQuestionIntent(
   db.prepare(`
     UPDATE tb_questions
     SET intervention_intent_id = ?, intervention_rationale = ?,
-        dttm_modified_utc = datetime('now'), modified_by = 'system'
+        dttm_modified_utc = ?, modified_by = 'system'
     WHERE question_id = ?
-  `).run(intentRow.intervention_intent_id, rationale, questionId);
+  `).run(intentRow.intervention_intent_id, rationale, nowStr(), questionId);
 }
 
 export function getQuestionIntent(questionId: number): {

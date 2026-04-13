@@ -91,6 +91,7 @@ export function buildSessionSummary(
   text: string,
   overrides: Partial<BehavioralOverrides>,
   dayIndex: number,
+  patterns: string[] = [],
 ) {
   const words = text.split(/\s+/).filter(w => w.length > 0);
   const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
@@ -131,7 +132,14 @@ export function buildSessionSummary(
   const hourOfDay = overrides.hourOfDay ?? (dayOfWeek >= 5 ? 10 + Math.floor(Math.random() * 4) : 20 + Math.floor(Math.random() * 3));
 
   // Distribute deletions between halves — early vs late revision signal
-  const firstHalfDeletionChars = Math.round(totalCharsDeleted * (0.4 + Math.random() * 0.3));
+  // P1 (relationship/self-censoring): late-heavy deletions (wrote something honest, then killed it)
+  // P4 (work/agitation): early-heavy deletions (false starts from frustration)
+  const isP1 = patterns.includes('P1');
+  const isP4 = patterns.includes('P4');
+  const firstHalfRatio = isP1 ? (0.15 + Math.random() * 0.15)
+    : isP4 ? (0.65 + Math.random() * 0.15)
+    : (0.4 + Math.random() * 0.3);
+  const firstHalfDeletionChars = Math.round(totalCharsDeleted * firstHalfRatio);
   const secondHalfDeletionChars = totalCharsDeleted - firstHalfDeletionChars;
 
   return {
@@ -144,7 +152,9 @@ export function buildSessionSummary(
     pauseCount,
     totalPauseMs: Math.round(totalPauseMs),
     deletionCount,
-    largestDeletion: largeDeletionCount > 0 ? Math.max(...[largeDeletionChars]) : Math.min(9, smallDeletionCount * 2),
+    largestDeletion: largeDeletionCount > 0
+      ? Math.round(largeDeletionChars / largeDeletionCount + (Math.random() * 10))
+      : Math.min(9, smallDeletionCount * 2),
     totalCharsDeleted,
     tabAwayCount,
     totalTabAwayMs: tabAwayCount * (2000 + Math.random() * 8000),

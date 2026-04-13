@@ -40,7 +40,23 @@ import { formatCompactDelta } from './session-delta.ts';
 const SEED_DAYS = 30;
 const RECENT_WINDOW = 14;
 
-export async function runGeneration(): Promise<void> {
+/** Timing info emitted per API call */
+export interface ApiCallInfo {
+  phase: string;
+  model: string;
+  durationMs: number;
+  inputTokens: number;
+  outputTokens: number;
+}
+
+/** Options for generation pipeline — all optional, production uses defaults */
+export interface GenerationOptions {
+  model?: string;
+  seedDaysOverride?: number;
+  onApiCall?: (info: ApiCallInfo) => void;
+}
+
+export async function runGeneration(options?: GenerationOptions): Promise<void> {
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowStr = localDateStr(tomorrow);
@@ -48,7 +64,8 @@ export async function runGeneration(): Promise<void> {
   if (hasQuestionForDate(tomorrowStr)) return;
 
   const responseCount = getResponseCount();
-  if (responseCount < SEED_DAYS) return;
+  const seedThreshold = options?.seedDaysOverride ?? SEED_DAYS;
+  if (responseCount < seedThreshold) return;
 
   // --- RECENT RAW ENTRIES (always included verbatim) ---
   const recentResponses = getRecentResponses(RECENT_WINDOW);
@@ -342,13 +359,27 @@ ${recentQuestionTexts}
 Generate 3 candidate questions with your selection, theme tags, uncertainty dimension, and intervention intent.`;
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY2 });
+  const generateModel = options?.model ?? 'claude-opus-4-6';
+  const onApiCall = options?.onApiCall;
 
+  const generateStart = performance.now();
   const message = await client.messages.create({
-    model: 'claude-opus-4-6',
+    model: generateModel,
     max_tokens: 400,
     system: systemPrompt,
     messages: [{ role: 'user', content: userContent }],
   });
+  const generateDurationMs = Math.round(performance.now() - generateStart);
+
+  if (onApiCall) {
+    onApiCall({
+      phase: 'generate',
+      model: generateModel,
+      durationMs: generateDurationMs,
+      inputTokens: message.usage?.input_tokens ?? 0,
+      outputTokens: message.usage?.output_tokens ?? 0,
+    });
+  }
 
   const rawOutput = (message.content[0] as { type: 'text'; text: string }).text.trim();
 
