@@ -278,7 +278,7 @@ Write tonight's observation, suppressed question, and predictions.${openPredicti
 
   const message = await client.messages.create({
     model: 'claude-opus-4-6',
-    max_tokens: 3000,
+    max_tokens: 5000,
     system: systemPrompt,
     messages: [{ role: 'user', content: userContent }],
   });

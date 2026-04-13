@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { localDateStr } from './date.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DB_PATH = path.resolve(__dirname, '../../data/alice.db');
+const DB_PATH = process.env.ALICE_DB_PATH || path.resolve(__dirname, '../../data/alice.db');
 
 const db = new Database(DB_PATH);
 
@@ -1163,7 +1163,7 @@ export function getBurstSequence(questionId: number): Array<BurstEntry & { burst
 }
 
 const SESSION_SUMMARY_COLS = `
-  question_id as questionId, first_keystroke_ms as firstKeystrokeMs,
+  s.question_id as questionId, first_keystroke_ms as firstKeystrokeMs,
   total_duration_ms as totalDurationMs, total_chars_typed as totalCharsTyped,
   final_char_count as finalCharCount, commitment_ratio as commitmentRatio,
   pause_count as pauseCount, total_pause_ms as totalPauseMs,
@@ -1194,7 +1194,7 @@ const SESSION_SUMMARY_COLS = `
 
 export function getSessionSummary(questionId: number): SessionSummaryInput | null {
   return db.prepare(
-    `SELECT ${SESSION_SUMMARY_COLS} FROM tb_session_summaries WHERE question_id = ?`
+    `SELECT ${SESSION_SUMMARY_COLS} FROM tb_session_summaries s WHERE s.question_id = ?`
   ).get(questionId) as SessionSummaryInput | null;
 }
 
