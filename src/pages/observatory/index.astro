@@ -2,11 +2,16 @@
 /**
  * Observatory
  *
- * Hero: prediction arc timeline — shows predictions as arcs from
- * origin to resolution. The visual proof that this system makes
- * falsifiable claims and tests them.
- *
- * Below: sparklines + theories + patterns for depth.
+ * The system's self-awareness layer. Shows:
+ *   1. Prediction arc timeline (hero) — visual proof of falsifiable claims
+ *   2. Scoreboard + calibration curve — the system learning over time
+ *   3. Narrative — what's notable right now, in plain English
+ *   4. Recent calls — compact, scannable prediction results
+ *   5. Running theories — compact list with confidence
+ *   6. Grouped dimension cards with human-readable labels
+ *   7. Collapsible heatmap for power users
+ *   8. Patterns
+ *   9. Entry panel with loop trace — shows how each entry connects to the whole
  */
 ---
 <html lang="en">
@@ -49,8 +54,10 @@
       --ob-frame-b: #aa8833;
       --ob-frame-c: #4a7a4a;
       --ob-theory-active: #3a3a7a;
+      --ob-theory-established: #2a7a2a;
       --ob-theory-retired: #7a3a3a;
       --ob-score-bg: #ebe7e1;
+      --ob-loop-line: #3a6ea5;
     }
     [data-theme="dark"] {
       --ob-bg: #0a0a0a;
@@ -80,8 +87,10 @@
       --ob-frame-b: #aa8833;
       --ob-frame-c: #5a7a5a;
       --ob-theory-active: #5a5a8a;
+      --ob-theory-established: #5a8a5a;
       --ob-theory-retired: #8a5a5a;
       --ob-score-bg: #111;
+      --ob-loop-line: #5a9ed6;
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -92,306 +101,206 @@
       font-size: 11px;
     }
 
-    /* ---- Nav ---- */
     .nav {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 16px 24px;
-      border-bottom: 1px solid var(--ob-border);
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 16px 24px; border-bottom: 1px solid var(--ob-border);
     }
     .nav a, .theme-btn {
-      color: var(--ob-text-faint);
-      text-decoration: none;
-      font-size: 11px;
-      letter-spacing: 0.05em;
-      background: none;
-      border: none;
-      font-family: inherit;
-      cursor: pointer;
+      color: var(--ob-text-faint); text-decoration: none; font-size: 11px;
+      letter-spacing: 0.05em; background: none; border: none;
+      font-family: inherit; cursor: pointer;
     }
     .nav a:hover, .theme-btn:hover { color: var(--ob-text-muted); }
-    .nav-title {
-      color: var(--ob-text-faint);
-      font-size: 12px;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-    }
-    .nav-right {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
+    .nav-title { color: var(--ob-text-faint); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; }
+    .nav-right { display: flex; align-items: center; gap: 16px; }
 
-    .container {
-      max-width: 1000px;
-      margin: 0 auto;
-      padding: 0 24px 48px;
-    }
+    .container { max-width: 1000px; margin: 0 auto; padding: 0 24px 48px; }
 
-    /* ---- Hero: prediction arcs ---- */
-    .hero {
-      padding: 24px 0 0;
-    }
+    /* ---- Hero ---- */
+    .hero { padding: 24px 0 0; }
     .hero-tagline {
-      color: var(--ob-text-faint);
-      font-size: 10px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      margin-bottom: 12px;
+      color: var(--ob-text-faint); font-size: 10px; letter-spacing: 0.12em;
+      text-transform: uppercase; margin-bottom: 12px;
     }
-    .hero-canvas-wrap {
-      position: relative;
-      margin-bottom: 4px;
-    }
-    #arc-canvas {
-      display: block;
-      width: 100%;
-      cursor: crosshair;
-    }
-    .hero-date-axis {
-      position: relative;
-      height: 14px;
-      margin-bottom: 8px;
-    }
-    .hero-date-axis span {
-      position: absolute;
-      color: var(--ob-text-dim);
-      font-size: 9px;
-    }
+    .hero-canvas-wrap { position: relative; margin-bottom: 4px; }
+    #arc-canvas { display: block; width: 100%; cursor: crosshair; }
+    .hero-date-axis { position: relative; height: 14px; margin-bottom: 8px; }
+    .hero-date-axis span { position: absolute; color: var(--ob-text-dim); font-size: 9px; }
 
     /* ---- Scoreboard ---- */
     .scoreboard {
-      display: flex;
-      gap: 1px;
-      background: var(--ob-border);
-      margin-bottom: 32px;
-      border: 1px solid var(--ob-border);
+      display: flex; gap: 1px; background: var(--ob-border);
+      margin-bottom: 24px; border: 1px solid var(--ob-border);
     }
-    .score-cell {
-      flex: 1;
-      padding: 16px 12px;
-      background: var(--ob-score-bg);
-      text-align: center;
-    }
-    .score-number {
-      font-size: 24px;
-      line-height: 1;
-      margin-bottom: 4px;
-    }
-    .score-label {
-      font-size: 8px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--ob-text-dim);
-    }
+    .score-cell { flex: 1; padding: 14px 10px; background: var(--ob-score-bg); text-align: center; }
+    .score-number { font-size: 22px; line-height: 1; margin-bottom: 3px; }
+    .score-label { font-size: 8px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ob-text-dim); }
     .score-confirmed .score-number { color: var(--ob-confirmed); }
     .score-falsified .score-number { color: var(--ob-falsified); }
     .score-open .score-number { color: var(--ob-text-faint); }
     .score-entries .score-number { color: var(--ob-text-muted); }
     .score-total .score-number { color: var(--ob-text-faint); }
 
+    /* ---- Calibration curve ---- */
+    .calibration-section { margin-bottom: 32px; }
+    .calibration-row {
+      display: flex; align-items: center; gap: 16px;
+    }
+    .calibration-canvas-wrap { flex: 1; position: relative; }
+    #calibration-canvas { display: block; width: 100%; height: 60px; cursor: crosshair; }
+    .calibration-summary {
+      width: 140px; flex-shrink: 0; text-align: right;
+    }
+    .calibration-rate {
+      font-size: 20px; color: var(--ob-text-muted); line-height: 1;
+    }
+    .calibration-label {
+      font-size: 9px; color: var(--ob-text-dim); letter-spacing: 0.08em;
+      text-transform: uppercase; margin-top: 3px;
+    }
+    .calibration-trend {
+      font-size: 9px; color: var(--ob-text-faint); margin-top: 4px;
+    }
+
     /* ---- Section ---- */
     .section { margin-bottom: 32px; }
     .section-label {
-      color: var(--ob-text-dim);
-      font-size: 9px;
-      letter-spacing: 0.15em;
-      text-transform: uppercase;
-      margin-bottom: 12px;
-      padding-bottom: 6px;
+      color: var(--ob-text-dim); font-size: 9px; letter-spacing: 0.15em;
+      text-transform: uppercase; margin-bottom: 12px; padding-bottom: 6px;
       border-bottom: 1px solid var(--ob-border);
     }
 
-    /* ---- Recent calls ---- */
-    .call-card {
-      background: var(--ob-bg-card);
-      border: 1px solid var(--ob-border-subtle);
-      padding: 12px 16px;
-      margin-bottom: 6px;
+    /* ---- Narrative ---- */
+    .narrative-insight {
+      padding: 10px 16px; margin-bottom: 6px; line-height: 1.7;
+      color: var(--ob-text-muted); font-size: 12px;
+      background: var(--ob-bg-card); border-left: 3px solid var(--ob-border);
     }
-    .call-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 12px;
+    .narrative-insight-notable { border-left-color: var(--ob-spark-line); }
+    .narrative-insight-rare { border-left-color: var(--ob-falsified); }
+    .narrative-arc {
+      padding: 8px 16px; margin-bottom: 4px; line-height: 1.7;
+      color: var(--ob-text-faint); font-size: 11px;
     }
-    .call-hypothesis {
-      color: var(--ob-text-muted);
-      font-size: 11px;
-      line-height: 1.7;
-      flex: 1;
-    }
-    .call-badge {
-      font-size: 8px;
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
-      padding: 3px 8px;
-      border-radius: 2px;
-      flex-shrink: 0;
-    }
-    .call-badge-confirmed { background: rgba(42,122,42,0.1); color: var(--ob-confirmed); }
-    .call-badge-falsified { background: rgba(154,58,58,0.1); color: var(--ob-falsified); }
-    [data-theme="dark"] .call-badge-confirmed { background: rgba(90,138,90,0.15); }
-    [data-theme="dark"] .call-badge-falsified { background: rgba(138,90,90,0.15); }
-    .call-meta {
-      color: var(--ob-text-dim);
-      font-size: 9px;
-      margin-top: 4px;
-    }
-    .call-rationale {
-      color: var(--ob-text-faint);
-      font-size: 10px;
-      line-height: 1.6;
-      margin-top: 6px;
-      padding-top: 6px;
-      border-top: 1px solid var(--ob-border-subtle);
-    }
+    .narrative-empty { color: var(--ob-text-dim); font-size: 11px; padding: 8px 0; }
 
-    /* ---- Theories ---- */
-    .theory-card {
-      background: var(--ob-bg-card);
-      border: 1px solid var(--ob-border-subtle);
-      padding: 12px 16px;
-      margin-bottom: 6px;
+    /* ---- Recent calls (compact) ---- */
+    .call-row {
+      display: flex; align-items: baseline; gap: 10px;
+      padding: 8px 0; border-bottom: 1px solid var(--ob-border-subtle);
     }
-    .theory-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+    .call-row:last-child { border-bottom: none; }
+    .call-status {
+      font-size: 8px; letter-spacing: 0.05em; text-transform: uppercase;
+      padding: 2px 6px; border-radius: 2px; flex-shrink: 0; width: 68px; text-align: center;
     }
+    .call-status-confirmed { background: rgba(42,122,42,0.1); color: var(--ob-confirmed); }
+    .call-status-falsified { background: rgba(154,58,58,0.1); color: var(--ob-falsified); }
+    [data-theme="dark"] .call-status-confirmed { background: rgba(90,138,90,0.15); }
+    [data-theme="dark"] .call-status-falsified { background: rgba(138,90,90,0.15); }
+    .call-text {
+      flex: 1; color: var(--ob-text-muted); font-size: 11px; line-height: 1.6;
+    }
+    .call-date { color: var(--ob-text-dim); font-size: 9px; flex-shrink: 0; }
+
+    /* ---- Theories (compact) ---- */
+    .theory-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 8px 0; border-bottom: 1px solid var(--ob-border-subtle);
+    }
+    .theory-row:last-child { border-bottom: none; }
+    .theory-status-dot {
+      width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+    }
+    .theory-dot-active { background: var(--ob-theory-active); }
+    .theory-dot-established { background: var(--ob-theory-established); }
+    .theory-dot-retired { background: var(--ob-theory-retired); }
+    .theory-info { flex: 1; min-width: 0; }
     .theory-name { color: var(--ob-text-muted); font-size: 11px; }
-    .theory-status {
-      font-size: 8px;
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
-      padding: 2px 8px;
-      border-radius: 2px;
+    .theory-desc-line {
+      color: var(--ob-text-faint); font-size: 9px; line-height: 1.5;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    .theory-active { background: rgba(58,58,122,0.12); color: var(--ob-theory-active); }
-    .theory-retired { background: rgba(122,58,58,0.12); color: var(--ob-theory-retired); }
-    .theory-desc { color: var(--ob-text-faint); font-size: 10px; line-height: 1.5; margin-top: 6px; }
-    .theory-bar-wrap { margin-top: 8px; display: flex; align-items: center; gap: 10px; }
-    .theory-bar-track { flex: 1; height: 4px; background: var(--ob-border-subtle); border-radius: 2px; overflow: hidden; }
+    .theory-bar-inline {
+      width: 80px; height: 4px; background: var(--ob-border-subtle);
+      border-radius: 2px; overflow: hidden; flex-shrink: 0;
+    }
     .theory-bar-fill { height: 100%; border-radius: 2px; }
-    .theory-bar-label { color: var(--ob-text-dim); font-size: 9px; width: 80px; flex-shrink: 0; }
+    .theory-pct {
+      width: 48px; text-align: right; color: var(--ob-text-dim);
+      font-size: 9px; flex-shrink: 0;
+    }
 
-    /* ---- Sparklines ---- */
-    .sparkline-stack { margin-bottom: 8px; }
-    .sparkline-row {
-      display: flex;
-      align-items: center;
-      height: 56px;
-      border-bottom: 1px solid var(--ob-border-subtle);
-    }
+    /* ---- Dimension groups ---- */
+    .dim-group { margin-bottom: 24px; }
+    .dim-group-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+    .dim-group-name { color: var(--ob-text-muted); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
+    .dim-group-summary { color: var(--ob-text-faint); font-size: 10px; font-style: italic; }
+    .sparkline-row { display: flex; align-items: center; height: 48px; border-bottom: 1px solid var(--ob-border-subtle); }
     .sparkline-row:last-child { border-bottom: none; }
-    .dim-label {
-      width: 90px;
-      color: var(--ob-text-dim);
-      font-size: 9px;
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
-      flex-shrink: 0;
-    }
+    .dim-label { width: 100px; color: var(--ob-text-dim); font-size: 9px; letter-spacing: 0.05em; text-transform: uppercase; flex-shrink: 0; }
     .sparkline-canvas { flex: 1; height: 100%; cursor: crosshair; }
-    .dim-value {
-      width: 50px;
-      text-align: right;
-      color: var(--ob-text-faint);
-      font-size: 10px;
-      flex-shrink: 0;
-    }
+    .dim-value-wrap { width: 120px; text-align: right; flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+    .dim-value-label { color: var(--ob-text-faint); font-size: 10px; }
+    .dim-value-num { color: var(--ob-text-dim); font-size: 8px; }
+
+    /* ---- Collapsible ---- */
+    .collapsible-toggle { display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; }
+    .collapsible-toggle:hover .section-label { color: var(--ob-text-faint); }
+    .toggle-icon { color: var(--ob-text-dim); font-size: 10px; transition: transform 0.15s; }
+    .toggle-icon.open { transform: rotate(90deg); }
+    .collapsible-body { display: none; }
+    .collapsible-body.open { display: block; }
 
     /* ---- Heat strip ---- */
     .heatstrip-wrap { display: flex; align-items: stretch; }
-    .heatstrip-labels {
-      display: flex; flex-direction: column; flex-shrink: 0;
-      width: 90px;
-    }
-    .heatstrip-label {
-      flex: 1; display: flex; align-items: center;
-      color: var(--ob-text-dim); font-size: 9px;
-      letter-spacing: 0.05em; text-transform: uppercase;
-    }
+    .heatstrip-labels { display: flex; flex-direction: column; flex-shrink: 0; width: 100px; }
+    .heatstrip-label { flex: 1; display: flex; align-items: center; color: var(--ob-text-dim); font-size: 9px; letter-spacing: 0.05em; text-transform: uppercase; }
     .heatstrip-canvas-wrap { flex: 1; position: relative; }
     #heatstrip-canvas { display: block; width: 100%; cursor: crosshair; }
-    .heatstrip-date-axis {
-      margin-left: 90px; margin-top: 4px;
-      position: relative; height: 14px;
-    }
-    .heatstrip-date-axis span {
-      position: absolute; color: var(--ob-text-dim); font-size: 9px;
-    }
+    .heatstrip-date-axis { margin-left: 100px; margin-top: 4px; position: relative; height: 14px; }
+    .heatstrip-date-axis span { position: absolute; color: var(--ob-text-dim); font-size: 9px; }
 
     /* ---- Discoveries ---- */
     .discovery {
-      padding: 10px 14px;
-      background: var(--ob-bg-card);
-      border-left: 3px solid var(--ob-border);
-      line-height: 1.7;
-      color: var(--ob-text-muted);
-      font-size: 11px;
-      margin-bottom: 6px;
+      padding: 10px 14px; background: var(--ob-bg-card); border-left: 3px solid var(--ob-border);
+      line-height: 1.7; color: var(--ob-text-muted); font-size: 11px; margin-bottom: 6px;
     }
     .discovery-strong { border-left-color: var(--ob-spark-line); }
-    .discovery-evidence {
-      color: var(--ob-text-dim);
-      font-size: 9px;
-      margin-top: 4px;
-    }
+    .discovery-evidence { color: var(--ob-text-dim); font-size: 9px; margin-top: 4px; }
 
-    /* ---- Inline entry panel ---- */
-    .entry-panel {
-      display: none;
-      margin-top: 16px;
-      padding: 20px;
-      background: var(--ob-bg-card);
-      border: 1px solid var(--ob-border);
-    }
+    /* ---- Entry panel ---- */
+    .entry-panel { display: none; margin-top: 16px; padding: 20px; background: var(--ob-bg-card); border: 1px solid var(--ob-border); }
     .entry-panel.open { display: block; }
-    .entry-panel-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 16px;
-    }
+    .entry-panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
     .entry-panel-date { color: var(--ob-text-faint); font-size: 10px; letter-spacing: 0.05em; }
     .entry-panel-nav { display: flex; gap: 12px; align-items: center; }
-    .entry-nav-btn {
-      color: var(--ob-text-dim); font-size: 10px; cursor: pointer;
-      background: none; border: none; font-family: inherit; padding: 2px 6px;
-    }
+    .entry-nav-btn { color: var(--ob-text-dim); font-size: 10px; cursor: pointer; background: none; border: none; font-family: inherit; padding: 2px 6px; }
     .entry-nav-btn:hover { color: var(--ob-text-muted); }
     .entry-nav-btn:disabled { color: var(--ob-border-subtle); cursor: default; }
-    .entry-panel-close {
-      color: var(--ob-text-dim); font-size: 10px; cursor: pointer; padding: 4px 8px;
-    }
+    .entry-panel-close { color: var(--ob-text-dim); font-size: 10px; cursor: pointer; padding: 4px 8px; }
     .entry-panel-close:hover { color: var(--ob-text-muted); }
-    .entry-panel-question {
-      color: var(--ob-text-muted);
-      font-size: 13px;
-      font-style: italic;
-      line-height: 1.7;
-      padding-bottom: 16px;
-      border-bottom: 1px solid var(--ob-border-subtle);
-      margin-bottom: 16px;
+    .entry-panel-question { color: var(--ob-text-muted); font-size: 13px; font-style: italic; line-height: 1.7; padding-bottom: 16px; border-bottom: 1px solid var(--ob-border-subtle); margin-bottom: 16px; }
+    .entry-section-label { color: var(--ob-text-dim); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; margin: 16px 0 10px; }
+
+    /* Loop trace */
+    .loop-trace {
+      background: var(--ob-bg-card-alt); border: 1px solid var(--ob-border-subtle);
+      padding: 14px 18px; margin-bottom: 16px;
     }
-    .entry-section-label {
-      color: var(--ob-text-dim);
-      font-size: 9px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      margin: 16px 0 10px;
+    .loop-step {
+      display: flex; align-items: baseline; gap: 8px;
+      padding: 4px 0; color: var(--ob-text-faint); font-size: 10px; line-height: 1.6;
     }
-    .frame-card {
-      background: var(--ob-bg-card-alt);
-      border: 1px solid var(--ob-border-subtle);
-      padding: 14px 18px;
-      margin-bottom: 8px;
-      line-height: 1.7;
-      color: var(--ob-text-muted);
-      font-size: 11px;
+    .loop-marker {
+      color: var(--ob-loop-line); font-size: 9px; flex-shrink: 0; width: 12px; text-align: center;
     }
+    .loop-connector {
+      padding: 0 0 0 5px; color: var(--ob-text-dim); font-size: 9px;
+    }
+    .loop-highlight { color: var(--ob-text-muted); }
+
+    .frame-card { background: var(--ob-bg-card-alt); border: 1px solid var(--ob-border-subtle); padding: 14px 18px; margin-bottom: 8px; line-height: 1.7; color: var(--ob-text-muted); font-size: 11px; }
     .frame-card-a { border-left: 3px solid var(--ob-frame-a); }
     .frame-card-b { border-left: 3px solid var(--ob-frame-b); }
     .frame-card-c { border-left: 3px solid var(--ob-frame-c); }
@@ -400,18 +309,10 @@
     .frame-label-b { color: var(--ob-frame-b); }
     .frame-label-c { color: var(--ob-frame-c); }
 
-    .prediction-card {
-      background: var(--ob-bg-card-alt);
-      border: 1px solid var(--ob-border-subtle);
-      padding: 10px 14px;
-      margin-bottom: 6px;
-    }
+    .prediction-card { background: var(--ob-bg-card-alt); border: 1px solid var(--ob-border-subtle); padding: 10px 14px; margin-bottom: 6px; }
     .prediction-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
     .prediction-hypothesis { color: var(--ob-text-muted); line-height: 1.6; font-size: 10px; }
-    .status-badge {
-      font-size: 8px; letter-spacing: 0.05em; text-transform: uppercase;
-      padding: 2px 6px; border-radius: 2px; flex-shrink: 0;
-    }
+    .status-badge { font-size: 8px; letter-spacing: 0.05em; text-transform: uppercase; padding: 2px 6px; border-radius: 2px; flex-shrink: 0; }
     .status-open { background: var(--ob-border-subtle); color: var(--ob-text-faint); }
     .status-confirmed { background: rgba(42,122,42,0.1); color: var(--ob-confirmed); }
     .status-falsified { background: rgba(154,58,58,0.1); color: var(--ob-falsified); }
@@ -419,45 +320,17 @@
     [data-theme="dark"] .status-confirmed { background: rgba(90,138,90,0.15); }
     [data-theme="dark"] .status-falsified { background: rgba(138,90,90,0.15); }
     .prediction-meta { color: var(--ob-text-dim); font-size: 9px; margin-top: 4px; }
-    .prediction-rationale {
-      color: var(--ob-text-faint); font-size: 10px; margin-top: 6px;
-      padding-top: 6px; border-top: 1px solid var(--ob-border-subtle); line-height: 1.5;
-    }
-    .suppressed-block {
-      background: var(--ob-bg-card-alt);
-      border-left: 3px solid var(--ob-border);
-      padding: 12px 16px;
-      color: var(--ob-text-faint);
-      font-style: italic;
-      line-height: 1.6;
-      font-size: 10px;
-      margin-top: 12px;
-    }
+    .prediction-rationale { color: var(--ob-text-faint); font-size: 10px; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--ob-border-subtle); line-height: 1.5; }
+
+    .suppressed-block { background: var(--ob-bg-card-alt); border-left: 3px solid var(--ob-border); padding: 12px 16px; color: var(--ob-text-faint); font-style: italic; line-height: 1.6; font-size: 10px; margin-top: 12px; }
     .entry-radar-wrap { display: flex; justify-content: center; margin: 12px 0; }
 
     /* ---- Tooltip ---- */
-    .tooltip {
-      display: none;
-      position: fixed;
-      background: var(--ob-bg-card);
-      border: 1px solid var(--ob-border);
-      padding: 8px 12px;
-      font-size: 10px;
-      color: var(--ob-text-muted);
-      pointer-events: none;
-      z-index: 100;
-      line-height: 1.5;
-      max-width: 340px;
-    }
+    .tooltip { display: none; position: fixed; background: var(--ob-bg-card); border: 1px solid var(--ob-border); padding: 8px 12px; font-size: 10px; color: var(--ob-text-muted); pointer-events: none; z-index: 100; line-height: 1.5; max-width: 340px; }
     .tooltip-question { color: var(--ob-text-muted); font-style: italic; margin-bottom: 4px; }
     .tooltip-dim { color: var(--ob-text-faint); font-size: 9px; }
 
-    .loading {
-      color: var(--ob-text-dim);
-      text-align: center;
-      padding: 60px 0;
-      letter-spacing: 0.1em;
-    }
+    .loading { color: var(--ob-text-dim); text-align: center; padding: 60px 0; letter-spacing: 0.1em; }
   </style>
 </head>
 <body>
@@ -474,17 +347,34 @@
 
   <div class="container" id="main" style="display:none">
 
-    <!-- HERO: Prediction arc timeline -->
+    <!-- HERO -->
     <div class="hero">
       <div class="hero-tagline">predictions over time</div>
-      <div class="hero-canvas-wrap">
-        <canvas id="arc-canvas"></canvas>
-      </div>
+      <div class="hero-canvas-wrap"><canvas id="arc-canvas"></canvas></div>
       <div class="hero-date-axis" id="arc-dates"></div>
     </div>
 
     <!-- SCOREBOARD -->
     <div class="scoreboard" id="scoreboard"></div>
+
+    <!-- CALIBRATION CURVE -->
+    <div class="calibration-section" id="section-calibration" style="display:none">
+      <div class="section-label">system calibration</div>
+      <div class="calibration-row">
+        <div class="calibration-canvas-wrap"><canvas id="calibration-canvas"></canvas></div>
+        <div class="calibration-summary">
+          <div class="calibration-rate" id="cal-rate"></div>
+          <div class="calibration-label">rolling accuracy</div>
+          <div class="calibration-trend" id="cal-trend"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- NARRATIVE -->
+    <div class="section" id="section-narrative">
+      <div class="section-label">right now</div>
+      <div id="narrative-body"></div>
+    </div>
 
     <!-- RECENT CALLS -->
     <div class="section" id="section-calls">
@@ -498,25 +388,50 @@
       <div id="theories-list"></div>
     </div>
 
-    <!-- SPARKLINES -->
+    <!-- DIMENSIONS -->
     <div class="section">
       <div class="section-label">behavioral dimensions</div>
-      <div class="sparkline-stack" id="sparkline-stack"></div>
+      <div class="dim-group" id="group-flow">
+        <div class="dim-group-header">
+          <span class="dim-group-name">Flow</span>
+          <span class="dim-group-summary" id="group-flow-summary"></span>
+        </div>
+        <div id="group-flow-sparklines"></div>
+      </div>
+      <div class="dim-group" id="group-process">
+        <div class="dim-group-header">
+          <span class="dim-group-name">Process</span>
+          <span class="dim-group-summary" id="group-process-summary"></span>
+        </div>
+        <div id="group-process-sparklines"></div>
+      </div>
+      <div class="dim-group" id="group-shape">
+        <div class="dim-group-header">
+          <span class="dim-group-name">Shape</span>
+          <span class="dim-group-summary" id="group-shape-summary"></span>
+        </div>
+        <div id="group-shape-sparklines"></div>
+      </div>
     </div>
 
-    <!-- HEAT STRIP -->
+    <!-- HEATMAP (collapsible) -->
     <div class="section">
-      <div class="section-label">behavioral heatmap</div>
-      <div class="heatstrip-wrap">
-        <div class="heatstrip-labels" id="heatstrip-labels"></div>
-        <div class="heatstrip-canvas-wrap">
-          <canvas id="heatstrip-canvas"></canvas>
+      <div class="collapsible-toggle" id="heatmap-toggle">
+        <div class="section-label" style="margin-bottom:0;border-bottom:none;padding-bottom:0;">behavioral heatmap</div>
+        <span class="toggle-icon" id="heatmap-icon">&#9654;</span>
+      </div>
+      <div class="collapsible-body" id="heatmap-body">
+        <div style="margin-top:12px">
+          <div class="heatstrip-wrap">
+            <div class="heatstrip-labels" id="heatstrip-labels"></div>
+            <div class="heatstrip-canvas-wrap"><canvas id="heatstrip-canvas"></canvas></div>
+          </div>
+          <div class="heatstrip-date-axis" id="heatstrip-dates"></div>
         </div>
       </div>
-      <div class="heatstrip-date-axis" id="heatstrip-dates"></div>
     </div>
 
-    <!-- INLINE ENTRY PANEL -->
+    <!-- ENTRY PANEL -->
     <div class="entry-panel" id="entry-panel">
       <div class="entry-panel-header">
         <span class="entry-panel-date" id="entry-panel-date"></span>
@@ -543,6 +458,18 @@
   <script>
     const DIMS = ['fluency', 'deliberation', 'revision', 'expression', 'commitment', 'volatility', 'thermal', 'presence'];
 
+    const DIM_GROUPS: Record<string, { dims: string[]; containerId: string; summaryId: string }> = {
+      flow: { dims: ['fluency', 'presence'], containerId: 'group-flow-sparklines', summaryId: 'group-flow-summary' },
+      process: { dims: ['deliberation', 'revision', 'thermal'], containerId: 'group-process-sparklines', summaryId: 'group-process-summary' },
+      shape: { dims: ['expression', 'commitment', 'volatility'], containerId: 'group-shape-sparklines', summaryId: 'group-shape-summary' },
+    };
+
+    const DIM_DISPLAY: Record<string, string> = {
+      fluency: 'fluency', deliberation: 'deliberation', revision: 'revision',
+      expression: 'expression', commitment: 'commitment', volatility: 'volatility',
+      thermal: 'corrections', presence: 'presence',
+    };
+
     interface EntryState {
       response_id: number; date: string; question: string;
       fluency: number; deliberation: number; revision: number; expression: number;
@@ -553,8 +480,41 @@
     let allStates: EntryState[] = [];
     let allPredictions: any[] = [];
     let selectedIdx: number | null = null;
+    let heatmapDrawn = false;
 
-    // ---- Theme toggle ----
+    // ---- Helpers ----
+    function zLabel(z: number): string {
+      const abs = Math.abs(z);
+      if (abs < 0.5) return 'typical';
+      if (abs < 1.0) return z > 0 ? 'slightly higher' : 'slightly lower';
+      if (abs < 1.5) return z > 0 ? 'higher than usual' : 'lower than usual';
+      if (abs < 2.0) return z > 0 ? 'notably high' : 'notably low';
+      return z > 0 ? 'unusually high' : 'unusually low';
+    }
+
+    function groupSummary(group: string, states: EntryState[]): string {
+      if (states.length === 0) return '';
+      const latest = states[states.length - 1];
+      const dims = DIM_GROUPS[group].dims;
+      const vals = dims.map(d => ({ dim: d, val: (latest as any)[d] as number }));
+      vals.sort((a, b) => Math.abs(b.val) - Math.abs(a.val));
+      const top = vals[0];
+      if (Math.abs(top.val) < 0.5) return 'all within normal range';
+      return `${DIM_DISPLAY[top.dim]} is ${zLabel(top.val)}`;
+    }
+
+    function truncate(s: string, n: number): string {
+      return s.length > n ? s.slice(0, n) + '\u2026' : s;
+    }
+
+    function cssVar(name: string): string {
+      return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    }
+    function cssVarNum(name: string): number {
+      return parseFloat(cssVar(name)) || 0;
+    }
+
+    // ---- Theme ----
     const themeBtn = document.getElementById('theme-toggle')!;
     const savedTheme = localStorage.getItem('alice-theme') || 'light';
     document.documentElement.setAttribute('data-theme', savedTheme);
@@ -565,21 +525,13 @@
       document.documentElement.setAttribute('data-theme', next);
       localStorage.setItem('alice-theme', next);
       themeBtn.textContent = next === 'dark' ? '\u2600' : '\u263E';
-      // Redraw canvases with new colors
       if (allStates.length > 0) {
         drawArcTimeline(allStates, allPredictions);
+        drawCalibrationCurve(allPredictions);
         drawAllSparklines(allStates);
-        drawHeatStrip(allStates);
+        if (heatmapDrawn) drawHeatStrip(allStates);
       }
     });
-
-    // ---- CSS variable reader ----
-    function cssVar(name: string): string {
-      return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-    }
-    function cssVarNum(name: string): number {
-      return parseFloat(cssVar(name)) || 0;
-    }
 
     // ---- Scoreboard ----
     function renderScoreboard(preds: any[], entryCount: number) {
@@ -595,17 +547,143 @@
       `;
     }
 
-    // ---- Prediction arc timeline ----
+    // ---- Calibration curve ----
+    function drawCalibrationCurve(preds: any[]) {
+      const graded = preds
+        .filter(p => p.status === 'confirmed' || p.status === 'falsified')
+        .sort((a, b) => (a.dttm_graded_utc || '').localeCompare(b.dttm_graded_utc || ''));
+
+      if (graded.length < 4) return;
+      document.getElementById('section-calibration')!.style.display = '';
+
+      // Compute rolling accuracy (window of 6, or all if fewer)
+      const windowSize = Math.min(6, graded.length);
+      const rollingAcc: number[] = [];
+      let hits = 0;
+      for (let i = 0; i < graded.length; i++) {
+        if (graded[i].status === 'confirmed') hits++;
+        if (i >= windowSize) {
+          if (graded[i - windowSize].status === 'confirmed') hits--;
+        }
+        const count = Math.min(i + 1, windowSize);
+        rollingAcc.push(hits / count);
+      }
+
+      // Current rate
+      const currentRate = rollingAcc[rollingAcc.length - 1];
+      document.getElementById('cal-rate')!.textContent = Math.round(currentRate * 100) + '%';
+
+      // Trend: compare first half avg to second half avg
+      const mid = Math.floor(rollingAcc.length / 2);
+      const firstHalf = rollingAcc.slice(0, mid).reduce((a, b) => a + b, 0) / mid;
+      const secondHalf = rollingAcc.slice(mid).reduce((a, b) => a + b, 0) / (rollingAcc.length - mid);
+      const diff = secondHalf - firstHalf;
+      const trendEl = document.getElementById('cal-trend')!;
+      if (Math.abs(diff) < 0.05) {
+        trendEl.textContent = 'holding steady';
+      } else if (diff > 0) {
+        trendEl.textContent = 'improving';
+        trendEl.style.color = cssVar('--ob-confirmed');
+      } else {
+        trendEl.textContent = 'declining';
+        trendEl.style.color = cssVar('--ob-falsified');
+      }
+
+      // Draw
+      const canvas = document.getElementById('calibration-canvas') as HTMLCanvasElement;
+      const wrap = canvas.parentElement!;
+      const wrapW = wrap.getBoundingClientRect().width;
+      if (wrapW < 10) { requestAnimationFrame(() => drawCalibrationCurve(preds)); return; }
+
+      const h = 60;
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = wrapW * dpr;
+      canvas.height = h * dpr;
+      canvas.style.width = wrapW + 'px';
+      canvas.style.height = h + 'px';
+      const ctx = canvas.getContext('2d')!;
+      ctx.scale(dpr, dpr);
+
+      const pad = { left: 4, right: 4, top: 8, bottom: 8 };
+      const plotW = wrapW - pad.left - pad.right;
+      const plotH = h - pad.top - pad.bottom;
+      const xStep = rollingAcc.length > 1 ? plotW / (rollingAcc.length - 1) : plotW;
+
+      // 50% reference line
+      const refY = pad.top + plotH * 0.5;
+      ctx.strokeStyle = cssVar('--ob-spark-zero');
+      ctx.lineWidth = 1;
+      ctx.setLineDash([2, 4]);
+      ctx.beginPath(); ctx.moveTo(pad.left, refY); ctx.lineTo(wrapW - pad.right, refY); ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Accuracy line
+      ctx.strokeStyle = cssVar('--ob-spark-line');
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (let i = 0; i < rollingAcc.length; i++) {
+        const x = pad.left + i * xStep;
+        const y = pad.top + plotH * (1 - rollingAcc[i]);
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+
+      // Dots colored by outcome
+      for (let i = 0; i < graded.length; i++) {
+        const x = pad.left + i * xStep;
+        const y = pad.top + plotH * (1 - rollingAcc[i]);
+        ctx.fillStyle = graded[i].status === 'confirmed' ? cssVar('--ob-confirmed') : cssVar('--ob-falsified');
+        ctx.beginPath(); ctx.arc(x, y, 2.5, 0, Math.PI * 2); ctx.fill();
+      }
+
+      // Hover
+      canvas.onmousemove = (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const idx = Math.round((mx - pad.left) / xStep);
+        if (idx >= 0 && idx < graded.length) {
+          const p = graded[idx];
+          const tt = document.getElementById('tooltip')!;
+          const label = p.status === 'confirmed' ? '\u2713' : '\u2717';
+          tt.innerHTML = `<div>${label} ${truncate(p.hypothesis, 120)}</div><div class="tooltip-dim">${Math.round(rollingAcc[idx] * 100)}% accuracy at this point</div>`;
+          tt.style.display = 'block';
+          tt.style.left = (e.clientX + 12) + 'px';
+          tt.style.top = (e.clientY - 10) + 'px';
+        } else {
+          document.getElementById('tooltip')!.style.display = 'none';
+        }
+      };
+      canvas.onmouseleave = () => { document.getElementById('tooltip')!.style.display = 'none'; };
+    }
+
+    // ---- Narrative ----
+    function renderNarrative(synthesis: any) {
+      const body = document.getElementById('narrative-body')!;
+      let html = '';
+      if (synthesis.rightNow && synthesis.rightNow.length > 0) {
+        for (const insight of synthesis.rightNow) {
+          const isRare = insight.magnitude && insight.magnitude > 2;
+          const isNotable = insight.magnitude && insight.magnitude > 1;
+          const cls = isRare ? 'narrative-insight-rare' : isNotable ? 'narrative-insight-notable' : '';
+          const text = insight.text.replace(/\s+[\d.]+\u03c3 from your baseline\.$/, '.');
+          html += `<div class="narrative-insight ${cls}">${text}</div>`;
+        }
+      }
+      if (synthesis.arcs && synthesis.arcs.length > 0) {
+        for (const arc of synthesis.arcs) {
+          html += `<div class="narrative-arc">${arc.text}</div>`;
+        }
+      }
+      if (!html) html = '<div class="narrative-empty">Not enough data yet for behavioral insights.</div>';
+      body.innerHTML = html;
+    }
+
+    // ---- Arc timeline ----
     function drawArcTimeline(states: EntryState[], preds: any[]) {
       const canvas = document.getElementById('arc-canvas') as HTMLCanvasElement;
       const wrap = canvas.parentElement!;
       const wrapW = wrap.getBoundingClientRect().width;
-
-      // If layout not ready, retry next frame
-      if (wrapW < 10) {
-        requestAnimationFrame(() => drawArcTimeline(states, preds));
-        return;
-      }
+      if (wrapW < 10) { requestAnimationFrame(() => drawArcTimeline(states, preds)); return; }
 
       const resolved = preds.filter(p => p.status === 'confirmed' || p.status === 'falsified');
       const openPreds = preds.filter(p => p.status === 'open');
@@ -616,33 +694,24 @@
       const totalH = baselineY + 30;
 
       const dpr = window.devicePixelRatio || 1;
-      canvas.width = wrapW * dpr;
-      canvas.height = totalH * dpr;
-      canvas.style.width = wrapW + 'px';
-      canvas.style.height = totalH + 'px';
-
+      canvas.width = wrapW * dpr; canvas.height = totalH * dpr;
+      canvas.style.width = wrapW + 'px'; canvas.style.height = totalH + 'px';
       const ctx = canvas.getContext('2d')!;
       ctx.scale(dpr, dpr);
 
       const n = states.length;
       if (n === 0) return;
-
       const pad = { left: 10, right: 10 };
       const plotW = wrapW - pad.left - pad.right;
       const xStep = n > 1 ? plotW / (n - 1) : plotW;
 
-      // Date → x mapping
       const dateToX = new Map<string, number>();
-      for (let i = 0; i < n; i++) {
-        dateToX.set(states[i].date, pad.left + i * xStep);
-      }
+      for (let i = 0; i < n; i++) dateToX.set(states[i].date, pad.left + i * xStep);
 
-      // Nearest date x-position finder
       function nearestX(dateStr: string): number {
         if (dateToX.has(dateStr)) return dateToX.get(dateStr)!;
         const d = dateStr.slice(0, 10);
         if (dateToX.has(d)) return dateToX.get(d)!;
-        // Find nearest
         let bestDist = Infinity, bestX = pad.left + plotW;
         for (const [sd, sx] of dateToX) {
           const dist = Math.abs(new Date(sd).getTime() - new Date(d).getTime());
@@ -651,63 +720,33 @@
         return bestX;
       }
 
-      // Baseline
-      ctx.strokeStyle = cssVar('--ob-border');
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(pad.left, baselineY);
-      ctx.lineTo(wrapW - pad.right, baselineY);
-      ctx.stroke();
+      ctx.strokeStyle = cssVar('--ob-border'); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(pad.left, baselineY); ctx.lineTo(wrapW - pad.right, baselineY); ctx.stroke();
 
-      // Entry dots
       const dotColor = cssVar('--ob-text-faint');
       for (let i = 0; i < n; i++) {
-        const x = pad.left + i * xStep;
-        ctx.fillStyle = dotColor;
-        ctx.beginPath();
-        ctx.arc(x, baselineY, 3, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.fillStyle = dotColor; ctx.beginPath();
+        ctx.arc(pad.left + i * xStep, baselineY, 3, 0, Math.PI * 2); ctx.fill();
       }
 
-      // Sort arcs: longer spans get higher arcs
       const arcData = allArcs.map(p => {
         const originX = nearestX(p.origin_date);
         const isOpen = p.status === 'open';
         const resolveX = isOpen ? wrapW - pad.right : nearestX((p.dttm_graded_utc || '').slice(0, 10));
-        const span = Math.abs(resolveX - originX);
-        return { ...p, originX, resolveX, span, isOpen };
+        return { ...p, originX, resolveX, span: Math.abs(resolveX - originX), isOpen };
       }).sort((a, b) => a.span - b.span);
 
-      // Draw arcs
       const maxSpan = Math.max(1, ...arcData.map(a => a.span));
       for (const arc of arcData) {
         const midX = (arc.originX + arc.resolveX) / 2;
-        const heightRatio = Math.max(0.15, arc.span / maxSpan);
-        const cpY = baselineY - heightRatio * arcH;
-
-        if (arc.status === 'confirmed') {
-          ctx.strokeStyle = cssVar('--ob-arc-confirmed');
-        } else if (arc.status === 'falsified') {
-          ctx.strokeStyle = cssVar('--ob-arc-falsified');
-        } else {
-          ctx.strokeStyle = cssVar('--ob-arc-open');
-        }
-
+        const cpY = baselineY - Math.max(0.15, arc.span / maxSpan) * arcH;
+        ctx.strokeStyle = arc.status === 'confirmed' ? cssVar('--ob-arc-confirmed') : arc.status === 'falsified' ? cssVar('--ob-arc-falsified') : cssVar('--ob-arc-open');
         ctx.lineWidth = arc.isOpen ? 1 : 1.5;
-        if (arc.isOpen) ctx.setLineDash([4, 4]);
-        else ctx.setLineDash([]);
-
-        ctx.beginPath();
-        ctx.moveTo(arc.originX, baselineY);
-        ctx.quadraticCurveTo(midX, cpY, arc.resolveX, baselineY);
-        ctx.stroke();
-
-        // Endpoint marker for resolved
+        ctx.setLineDash(arc.isOpen ? [4, 4] : []);
+        ctx.beginPath(); ctx.moveTo(arc.originX, baselineY); ctx.quadraticCurveTo(midX, cpY, arc.resolveX, baselineY); ctx.stroke();
         if (!arc.isOpen) {
           ctx.fillStyle = arc.status === 'confirmed' ? cssVar('--ob-confirmed') : cssVar('--ob-falsified');
-          ctx.beginPath();
-          ctx.arc(arc.resolveX, baselineY, 4, 0, Math.PI * 2);
-          ctx.fill();
+          ctx.beginPath(); ctx.arc(arc.resolveX, baselineY, 4, 0, Math.PI * 2); ctx.fill();
         }
       }
       ctx.setLineDash([]);
@@ -729,103 +768,89 @@
         datesEl.appendChild(span);
       }
 
-      // Hover
       canvas.onmousemove = (e) => {
         const rect = canvas.getBoundingClientRect();
-        const mx = e.clientX - rect.left;
-        const my = e.clientY - rect.top;
-
-        // Check if near an arc endpoint
+        const mx = e.clientX - rect.left, my = e.clientY - rect.top;
         let found = false;
         for (const arc of arcData) {
           if (!arc.isOpen) {
             const dx = mx - arc.resolveX, dy = my - baselineY;
             if (dx * dx + dy * dy < 100) {
               const tt = document.getElementById('tooltip')!;
-              const label = arc.status === 'confirmed' ? '\u2713 confirmed' : '\u2717 falsified';
-              tt.innerHTML = `<div style="margin-bottom:4px">${label}</div><div>${truncate(arc.hypothesis, 150)}</div>`;
-              tt.style.display = 'block';
-              tt.style.left = (e.clientX + 12) + 'px';
-              tt.style.top = (e.clientY - 10) + 'px';
-              found = true;
-              break;
+              tt.innerHTML = `<div style="margin-bottom:4px">${arc.status === 'confirmed' ? '\u2713 confirmed' : '\u2717 falsified'}</div><div>${truncate(arc.hypothesis, 150)}</div>`;
+              tt.style.display = 'block'; tt.style.left = (e.clientX + 12) + 'px'; tt.style.top = (e.clientY - 10) + 'px';
+              found = true; break;
             }
           }
         }
-        // Check if near an entry dot
         if (!found) {
           const col = Math.round((mx - pad.left) / xStep);
           if (col >= 0 && col < n && Math.abs(my - baselineY) < 15) {
-            const state = states[col];
             const tt = document.getElementById('tooltip')!;
-            tt.innerHTML = `<div class="tooltip-question">"${state.question}"</div><div class="tooltip-dim">${state.date}</div>`;
-            tt.style.display = 'block';
-            tt.style.left = (e.clientX + 12) + 'px';
-            tt.style.top = (e.clientY - 10) + 'px';
+            tt.innerHTML = `<div class="tooltip-question">"${states[col].question}"</div><div class="tooltip-dim">${states[col].date}</div>`;
+            tt.style.display = 'block'; tt.style.left = (e.clientX + 12) + 'px'; tt.style.top = (e.clientY - 10) + 'px';
             found = true;
           }
         }
         if (!found) document.getElementById('tooltip')!.style.display = 'none';
       };
       canvas.onmouseleave = () => { document.getElementById('tooltip')!.style.display = 'none'; };
-
-      // Click entry dot
       canvas.onclick = (e) => {
         const rect = canvas.getBoundingClientRect();
-        const mx = e.clientX - rect.left;
-        const col = Math.round((mx - pad.left) / xStep);
+        const col = Math.round((e.clientX - rect.left - pad.left) / xStep);
         if (col >= 0 && col < n) selectEntry(col);
       };
     }
 
-    // ---- Recent calls ----
+    // ---- Recent calls (compact) ----
     function renderCalls(preds: any[]) {
       const resolved = preds
         .filter(p => p.status === 'confirmed' || p.status === 'falsified')
         .sort((a, b) => (b.dttm_graded_utc || '').localeCompare(a.dttm_graded_utc || ''))
-        .slice(0, 6);
+        .slice(0, 8);
 
       const el = document.getElementById('calls-list')!;
       if (resolved.length === 0) {
         el.innerHTML = '<div style="color:var(--ob-text-dim);font-size:10px;">No predictions resolved yet.</div>';
         return;
       }
-      el.innerHTML = resolved.map(p => {
-        const cls = p.status === 'confirmed' ? 'call-badge-confirmed' : 'call-badge-falsified';
-        return `<div class="call-card">
-          <div class="call-header">
-            <div class="call-hypothesis">${p.hypothesis}</div>
-            <span class="call-badge ${cls}">${p.status}</span>
-          </div>
-          <div class="call-meta">predicted ${p.origin_date || ''} &middot; resolved ${(p.dttm_graded_utc || '').slice(0, 10)}</div>
-          ${p.grade_rationale ? `<div class="call-rationale">${truncate(p.grade_rationale, 200)}</div>` : ''}
-        </div>`;
-      }).join('');
+      el.innerHTML = resolved.map(p =>
+        `<div class="call-row">
+          <span class="call-status call-status-${p.status}">${p.status}</span>
+          <span class="call-text">${truncate(p.hypothesis, 120)}</span>
+          <span class="call-date">${(p.dttm_graded_utc || '').slice(5, 10)}</span>
+        </div>`
+      ).join('');
     }
 
-    // ---- Theories ----
+    // ---- Theories (compact) ----
     function renderTheories(theories: any[]) {
       if (!theories || theories.length === 0) return;
       document.getElementById('section-theories')!.style.display = '';
-      document.getElementById('theories-list')!.innerHTML = theories.map(t => {
+
+      // Sort: active first (by total predictions desc), then established, then retired
+      const sorted = [...theories].sort((a, b) => {
+        const order: Record<string, number> = { active: 0, established: 1, retired: 2 };
+        const statusDiff = (order[a.status] ?? 3) - (order[b.status] ?? 3);
+        if (statusDiff !== 0) return statusDiff;
+        return b.total_predictions - a.total_predictions;
+      });
+
+      document.getElementById('theories-list')!.innerHTML = sorted.map(t => {
         const pm = t.alpha / (t.alpha + t.beta);
-        const pct = (pm * 100).toFixed(0) + '%';
+        const pct = Math.round(pm * 100) + '%';
         const barW = Math.round(pm * 100);
-        const statusCls = `theory-${t.status}`;
-        const barColor = t.status === 'retired' ? 'var(--ob-falsified)' : 'var(--ob-theory-active)';
         const parts = t.theory_key.split(':');
         const name = parts.length === 2 ? parts[1].replace(/_/g, ' ') : t.theory_key.replace(/_/g, ' ');
-        const frame = parts.length === 2 ? ` (frame ${parts[0]})` : '';
-        return `<div class="theory-card">
-          <div class="theory-header">
-            <span class="theory-name">${name}<span style="color:var(--ob-text-dim)">${frame}</span></span>
-            <span class="theory-status ${statusCls}">${t.status}</span>
+        const barColor = t.status === 'retired' ? 'var(--ob-theory-retired)' : t.status === 'established' ? 'var(--ob-theory-established)' : 'var(--ob-theory-active)';
+        return `<div class="theory-row">
+          <span class="theory-status-dot theory-dot-${t.status}"></span>
+          <div class="theory-info">
+            <div class="theory-name">${name}</div>
+            <div class="theory-desc-line">${t.description || ''}</div>
           </div>
-          <div class="theory-desc">${t.description}</div>
-          <div class="theory-bar-wrap">
-            <div class="theory-bar-track"><div class="theory-bar-fill" style="width:${barW}%;background:${barColor}"></div></div>
-            <span class="theory-bar-label">${pct} after ${t.total_predictions}</span>
-          </div>
+          <div class="theory-bar-inline"><div class="theory-bar-fill" style="width:${barW}%;background:${barColor}"></div></div>
+          <span class="theory-pct">${pct} / ${t.total_predictions}</span>
         </div>`;
       }).join('');
     }
@@ -834,229 +859,146 @@
     const sparkHitTargets: Map<string, Array<{ x: number; idx: number; value: number }>> = new Map();
 
     function drawAllSparklines(states: EntryState[]) {
-      const stack = document.getElementById('sparkline-stack')!;
-      // Only rebuild DOM if empty
-      if (stack.children.length === 0) {
-        for (const dim of DIMS) {
-          const row = document.createElement('div');
-          row.className = 'sparkline-row';
-          const label = document.createElement('span');
-          label.className = 'dim-label';
-          label.textContent = dim;
-          const canvas = document.createElement('canvas');
-          canvas.className = 'sparkline-canvas';
-          canvas.id = `spark-${dim}`;
-          const val = document.createElement('span');
-          val.className = 'dim-value';
-          val.id = `sparkval-${dim}`;
-          row.appendChild(label);
-          row.appendChild(canvas);
-          row.appendChild(val);
-          stack.appendChild(row);
+      for (const [groupKey, group] of Object.entries(DIM_GROUPS)) {
+        const container = document.getElementById(group.containerId)!;
+        document.getElementById(group.summaryId)!.textContent = groupSummary(groupKey, states);
 
-          canvas.addEventListener('click', (e) => {
-            const targets = sparkHitTargets.get(dim);
-            if (!targets) return;
-            const rect = canvas.getBoundingClientRect();
-            const mx = e.clientX - rect.left;
-            let best = targets[0], bestD = Infinity;
-            for (const t of targets) { const d = Math.abs(mx - t.x); if (d < bestD) { bestD = d; best = t; } }
-            if (bestD < 30) selectEntry(best.idx);
-          });
+        if (container.children.length === 0) {
+          for (const dim of group.dims) {
+            const row = document.createElement('div');
+            row.className = 'sparkline-row';
+            row.innerHTML = `
+              <span class="dim-label">${DIM_DISPLAY[dim] || dim}</span>
+              <canvas class="sparkline-canvas" id="spark-${dim}"></canvas>
+              <span class="dim-value-wrap">
+                <span class="dim-value-label" id="sparklabel-${dim}"></span>
+                <span class="dim-value-num" id="sparknum-${dim}"></span>
+              </span>`;
+            container.appendChild(row);
 
-          canvas.addEventListener('mousemove', (e) => {
-            const targets = sparkHitTargets.get(dim);
-            if (!targets) return;
-            const rect = canvas.getBoundingClientRect();
-            const mx = e.clientX - rect.left;
-            let best = targets[0], bestD = Infinity;
-            for (const t of targets) { const d = Math.abs(mx - t.x); if (d < bestD) { bestD = d; best = t; } }
-            if (bestD < 20) {
-              const state = states[best.idx];
-              const tt = document.getElementById('tooltip')!;
-              tt.innerHTML = `<div class="tooltip-question">"${state.question}"</div><div class="tooltip-dim">${dim}: ${best.value >= 0 ? '+' : ''}${best.value.toFixed(2)}\u03c3 &middot; ${state.date.slice(5)}</div>`;
-              tt.style.display = 'block';
-              tt.style.left = (e.clientX + 12) + 'px';
-              tt.style.top = (e.clientY - 10) + 'px';
-            } else {
-              document.getElementById('tooltip')!.style.display = 'none';
-            }
-          });
-          canvas.addEventListener('mouseleave', () => { document.getElementById('tooltip')!.style.display = 'none'; });
+            const canvas = row.querySelector('canvas')!;
+            canvas.addEventListener('click', (e) => {
+              const targets = sparkHitTargets.get(dim);
+              if (!targets) return;
+              const rect = canvas.getBoundingClientRect();
+              const mx = e.clientX - rect.left;
+              let best = targets[0], bestD = Infinity;
+              for (const t of targets) { const d = Math.abs(mx - t.x); if (d < bestD) { bestD = d; best = t; } }
+              if (bestD < 30) selectEntry(best.idx);
+            });
+            canvas.addEventListener('mousemove', (e) => {
+              const targets = sparkHitTargets.get(dim);
+              if (!targets) return;
+              const rect = canvas.getBoundingClientRect();
+              const mx = e.clientX - rect.left;
+              let best = targets[0], bestD = Infinity;
+              for (const t of targets) { const d = Math.abs(mx - t.x); if (d < bestD) { bestD = d; best = t; } }
+              if (bestD < 20) {
+                const state = states[best.idx];
+                const tt = document.getElementById('tooltip')!;
+                tt.innerHTML = `<div class="tooltip-question">"${state.question}"</div><div class="tooltip-dim">${DIM_DISPLAY[dim] || dim}: ${zLabel(best.value)} &middot; ${state.date.slice(5)}</div>`;
+                tt.style.display = 'block'; tt.style.left = (e.clientX + 12) + 'px'; tt.style.top = (e.clientY - 10) + 'px';
+              } else { document.getElementById('tooltip')!.style.display = 'none'; }
+            });
+            canvas.addEventListener('mouseleave', () => { document.getElementById('tooltip')!.style.display = 'none'; });
+          }
         }
-      }
-
-      for (const dim of DIMS) {
-        drawSparkline(document.getElementById(`spark-${dim}`) as HTMLCanvasElement, dim, states);
+        for (const dim of group.dims) drawSparkline(document.getElementById(`spark-${dim}`) as HTMLCanvasElement, dim, states);
       }
     }
 
     function drawSparkline(canvas: HTMLCanvasElement, dim: string, states: EntryState[]) {
       const rect = canvas.getBoundingClientRect();
-      if (rect.width < 10) {
-        requestAnimationFrame(() => drawSparkline(canvas, dim, states));
-        return;
-      }
+      if (rect.width < 10) { requestAnimationFrame(() => drawSparkline(canvas, dim, states)); return; }
       const dpr = window.devicePixelRatio || 1;
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
+      canvas.width = rect.width * dpr; canvas.height = rect.height * dpr;
       const ctx = canvas.getContext('2d')!;
       ctx.scale(dpr, dpr);
 
       const w = rect.width, h = rect.height;
       const pad = { left: 4, right: 4, top: 6, bottom: 6 };
-      const plotW = w - pad.left - pad.right;
-      const plotH = h - pad.top - pad.bottom;
-
+      const plotW = w - pad.left - pad.right, plotH = h - pad.top - pad.bottom;
       const values = states.map(s => (s as any)[dim] as number);
       const maxAbs = Math.max(3, ...values.map(Math.abs));
       const xStep = states.length > 1 ? plotW / (states.length - 1) : plotW;
       const toY = (v: number) => pad.top + plotH / 2 - (v / maxAbs) * (plotH / 2);
-      const toX = (i: number) => pad.left + i * xStep;
 
-      // Zero line
-      ctx.strokeStyle = cssVar('--ob-spark-zero');
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = cssVar('--ob-spark-zero'); ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(pad.left, toY(0)); ctx.lineTo(w - pad.right, toY(0)); ctx.stroke();
-
-      // +/- 1σ refs
-      ctx.strokeStyle = cssVar('--ob-spark-ref');
-      ctx.setLineDash([2, 4]);
-      for (const ref of [1, -1]) {
-        ctx.beginPath(); ctx.moveTo(pad.left, toY(ref)); ctx.lineTo(w - pad.right, toY(ref)); ctx.stroke();
-      }
+      ctx.strokeStyle = cssVar('--ob-spark-ref'); ctx.setLineDash([2, 4]);
+      for (const ref of [1, -1]) { ctx.beginPath(); ctx.moveTo(pad.left, toY(ref)); ctx.lineTo(w - pad.right, toY(ref)); ctx.stroke(); }
       ctx.setLineDash([]);
 
-      // Line
-      ctx.strokeStyle = cssVar('--ob-spark-line');
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = cssVar('--ob-spark-line'); ctx.lineWidth = 1.5;
       ctx.beginPath();
-      for (let i = 0; i < values.length; i++) {
-        const x = toX(i), y = toY(values[i]);
-        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-      }
+      for (let i = 0; i < values.length; i++) { const x = pad.left + i * xStep, y = toY(values[i]); i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); }
       ctx.stroke();
 
-      // Dots + hit targets
       const targets: Array<{ x: number; idx: number; value: number }> = [];
-      const dotFill = cssVar('--ob-spark-dot');
       for (let i = 0; i < values.length; i++) {
-        const x = toX(i), y = toY(values[i]);
-        ctx.fillStyle = dotFill;
-        ctx.beginPath(); ctx.arc(x, y, 2.5, 0, Math.PI * 2); ctx.fill();
+        const x = pad.left + i * xStep, y = toY(values[i]);
+        ctx.fillStyle = cssVar('--ob-spark-dot'); ctx.beginPath(); ctx.arc(x, y, 2.5, 0, Math.PI * 2); ctx.fill();
         targets.push({ x, idx: i, value: values[i] });
       }
       sparkHitTargets.set(dim, targets);
 
-      // Current value label
       const latest = values[values.length - 1];
-      const valEl = document.getElementById(`sparkval-${dim}`)!;
-      valEl.textContent = (latest >= 0 ? '+' : '') + latest.toFixed(2);
-      valEl.style.color = cssVar('--ob-spark-line');
+      document.getElementById(`sparklabel-${dim}`)!.textContent = zLabel(latest);
+      document.getElementById(`sparknum-${dim}`)!.textContent = (latest >= 0 ? '+' : '') + latest.toFixed(2);
     }
 
     // ---- Heat strip ----
     function drawHeatStrip(states: EntryState[]) {
-      const labelsEl = document.getElementById('heatstrip-labels')!;
-      labelsEl.innerHTML = DIMS.map(d => `<div class="heatstrip-label">${d}</div>`).join('');
-
+      heatmapDrawn = true;
+      document.getElementById('heatstrip-labels')!.innerHTML = DIMS.map(d => `<div class="heatstrip-label">${DIM_DISPLAY[d] || d}</div>`).join('');
       const canvas = document.getElementById('heatstrip-canvas') as HTMLCanvasElement;
-      const wrap = canvas.parentElement!;
-      const wrapW = wrap.getBoundingClientRect().width;
+      const wrapW = canvas.parentElement!.getBoundingClientRect().width;
+      if (wrapW < 10) { requestAnimationFrame(() => drawHeatStrip(states)); return; }
 
-      if (wrapW < 10) {
-        requestAnimationFrame(() => drawHeatStrip(states));
-        return;
-      }
-      const rowH = 24;
-      const totalH = DIMS.length * rowH;
-
+      const rowH = 24, totalH = DIMS.length * rowH;
       const dpr = window.devicePixelRatio || 1;
-      canvas.width = wrapW * dpr;
-      canvas.height = totalH * dpr;
-      canvas.style.width = wrapW + 'px';
-      canvas.style.height = totalH + 'px';
-
+      canvas.width = wrapW * dpr; canvas.height = totalH * dpr;
+      canvas.style.width = wrapW + 'px'; canvas.style.height = totalH + 'px';
       const ctx = canvas.getContext('2d')!;
       ctx.scale(dpr, dpr);
 
       const n = states.length;
       if (n === 0) return;
       const cellW = wrapW / n;
-
       const posR = cssVarNum('--ob-heat-pos-r'), posG = cssVarNum('--ob-heat-pos-g'), posB = cssVarNum('--ob-heat-pos-b');
       const negR = cssVarNum('--ob-heat-neg-r'), negG = cssVarNum('--ob-heat-neg-g'), negB = cssVarNum('--ob-heat-neg-b');
       const neutralColor = cssVar('--ob-heat-neutral');
 
       for (let row = 0; row < DIMS.length; row++) {
-        const dim = DIMS[row];
         for (let col = 0; col < n; col++) {
-          const val = (states[col] as any)[dim] as number;
-          const x = col * cellW, y = row * rowH;
-          const absVal = Math.min(Math.abs(val), 3);
-          const t = absVal / 3;
-
-          if (Math.abs(val) < 0.05) {
-            ctx.fillStyle = neutralColor;
-          } else if (val > 0) {
-            ctx.fillStyle = `rgba(${posR}, ${posG}, ${posB}, ${0.2 + t * 0.8})`;
-          } else {
-            ctx.fillStyle = `rgba(${negR}, ${negG}, ${negB}, ${0.2 + t * 0.8})`;
-          }
-          ctx.fillRect(x, y, cellW + 0.5, rowH);
-
-          ctx.strokeStyle = cssVar('--ob-bg');
-          ctx.lineWidth = 0.5;
-          ctx.strokeRect(x, y, cellW + 0.5, rowH);
+          const val = (states[col] as any)[DIMS[row]] as number;
+          const t = Math.min(Math.abs(val), 3) / 3;
+          ctx.fillStyle = Math.abs(val) < 0.05 ? neutralColor : val > 0 ? `rgba(${posR},${posG},${posB},${0.2+t*0.8})` : `rgba(${negR},${negG},${negB},${0.2+t*0.8})`;
+          ctx.fillRect(col * cellW, row * rowH, cellW + 0.5, rowH);
+          ctx.strokeStyle = cssVar('--ob-bg'); ctx.lineWidth = 0.5;
+          ctx.strokeRect(col * cellW, row * rowH, cellW + 0.5, rowH);
         }
       }
+      if (selectedIdx !== null) { ctx.strokeStyle = cssVar('--ob-entry-border'); ctx.lineWidth = 2; ctx.strokeRect(selectedIdx * cellW, 0, cellW, totalH); }
 
-      if (selectedIdx !== null) {
-        ctx.strokeStyle = cssVar('--ob-entry-border');
-        ctx.lineWidth = 2;
-        ctx.strokeRect(selectedIdx * cellW, 0, cellW, totalH);
-      }
-
-      // Date axis
       const datesEl = document.getElementById('heatstrip-dates')!;
       datesEl.innerHTML = '';
       const labelEvery = Math.max(1, Math.ceil(n / 12));
-      for (let i = 0; i < n; i += labelEvery) {
-        const span = document.createElement('span');
-        span.textContent = states[i].date.slice(5);
-        span.style.left = (i * cellW) + 'px';
-        datesEl.appendChild(span);
-      }
-      if ((n - 1) % labelEvery !== 0) {
-        const span = document.createElement('span');
-        span.textContent = states[n - 1].date.slice(5);
-        span.style.left = ((n - 1) * cellW) + 'px';
-        datesEl.appendChild(span);
-      }
+      for (let i = 0; i < n; i += labelEvery) { const span = document.createElement('span'); span.textContent = states[i].date.slice(5); span.style.left = (i * cellW) + 'px'; datesEl.appendChild(span); }
+      if ((n - 1) % labelEvery !== 0) { const span = document.createElement('span'); span.textContent = states[n - 1].date.slice(5); span.style.left = ((n - 1) * cellW) + 'px'; datesEl.appendChild(span); }
 
       canvas.onmousemove = (e) => {
         const rect = canvas.getBoundingClientRect();
-        const col = Math.floor((e.clientX - rect.left) / cellW);
-        const row = Math.floor((e.clientY - rect.top) / rowH);
+        const col = Math.floor((e.clientX - rect.left) / cellW), row = Math.floor((e.clientY - rect.top) / rowH);
         if (col >= 0 && col < n && row >= 0 && row < DIMS.length) {
-          const state = states[col];
-          const dim = DIMS[row];
-          const val = (state as any)[dim] as number;
+          const val = (states[col] as any)[DIMS[row]] as number;
           const tt = document.getElementById('tooltip')!;
-          tt.innerHTML = `<div class="tooltip-question">"${state.question}"</div><div class="tooltip-dim">${dim}: ${val >= 0 ? '+' : ''}${val.toFixed(2)}\u03c3 &middot; ${state.date.slice(5)}</div>`;
-          tt.style.display = 'block';
-          tt.style.left = (e.clientX + 12) + 'px';
-          tt.style.top = (e.clientY - 10) + 'px';
-        } else {
-          document.getElementById('tooltip')!.style.display = 'none';
-        }
+          tt.innerHTML = `<div class="tooltip-question">"${states[col].question}"</div><div class="tooltip-dim">${DIM_DISPLAY[DIMS[row]]}: ${zLabel(val)} &middot; ${states[col].date.slice(5)}</div>`;
+          tt.style.display = 'block'; tt.style.left = (e.clientX + 12) + 'px'; tt.style.top = (e.clientY - 10) + 'px';
+        } else { document.getElementById('tooltip')!.style.display = 'none'; }
       };
       canvas.onmouseleave = () => { document.getElementById('tooltip')!.style.display = 'none'; };
-      canvas.onclick = (e) => {
-        const rect = canvas.getBoundingClientRect();
-        const col = Math.floor((e.clientX - rect.left) / cellW);
-        if (col >= 0 && col < n) selectEntry(col);
-      };
+      canvas.onclick = (e) => { const col = Math.floor((e.clientX - canvas.getBoundingClientRect().left) / cellW); if (col >= 0 && col < n) selectEntry(col); };
     }
 
     // ---- Discoveries ----
@@ -1064,48 +1006,88 @@
       if (!discoveries || discoveries.length === 0) return;
       document.getElementById('section-discoveries')!.style.display = '';
       document.getElementById('discoveries-list')!.innerHTML = discoveries.map(d =>
-        `<div class="discovery ${d.strength === 'strong' ? 'discovery-strong' : ''}">
-          ${d.text}
-          <div class="discovery-evidence">${d.evidence}</div>
-        </div>`
+        `<div class="discovery ${d.strength === 'strong' ? 'discovery-strong' : ''}">${d.text}<div class="discovery-evidence">${d.evidence}</div></div>`
       ).join('');
     }
 
-    // ---- Entry selection ----
+    // ---- Entry selection + loop trace ----
     async function selectEntry(idx: number) {
       selectedIdx = idx;
       const state = allStates[idx];
-      drawHeatStrip(allStates);
+      if (heatmapDrawn) drawHeatStrip(allStates);
 
       const panel = document.getElementById('entry-panel')!;
       panel.classList.add('open');
       document.getElementById('entry-panel-date')!.textContent = state.date;
       document.getElementById('entry-panel-question')!.textContent = state.question;
       document.getElementById('entry-panel-body')!.innerHTML = '<div style="color:var(--ob-text-dim);font-size:10px;">loading...</div>';
-
       (document.getElementById('entry-prev') as HTMLButtonElement).disabled = idx <= 0;
       (document.getElementById('entry-next') as HTMLButtonElement).disabled = idx >= allStates.length - 1;
 
       try {
         const res = await fetch(`/api/observatory/entry/${state.response_id}`);
         if (!res.ok) throw new Error('fail');
-        renderEntryPanel(await res.json());
+        renderEntryPanel(await res.json(), state);
       } catch {
         document.getElementById('entry-panel-body')!.innerHTML = '<div style="color:var(--ob-text-dim);">could not load</div>';
       }
       panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
-    function renderEntryPanel(data: any) {
+    function renderEntryPanel(data: any, state: EntryState) {
       const body = document.getElementById('entry-panel-body')!;
       let html = '';
+
+      // Loop trace — the connective tissue
+      const hasResolved = data.resolvedByThis && data.resolvedByThis.length > 0;
+      const hasCreated = data.predictions && data.predictions.length > 0;
+      const hasTheoryImpact = data.theoryImpact && data.theoryImpact.length > 0;
+
+      if (hasResolved || hasCreated || hasTheoryImpact) {
+        html += '<div class="loop-trace">';
+        html += '<div class="entry-section-label" style="margin-top:0">the loop</div>';
+
+        // What this entry resolved
+        if (hasResolved) {
+          for (const rp of data.resolvedByThis) {
+            const icon = rp.statusCode === 'confirmed' ? '\u2713' : '\u2717';
+            const verb = rp.statusCode === 'confirmed' ? 'confirmed' : 'falsified';
+            html += `<div class="loop-step"><span class="loop-marker">${icon}</span><span>This entry <span class="loop-highlight">${verb}</span> a prediction from ${rp.originDate}: "${truncate(rp.hypothesis, 90)}"</span></div>`;
+          }
+        }
+
+        // Theory impact
+        if (hasTheoryImpact) {
+          for (const t of data.theoryImpact) {
+            const pm = Math.round((t.alpha / (t.alpha + t.beta)) * 100);
+            const parts = t.theory_key.split(':');
+            const name = parts.length === 2 ? parts[1].replace(/_/g, ' ') : t.theory_key.replace(/_/g, ' ');
+            html += `<div class="loop-step"><span class="loop-marker">&rarr;</span><span>Updated theory "<span class="loop-highlight">${name}</span>" &mdash; now at ${pm}% confidence after ${t.total_predictions} predictions (${t.status})</span></div>`;
+          }
+        }
+
+        // What this entry generated
+        if (hasCreated) {
+          const openCount = data.predictions.filter((p: any) => p.statusCode === 'open').length;
+          const resolvedCount = data.predictions.length - openCount;
+          if (openCount > 0) {
+            html += `<div class="loop-step"><span class="loop-marker">+</span><span>Generated <span class="loop-highlight">${openCount} new prediction${openCount > 1 ? 's' : ''}</span> from this entry${resolvedCount > 0 ? ` (${resolvedCount} already resolved)` : ''}</span></div>`;
+          }
+        }
+
+        html += '</div>';
+      }
+
+      // Observation frames
       if (data.observation) {
         html += '<div class="entry-section-label">observation</div>';
         html += parseFrames(data.observation.observation_text).map(f =>
           `<div class="frame-card ${f.cls}"><div class="frame-label ${f.labelCls}">${f.label}</div>${f.body}</div>`
         ).join('');
       }
-      if (data.predictions && data.predictions.length > 0) {
+
+      // Predictions from this entry
+      if (hasCreated) {
         html += '<div class="entry-section-label">predictions from this entry</div>';
         html += data.predictions.map((p: any) =>
           `<div class="prediction-card">
@@ -1118,12 +1100,16 @@
           </div>`
         ).join('');
       }
+
+      // Suppressed question
       if (data.suppressedQuestion) {
         html += `<div class="suppressed-block">
           <div style="font-style:normal;color:var(--ob-text-dim);font-size:9px;letter-spacing:0.12em;text-transform:uppercase;margin-bottom:6px;">what alice wanted to ask but didn't</div>
           ${data.suppressedQuestion.suppressed_text}
         </div>`;
       }
+
+      // Radar
       if (data.entryState) {
         html += '<div class="entry-section-label">behavioral shape</div>';
         html += '<div class="entry-radar-wrap"><canvas id="entry-radar" width="280" height="280"></canvas></div>';
@@ -1151,35 +1137,24 @@
         ctx.strokeStyle = ring === 0 ? cssVar('--ob-border') : cssVar('--ob-border-subtle');
         ctx.lineWidth = ring === 0 ? 1 : 0.5;
         ctx.beginPath();
-        for (let i = 0; i <= n; i++) {
-          const a = -Math.PI / 2 + i * step;
-          i === 0 ? ctx.moveTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r) : ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
-        }
+        for (let i = 0; i <= n; i++) { const a = -Math.PI / 2 + i * step; i === 0 ? ctx.moveTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r) : ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r); }
         ctx.stroke();
       }
       for (let i = 0; i < n; i++) {
         const a = -Math.PI / 2 + i * step;
         ctx.strokeStyle = cssVar('--ob-border-subtle'); ctx.lineWidth = 0.5;
-        ctx.beginPath(); ctx.moveTo(cx, cy);
-        ctx.lineTo(cx + Math.cos(a) * maxR, cy + Math.sin(a) * maxR); ctx.stroke();
-        ctx.fillStyle = cssVar('--ob-text-faint'); ctx.font = '8px SF Mono, monospace';
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(DIMS[i], cx + Math.cos(a) * (maxR + 14), cy + Math.sin(a) * (maxR + 14));
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a) * maxR, cy + Math.sin(a) * maxR); ctx.stroke();
+        ctx.fillStyle = cssVar('--ob-text-faint'); ctx.font = '8px SF Mono, monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(DIM_DISPLAY[DIMS[i]] || DIMS[i], cx + Math.cos(a) * (maxR + 14), cy + Math.sin(a) * (maxR + 14));
       }
       const vals = DIMS.map(d => es[d] as number);
       ctx.fillStyle = 'rgba(58,110,165,0.12)'; ctx.strokeStyle = cssVar('--ob-spark-line'); ctx.lineWidth = 1.5;
       ctx.beginPath();
-      for (let i = 0; i < n; i++) {
-        const a = -Math.PI / 2 + i * step;
-        const r = toR(Math.max(-maxZ, Math.min(maxZ, vals[i])));
-        i === 0 ? ctx.moveTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r) : ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
-      }
+      for (let i = 0; i < n; i++) { const a = -Math.PI / 2 + i * step; const r = toR(Math.max(-maxZ, Math.min(maxZ, vals[i]))); i === 0 ? ctx.moveTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r) : ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r); }
       ctx.closePath(); ctx.fill(); ctx.stroke();
       for (let i = 0; i < n; i++) {
-        const a = -Math.PI / 2 + i * step;
-        const r = toR(Math.max(-maxZ, Math.min(maxZ, vals[i])));
-        ctx.fillStyle = cssVar('--ob-spark-dot'); ctx.beginPath();
-        ctx.arc(cx + Math.cos(a) * r, cy + Math.sin(a) * r, 2.5, 0, Math.PI * 2); ctx.fill();
+        const a = -Math.PI / 2 + i * step; const r = toR(Math.max(-maxZ, Math.min(maxZ, vals[i])));
+        ctx.fillStyle = cssVar('--ob-spark-dot'); ctx.beginPath(); ctx.arc(cx + Math.cos(a) * r, cy + Math.sin(a) * r, 2.5, 0, Math.PI * 2); ctx.fill();
       }
     }
 
@@ -1197,16 +1172,21 @@
         for (let j = i + 1; j < pats.length; j++) { const ni = text.indexOf(pats[j].marker); if (ni !== -1) { end = ni; break; } }
         let body = text.slice(idx, end).trim();
         const ci = body.indexOf(':');
-        if (ci !== -1) { body = body.slice(ci + 1).trim().replace(/^\*\*\s*/, ''); }
+        if (ci !== -1) body = body.slice(ci + 1).trim().replace(/^\*\*\s*/, '');
         frames.push({ ...pats[i], body });
       }
       if (frames.length === 0) frames.push({ label: 'Observation', cls: '', labelCls: '', body: text });
       return frames;
     }
 
-    function truncate(s: string, n: number): string {
-      return s.length > n ? s.slice(0, n) + '\u2026' : s;
-    }
+    // ---- Heatmap toggle ----
+    document.getElementById('heatmap-toggle')!.addEventListener('click', () => {
+      const body = document.getElementById('heatmap-body')!;
+      const icon = document.getElementById('heatmap-icon')!;
+      const isOpen = body.classList.toggle('open');
+      icon.classList.toggle('open', isOpen);
+      if (isOpen && !heatmapDrawn && allStates.length > 0) requestAnimationFrame(() => drawHeatStrip(allStates));
+    });
 
     // ---- Load ----
     async function load() {
@@ -1227,35 +1207,27 @@
 
       renderScoreboard(predictions, states.length);
       drawArcTimeline(states, predictions);
+      drawCalibrationCurve(predictions);
+      renderNarrative(synthesis);
       renderCalls(predictions);
       renderTheories(coupling.theories);
       drawAllSparklines(states);
-      drawHeatStrip(states);
       renderDiscoveries(synthesis.discoveries);
 
       document.getElementById('loading')!.style.display = 'none';
       document.getElementById('main')!.style.display = '';
     }
 
-    // Defer drawing until layout is stable
-    if (document.readyState === 'complete') {
-      requestAnimationFrame(() => requestAnimationFrame(load));
-    } else {
-      window.addEventListener('load', () => requestAnimationFrame(load));
-    }
+    if (document.readyState === 'complete') requestAnimationFrame(() => requestAnimationFrame(load));
+    else window.addEventListener('load', () => requestAnimationFrame(load));
 
     // Controls
-    document.getElementById('entry-panel-close')!.onclick = () => {
-      document.getElementById('entry-panel')!.classList.remove('open');
-      selectedIdx = null; drawHeatStrip(allStates);
-    };
+    document.getElementById('entry-panel-close')!.onclick = () => { document.getElementById('entry-panel')!.classList.remove('open'); selectedIdx = null; if (heatmapDrawn) drawHeatStrip(allStates); };
     document.getElementById('entry-prev')!.onclick = () => { if (selectedIdx !== null && selectedIdx > 0) selectEntry(selectedIdx - 1); };
     document.getElementById('entry-next')!.onclick = () => { if (selectedIdx !== null && selectedIdx < allStates.length - 1) selectEntry(selectedIdx + 1); };
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        document.getElementById('entry-panel')!.classList.remove('open');
-        selectedIdx = null; drawHeatStrip(allStates);
-      } else if (e.key === 'ArrowLeft' && selectedIdx !== null && selectedIdx > 0) selectEntry(selectedIdx - 1);
+      if (e.key === 'Escape') { document.getElementById('entry-panel')!.classList.remove('open'); selectedIdx = null; if (heatmapDrawn) drawHeatStrip(allStates); }
+      else if (e.key === 'ArrowLeft' && selectedIdx !== null && selectedIdx > 0) selectEntry(selectedIdx - 1);
       else if (e.key === 'ArrowRight' && selectedIdx !== null && selectedIdx < allStates.length - 1) selectEntry(selectedIdx + 1);
     });
 
@@ -1265,8 +1237,9 @@
       resizeTimer = setTimeout(() => {
         if (allStates.length > 0) {
           drawArcTimeline(allStates, allPredictions);
+          drawCalibrationCurve(allPredictions);
           drawAllSparklines(allStates);
-          drawHeatStrip(allStates);
+          if (heatmapDrawn) drawHeatStrip(allStates);
         }
       }, 100);
     });
