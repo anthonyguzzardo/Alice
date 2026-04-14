@@ -1,23 +1,35 @@
 /**
- * Observatory Coupling API
- *
- * Returns the coupling matrix, emotion-behavior couplings,
- * and per-dimension dynamics for the latest entry count.
+ * Observatory Coupling API — hardcoded to simulation DB.
  */
 import type { APIRoute } from 'astro';
-import {
-  getEntryStateCount,
-  getLatestCouplingMatrix,
-  getLatestEmotionBehaviorCoupling,
-  getLatestTraitDynamics,
-} from '../../../lib/db.ts';
+import simDb from '../../../lib/sim-db.ts';
 
 export const GET: APIRoute = async () => {
   try {
-    const entryCount = getEntryStateCount();
-    const couplings = getLatestCouplingMatrix(entryCount);
-    const emotionCouplings = getLatestEmotionBehaviorCoupling(entryCount);
-    const dynamics = getLatestTraitDynamics(entryCount);
+    const entryCount = (simDb.prepare(
+      'SELECT COUNT(*) as c FROM tb_entry_states'
+    ).get() as any).c;
+
+    const couplings = simDb.prepare(`
+      SELECT leader, follower, lag_sessions, correlation, direction
+      FROM tb_coupling_matrix
+      WHERE entry_count = ?
+      ORDER BY correlation DESC
+    `).all(entryCount);
+
+    const emotionCouplings = simDb.prepare(`
+      SELECT emotion_dim, behavior_dim, lag_sessions, correlation, direction
+      FROM tb_emotion_behavior_coupling
+      WHERE entry_count = ?
+      ORDER BY correlation DESC
+    `).all(entryCount);
+
+    const dynamics = simDb.prepare(`
+      SELECT dimension, baseline, variability, attractor_force, current_state, deviation, window_size
+      FROM tb_trait_dynamics
+      WHERE entry_count = ?
+      ORDER BY dimension
+    `).all(entryCount);
 
     return new Response(JSON.stringify({
       entryCount,

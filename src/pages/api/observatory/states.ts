@@ -1,28 +1,20 @@
 /**
- * Observatory States API
- *
- * Returns all 8D entry states with dates for the trajectory sparklines.
- * No AI involved. Pure deterministic data from tb_entry_states.
+ * Observatory States API — hardcoded to simulation DB.
  */
 import type { APIRoute } from 'astro';
-import { getEntryStatesWithDates } from '../../../lib/db.ts';
+import simDb from '../../../lib/sim-db.ts';
 
 export const GET: APIRoute = async () => {
   try {
-    const rows = getEntryStatesWithDates();
-    const states = rows.map(r => ({
-      response_id: r.response_id,
-      date: r.date,
-      fluency: r.fluency,
-      deliberation: r.deliberation,
-      revision: r.revision,
-      expression: r.expression,
-      commitment: r.commitment,
-      volatility: r.volatility,
-      thermal: r.thermal,
-      presence: r.presence,
-      convergence: r.convergence,
-    }));
+    const states = simDb.prepare(`
+      SELECT es.response_id, q.scheduled_for as date,
+             es.fluency, es.deliberation, es.revision, es.expression,
+             es.commitment, es.volatility, es.thermal, es.presence, es.convergence
+      FROM tb_entry_states es
+      JOIN tb_responses r ON es.response_id = r.response_id
+      JOIN tb_questions q ON r.question_id = q.question_id
+      ORDER BY es.entry_state_id ASC
+    `).all();
 
     return new Response(JSON.stringify({ states }, null, 2), {
       headers: { 'Content-Type': 'application/json' },
