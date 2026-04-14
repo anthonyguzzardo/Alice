@@ -18,18 +18,17 @@
         display: flex; align-items: center; justify-content: center;
         color: rgba(255,255,255,0.4); font-size: 1rem;
         text-decoration: none; z-index: 10; transition: all 0.3s ease;
-        opacity: 0;
+        opacity: 1;
       }
-      .back-btn.visible { opacity: 1; }
       .back-btn:hover {
         border-color: rgba(255,255,255,0.35); color: rgba(255,255,255,0.6);
       }
     </style>
   </head>
   <body>
-    <a href="/" class="back-btn" id="back" aria-label="Back to journal">&larr;</a>
-    <a href="/trajectory" class="back-btn" id="trace-link" style="right: 5rem;" aria-label="Trajectory">&#x2237;</a>
-    <a href="/gallery" class="back-btn" id="gallery-link" style="right: 8rem; line-height: 1;" aria-label="Gallery">&#x25A6;</a>
+    <a href="/" class="back-btn" id="back" aria-label="Back to journal" title="journal">&larr;</a>
+    <a href="/trajectory" class="back-btn" id="trace-link" style="right: 5rem;" aria-label="Trajectory" title="trajectory">&#x2237;</a>
+    <a href="/gallery" class="back-btn" id="gallery-link" style="right: 8rem; line-height: 1;" aria-label="Gallery" title="gallery">&#x25A6;</a>
     <canvas id="alice-negative"></canvas>
 
     <script>
@@ -210,8 +209,6 @@
 
       let startTime = 0;
       let lastFrame = 0;
-      let backBtnShown = false;
-
       function frame(now: number): void {
         if (!startTime) {
           startTime = now;
@@ -253,14 +250,6 @@
 
         // ─── Render ────────────────────────────────
         renderer.render(scene, camera);
-
-        // Show back button after threshold completes
-        if (thresholdComplete && !backBtnShown) {
-          backBtn.classList.add('visible');
-          document.getElementById('trace-link')?.classList.add('visible');
-          document.getElementById('gallery-link')?.classList.add('visible');
-          backBtnShown = true;
-        }
 
         requestAnimationFrame(frame);
       }

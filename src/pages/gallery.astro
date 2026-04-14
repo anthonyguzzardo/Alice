@@ -150,7 +150,7 @@
     </style>
   </head>
   <body>
-    <a href="/alice-negative" class="back-btn" aria-label="Back to Alice Negative">&larr;</a>
+    <a href="/alice-negative" class="back-btn" aria-label="Back to Alice Negative" title="alice negative">&larr;</a>
 
     <div class="gallery-header">
       <h1>Lineage</h1>
@@ -179,6 +179,7 @@
         entryCount: number;
         traits: WitnessTraits;
         createdAt: string;
+        scheduledFor: string;
       }
 
       interface AliceNegativeInstance {
@@ -318,11 +319,11 @@
           // Labels
           const label = document.createElement('div');
           label.className = 'alice-negative-label';
-          const ts = new Date(entry.createdAt + 'Z');
-          const timeStr = ts.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase();
+          const scheduled = new Date(entry.scheduledFor + 'T00:00:00');
+          const dateStr = scheduled.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toLowerCase();
           label.innerHTML = `
             <div class="version">alice-negative ${entry.version}</div>
-            <div class="meta">${timeStr}</div>
+            <div class="meta">${dateStr}</div>
           `;
           cell.appendChild(label);
 
