@@ -359,7 +359,7 @@ ${recentQuestionTexts}
 Generate 3 candidate questions with your selection, theme tags, uncertainty dimension, and intervention intent.`;
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY2 });
-  const generateModel = options?.model ?? 'claude-opus-4-6';
+  const generateModel = options?.model ?? 'claude-sonnet-4-20250514';
   const onApiCall = options?.onApiCall;
 
   const generateStart = performance.now();

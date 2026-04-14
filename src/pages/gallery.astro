@@ -154,7 +154,7 @@
 
     <div class="gallery-header">
       <h1>Lineage</h1>
-      <p>april 12, 2026</p>
+      <p id="gallery-date"></p>
     </div>
 
     <div class="gallery-filters" id="filters">
@@ -294,6 +294,14 @@
       async function init() {
         const res = await fetch('/api/gallery');
         const entries: GalleryEntry[] = await res.json();
+
+        // Set date from latest entry
+        const dateEl = document.getElementById('gallery-date')!;
+        if (entries.length > 0) {
+          const latest = entries[entries.length - 1];
+          const d = new Date(latest.createdAt + 'Z');
+          dateEl.textContent = d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }).toLowerCase();
+        }
 
         // Only show filters when there's more than one Alice Negative
         if (entries.length > 1) {

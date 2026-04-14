@@ -531,10 +531,11 @@ if (!DRY_RUN) {
   const predStatusLines = predStatusRows.map(r => `| ${statusNames[r.status] ?? 'unknown'} | ${r.count} |`).join('\n');
 
   const theoryRows = db.prepare(`
-    SELECT theory_key, ROUND(alpha*1.0/(alpha+beta),3) as confidence, total_predictions
+    SELECT theory_key, ROUND(alpha*1.0/(alpha+beta),3) as confidence, total_predictions,
+           alpha, beta, ROUND(log_bayes_factor, 3) as logBF, status
     FROM tb_theory_confidence ORDER BY total_predictions DESC
-  `).all() as Array<{ theory_key: string; confidence: number; total_predictions: number }>;
-  const theoryLines = theoryRows.map(r => `| ${r.theory_key} | ${r.confidence} | ${r.total_predictions} |`).join('\n');
+  `).all() as Array<{ theory_key: string; confidence: number; total_predictions: number; alpha: number; beta: number; logBF: number; status: string }>;
+  const theoryLines = theoryRows.map(r => `| ${r.theory_key} | ${r.confidence} | ${r.total_predictions} | ${r.logBF} | ${r.status} |`).join('\n');
 
   // Grade method breakdown for report
   const reportGradeMethodRows = db.prepare(`
@@ -733,9 +734,75 @@ Code-graded outcomes: ${codeGradedOutcomes}
 
 ### Theory Confidence
 
-| Theory | Posterior | Predictions |
-|--------|----------|-------------|
-${theoryLines || '| (none) | - | 0 |'}
+| Theory | Posterior | Predictions | Log-BF | Status |
+|--------|----------|-------------|--------|--------|
+${theoryLines || '| (none) | - | 0 | - | - |'}
+
+### What Happened (Plain English)
+
+${(() => {
+    const confirmed = predStatusRows.find(r => r.status === 2)?.count ?? 0;
+    const falsified = predStatusRows.find(r => r.status === 3)?.count ?? 0;
+    const open = predStatusRows.find(r => r.status === 1)?.count ?? 0;
+    const indeterminate = predStatusRows.find(r => r.status === 5)?.count ?? 0;
+    const total = totalPredictions;
+    const theoryCount = theoryRows.length;
+    const activeTheories = theoryRows.filter(r => r.status === 'active').length;
+    const retiredTheories = theoryRows.filter(r => r.status === 'retired').length;
+    const establishedTheories = theoryRows.filter(r => r.status === 'established').length;
+
+    const lines: string[] = [];
+
+    // Prediction accuracy
+    const graded = confirmed + falsified;
+    if (graded > 0) {
+      const hitRate = Math.round((confirmed / graded) * 100);
+      if (confirmed === 0) {
+        lines.push(`The system made ${total} predictions and none were confirmed — every testable prediction was wrong. This usually means the system is testing bad theories or setting thresholds too aggressively.`);
+      } else if (hitRate < 20) {
+        lines.push(`The system made ${total} predictions. Of the ${graded} that could be graded, ${confirmed} were confirmed (${hitRate}% hit rate). Most predictions were wrong, but the system is starting to get some right.`);
+      } else if (hitRate < 50) {
+        lines.push(`The system made ${total} predictions. Of the ${graded} that could be graded, ${confirmed} were confirmed and ${falsified} falsified (${hitRate}% hit rate). This is a healthy range — the system is learning which patterns are real and which are stories.`);
+      } else {
+        lines.push(`The system made ${total} predictions with a ${hitRate}% hit rate (${confirmed} confirmed, ${falsified} falsified out of ${graded} graded). The system's theories are holding up well against the data.`);
+      }
+    } else {
+      lines.push(`The system made ${total} predictions but none could be graded yet — they're either still open or indeterminate.`);
+    }
+
+    if (open > 0) lines.push(`${open} prediction${open > 1 ? 's are' : ' is'} still open, waiting for future data.`);
+    if (indeterminate > 0) lines.push(`${indeterminate} prediction${indeterminate > 1 ? 's were' : ' was'} indeterminate — the data needed to test them wasn't available.`);
+
+    // Theory lifecycle
+    if (theoryCount === 0) {
+      lines.push(`No theories were created yet — the system hasn't accumulated enough observations.`);
+    } else {
+      const topTheory = theoryRows[0];
+      const distribution = theoryRows.map(r => r.total_predictions).join('/');
+      lines.push(`The system built ${theoryCount} theor${theoryCount === 1 ? 'y' : 'ies'} with prediction distribution ${distribution}.`);
+
+      if (theoryCount === 1) {
+        lines.push(`Only one theory emerged — the system needs more diverse data or more days to develop competing hypotheses.`);
+      } else if (topTheory.total_predictions > total * 0.7) {
+        lines.push(`The top theory (${topTheory.theory_key}) absorbed ${topTheory.total_predictions} of ${total} predictions — still top-heavy. Thompson sampling is working but the theory was created early and accumulated predictions before alternatives emerged.`);
+      } else {
+        lines.push(`Predictions are reasonably spread across theories — Thompson sampling is distributing attention well.`);
+      }
+
+      if (retiredTheories > 0) lines.push(`${retiredTheories} theor${retiredTheories === 1 ? 'y was' : 'ies were'} retired (Bayes factor below 1/10 — strong evidence against). Retired theories are permanently removed from the LLM's view.`);
+      if (establishedTheories > 0) lines.push(`${establishedTheories} theor${establishedTheories === 1 ? 'y was' : 'ies were'} established (Bayes factor above 10 — strong evidence for). Established theories stop being tested.`);
+      if (activeTheories > 0 && activeTheories === theoryCount) lines.push(`All ${activeTheories} theories are still active — none have accumulated enough evidence to graduate or retire yet.`);
+
+      // Flag failing theories that should concern us
+      for (const t of theoryRows) {
+        if (t.confidence < 0.15 && t.status === 'active' && t.total_predictions >= 5) {
+          lines.push(`Warning: ${t.theory_key} has posterior ${t.confidence} after ${t.total_predictions} predictions but hasn't been retired yet (log-BF ${t.logBF} hasn't crossed -2.3 threshold). It's close — a few more falsifications will retire it.`);
+        }
+      }
+    }
+
+    return lines.join('\n\n');
+  })()}
 
 ---
 

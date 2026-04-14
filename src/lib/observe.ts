@@ -170,7 +170,7 @@ export async function runObservation(options?: ObservationOptions): Promise<void
     ? formatLifeContext(lifeContextTags)
     : '';
 
-  const observeModel = options?.model ?? 'claude-opus-4-6';
+  const observeModel = options?.model ?? 'claude-sonnet-4-20250514';
   const onApiCall = options?.onApiCall;
 
   // ══════════════════════════════════════════════════════════════════════════

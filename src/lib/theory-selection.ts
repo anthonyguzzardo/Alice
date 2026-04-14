@@ -138,19 +138,20 @@ const MIN_PREDICTIONS_FOR_RETIREMENT = 3;
 /**
  * Compute the incremental log Bayes factor update for a single observation.
  *
- * Uses alpha/beta BEFORE the increment. The update is the log ratio of
- * the predictive probability under the theory vs a null (coin-flip) model:
- *   hit:  log(alpha / (alpha + beta)) - log(0.5)
- *   miss: log(beta / (alpha + beta)) - log(0.5)
+ * Uses the SPRT formulation: each confirmation is evidence FOR the theory
+ * (+log(2)), each falsification is evidence AGAINST (-log(2)). This is the
+ * sequential probability ratio test for p>0.5 vs p=0.5.
+ *
+ * The fixed increment avoids the trap where a theory with many falsifications
+ * has high P(falsify|posterior), causing falsifications to paradoxically
+ * increase the Bayes factor under the predictive probability formulation.
  */
 export function computeLogBayesFactorUpdate(
-  alpha: number,
-  beta: number,
+  _alpha: number,
+  _beta: number,
   hit: boolean,
 ): number {
-  const total = alpha + beta;
-  const predictiveProb = hit ? alpha / total : beta / total;
-  return Math.log(predictiveProb) - Math.log(0.5);
+  return hit ? Math.log(2) : -Math.log(2);
 }
 
 /**

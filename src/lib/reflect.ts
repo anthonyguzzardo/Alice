@@ -174,8 +174,8 @@ export async function runReflection(options?: ReflectionOptions): Promise<void> 
     : 'No question feedback collected yet.';
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY2 });
-  const primaryModel = options?.primaryModel ?? 'claude-opus-4-6';
-  const auditModel = options?.auditModel ?? 'claude-sonnet-4-20250514';
+  const primaryModel = options?.primaryModel ?? 'claude-sonnet-4-20250514';
+  const auditModel = options?.auditModel ?? 'claude-opus-4-6';
   const onApiCall = options?.onApiCall;
 
   // --- PRIMARY REFLECTION ---

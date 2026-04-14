@@ -2158,10 +2158,11 @@ export function updateTheoryConfidence(
 
   if (existing) {
     const col = hit ? 'alpha' : 'beta';
-    // Incremental Bayes factor: log predictive probability vs null (0.5)
-    const total = existing.alpha + existing.beta;
-    const predictiveProb = hit ? existing.alpha / total : existing.beta / total;
-    const logBFDelta = Math.log(predictiveProb) - Math.log(0.5);
+    // Incremental Bayes factor: evidence for theory being correct vs coin flip.
+    // Hit = evidence FOR the theory (+log(2)), miss = evidence AGAINST (-log(2)).
+    // This is the SPRT for p>0.5 vs p=0.5 — each observation contributes
+    // a fixed log-likelihood ratio regardless of the current posterior.
+    const logBFDelta = hit ? Math.log(2) : -Math.log(2);
     const newLogBF = existing.log_bayes_factor + logBFDelta;
     const newTotal = existing.total_predictions + 1;
     // Lifecycle classification (Kass & Raftery 1995 thresholds)
