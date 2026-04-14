@@ -1,0 +1,790 @@
+---
+
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Signal Sandbox</title>
+    <script is:inline>
+      (function() {
+        var t = localStorage.getItem('alice-theme') || 'light';
+        document.documentElement.setAttribute('data-theme', t);
+      })();
+    </script>
+    <style is:global>
+      @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap');
+
+      :root {
+        --bg: #f5f2ed;
+        --bg-input: #ebe7e1;
+        --text: #1a1a1a;
+        --text-muted: #6b6560;
+        --text-faint: #9a9590;
+        --border: #ccc5bc;
+        --border-focus: #8a8580;
+        --panel-bg: #ebe7e1;
+        --metric-label: #6b6560;
+        --metric-value: #1a1a1a;
+        --section-border: #ddd8d2;
+        --zero: #c5c0ba;
+        --positive: #4a7c59;
+        --negative: #8c4a4a;
+        --bar-bg: #ddd8d2;
+        --bar-fill: #8a8580;
+      }
+
+      [data-theme="dark"] {
+        --bg: #0a0a0a;
+        --bg-input: #161514;
+        --text: #ffffff;
+        --text-muted: #7a7570;
+        --text-faint: #4a4540;
+        --border: #333;
+        --border-focus: #666;
+        --panel-bg: #141312;
+        --metric-label: #7a7570;
+        --metric-value: #ffffff;
+        --section-border: #2a2825;
+        --zero: #4a4540;
+        --positive: #6aaa79;
+        --negative: #bb6a6a;
+        --bar-bg: #2a2825;
+        --bar-fill: #7a7570;
+      }
+
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      html, body {
+        height: 100%;
+        background: var(--bg);
+        color: var(--text);
+        font-family: 'EB Garamond', Georgia, serif;
+      }
+
+      body {
+        display: flex;
+        padding: 2rem;
+        gap: 2rem;
+      }
+
+      .write-col {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        max-width: 700px;
+      }
+
+      .header {
+        display: flex;
+        align-items: baseline;
+        gap: 1.5rem;
+        margin-bottom: 1.5rem;
+      }
+
+      .header h1 {
+        font-size: 1.3rem;
+        font-weight: 400;
+        color: var(--text-muted);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .mode-toggle {
+        display: flex;
+        gap: 0.5rem;
+      }
+
+      .mode-btn {
+        background: none;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        color: var(--text-muted);
+        font-family: inherit;
+        font-size: 0.95rem;
+        padding: 0.3rem 0.8rem;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .mode-btn.active {
+        background: var(--border);
+        color: var(--text);
+      }
+
+      .mode-btn:hover:not(.active) {
+        border-color: var(--border-focus);
+      }
+
+      .reset-btn {
+        background: none;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        color: var(--text-faint);
+        font-family: inherit;
+        font-size: 0.85rem;
+        padding: 0.2rem 0.6rem;
+        cursor: pointer;
+        margin-left: auto;
+      }
+
+      .reset-btn:hover {
+        color: var(--negative);
+        border-color: var(--negative);
+      }
+
+      .prompt-label {
+        font-size: 1rem;
+        color: var(--text-faint);
+        margin-bottom: 0.8rem;
+        font-style: italic;
+      }
+
+      textarea {
+        width: 100%;
+        flex: 1;
+        min-height: 400px;
+        background: var(--bg-input);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        color: var(--text);
+        font-family: inherit;
+        font-size: 1.3rem;
+        line-height: 1.8;
+        padding: 1.5rem;
+        resize: none;
+        outline: none;
+      }
+
+      textarea:focus { border-color: var(--border-focus); }
+
+      .metrics-col {
+        width: 380px;
+        overflow-y: auto;
+        max-height: 100vh;
+        padding-right: 0.5rem;
+      }
+
+      .section {
+        margin-bottom: 1.5rem;
+        border-bottom: 1px solid var(--section-border);
+        padding-bottom: 1rem;
+      }
+
+      .section:last-child { border-bottom: none; }
+
+      .section-title {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--text-faint);
+        margin-bottom: 0.6rem;
+      }
+
+      .metric-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        padding: 0.15rem 0;
+        font-size: 0.95rem;
+      }
+
+      .metric-label {
+        color: var(--metric-label);
+      }
+
+      .metric-value {
+        color: var(--metric-value);
+        font-variant-numeric: tabular-nums;
+        min-width: 60px;
+        text-align: right;
+      }
+
+      .metric-value.zero { color: var(--zero); }
+      .metric-value.positive { color: var(--positive); }
+      .metric-value.negative { color: var(--negative); }
+
+      .delta-section {
+        background: var(--panel-bg);
+        border-radius: 6px;
+        padding: 1rem;
+        margin-top: 1rem;
+      }
+
+      .delta-section .section-title {
+        color: var(--text-muted);
+      }
+
+      .burst-bar {
+        display: flex;
+        gap: 2px;
+        height: 18px;
+        margin-top: 0.4rem;
+        align-items: flex-end;
+      }
+
+      .burst-segment {
+        background: var(--bar-fill);
+        border-radius: 1px;
+        min-width: 3px;
+        transition: height 0.15s;
+      }
+
+      .status-line {
+        font-size: 0.85rem;
+        color: var(--text-faint);
+        margin-top: 0.5rem;
+        font-style: italic;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="write-col">
+      <div class="header">
+        <h1>Signal Sandbox</h1>
+        <div class="mode-toggle">
+          <button class="mode-btn active" id="mode-journal">Journal</button>
+          <button class="mode-btn" id="mode-calib">Calibration</button>
+        </div>
+        <button class="reset-btn" id="reset">Reset</button>
+      </div>
+      <div class="prompt-label" id="prompt-label">Write anything. Metrics update live.</div>
+      <textarea id="input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" autofocus></textarea>
+    </div>
+
+    <div class="metrics-col" id="metrics">
+      <!-- Populated by JS -->
+    </div>
+
+    <script>
+      const textarea = document.getElementById('input') as HTMLTextAreaElement;
+      const metricsEl = document.getElementById('metrics')!;
+      const resetBtn = document.getElementById('reset')!;
+      const modeJournalBtn = document.getElementById('mode-journal')!;
+      const modeCalibBtn = document.getElementById('mode-calib')!;
+      const promptLabel = document.getElementById('prompt-label')!;
+
+      // ── State ──────────────────────────────────────────────
+      type Mode = 'journal' | 'calibration';
+      let mode: Mode = 'journal';
+      let savedCalibMetrics: Record<string, any> | null = null;
+      let savedJournalMetrics: Record<string, any> | null = null;
+
+      let pageOpenTime = Date.now();
+      let firstKeystrokeTime: number | null = null;
+      let firstKeystrokeSent = false;
+      let pauseTimer: number | null = null;
+      let isPaused = false;
+      let pauseStartTime: number | null = null;
+      let totalPauseMs = 0;
+      let pauseCount = 0;
+      let totalCharsTyped = 0;
+      let totalCharsDeleted = 0;
+      let deletionCount = 0;
+      let largestDeletion = 0;
+      let lastTextLength = 0;
+      let tabAwayCount = 0;
+      let tabAwayStartTime: number | null = null;
+      let totalTabAwayMs = 0;
+
+      // Faigley & Witte deletion decomposition
+      let smallDeletionCount = 0;
+      let largeDeletionCount = 0;
+      let largeDeletionChars = 0;
+      const deletionTimestamps: Array<{chars: number; time: number}> = [];
+
+      // P-burst tracking (Chenoweth & Hayes)
+      let lastInputTime: number | null = null;
+      let currentBurstChars = 0;
+      let burstStartTime: number | null = null;
+      const burstLengths: number[] = [];
+      const burstSequence: Array<{chars: number; startOffsetMs: number; durationMs: number}> = [];
+
+      // Keystroke dynamics (Epp et al. 2011)
+      let lastKeystrokeTime: number | null = null;
+      const interKeyIntervals: number[] = [];
+      let currentRevisionChainLength = 0;
+      let lastDeletionTime: number | null = null;
+      const revisionChains: number[] = [];
+
+      // Scroll tracking
+      let scrollBackCount = 0;
+      let lastScrollTop = 0;
+
+      // Linguistic densities (from server)
+      let linguisticDensities: Record<string, number> = {};
+      let linguisticDebounce: number | null = null;
+
+      // ── Mode switching ─────────────────────────────────────
+      function setMode(m: Mode) {
+        // Save current metrics before switching
+        const currentMetrics = computeAllMetrics();
+        if (mode === 'calibration') savedCalibMetrics = { ...currentMetrics, ...linguisticDensities };
+        if (mode === 'journal') savedJournalMetrics = { ...currentMetrics, ...linguisticDensities };
+
+        mode = m;
+        modeJournalBtn.classList.toggle('active', m === 'journal');
+        modeCalibBtn.classList.toggle('active', m === 'calibration');
+        promptLabel.textContent = m === 'calibration'
+          ? 'Calibration mode — write something neutral.'
+          : 'Journal mode — write reflectively.';
+
+        resetSession();
+      }
+
+      modeJournalBtn.addEventListener('click', () => setMode('journal'));
+      modeCalibBtn.addEventListener('click', () => setMode('calibration'));
+
+      resetBtn.addEventListener('click', () => {
+        savedCalibMetrics = null;
+        savedJournalMetrics = null;
+        resetSession();
+      });
+
+      function resetSession() {
+        textarea.value = '';
+        pageOpenTime = Date.now();
+        firstKeystrokeTime = null;
+        firstKeystrokeSent = false;
+        if (pauseTimer) clearTimeout(pauseTimer);
+        isPaused = false;
+        pauseStartTime = null;
+        totalPauseMs = 0;
+        pauseCount = 0;
+        totalCharsTyped = 0;
+        totalCharsDeleted = 0;
+        deletionCount = 0;
+        largestDeletion = 0;
+        lastTextLength = 0;
+        tabAwayCount = 0;
+        tabAwayStartTime = null;
+        totalTabAwayMs = 0;
+        smallDeletionCount = 0;
+        largeDeletionCount = 0;
+        largeDeletionChars = 0;
+        deletionTimestamps.length = 0;
+        lastInputTime = null;
+        currentBurstChars = 0;
+        burstStartTime = null;
+        burstLengths.length = 0;
+        burstSequence.length = 0;
+        lastKeystrokeTime = null;
+        interKeyIntervals.length = 0;
+        currentRevisionChainLength = 0;
+        lastDeletionTime = null;
+        revisionChains.length = 0;
+        scrollBackCount = 0;
+        lastScrollTop = 0;
+        linguisticDensities = {};
+        renderMetrics();
+        textarea.focus();
+      }
+
+      // ── Keystroke tracking ─────────────────────────────────
+      textarea.addEventListener('scroll', () => {
+        if (textarea.scrollTop < lastScrollTop && lastScrollTop > 0) {
+          scrollBackCount++;
+        }
+        lastScrollTop = textarea.scrollTop;
+      });
+
+      textarea.addEventListener('keydown', (e: KeyboardEvent) => {
+        const now = Date.now();
+
+        if (lastKeystrokeTime !== null) {
+          const interval = now - lastKeystrokeTime;
+          if (interval < 5000) interKeyIntervals.push(interval);
+        }
+        lastKeystrokeTime = now;
+
+        if (e.key === 'Backspace' || e.key === 'Delete') {
+          if (lastDeletionTime !== null && (now - lastDeletionTime) < 500) {
+            currentRevisionChainLength++;
+          } else {
+            if (currentRevisionChainLength > 0) revisionChains.push(currentRevisionChainLength);
+            currentRevisionChainLength = 1;
+          }
+          lastDeletionTime = now;
+        } else {
+          if (currentRevisionChainLength > 0) {
+            revisionChains.push(currentRevisionChainLength);
+            currentRevisionChainLength = 0;
+          }
+        }
+      });
+
+      textarea.addEventListener('input', () => {
+        const now = Date.now();
+        const currentLength = textarea.value.length;
+        const delta = currentLength - lastTextLength;
+
+        if (delta > 0) {
+          totalCharsTyped += delta;
+
+          // P-burst: 2s gap = new burst
+          if (lastInputTime !== null && (now - lastInputTime) > 2000) {
+            if (currentBurstChars > 0) {
+              burstLengths.push(currentBurstChars);
+              burstSequence.push({
+                chars: currentBurstChars,
+                startOffsetMs: (burstStartTime ?? now) - pageOpenTime,
+                durationMs: lastInputTime - (burstStartTime ?? lastInputTime),
+              });
+            }
+            currentBurstChars = 0;
+            burstStartTime = now;
+          }
+          if (burstStartTime === null) burstStartTime = now;
+          currentBurstChars += delta;
+          lastInputTime = now;
+        } else if (delta < 0) {
+          const deleted = Math.abs(delta);
+          totalCharsDeleted += deleted;
+          deletionCount++;
+          if (deleted > largestDeletion) largestDeletion = deleted;
+
+          if (deleted < 10) {
+            smallDeletionCount++;
+          } else {
+            largeDeletionCount++;
+            largeDeletionChars += deleted;
+          }
+          deletionTimestamps.push({ chars: deleted, time: now });
+        }
+
+        lastTextLength = currentLength;
+
+        if (!firstKeystrokeSent && delta > 0) {
+          firstKeystrokeTime = Date.now();
+          firstKeystrokeSent = true;
+        }
+
+        if (isPaused) {
+          if (pauseStartTime) {
+            totalPauseMs += Date.now() - pauseStartTime;
+            pauseStartTime = null;
+          }
+          isPaused = false;
+        }
+
+        if (pauseTimer) clearTimeout(pauseTimer);
+        pauseTimer = window.setTimeout(() => {
+          if (textarea.value.trim()) {
+            pauseCount++;
+            pauseStartTime = Date.now();
+            isPaused = true;
+            renderMetrics();
+          }
+        }, 30000);
+
+        // Debounced linguistic density fetch
+        if (linguisticDebounce) clearTimeout(linguisticDebounce);
+        linguisticDebounce = window.setTimeout(() => {
+          fetchLinguistic(textarea.value);
+        }, 400);
+
+        renderMetrics();
+      });
+
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+          tabAwayStartTime = Date.now();
+          if (currentBurstChars > 0) {
+            burstLengths.push(currentBurstChars);
+            burstSequence.push({
+              chars: currentBurstChars,
+              startOffsetMs: (burstStartTime ?? Date.now()) - pageOpenTime,
+              durationMs: Date.now() - (burstStartTime ?? Date.now()),
+            });
+            currentBurstChars = 0;
+            burstStartTime = null;
+          }
+        } else {
+          if (tabAwayStartTime) {
+            totalTabAwayMs += Date.now() - tabAwayStartTime;
+            tabAwayCount++;
+            tabAwayStartTime = null;
+          }
+          renderMetrics();
+        }
+      });
+
+      // ── Linguistic fetch ───────────────────────────────────
+      async function fetchLinguistic(text: string) {
+        if (!text.trim()) {
+          linguisticDensities = {};
+          renderMetrics();
+          return;
+        }
+        try {
+          const res = await fetch('/api/dev/linguistic', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text }),
+          });
+          if (res.ok) {
+            linguisticDensities = await res.json();
+            renderMetrics();
+          }
+        } catch { /* ignore */ }
+      }
+
+      // ── Compute all client-side metrics ────────────────────
+      function computeAllMetrics() {
+        const now = Date.now();
+        const text = textarea.value;
+        const totalDurationMs = now - pageOpenTime;
+        const firstKeystrokeMs = firstKeystrokeTime ? firstKeystrokeTime - pageOpenTime : null;
+        const finalCharCount = text.length;
+        const wordCount = text.split(/\s+/).filter(Boolean).length;
+        const sentenceCount = text.split(/[.!?]+/).filter((s: string) => s.trim()).length;
+        const commitmentRatio = totalCharsTyped > 0 ? finalCharCount / totalCharsTyped : null;
+
+        // Account for current pause
+        let effectivePauseMs = totalPauseMs;
+        if (isPaused && pauseStartTime) effectivePauseMs += now - pauseStartTime;
+
+        const activeTypingMs = Math.max(0, totalDurationMs - effectivePauseMs - totalTabAwayMs);
+        const charsPerMinute = activeTypingMs > 0 ? totalCharsTyped / (activeTypingMs / 60000) : null;
+
+        // Include current burst in count
+        const allBursts = [...burstLengths];
+        if (currentBurstChars > 0) allBursts.push(currentBurstChars);
+        const pBurstCount = allBursts.length;
+        const avgPBurstLength = pBurstCount > 0
+          ? allBursts.reduce((a, b) => a + b, 0) / pBurstCount : null;
+
+        // Deletion timing
+        const midpoint = pageOpenTime + totalDurationMs / 2;
+        let firstHalfDeletionChars = 0;
+        let secondHalfDeletionChars = 0;
+        for (const d of deletionTimestamps) {
+          if (d.time <= midpoint) firstHalfDeletionChars += d.chars;
+          else secondHalfDeletionChars += d.chars;
+        }
+
+        // IKI stats
+        const ikiCount = interKeyIntervals.length;
+        const ikiMean = ikiCount > 0
+          ? interKeyIntervals.reduce((a, b) => a + b, 0) / ikiCount : null;
+        const ikiStd = ikiCount > 1
+          ? Math.sqrt(interKeyIntervals.reduce((sum, v) => sum + (v - ikiMean!) ** 2, 0) / (ikiCount - 1)) : null;
+
+        // Revision chains (include current)
+        const allChains = [...revisionChains];
+        if (currentRevisionChainLength > 0) allChains.push(currentRevisionChainLength);
+        const revChainCount = allChains.length;
+        const revChainAvgLength = revChainCount > 0
+          ? allChains.reduce((a, b) => a + b, 0) / revChainCount : null;
+
+        return {
+          totalDurationMs,
+          firstKeystrokeMs,
+          totalCharsTyped,
+          finalCharCount,
+          wordCount,
+          sentenceCount,
+          commitmentRatio,
+          pauseCount,
+          totalPauseMs: effectivePauseMs,
+          deletionCount,
+          largestDeletion,
+          totalCharsDeleted,
+          tabAwayCount,
+          totalTabAwayMs,
+          activeTypingMs,
+          charsPerMinute,
+          smallDeletionCount,
+          largeDeletionCount,
+          largeDeletionChars,
+          firstHalfDeletionChars,
+          secondHalfDeletionChars,
+          pBurstCount,
+          avgPBurstLength,
+          burstSequence: [...burstSequence, ...(currentBurstChars > 0 ? [{
+            chars: currentBurstChars,
+            startOffsetMs: (burstStartTime ?? now) - pageOpenTime,
+            durationMs: now - (burstStartTime ?? now),
+          }] : [])],
+          interKeyIntervalMean: ikiMean,
+          interKeyIntervalStd: ikiStd,
+          revisionChainCount: revChainCount,
+          revisionChainAvgLength: revChainAvgLength,
+          scrollBackCount,
+        };
+      }
+
+      // ── Render ─────────────────────────────────────────────
+      function fmt(v: number | null | undefined, decimals = 1): string {
+        if (v == null) return '—';
+        return decimals === 0 ? String(Math.round(v)) : v.toFixed(decimals);
+      }
+
+      function fmtMs(ms: number | null): string {
+        if (ms == null) return '—';
+        if (ms < 1000) return `${Math.round(ms)}ms`;
+        return `${(ms / 1000).toFixed(1)}s`;
+      }
+
+      function fmtDuration(ms: number): string {
+        const s = Math.floor(ms / 1000);
+        const m = Math.floor(s / 60);
+        const sec = s % 60;
+        return m > 0 ? `${m}m ${sec}s` : `${sec}s`;
+      }
+
+      function fmtPct(v: number | null): string {
+        if (v == null) return '—';
+        return `${(v * 100).toFixed(1)}%`;
+      }
+
+      function fmtDensity(v: number | null | undefined): string {
+        if (v == null) return '—';
+        return (v * 100).toFixed(2) + '%';
+      }
+
+      function valueClass(v: number | null | undefined): string {
+        if (v == null || v === 0) return 'zero';
+        return '';
+      }
+
+      function deltaClass(v: number | null | undefined): string {
+        if (v == null || Math.abs(v) < 0.001) return 'zero';
+        return v > 0 ? 'positive' : 'negative';
+      }
+
+      function fmtDelta(v: number | null | undefined, decimals = 2): string {
+        if (v == null) return '—';
+        const prefix = v > 0 ? '+' : '';
+        return prefix + v.toFixed(decimals);
+      }
+
+      function renderMetrics() {
+        const m = computeAllMetrics();
+        const l = linguisticDensities;
+
+        // Burst visualization
+        const maxBurst = Math.max(1, ...m.burstSequence.map(b => b.chars));
+        const burstBars = m.burstSequence.map(b =>
+          `<div class="burst-segment" style="height: ${Math.max(3, (b.chars / maxBurst) * 18)}px; width: ${Math.max(3, Math.min(20, b.chars / 2))}px"></div>`
+        ).join('');
+
+        let deltaHTML = '';
+        if (savedCalibMetrics && savedJournalMetrics) {
+          const c = savedCalibMetrics;
+          const j = savedJournalMetrics;
+          deltaHTML = `
+            <div class="delta-section">
+              <div class="section-title">Session Delta (Journal - Calibration)</div>
+              ${deltaRow('First person', j.firstPersonDensity, c.firstPersonDensity)}
+              ${deltaRow('Cognitive', j.cognitiveDensity, c.cognitiveDensity)}
+              ${deltaRow('Hedging', j.hedgingDensity, c.hedgingDensity)}
+              ${deltaRow('Chars/min', j.charsPerMinute, c.charsPerMinute)}
+              ${deltaRow('Commitment', j.commitmentRatio, c.commitmentRatio)}
+              ${deltaRow('Large deletions', j.largeDeletionCount, c.largeDeletionCount)}
+              ${deltaRow('IKI mean', j.interKeyIntervalMean, c.interKeyIntervalMean)}
+              ${deltaRow('Avg P-burst len', j.avgPBurstLength, c.avgPBurstLength)}
+            </div>
+          `;
+        } else if (savedCalibMetrics || savedJournalMetrics) {
+          const done = savedCalibMetrics ? 'Calibration' : 'Journal';
+          const todo = savedCalibMetrics ? 'journal' : 'calibration';
+          deltaHTML = `<div class="status-line">${done} saved. Switch to ${todo} mode and write to see deltas.</div>`;
+        }
+
+        // Save current metrics for delta display when switching modes
+        const currentForDelta = { ...m, ...l };
+        if (mode === 'calibration' && textarea.value.trim()) {
+          savedCalibMetrics = currentForDelta;
+        }
+        if (mode === 'journal' && textarea.value.trim()) {
+          savedJournalMetrics = currentForDelta;
+        }
+
+        metricsEl.innerHTML = `
+          <div class="section">
+            <div class="section-title">Timing</div>
+            ${row('Duration', fmtDuration(m.totalDurationMs))}
+            ${row('First keystroke', fmtMs(m.firstKeystrokeMs))}
+            ${row('Active typing', fmtDuration(m.activeTypingMs))}
+            ${row('Pauses (>30s)', m.pauseCount)}
+            ${row('Total pause time', fmtDuration(m.totalPauseMs))}
+            ${row('Tab-aways', m.tabAwayCount)}
+            ${row('Tab-away time', fmtDuration(m.totalTabAwayMs))}
+          </div>
+
+          <div class="section">
+            <div class="section-title">Production</div>
+            ${row('Total chars typed', m.totalCharsTyped)}
+            ${row('Final char count', m.finalCharCount)}
+            ${row('Words', m.wordCount)}
+            ${row('Sentences', m.sentenceCount)}
+            ${row('Commitment ratio', fmtPct(m.commitmentRatio), m.commitmentRatio)}
+            ${row('Chars/min', fmt(m.charsPerMinute, 0))}
+          </div>
+
+          <div class="section">
+            <div class="section-title">Deletions (Faigley & Witte)</div>
+            ${row('Total deletions', m.deletionCount)}
+            ${row('Chars deleted', m.totalCharsDeleted)}
+            ${row('Largest deletion', m.largestDeletion)}
+            ${row('Small (<10 chars)', m.smallDeletionCount)}
+            ${row('Large (>=10 chars)', m.largeDeletionCount)}
+            ${row('Large deletion chars', m.largeDeletionChars)}
+            ${row('1st half del chars', m.firstHalfDeletionChars)}
+            ${row('2nd half del chars', m.secondHalfDeletionChars)}
+          </div>
+
+          <div class="section">
+            <div class="section-title">P-Bursts (Chenoweth & Hayes)</div>
+            ${row('Burst count', m.pBurstCount)}
+            ${row('Avg burst length', fmt(m.avgPBurstLength, 1))}
+            <div class="burst-bar">${burstBars}</div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">Keystroke Dynamics (Epp et al.)</div>
+            ${row('IKI mean', fmtMs(m.interKeyIntervalMean))}
+            ${row('IKI std dev', fmtMs(m.interKeyIntervalStd))}
+            ${row('Revision chains', m.revisionChainCount)}
+            ${row('Avg chain length', fmt(m.revisionChainAvgLength, 1))}
+            ${row('Scroll-backs', m.scrollBackCount)}
+          </div>
+
+          <div class="section">
+            <div class="section-title">Linguistic Densities (NRC / Pennebaker)</div>
+            ${row('Anger', fmtDensity(l.nrcAngerDensity), l.nrcAngerDensity)}
+            ${row('Fear', fmtDensity(l.nrcFearDensity), l.nrcFearDensity)}
+            ${row('Joy', fmtDensity(l.nrcJoyDensity), l.nrcJoyDensity)}
+            ${row('Sadness', fmtDensity(l.nrcSadnessDensity), l.nrcSadnessDensity)}
+            ${row('Trust', fmtDensity(l.nrcTrustDensity), l.nrcTrustDensity)}
+            ${row('Anticipation', fmtDensity(l.nrcAnticipationDensity), l.nrcAnticipationDensity)}
+            ${row('Cognitive', fmtDensity(l.cognitiveDensity), l.cognitiveDensity)}
+            ${row('Hedging', fmtDensity(l.hedgingDensity), l.hedgingDensity)}
+            ${row('First person', fmtDensity(l.firstPersonDensity), l.firstPersonDensity)}
+          </div>
+
+          ${deltaHTML}
+        `;
+      }
+
+      function row(label: string, value: any, numericValue?: any): string {
+        const cls = numericValue != null ? valueClass(numericValue) : '';
+        return `<div class="metric-row"><span class="metric-label">${label}</span><span class="metric-value ${cls}">${value}</span></div>`;
+      }
+
+      function deltaRow(label: string, journalVal: any, calibVal: any): string {
+        if (journalVal == null || calibVal == null) return row(label, '—');
+        const d = journalVal - calibVal;
+        return `<div class="metric-row"><span class="metric-label">${label}</span><span class="metric-value ${deltaClass(d)}">${fmtDelta(d)}</span></div>`;
+      }
+
+      // Initial render
+      renderMetrics();
+
+      // Tick duration every second
+      setInterval(renderMetrics, 1000);
+    </script>
+  </body>
+</html>
