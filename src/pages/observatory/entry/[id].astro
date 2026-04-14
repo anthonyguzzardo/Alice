@@ -12,11 +12,35 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Observatory — Entry</title>
+  <script is:inline>
+    (function() {
+      var t = localStorage.getItem('alice-theme') || 'light';
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
   <style>
+    :root {
+      --en-bg: #f5f2ed; --en-bg-card: #ebe7e1; --en-bg-card-alt: #e2ded8;
+      --en-text: #1a1a1a; --en-text-muted: #6b6560; --en-text-faint: #9a9590; --en-text-dim: #b5b0aa;
+      --en-border: #ccc5bc; --en-border-subtle: #ddd8d2;
+      --en-frame-a: #3a6ea5; --en-frame-b: #aa8833; --en-frame-c: #4a7a4a;
+      --en-confirmed: #2a7a2a; --en-falsified: #9a3a3a;
+      --en-spark-line: #3a6ea5; --en-spark-dot: #2a5a8a;
+      --en-radar-ref: #ddd8d2; --en-radar-zero: #ccc5bc;
+    }
+    [data-theme="dark"] {
+      --en-bg: #0a0a0a; --en-bg-card: #0c0c0c; --en-bg-card-alt: #111;
+      --en-text: #cccccc; --en-text-muted: #666; --en-text-faint: #555; --en-text-dim: #333;
+      --en-border: #1a1a1a; --en-border-subtle: #151515;
+      --en-frame-a: #3a6ea5; --en-frame-b: #aa8833; --en-frame-c: #5a7a5a;
+      --en-confirmed: #5a8a5a; --en-falsified: #8a5a5a;
+      --en-spark-line: #3a6ea5; --en-spark-dot: #5a9ed6;
+      --en-radar-ref: #151515; --en-radar-zero: #2a2a2a;
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      background: #0a0a0a;
-      color: #666;
+      background: var(--en-bg);
+      color: var(--en-text-muted);
       font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
       font-size: 11px;
     }
@@ -27,12 +51,12 @@
       justify-content: space-between;
       align-items: center;
       padding: 12px 24px;
-      border-bottom: 1px solid #1a1a1a;
-      background: #0a0a0a;
+      border-bottom: 1px solid var(--en-border);
+      background: var(--en-bg);
       z-index: 50;
     }
-    .nav a, .nav-btn {
-      color: #555;
+    .nav a, .nav-btn, .theme-btn {
+      color: var(--en-text-faint);
       text-decoration: none;
       font-size: 11px;
       letter-spacing: 0.05em;
@@ -41,10 +65,10 @@
       border: none;
       font-family: inherit;
     }
-    .nav a:hover, .nav-btn:hover { color: #888; }
-    .nav-btn:disabled { color: #222; cursor: default; }
+    .nav a:hover, .nav-btn:hover, .theme-btn:hover { color: var(--en-text-muted); }
+    .nav-btn:disabled { color: var(--en-border-subtle); cursor: default; }
     .nav-center {
-      color: #444;
+      color: var(--en-text-faint);
       font-size: 11px;
       letter-spacing: 0.05em;
     }
@@ -61,38 +85,38 @@
 
     /* --- Question (the lead) --- */
     .question-text {
-      color: #777;
+      color: var(--en-text-muted);
       font-size: 14px;
       font-style: italic;
       padding: 20px 0 28px;
-      border-bottom: 1px solid #1a1a1a;
+      border-bottom: 1px solid var(--en-border);
       margin-bottom: 28px;
       line-height: 1.7;
     }
 
     .section { margin-bottom: 36px; }
     .section-title {
-      color: #444;
+      color: var(--en-text-dim);
       font-size: 10px;
       letter-spacing: 0.15em;
       text-transform: uppercase;
       margin-bottom: 12px;
       padding-bottom: 6px;
-      border-bottom: 1px solid #1a1a1a;
+      border-bottom: 1px solid var(--en-border);
     }
 
     /* --- Three frames --- */
     .frame-card {
-      background: #0c0c0c;
-      border: 1px solid #1a1a1a;
+      background: var(--en-bg-card);
+      border: 1px solid var(--en-border-subtle);
       padding: 16px 20px;
       margin-bottom: 8px;
       line-height: 1.7;
-      color: #666;
+      color: var(--en-text-muted);
     }
-    .frame-card-a { border-left: 3px solid #3a6ea5; }
-    .frame-card-b { border-left: 3px solid #aa8833; }
-    .frame-card-c { border-left: 3px solid #5a7a5a; }
+    .frame-card-a { border-left: 3px solid var(--en-frame-a); }
+    .frame-card-b { border-left: 3px solid var(--en-frame-b); }
+    .frame-card-c { border-left: 3px solid var(--en-frame-c); }
     .frame-label {
       font-size: 9px;
       letter-spacing: 0.1em;
@@ -100,14 +124,14 @@
       margin-bottom: 8px;
       font-weight: normal;
     }
-    .frame-label-a { color: #3a6ea5; }
-    .frame-label-b { color: #aa8833; }
-    .frame-label-c { color: #5a7a5a; }
+    .frame-label-a { color: var(--en-frame-a); }
+    .frame-label-b { color: var(--en-frame-b); }
+    .frame-label-c { color: var(--en-frame-c); }
 
     /* --- Predictions --- */
     .prediction-card {
-      background: #0c0c0c;
-      border: 1px solid #1a1a1a;
+      background: var(--en-bg-card);
+      border: 1px solid var(--en-border-subtle);
       padding: 12px 16px;
       margin-bottom: 8px;
     }
@@ -118,7 +142,7 @@
       margin-bottom: 6px;
     }
     .prediction-hypothesis {
-      color: #777;
+      color: var(--en-text-muted);
       line-height: 1.6;
       font-size: 11px;
     }
@@ -131,37 +155,39 @@
       flex-shrink: 0;
       margin-left: 12px;
     }
-    .status-open { background: #1a1a1a; color: #666; }
-    .status-confirmed { background: #1a2a1a; color: #5a8a5a; }
-    .status-falsified { background: #2a1a1a; color: #8a5a5a; }
-    .status-expired { background: #1a1a1a; color: #444; }
-    .status-indeterminate { background: #1a1a18; color: #8a8a5a; }
+    .status-open { background: var(--en-border-subtle); color: var(--en-text-faint); }
+    .status-confirmed { background: rgba(42,122,42,0.1); color: var(--en-confirmed); }
+    .status-falsified { background: rgba(154,58,58,0.1); color: var(--en-falsified); }
+    .status-expired { background: var(--en-border-subtle); color: var(--en-text-dim); }
+    .status-indeterminate { background: var(--en-border-subtle); color: var(--en-text-dim); }
+    [data-theme="dark"] .status-confirmed { background: rgba(90,138,90,0.15); }
+    [data-theme="dark"] .status-falsified { background: rgba(138,90,90,0.15); }
     .prediction-meta {
-      color: #444;
+      color: var(--en-text-dim);
       font-size: 9px;
       margin-top: 6px;
     }
     .prediction-rationale {
-      color: #555;
+      color: var(--en-text-faint);
       font-size: 10px;
       margin-top: 8px;
       padding-top: 6px;
-      border-top: 1px solid #151515;
+      border-top: 1px solid var(--en-border-subtle);
       line-height: 1.5;
     }
 
     /* --- Suppressed question --- */
     .suppressed-block {
-      background: #0c0c0c;
-      border-left: 3px solid #333;
+      background: var(--en-bg-card);
+      border-left: 3px solid var(--en-border);
       padding: 16px 20px;
-      color: #555;
+      color: var(--en-text-faint);
       font-style: italic;
       line-height: 1.6;
     }
     .suppressed-label {
       font-style: normal;
-      color: #333;
+      color: var(--en-text-dim);
       font-size: 9px;
       letter-spacing: 0.15em;
       text-transform: uppercase;
@@ -175,30 +201,26 @@
       gap: 8px;
       cursor: pointer;
       padding: 12px 0;
-      border-bottom: 1px solid #1a1a1a;
+      border-bottom: 1px solid var(--en-border);
       margin-bottom: 16px;
       user-select: none;
     }
-    .detail-toggle:hover .section-title { color: #666; }
+    .detail-toggle:hover .section-title { color: var(--en-text-muted); }
     .detail-toggle .section-title {
       margin-bottom: 0;
       padding-bottom: 0;
       border-bottom: none;
     }
     .detail-toggle-arrow {
-      color: #333;
+      color: var(--en-text-dim);
       font-size: 10px;
       transition: transform 0.2s;
     }
     .detail-toggle-arrow.open {
       transform: rotate(90deg);
     }
-    .detail-content {
-      display: none;
-    }
-    .detail-content.open {
-      display: block;
-    }
+    .detail-content { display: none; }
+    .detail-content.open { display: block; }
 
     /* --- Radar + metrics --- */
     .radar-container {
@@ -212,24 +234,24 @@
       gap: 8px;
     }
     .metric-card {
-      background: #0f0f0f;
+      background: var(--en-bg-card-alt);
       padding: 8px 12px;
-      border: 1px solid #141414;
+      border: 1px solid var(--en-border-subtle);
     }
     .metric-name {
-      color: #3a3a3a;
+      color: var(--en-text-dim);
       font-size: 8px;
       letter-spacing: 0.1em;
       text-transform: uppercase;
       margin-bottom: 4px;
     }
     .metric-value {
-      color: #777;
+      color: var(--en-text-muted);
       font-size: 13px;
     }
     .metric-group-title {
       grid-column: 1 / -1;
-      color: #333;
+      color: var(--en-text-dim);
       font-size: 9px;
       letter-spacing: 0.1em;
       text-transform: uppercase;
@@ -237,7 +259,7 @@
     }
 
     .loading {
-      color: #333;
+      color: var(--en-text-dim);
       text-align: center;
       padding: 80px 0;
       letter-spacing: 0.1em;
@@ -251,6 +273,7 @@
     <div class="nav-arrows">
       <button class="nav-btn" id="btn-prev" disabled>&larr; prev</button>
       <button class="nav-btn" id="btn-next" disabled>next &rarr;</button>
+      <button class="theme-btn" id="theme-toggle"></button>
     </div>
   </div>
 
@@ -294,6 +317,22 @@
   </div>
 
   <script>
+    // Theme toggle
+    const themeBtn = document.getElementById('theme-toggle')!;
+    const savedTheme = localStorage.getItem('alice-theme') || 'light';
+    themeBtn.textContent = savedTheme === 'dark' ? '\u2600' : '\u263E';
+    themeBtn.addEventListener('click', () => {
+      const cur = document.documentElement.getAttribute('data-theme');
+      const next = cur === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem('alice-theme', next);
+      themeBtn.textContent = next === 'dark' ? '\u2600' : '\u263E';
+    });
+
+    function cssVar(name: string): string {
+      return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    }
+
     const DIMS = ['fluency', 'deliberation', 'revision', 'expression', 'commitment', 'volatility', 'thermal', 'presence'];
 
     function drawRadar(entryState: any) {
@@ -318,7 +357,7 @@
       // Reference rings
       for (const ring of [-2, -1, 0, 1, 2]) {
         const r = toRadiusSigned(ring);
-        ctx.strokeStyle = ring === 0 ? '#2a2a2a' : '#151515';
+        ctx.strokeStyle = ring === 0 ? cssVar('--en-radar-zero') : cssVar('--en-radar-ref');
         ctx.lineWidth = ring === 0 ? 1.5 : 0.5;
         ctx.beginPath();
         for (let i = 0; i <= n; i++) {
@@ -331,7 +370,7 @@
         ctx.stroke();
 
         if (ring !== 0) {
-          ctx.fillStyle = '#222';
+          ctx.fillStyle = cssVar('--en-text-dim');
           ctx.font = '8px SF Mono, monospace';
           ctx.textAlign = 'center';
           ctx.fillText(`${ring > 0 ? '+' : ''}${ring}\u03c3`, cx + 14, cy - r + 3);
@@ -344,7 +383,7 @@
         const ax = cx + Math.cos(angle) * maxRadius;
         const ay = cy + Math.sin(angle) * maxRadius;
 
-        ctx.strokeStyle = '#1a1a1a';
+        ctx.strokeStyle = cssVar('--en-radar-ref');
         ctx.lineWidth = 0.5;
         ctx.beginPath();
         ctx.moveTo(cx, cy);
@@ -353,7 +392,7 @@
 
         const lx = cx + Math.cos(angle) * (maxRadius + 18);
         const ly = cy + Math.sin(angle) * (maxRadius + 18);
-        ctx.fillStyle = '#444';
+        ctx.fillStyle = cssVar('--en-text-faint');
         ctx.font = '9px SF Mono, monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
@@ -363,7 +402,7 @@
       // Data polygon
       const values = DIMS.map(d => entryState[d] as number);
       ctx.fillStyle = 'rgba(58, 110, 165, 0.12)';
-      ctx.strokeStyle = '#3a6ea5';
+      ctx.strokeStyle = cssVar('--en-spark-line');
       ctx.lineWidth = 2;
       ctx.beginPath();
       for (let i = 0; i < n; i++) {
@@ -384,7 +423,7 @@
         const r = toRadiusSigned(Math.max(-maxZ, Math.min(maxZ, values[i])));
         const x = cx + Math.cos(angle) * r;
         const y = cy + Math.sin(angle) * r;
-        ctx.fillStyle = '#5a9ed6';
+        ctx.fillStyle = cssVar('--en-spark-dot');
         ctx.beginPath();
         ctx.arc(x, y, 3, 0, Math.PI * 2);
         ctx.fill();

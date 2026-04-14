@@ -12,11 +12,33 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Observatory — Coupling</title>
+  <script is:inline>
+    (function() {
+      var t = localStorage.getItem('alice-theme') || 'light';
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
   <style>
+    :root {
+      --cp-bg: #f5f2ed; --cp-bg-card: #ebe7e1; --cp-text: #1a1a1a;
+      --cp-text-muted: #6b6560; --cp-text-faint: #9a9590; --cp-text-dim: #b5b0aa;
+      --cp-border: #ccc5bc; --cp-border-subtle: #ddd8d2;
+      --cp-pos: rgba(40, 100, 160, 0.7); --cp-neg: rgba(160, 60, 60, 0.7);
+      --cp-cell-empty: #e8e4de; --cp-confirmed: #2a7a2a; --cp-falsified: #9a3a3a;
+      --cp-attractor-rigid: #9a3a3a; --cp-attractor-mod: #8a8a3a; --cp-attractor-mal: #3a7a3a;
+    }
+    [data-theme="dark"] {
+      --cp-bg: #0a0a0a; --cp-bg-card: #0f0f0f; --cp-text: #cccccc;
+      --cp-text-muted: #666; --cp-text-faint: #555; --cp-text-dim: #333;
+      --cp-border: #1a1a1a; --cp-border-subtle: #151515;
+      --cp-pos: rgba(70, 130, 180, 0.7); --cp-neg: rgba(180, 70, 70, 0.7);
+      --cp-cell-empty: #0f0f0f; --cp-confirmed: #5a8a5a; --cp-falsified: #8a5a5a;
+      --cp-attractor-rigid: #aa5a5a; --cp-attractor-mod: #8a8a5a; --cp-attractor-mal: #5a8a5a;
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      background: #0a0a0a;
-      color: #666;
+      background: var(--cp-bg);
+      color: var(--cp-text-muted);
       font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
       font-size: 11px;
     }
@@ -25,34 +47,36 @@
       justify-content: space-between;
       align-items: center;
       padding: 16px 24px;
-      border-bottom: 1px solid #1a1a1a;
+      border-bottom: 1px solid var(--cp-border);
     }
-    .nav a {
-      color: #555;
+    .nav a, .theme-btn {
+      color: var(--cp-text-faint);
       text-decoration: none;
       font-size: 11px;
       letter-spacing: 0.05em;
+      background: none; border: none; font-family: inherit; cursor: pointer;
     }
-    .nav a:hover { color: #888; }
+    .nav a:hover, .theme-btn:hover { color: var(--cp-text-muted); }
     .nav-title {
-      color: #444;
+      color: var(--cp-text-faint);
       font-size: 12px;
       letter-spacing: 0.1em;
       text-transform: uppercase;
     }
+    .nav-right { display: flex; align-items: center; gap: 16px; }
     .content {
       max-width: 1100px;
       margin: 0 auto;
       padding: 24px;
     }
     .section-title {
-      color: #444;
+      color: var(--cp-text-dim);
       font-size: 10px;
       letter-spacing: 0.15em;
       text-transform: uppercase;
       margin-bottom: 12px;
       padding-bottom: 6px;
-      border-bottom: 1px solid #1a1a1a;
+      border-bottom: 1px solid var(--cp-border);
     }
     .section { margin-bottom: 40px; }
 
@@ -63,28 +87,28 @@
       gap: 12px;
     }
     .discovery {
-      background: #0c0c0c;
-      border-left: 3px solid #2a2a2a;
+      background: var(--cp-bg-card);
+      border-left: 3px solid var(--cp-border);
       padding: 14px 18px;
       line-height: 1.7;
     }
     .discovery-finding {
-      color: #888;
+      color: var(--cp-text-muted);
       font-size: 11px;
     }
     .discovery-evidence {
-      color: #444;
+      color: var(--cp-text-dim);
       font-size: 9px;
       margin-top: 6px;
       letter-spacing: 0.02em;
     }
     .discovery-strong { border-left-color: #3a5a7a; }
-    .discovery-moderate { border-left-color: #4a4a3a; }
+    .discovery-moderate { border-left-color: #6a6a4a; }
 
     /* --- Theories --- */
     .theory-card {
-      background: #0c0c0c;
-      border: 1px solid #1a1a1a;
+      background: var(--cp-bg-card);
+      border: 1px solid var(--cp-border-subtle);
       padding: 12px 16px;
       margin-bottom: 8px;
     }
@@ -95,7 +119,7 @@
       margin-bottom: 4px;
     }
     .theory-name {
-      color: #666;
+      color: var(--cp-text-muted);
       font-size: 10px;
     }
     .theory-status {
@@ -105,16 +129,16 @@
       padding: 2px 8px;
       border-radius: 2px;
     }
-    .theory-active { background: #1a1a1a; color: #666; }
-    .theory-established { background: #1a2a1a; color: #5a8a5a; }
-    .theory-retired { background: #2a1a1a; color: #8a5a5a; }
+    .theory-active { background: var(--cp-border-subtle); color: var(--cp-text-muted); }
+    .theory-established { background: rgba(42,122,42,0.1); color: var(--cp-confirmed); }
+    .theory-retired { background: rgba(154,58,58,0.1); color: var(--cp-falsified); }
     .theory-meta {
-      color: #444;
+      color: var(--cp-text-dim);
       font-size: 9px;
       margin-top: 4px;
     }
     .theory-desc {
-      color: #555;
+      color: var(--cp-text-faint);
       font-size: 10px;
       margin-top: 6px;
       line-height: 1.5;
@@ -122,7 +146,7 @@
     .theory-bar-container {
       margin-top: 6px;
       height: 4px;
-      background: #1a1a1a;
+      background: var(--cp-border-subtle);
       border-radius: 2px;
       overflow: hidden;
     }
@@ -147,21 +171,21 @@
     }
     th {
       text-align: left;
-      color: #444;
+      color: var(--cp-text-dim);
       font-size: 9px;
       letter-spacing: 0.1em;
       text-transform: uppercase;
       padding: 6px 12px;
-      border-bottom: 1px solid #222;
+      border-bottom: 1px solid var(--cp-border);
       font-weight: normal;
     }
     td {
       padding: 6px 12px;
-      border-bottom: 1px solid #111;
-      color: #666;
+      border-bottom: 1px solid var(--cp-border-subtle);
+      color: var(--cp-text-muted);
     }
-    .corr-positive { color: #5a8aaa; }
-    .corr-negative { color: #aa5a5a; }
+    .corr-positive { color: #3a7aaa; }
+    .corr-negative { color: #aa4a4a; }
 
     /* --- Dynamics --- */
     .dynamics-grid {
@@ -170,12 +194,12 @@
       gap: 12px;
     }
     .dynamics-card {
-      background: #0f0f0f;
-      border: 1px solid #1a1a1a;
+      background: var(--cp-bg-card);
+      border: 1px solid var(--cp-border-subtle);
       padding: 12px 16px;
     }
     .dynamics-card-title {
-      color: #555;
+      color: var(--cp-text-faint);
       font-size: 10px;
       letter-spacing: 0.1em;
       text-transform: uppercase;
@@ -185,24 +209,23 @@
       display: flex;
       justify-content: space-between;
       padding: 2px 0;
-      color: #555;
       font-size: 10px;
     }
-    .dynamics-row .label { color: #444; }
-    .dynamics-row .value { color: #666; }
-    .attractor-rigid { color: #aa5a5a; }
-    .attractor-moderate { color: #8a8a5a; }
-    .attractor-malleable { color: #5a8a5a; }
+    .dynamics-row .label { color: var(--cp-text-dim); }
+    .dynamics-row .value { color: var(--cp-text-muted); }
+    .attractor-rigid { color: var(--cp-attractor-rigid); }
+    .attractor-moderate { color: var(--cp-attractor-mod); }
+    .attractor-malleable { color: var(--cp-attractor-mal); }
 
     /* --- Tooltip --- */
     .tooltip {
       display: none;
       position: fixed;
-      background: #1a1a1a;
-      border: 1px solid #333;
+      background: var(--cp-bg-card);
+      border: 1px solid var(--cp-border);
       padding: 8px 12px;
       font-size: 10px;
-      color: #888;
+      color: var(--cp-text-muted);
       pointer-events: none;
       z-index: 100;
       line-height: 1.6;
@@ -222,26 +245,42 @@
     }
     .overlay.active { display: flex; }
     .overlay-title {
-      color: #666;
+      color: var(--cp-text-muted);
       font-size: 12px;
       margin-bottom: 12px;
       letter-spacing: 0.05em;
     }
     .overlay-close {
-      color: #444;
+      color: var(--cp-text-dim);
       font-size: 10px;
       margin-top: 12px;
       cursor: pointer;
     }
-    .overlay-close:hover { color: #888; }
+    .overlay-close:hover { color: var(--cp-text-muted); }
   </style>
 </head>
 <body>
   <div class="nav">
     <a href="/observatory">&larr; observatory</a>
     <span class="nav-title">coupling</span>
-    <span></span>
+    <div class="nav-right">
+      <button class="theme-btn" id="theme-toggle"></button>
+    </div>
   </div>
+  <script is:inline>
+    (function() {
+      var btn = document.getElementById('theme-toggle');
+      var t = localStorage.getItem('alice-theme') || 'light';
+      btn.textContent = t === 'dark' ? '\u2600' : '\u263E';
+      btn.addEventListener('click', function() {
+        var cur = document.documentElement.getAttribute('data-theme');
+        var next = cur === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        localStorage.setItem('alice-theme', next);
+        btn.textContent = next === 'dark' ? '\u2600' : '\u263E';
+      });
+    })();
+  </script>
 
   <div class="content">
     <!-- Discoveries: plain-English findings -->
