@@ -14,7 +14,8 @@
  *
  * Usage:
  *   npm run simulate                          # mechanics mode (default)
- *   npm run simulate -- --quality             # quality mode
+ *   npm run simulate -- --quality             # quality mode (15 days, Sonnet)
+ *   npm run simulate -- --full                # full mode (all 30 days, Sonnet)
  *   npm run simulate -- --start 5             # resume from day 5
  *   npm run simulate -- --embed               # include Voyage AI embeddings
  *   npm run simulate -- --dry-run             # data only, no AI calls
@@ -33,15 +34,18 @@ const startIdx = args.indexOf('--start');
 const START_DAY = startIdx >= 0 ? parseInt(args[startIdx + 1], 10) : 1;
 
 // ── Mode config ─────────────────────────────────────────────────────────────
-const MODE = QUALITY_MODE ? 'quality' : 'mechanics';
-const MODEL = QUALITY_MODE ? 'claude-sonnet-4-20250514' : 'claude-haiku-4-5-20251001';
+const FULL_MODE = args.includes('--full');
+const MODE = FULL_MODE ? 'full' : QUALITY_MODE ? 'quality' : 'mechanics';
+const MODEL = (FULL_MODE || QUALITY_MODE) ? 'claude-sonnet-4-20250514' : 'claude-haiku-4-5-20251001';
 const AUDIT_MODEL = 'claude-haiku-4-5-20251001';
 
 // Mechanics: 10 days cherry-picked for pattern coverage
 // Quality: 15 days for deeper pattern detection
+// Full: all 30 days for complete Jordan Chen run
 const MECHANICS_DAYS = [0, 1, 2, 3, 4, 5, 7, 8, 10, 13]; // P1,P2,P3,P4,P5,F1,F2 + reflection trigger
 const QUALITY_DAYS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]; // first 15 days
-const SELECTED_DAYS = QUALITY_MODE ? QUALITY_DAYS : MECHANICS_DAYS;
+const FULL_DAYS = Array.from({ length: 30 }, (_, i) => i); // all 30 days
+const SELECTED_DAYS = FULL_MODE ? FULL_DAYS : QUALITY_MODE ? QUALITY_DAYS : MECHANICS_DAYS;
 const TOTAL_DAYS = SELECTED_DAYS.length;
 
 // ── Set DB path BEFORE any imports that touch the database ──────────────────
@@ -122,6 +126,18 @@ const { runObservation } = await import('../lib/observe.ts');
 const { runGeneration } = await import('../lib/generate.ts');
 const { runReflection } = await import('../lib/reflect.ts');
 const { JORDAN_ENTRIES, buildSessionSummary } = await import('./simulation-data.ts');
+
+// Import state engine (8D behavioral states, dynamics, coupling)
+const { computeEntryStates } = await import('../lib/alice-negative/state-engine.ts');
+const { computeDynamics } = await import('../lib/alice-negative/dynamics.ts');
+const { computeEmotionAnalysis } = await import('../lib/alice-negative/emotion-profile.ts');
+const {
+  saveEntryState,
+  getEntryStateCount,
+  saveTraitDynamics,
+  saveCouplingMatrix,
+  saveEmotionBehaviorCoupling,
+} = await import('../lib/db.ts');
 
 // Conditional embedding import
 let embedResponse: ((id: number, q: string, r: string, d: string) => Promise<void>) | null = null;
@@ -242,14 +258,28 @@ function validateDay(dayNum: number, questionId: number, dateStr: string, hasRef
 
 // ── Resume cleanup ──────────────────────────────────────────────────────────
 if (START_DAY > 1) {
-  // Clean up data from START_DAY onwards to avoid duplicates
-  const startQuestionId = SELECTED_DAYS[START_DAY - 1] + 1;
-  console.log(`[sim] Cleaning up data from question_id >= ${startQuestionId} for resume`);
-  db.prepare('DELETE FROM tb_responses WHERE question_id >= ?').run(startQuestionId);
-  db.prepare('DELETE FROM tb_session_summaries WHERE question_id >= ?').run(startQuestionId);
-  db.prepare('DELETE FROM tb_ai_observations WHERE question_id >= ?').run(startQuestionId);
-  db.prepare('DELETE FROM tb_ai_suppressed_questions WHERE question_id >= ?').run(startQuestionId);
-  db.prepare('DELETE FROM tb_predictions WHERE question_id >= ?').run(startQuestionId);
+  // Find actual question_ids to clean up (can't assume sequential due to INSERT OR IGNORE)
+  const resumeDates = SELECTED_DAYS.slice(START_DAY - 1).map(idx => simDateStr(idx));
+  const questionIds = resumeDates
+    .map(d => db.prepare('SELECT question_id FROM tb_questions WHERE scheduled_for = ?').get(d) as { question_id: number } | undefined)
+    .filter(Boolean)
+    .map(r => r!.question_id);
+
+  if (questionIds.length > 0) {
+    const placeholders = questionIds.map(() => '?').join(',');
+    console.log(`[sim] Cleaning up ${questionIds.length} question_ids for resume: ${questionIds[0]}..${questionIds[questionIds.length - 1]}`);
+    db.prepare(`DELETE FROM tb_responses WHERE question_id IN (${placeholders})`).run(...questionIds);
+    db.prepare(`DELETE FROM tb_session_summaries WHERE question_id IN (${placeholders})`).run(...questionIds);
+    db.prepare(`DELETE FROM tb_burst_sequences WHERE question_id IN (${placeholders})`).run(...questionIds);
+    db.prepare(`DELETE FROM tb_ai_observations WHERE question_id IN (${placeholders})`).run(...questionIds);
+    db.prepare(`DELETE FROM tb_ai_suppressed_questions WHERE question_id IN (${placeholders})`).run(...questionIds);
+    db.prepare(`DELETE FROM tb_predictions WHERE question_id IN (${placeholders})`).run(...questionIds);
+  }
+  // Clean up state engine data — recomputed incrementally
+  db.prepare('DELETE FROM tb_entry_states WHERE entry_state_id > ?').run(START_DAY - 1);
+  db.prepare('DELETE FROM tb_trait_dynamics WHERE entry_count >= ?').run(START_DAY);
+  db.prepare('DELETE FROM tb_coupling_matrix WHERE entry_count >= ?').run(START_DAY);
+  db.prepare('DELETE FROM tb_emotion_behavior_coupling WHERE entry_count >= ?').run(START_DAY);
 }
 
 // ── Main simulation loop ────────────────────────────────────────────────────
@@ -292,8 +322,15 @@ for (let i = START_DAY - 1; i < TOTAL_DAYS; i++) {
   setSimulatedDate(dateStr);
   setDateOverride(dateStr);
 
-  // 1. Insert response
-  const questionId = i + 1; // sequential within this simulation
+  // 1. Look up actual question_id from DB (may differ from loop index on resume)
+  const questionRow = db.prepare(
+    'SELECT question_id FROM tb_questions WHERE scheduled_for = ?'
+  ).get(dateStr) as { question_id: number } | undefined;
+  if (!questionRow) {
+    console.error(`   No question found for ${dateStr} — skipping`);
+    continue;
+  }
+  const questionId = questionRow.question_id;
   const responseId = saveResponse(questionId, entry.text.trim());
 
   // 2. Compute linguistic densities from actual text
@@ -348,7 +385,74 @@ for (let i = START_DAY - 1; i < TOTAL_DAYS; i++) {
     }
   }
 
-  // 6. Validate
+  // 6. Compute 8D state engine (deterministic — no AI)
+  try {
+    const states = computeEntryStates();
+    if (states.length >= 3) {
+      // Persist any new entry states
+      const existingCount = getEntryStateCount();
+      if (states.length > existingCount) {
+        const newStates = states.slice(existingCount);
+        for (const s of newStates) {
+          saveEntryState({
+            response_id: s.responseId,
+            fluency: s.fluency,
+            deliberation: s.deliberation,
+            revision: s.revision,
+            expression: s.expression,
+            commitment: s.commitment,
+            volatility: s.volatility,
+            thermal: s.thermal,
+            presence: s.presence,
+            convergence: s.convergence,
+          });
+        }
+      }
+
+      // Compute dynamics + coupling
+      const dynamics = computeDynamics(states);
+      saveTraitDynamics(dynamics.dimensions.map(d => ({
+        entry_count: states.length,
+        dimension: d.dimension,
+        baseline: d.baseline,
+        variability: d.variability,
+        attractor_force: d.attractorForce,
+        current_state: d.currentState,
+        deviation: d.deviation,
+        window_size: d.windowSize,
+      })));
+
+      if (dynamics.coupling.length > 0) {
+        saveCouplingMatrix(dynamics.coupling.map(c => ({
+          entry_count: states.length,
+          leader: c.leader,
+          follower: c.follower,
+          lag_sessions: c.lagSessions,
+          correlation: c.correlation,
+          direction: c.direction,
+        })));
+      }
+
+      // Emotion→behavior coupling
+      const emotionAnalysis = computeEmotionAnalysis(states);
+      if (emotionAnalysis.emotionBehaviorCoupling.length > 0) {
+        saveEmotionBehaviorCoupling(emotionAnalysis.emotionBehaviorCoupling.map(c => ({
+          entry_count: states.length,
+          emotion_dim: c.emotionDim,
+          behavior_dim: c.behaviorDim,
+          lag_sessions: c.lagSessions,
+          correlation: c.correlation,
+          direction: c.direction,
+        })));
+      }
+
+      console.log(`   States: ${states.length} entries, phase=${dynamics.phase}, velocity=${dynamics.velocity.toFixed(3)}, coupling=${dynamics.coupling.length}`);
+    }
+  } catch (err: any) {
+    console.error(`   State engine error: ${err.message}`);
+  }
+
+  // 7. Validate
   validateDay(dayNum, questionId, dateStr, expectReflection);
 
   console.log('');
@@ -410,7 +514,7 @@ if (apiCalls.length > 0) {
 }
 
 // ── Quality scoring (Mode 2 only) ──────────────────────────────────────────
-if (QUALITY_MODE && !DRY_RUN) {
+if ((QUALITY_MODE || FULL_MODE) && !DRY_RUN) {
   console.log('  ── GROUND TRUTH SCORING ──');
 
   const observations = db.prepare(
@@ -486,6 +590,54 @@ if (QUALITY_MODE && !DRY_RUN) {
     console.log(`  code-graded outcomes: ${codeGraded.count}`);
   }
   console.log('');
+
+  // State engine summary
+  const entryStateCount = (db.prepare('SELECT COUNT(*) as c FROM tb_entry_states').get() as any).c;
+  const dynamicsCount = (db.prepare('SELECT COUNT(*) as c FROM tb_trait_dynamics').get() as any).c;
+  const couplingCount = (db.prepare('SELECT COUNT(*) as c FROM tb_coupling_matrix').get() as any).c;
+  const emotionCouplingCount = (db.prepare('SELECT COUNT(*) as c FROM tb_emotion_behavior_coupling').get() as any).c;
+  console.log('  ── STATE ENGINE ──');
+  console.log(`  Entry states:          ${entryStateCount}`);
+  console.log(`  Dynamics snapshots:    ${dynamicsCount}`);
+  console.log(`  Coupling edges:        ${couplingCount}`);
+  console.log(`  Emotion couplings:     ${emotionCouplingCount}`);
+
+  // Show latest dynamics
+  const latestDynamics = db.prepare(`
+    SELECT dimension, ROUND(baseline,3) as baseline, ROUND(variability,3) as variability,
+           ROUND(attractor_force,3) as attractor, ROUND(current_state,3) as current,
+           ROUND(deviation,3) as deviation
+    FROM tb_trait_dynamics
+    WHERE entry_count = (SELECT MAX(entry_count) FROM tb_trait_dynamics)
+    ORDER BY dimension
+  `).all() as any[];
+  if (latestDynamics.length > 0) {
+    console.log('');
+    console.log('  ── LATEST DYNAMICS ──');
+    for (const d of latestDynamics) {
+      const attractorLabel = d.attractor >= 0.7 ? 'rigid' : d.attractor >= 0.4 ? 'moderate' : 'malleable';
+      console.log(`  ${d.dimension.padEnd(14)} base=${(d.baseline >= 0 ? '+' : '') + d.baseline}  var=${d.variability}  attr=${d.attractor} (${attractorLabel})  dev=${(d.deviation >= 0 ? '+' : '') + d.deviation}`);
+    }
+  }
+
+  // Show top couplings
+  const latestCouplings = db.prepare(`
+    SELECT leader, follower, lag_sessions, ROUND(correlation,3) as corr, direction
+    FROM tb_coupling_matrix
+    WHERE entry_count = (SELECT MAX(entry_count) FROM tb_coupling_matrix)
+    ORDER BY correlation DESC
+    LIMIT 10
+  `).all() as any[];
+  if (latestCouplings.length > 0) {
+    console.log('');
+    console.log('  ── TOP COUPLINGS ──');
+    for (const c of latestCouplings) {
+      const sign = c.direction > 0 ? '+' : '-';
+      const lagLabel = c.lag_sessions === 0 ? 'concurrent' : `lag-${c.lag_sessions}`;
+      console.log(`  ${c.leader} → ${c.follower}  r=${sign}${c.corr}  (${lagLabel})`);
+    }
+  }
+  console.log('');
 }
 
 // ── Validation results ──────────────────────────────────────────────────────
@@ -545,6 +697,31 @@ if (!DRY_RUN) {
   const reportMethodNames: Record<number, string> = { 1: 'code', 2: 'text_search', 3: 'interpretive' };
   const gradeMethodLines = reportGradeMethodRows.map(r => `| ${reportMethodNames[r.method] ?? 'unknown'} | ${r.count} |`).join('\n');
   const codeGradedOutcomes = (db.prepare(`SELECT COUNT(*) as c FROM tb_predictions WHERE grade_rationale LIKE '[code-graded]%'`).get() as any).c;
+
+  // State engine data for report
+  const reportEntryStates = (db.prepare('SELECT COUNT(*) as c FROM tb_entry_states').get() as any).c;
+  const reportDynamics = db.prepare(`
+    SELECT dimension, ROUND(baseline,3) as baseline, ROUND(variability,3) as variability,
+           ROUND(attractor_force,3) as attractor, ROUND(current_state,3) as current,
+           ROUND(deviation,3) as deviation
+    FROM tb_trait_dynamics
+    WHERE entry_count = (SELECT MAX(entry_count) FROM tb_trait_dynamics)
+    ORDER BY dimension
+  `).all() as any[];
+  const reportCouplings = db.prepare(`
+    SELECT leader, follower, lag_sessions, ROUND(correlation,3) as corr, direction
+    FROM tb_coupling_matrix
+    WHERE entry_count = (SELECT MAX(entry_count) FROM tb_coupling_matrix)
+    ORDER BY correlation DESC
+    LIMIT 10
+  `).all() as any[];
+  const reportEmotionCouplings = db.prepare(`
+    SELECT emotion_dim, behavior_dim, lag_sessions, ROUND(correlation,3) as corr, direction
+    FROM tb_emotion_behavior_coupling
+    WHERE entry_count = (SELECT MAX(entry_count) FROM tb_emotion_behavior_coupling)
+    ORDER BY correlation DESC
+    LIMIT 10
+  `).all() as any[];
 
   // Timing summary
   let timingSection = '';
@@ -617,7 +794,7 @@ ${dayTimingLines}
 
   // Quality scoring section
   let qualitySection = '';
-  if (QUALITY_MODE && !DRY_RUN) {
+  if ((QUALITY_MODE || FULL_MODE) && !DRY_RUN) {
     const observations = db.prepare(
       'SELECT observation_text FROM tb_ai_observations ORDER BY question_id'
     ).all() as Array<{ observation_text: string }>;
@@ -816,6 +993,48 @@ ${entryLines}
 
 ${timingSection}
 ${qualitySection}
+${(() => {
+    if (reportEntryStates === 0) return '';
+    let section = `## State Engine (8D Behavioral Dynamics)\n\n`;
+    section += `Entry states computed: ${reportEntryStates}\n\n`;
+
+    if (reportDynamics.length > 0) {
+      section += `### Final Dynamics\n\n`;
+      section += `| Dimension | Baseline | Variability | Attractor | Current | Deviation |\n`;
+      section += `|-----------|----------|-------------|-----------|---------|----------|\n`;
+      for (const d of reportDynamics) {
+        const attractorLabel = d.attractor >= 0.7 ? 'rigid' : d.attractor >= 0.4 ? 'moderate' : 'malleable';
+        section += `| ${d.dimension} | ${d.baseline} | ${d.variability} | ${d.attractor} (${attractorLabel}) | ${d.current} | ${d.deviation} |\n`;
+      }
+      section += '\n';
+    }
+
+    if (reportCouplings.length > 0) {
+      section += `### Top Behavioral Couplings\n\n`;
+      section += `| Leader | Follower | Lag | Correlation | Direction |\n`;
+      section += `|--------|----------|-----|-------------|----------|\n`;
+      for (const c of reportCouplings) {
+        const sign = c.direction > 0 ? '+' : '-';
+        const lagLabel = c.lag_sessions === 0 ? 'concurrent' : `lag-${c.lag_sessions}`;
+        section += `| ${c.leader} | ${c.follower} | ${lagLabel} | ${sign}${c.corr} | ${c.direction > 0 ? 'same' : 'opposite'} |\n`;
+      }
+      section += '\n';
+    }
+
+    if (reportEmotionCouplings.length > 0) {
+      section += `### Top Emotion→Behavior Couplings\n\n`;
+      section += `| Emotion | Behavior | Lag | Correlation | Direction |\n`;
+      section += `|---------|----------|-----|-------------|----------|\n`;
+      for (const c of reportEmotionCouplings) {
+        const sign = c.direction > 0 ? '+' : '-';
+        const lagLabel = c.lag_sessions === 0 ? 'concurrent' : `lag-${c.lag_sessions}`;
+        section += `| ${c.emotion_dim} | ${c.behavior_dim} | ${lagLabel} | ${sign}${c.corr} | ${c.direction > 0 ? 'same' : 'opposite'} |\n`;
+      }
+      section += '\n';
+    }
+
+    return section;
+  })()}
 ${validationSection}
 ---
 

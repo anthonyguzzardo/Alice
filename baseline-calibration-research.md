@@ -1,4 +1,4 @@
-# Baseline Calibration Research
+o# Baseline Calibration Research
 
 **The question:** Does it make sense to mix real questions with neutral/generic ones — no Bob, no grading, just raw pipeline — to establish a baseline before layering everything on?
 
