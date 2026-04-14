@@ -6,7 +6,19 @@ The observatory is Alice's behavioral analysis layer. It watches *how* you write
 
 Every journal entry produces a session summary from keystroke dynamics: how long before the first keystroke, how fast you typed, how many times you deleted large chunks, how often you left the page, your production burst patterns. From these raw signals, the system computes an 8-dimensional behavioral state, makes predictions about future entries, and tests those predictions against what actually happens.
 
-The observatory surfaces this process.
+The observatory surfaces this process — and, critically, makes the system's learning visible. Not just what it measured, but whether its model of you is getting smarter.
+
+---
+
+## Design principles
+
+**Narrative over data.** The observatory leads with plain-English interpretation, not raw numbers. Every section answers "so what?" before showing the underlying evidence.
+
+**The loop is visible.** The core value of this system isn't any single measurement — it's the compound loop: responses shape observations, observations shape predictions, predictions shape questions, questions shape responses. The observatory makes this loop legible at every level.
+
+**Progressive disclosure.** The main view is interpretable by anyone. Power-user visualizations (heatmap, coupling matrix) are accessible but don't compete for attention.
+
+**Human-readable by default.** Behavioral dimensions use plain language labels ("notably high", "slightly lower", "typical") with raw z-scores as subtle secondary labels. The sigma notation exists for those who want it but never leads.
 
 ---
 
@@ -20,20 +32,36 @@ Canvas visualization showing every prediction as an arc from the day it was made
 **Scoreboard**
 Compact row: total entries, total predictions, confirmed count, falsified count, open count.
 
+**System calibration**
+Rolling accuracy curve showing the system's prediction hit rate over time. Each dot is colored by outcome (green/red). The line shows rolling accuracy over a 6-prediction window. Right side displays current accuracy percentage and trend direction (improving / declining / holding steady). This answers: "Is the system getting smarter about you?"
+
+**Right now** (narrative)
+Plain-English insights about the latest entry. Translates behavioral state into readable language: "You wrote with unusually sustained flow" or "Your hesitation has been climbing for 4 straight sessions." Notable deviations get a blue accent; rare ones (>2σ) get red. Also surfaces sustained trends (arcs) — monotonic runs across dimensions.
+
 **Recent calls**
-The 6 most recently resolved predictions with hypothesis text, outcome badge, origin/resolution dates, and grading rationale.
+Compact rows showing the 8 most recently resolved predictions. Each row: status badge, hypothesis text (truncated), resolution date. One line per prediction — scannable at a glance.
 
 **Running theories**
-Active and retired theories with Bayesian confidence bars showing posterior mean and total prediction count.
+Compact list with colored status dots (blue = active, green = established, red = retired), theory name, description (single line, truncated), inline confidence bar, and accuracy/count. Sorted: active first by prediction count, then established, then retired.
 
-**Behavioral dimensions** (sparklines)
-8 sparklines, one per dimension. Each shows z-scored values over time with +/-1 sigma reference lines. Click any point to expand entry detail inline. Current value shown at right.
+**Behavioral dimensions** (grouped sparklines)
+8 dimensions organized into 3 interpretive groups:
+- **Flow** — fluency + presence (how you engaged)
+- **Process** — deliberation + revision + corrections (how you edited)
+- **Shape** — expression + commitment + volatility (what came out)
 
-**Behavioral heatmap** (heat strip)
-Compact 8-row x N-column heatmap. One row per dimension, one column per entry. Warm colors = positive z-scores, cool colors = negative. Grid lines separate cells. Click any column to expand entry detail.
+Each group has a one-line summary derived from the latest values ("fluency is notably high" or "all within normal range"). Each dimension row shows a sparkline with the current value as a human-readable label ("higher than usual") and a subtle raw number (+1.52).
+
+**Behavioral heatmap** (collapsible)
+Collapsed by default. Click to expand. Compact 8-row × N-column heatmap. One row per dimension, one column per entry. Warm colors = positive z-scores, cool colors = negative. Only renders when opened (lazy draw).
 
 **Inline entry panel**
-Expands below the heatmap when you click any entry. Shows:
+Expands when you click any entry dot, sparkline point, or heatmap column. Shows:
+
+- **The loop** — A trace showing how this entry connects to the system's learning:
+  - Predictions this entry *resolved* (confirmed/falsified), with origin date and hypothesis
+  - Theories *updated* by those graded predictions, with current confidence and status
+  - New predictions *generated* from this entry
 - The question Alice asked
 - Bob's three-frame observation (Charitable / Avoidance / Mundane)
 - Predictions generated from that entry with status badges
@@ -50,7 +78,7 @@ Plain-English descriptions of discovered behavioral couplings and emotion-behavi
 
 **Theories** — all theory cards with posterior mean progress bars and log Bayes factors.
 
-**Behavioral coupling matrix** — 8x8 heatmap showing signed Pearson correlations between all dimension pairs. Blue cells = positive coupling, red = negative. Click a cell to overlay the two coupled time series with lag shift applied.
+**Behavioral coupling matrix** — 8×8 heatmap showing signed Pearson correlations between all dimension pairs. Blue cells = positive coupling, red = negative. Click a cell to overlay the two coupled time series with lag shift applied.
 
 **Emotion-behavior coupling table** — top 15 emotion-to-behavior correlations with lag, direction, and strength.
 
@@ -58,7 +86,35 @@ Plain-English descriptions of discovered behavioral couplings and emotion-behavi
 
 ### `/observatory/entry/[id]` — Single entry detail
 
-Question text, three-frame observation, predictions with status, suppressed question, collapsible behavioral detail section with radar chart and full metrics grid (timing, production, revision, engagement, fluency, emotion, linguistic).
+Question text, three-frame observation, loop trace (predictions resolved, theory impact, predictions generated), predictions with status, suppressed question, collapsible behavioral detail section with radar chart and full metrics grid (timing, production, revision, engagement, fluency, emotion, linguistic).
+
+---
+
+## The loop
+
+The observatory exists to make visible something that would otherwise be invisible: the system is learning.
+
+```
+Question (shaped by uncertain theories)
+    ↓
+Response (user writes)
+    ↓
+Observation (3-frame analysis: charitable / avoidance / mundane)
+    ↓
+Predictions created (falsifiable, with structured grading criteria)
+    ↓
+Predictions graded (by future entries, deterministically or interpretively)
+    ↓
+Theory confidence updated (Bayesian Beta-Binomial, log Bayes factors)
+    ↓
+Next question shaped (Thompson sampling targets uncertain theories)
+    ↓
+... cycle repeats
+```
+
+Each entry turns the loop once. The calibration curve shows whether the accumulated structure is outperforming what any single inference call could produce. The loop trace in the entry panel shows the causal chain for each individual turn.
+
+The system gets meaningfully smarter about you every cycle without spending a dollar on training. The constraint — one entry per day — is what makes each turn honest.
 
 ---
 
@@ -66,16 +122,26 @@ Question text, three-frame observation, predictions with status, suppressed ques
 
 All dimensions are z-scored against personal history. A value of +1.5 means 1.5 standard deviations above that person's mean. Every signal is relative — only meaningful compared to your own baseline.
 
-| Dimension | What it measures | Raw signals |
-|-----------|-----------------|-------------|
-| **Fluency** | Sustained production flow | Average P-burst length (chars), chars per minute. P-bursts are continuous typing bounded by 2-second pauses. |
-| **Deliberation** | Cognitive load and hesitation | First keystroke delay, pause rate (30s+ pauses per minute), revision weight (large deletion chars / total typed). Average of three z-scores. |
-| **Revision** | How much rethinking happens | Inverted commitment ratio + substantive deletion rate (large deletions per 100 chars). Large deletion = 10+ chars. |
-| **Expression** | Deviation from personal style | Absolute z-scores of sentence length, question density, first-person density, hedging density. Average of four. |
-| **Commitment** | How much text is retained | Final char count / total chars typed, z-scored. High = kept almost everything. |
-| **Volatility** | Session-to-session instability | Euclidean distance from previous entry in 4D subspace (fluency, deliberation, revision, commitment). |
-| **Thermal** | Correction intensity | Small deletion rate (typo fixes) + revision timing (fraction of large deletions in second half of session). |
-| **Presence** | Focus and attention | Negated average of tab-away rate and pause rate. High = stayed focused, low = distracted. |
+Human-readable labels translate z-scores for the UI:
+
+| Z-score range | Label |
+|---------------|-------|
+| |z| < 0.5 | typical |
+| 0.5 ≤ |z| < 1.0 | slightly higher / lower |
+| 1.0 ≤ |z| < 1.5 | higher / lower than usual |
+| 1.5 ≤ |z| < 2.0 | notably high / low |
+| |z| ≥ 2.0 | unusually high / low |
+
+| Dimension | Group | What it measures | Raw signals |
+|-----------|-------|-----------------|-------------|
+| **Fluency** | Flow | Sustained production flow | Average P-burst length (chars), chars per minute. P-bursts are continuous typing bounded by 2-second pauses. |
+| **Presence** | Flow | Focus and attention | Negated average of tab-away rate and pause rate. High = stayed focused, low = distracted. |
+| **Deliberation** | Process | Cognitive load and hesitation | First keystroke delay, pause rate (30s+ pauses per minute), revision weight (large deletion chars / total typed). Average of three z-scores. |
+| **Revision** | Process | How much rethinking happens | Inverted commitment ratio + substantive deletion rate (large deletions per 100 chars). Large deletion = 10+ chars. |
+| **Thermal** | Process | Correction intensity | Small deletion rate (typo fixes) + revision timing (fraction of large deletions in second half of session). |
+| **Expression** | Shape | Deviation from personal style | Absolute z-scores of sentence length, question density, first-person density, hedging density. Average of four. |
+| **Commitment** | Shape | How much text is retained | Final char count / total chars typed, z-scored. High = kept almost everything. |
+| **Volatility** | Shape | Session-to-session instability | Euclidean distance from previous entry in 4D subspace (fluency, deliberation, revision, commitment). |
 
 **Convergence** — Euclidean distance from personal center in 8D space, normalized to [0, 1]. High convergence means multiple dimensions moved together (coordinated behavioral shift).
 
@@ -156,7 +222,7 @@ Predictions can reference ~70 signals across three domains:
 
 - **Session signals** (~30): raw keystroke and linguistic metrics from `tb_session_summaries`
 - **Delta signals** (~10): difference between calibration and journal session on the same day
-- **Dynamics signals** (~42): 8 dimensions x 5 parameters + velocity + system entropy
+- **Dynamics signals** (~42): 8 dimensions × 5 parameters + velocity + system entropy
 
 ---
 
@@ -177,6 +243,19 @@ Each theory tracks a Beta(alpha, beta) posterior distribution.
 - **Active**: everything in between
 
 **Expected Information Gain (EIG)** — binary entropy of the posterior. High EIG (near 0.5) = uncertain, worth testing. Low EIG = settled, deprioritize. Used by Thompson sampling to balance exploration.
+
+---
+
+## System calibration
+
+The calibration curve computes rolling prediction accuracy over a 6-prediction window, sorted by grading date. This answers the compound-learning question: is the accumulated structure (signals → observations → predictions → theories → questions) producing better predictions over time than any single inference call could?
+
+The trend is classified as:
+- **Improving**: second-half average accuracy > first-half by ≥ 5 percentage points
+- **Declining**: second-half average accuracy < first-half by ≥ 5 percentage points
+- **Holding steady**: difference < 5 percentage points
+
+Requires at least 4 graded predictions to display.
 
 ---
 
@@ -210,7 +289,9 @@ Pages that remain dark-only: alice-negative, lab, gallery.
 | Min entries for 8D state | 3 | Need enough history for z-scoring |
 | Min entries for dynamics | 5 | Need enough for baseline/variability |
 | Min entries for coupling | 10 | Need enough for meaningful correlations |
+| Min graded for calibration | 4 | Need enough for rolling accuracy |
 | Rolling window | 30 entries | Baseline and variability calculation |
+| Calibration window | 6 predictions | Rolling accuracy smoothing |
 | Max coupling lag | 3 sessions | How far ahead/behind to test |
 | Coupling threshold | \|r\| >= 0.3 | Minimum correlation to report |
 | Large deletion | 10+ chars | Distinguishes correction from revision |
