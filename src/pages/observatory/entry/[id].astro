@@ -634,7 +634,12 @@
       renderMetrics(data.sessionSummary);
     }
 
-    load();
+    // Defer drawing until layout is stable
+    if (document.readyState === 'complete') {
+      requestAnimationFrame(() => requestAnimationFrame(load));
+    } else {
+      window.addEventListener('load', () => requestAnimationFrame(load));
+    }
 
     // Collapsible detail section
     document.getElementById('detail-toggle')!.addEventListener('click', () => {

@@ -601,6 +601,12 @@
       const wrap = canvas.parentElement!;
       const wrapW = wrap.getBoundingClientRect().width;
 
+      // If layout not ready, retry next frame
+      if (wrapW < 10) {
+        requestAnimationFrame(() => drawArcTimeline(states, preds));
+        return;
+      }
+
       const resolved = preds.filter(p => p.status === 'confirmed' || p.status === 'falsified');
       const openPreds = preds.filter(p => p.status === 'open');
       const allArcs = [...resolved, ...openPreds];
@@ -887,6 +893,10 @@
 
     function drawSparkline(canvas: HTMLCanvasElement, dim: string, states: EntryState[]) {
       const rect = canvas.getBoundingClientRect();
+      if (rect.width < 10) {
+        requestAnimationFrame(() => drawSparkline(canvas, dim, states));
+        return;
+      }
       const dpr = window.devicePixelRatio || 1;
       canvas.width = rect.width * dpr;
       canvas.height = rect.height * dpr;
@@ -953,6 +963,11 @@
       const canvas = document.getElementById('heatstrip-canvas') as HTMLCanvasElement;
       const wrap = canvas.parentElement!;
       const wrapW = wrap.getBoundingClientRect().width;
+
+      if (wrapW < 10) {
+        requestAnimationFrame(() => drawHeatStrip(states));
+        return;
+      }
       const rowH = 24;
       const totalH = DIMS.length * rowH;
 
@@ -1222,7 +1237,12 @@
       document.getElementById('main')!.style.display = '';
     }
 
-    load();
+    // Defer drawing until layout is stable
+    if (document.readyState === 'complete') {
+      requestAnimationFrame(() => requestAnimationFrame(load));
+    } else {
+      window.addEventListener('load', () => requestAnimationFrame(load));
+    }
 
     // Controls
     document.getElementById('entry-panel-close')!.onclick = () => {

@@ -1,0 +1,233 @@
+# Observatory
+
+The observatory is Alice's behavioral analysis layer. It watches *how* you write — not what you write — and builds a falsifiable model of your patterns over time.
+
+## What it does
+
+Every journal entry produces a session summary from keystroke dynamics: how long before the first keystroke, how fast you typed, how many times you deleted large chunks, how often you left the page, your production burst patterns. From these raw signals, the system computes an 8-dimensional behavioral state, makes predictions about future entries, and tests those predictions against what actually happens.
+
+The observatory surfaces this process.
+
+---
+
+## Pages
+
+### `/observatory` — Main view
+
+**Prediction arc timeline** (hero)
+Canvas visualization showing every prediction as an arc from the day it was made to the day it resolved. Green arcs = confirmed, red = falsified, gray dashed = still open. Longer-span predictions arc higher. Entry dots sit along the baseline. Hovering shows the hypothesis text; clicking an entry dot opens the inline detail panel.
+
+**Scoreboard**
+Compact row: total entries, total predictions, confirmed count, falsified count, open count.
+
+**Recent calls**
+The 6 most recently resolved predictions with hypothesis text, outcome badge, origin/resolution dates, and grading rationale.
+
+**Running theories**
+Active and retired theories with Bayesian confidence bars showing posterior mean and total prediction count.
+
+**Behavioral dimensions** (sparklines)
+8 sparklines, one per dimension. Each shows z-scored values over time with +/-1 sigma reference lines. Click any point to expand entry detail inline. Current value shown at right.
+
+**Behavioral heatmap** (heat strip)
+Compact 8-row x N-column heatmap. One row per dimension, one column per entry. Warm colors = positive z-scores, cool colors = negative. Grid lines separate cells. Click any column to expand entry detail.
+
+**Inline entry panel**
+Expands below the heatmap when you click any entry. Shows:
+- The question Alice asked
+- Bob's three-frame observation (Charitable / Avoidance / Mundane)
+- Predictions generated from that entry with status badges
+- The suppressed question (what Alice wanted to ask but didn't)
+- A mini radar chart showing the entry's behavioral shape
+- Arrow keys and prev/next buttons for navigation, ESC to close
+
+**Patterns**
+Plain-English descriptions of discovered behavioral couplings and emotion-behavior links, with correlation evidence.
+
+### `/observatory/coupling` — Data deep-dive
+
+**Discoveries** — top behavioral couplings rendered as plain-English findings with correlation evidence.
+
+**Theories** — all theory cards with posterior mean progress bars and log Bayes factors.
+
+**Behavioral coupling matrix** — 8x8 heatmap showing signed Pearson correlations between all dimension pairs. Blue cells = positive coupling, red = negative. Click a cell to overlay the two coupled time series with lag shift applied.
+
+**Emotion-behavior coupling table** — top 15 emotion-to-behavior correlations with lag, direction, and strength.
+
+**Dynamics per dimension** — 8 cards showing baseline, variability, attractor force, current state, and deviation from baseline for each dimension.
+
+### `/observatory/entry/[id]` — Single entry detail
+
+Question text, three-frame observation, predictions with status, suppressed question, collapsible behavioral detail section with radar chart and full metrics grid (timing, production, revision, engagement, fluency, emotion, linguistic).
+
+---
+
+## The 8 behavioral dimensions
+
+All dimensions are z-scored against personal history. A value of +1.5 means 1.5 standard deviations above that person's mean. Every signal is relative — only meaningful compared to your own baseline.
+
+| Dimension | What it measures | Raw signals |
+|-----------|-----------------|-------------|
+| **Fluency** | Sustained production flow | Average P-burst length (chars), chars per minute. P-bursts are continuous typing bounded by 2-second pauses. |
+| **Deliberation** | Cognitive load and hesitation | First keystroke delay, pause rate (30s+ pauses per minute), revision weight (large deletion chars / total typed). Average of three z-scores. |
+| **Revision** | How much rethinking happens | Inverted commitment ratio + substantive deletion rate (large deletions per 100 chars). Large deletion = 10+ chars. |
+| **Expression** | Deviation from personal style | Absolute z-scores of sentence length, question density, first-person density, hedging density. Average of four. |
+| **Commitment** | How much text is retained | Final char count / total chars typed, z-scored. High = kept almost everything. |
+| **Volatility** | Session-to-session instability | Euclidean distance from previous entry in 4D subspace (fluency, deliberation, revision, commitment). |
+| **Thermal** | Correction intensity | Small deletion rate (typo fixes) + revision timing (fraction of large deletions in second half of session). |
+| **Presence** | Focus and attention | Negated average of tab-away rate and pause rate. High = stayed focused, low = distracted. |
+
+**Convergence** — Euclidean distance from personal center in 8D space, normalized to [0, 1]. High convergence means multiple dimensions moved together (coordinated behavioral shift).
+
+---
+
+## Trait dynamics
+
+Computed per dimension when 5+ entries exist. Rolling window of 30 entries.
+
+**Baseline** — Rolling mean. Your stable set point in that dimension.
+
+**Variability** — Rolling standard deviation. How much you fluctuate.
+
+**Attractor force** — How quickly deviations snap back to baseline. Estimated from lag-1 autocorrelation of deviations (Ornstein-Uhlenbeck mean-reversion). Range 0-1:
+- Near 0 (malleable): deviations persist, the dimension drifts
+- Near 0.5 (moderate): normal variability
+- Near 1 (rigid): snaps back to baseline immediately
+
+**Current state** — Latest z-score.
+
+**Deviation** — How far current state is from baseline in sigma units.
+
+---
+
+## Coupling discovery
+
+Identifies lagged cross-correlations between dimension pairs. Tests lags from -3 to +3 sessions. Reports signed Pearson correlations above |r| >= 0.3.
+
+**Behavioral coupling**: any pair of the 8 dimensions can lead or follow another. Example: fluency increases, then commitment drops 2 sessions later (r = -0.68).
+
+**Emotion-behavior coupling**: NRC emotion densities (anger, fear, joy, sadness, trust, anticipation) and Pennebaker categories (cognitive, hedging, first-person) tested against the 8 behavioral dimensions. Positive lags only (emotion leads behavior). Example: fear language increases, then presence drops 2 sessions later (r = -0.59).
+
+Minimum 10 entries required for coupling discovery.
+
+---
+
+## Prediction system
+
+### How predictions are made
+
+After each entry, the observation pipeline runs three sequential steps:
+
+1. **Observe** — Claude reads the response text + behavioral signals + dynamics context + recent history. Produces a three-frame observation (Charitable reading / Avoidance reading / Mundane reading) plus a synthesis. This is not shown to the user.
+
+2. **Suppress** — Claude generates one question it considered asking but held back, targeting the area of highest uncertainty.
+
+3. **Predict** — Claude generates 1-2 new falsifiable predictions using structured criteria. Each prediction specifies:
+   - A hypothesis in natural language
+   - Confirmation criteria (what would make it true)
+   - Falsification criteria (what would make it false)
+   - A time window (how many future sessions to evaluate)
+   - A window mode (any/all/majority/latest)
+
+Theory selection uses Thompson sampling from active theories to balance exploration vs. exploitation.
+
+### How predictions are graded
+
+All predictions are graded deterministically by code, not by the LLM. The grader evaluates structured criteria against computed signals.
+
+**Criterion types:**
+- **Threshold** — Signal above/below/between specific values
+- **Percentile** — Signal in top/bottom N% of personal history
+- **Direction** — Signal increased/decreased from a reference value
+- **Text search** — Regex match against response text
+- **Compound** — Logical AND/OR of sub-criteria
+
+**Window modes:**
+- `latest` — Only the most recent session counts
+- `any` — Confirmed if any session in the window matches
+- `all` — Confirmed only if every session matches
+- `majority` — Confirmed if >50% of sessions match
+
+Falsification is checked first. If falsification criteria are met, the prediction is falsified regardless of confirmation criteria.
+
+### Signal sources
+
+Predictions can reference ~70 signals across three domains:
+
+- **Session signals** (~30): raw keystroke and linguistic metrics from `tb_session_summaries`
+- **Delta signals** (~10): difference between calibration and journal session on the same day
+- **Dynamics signals** (~42): 8 dimensions x 5 parameters + velocity + system entropy
+
+---
+
+## Theory confidence
+
+Each theory tracks a Beta(alpha, beta) posterior distribution.
+
+- Prior: Beta(1, 1) — uniform, no bias
+- Each confirmed prediction: alpha += 1
+- Each falsified prediction: beta += 1
+- Posterior mean: alpha / (alpha + beta) — estimated success rate
+
+**Log Bayes factor** — cumulative evidence score using Sequential Probability Ratio Test. Each hit adds ln(2), each miss subtracts ln(2).
+
+**Status thresholds:**
+- **Established**: log BF >= ln(10) ~ 2.30 (Bayes factor > 10, strong evidence)
+- **Retired**: log BF <= -ln(10) ~ -2.30 AND >= 3 predictions tested (strong counter-evidence)
+- **Active**: everything in between
+
+**Expected Information Gain (EIG)** — binary entropy of the posterior. High EIG (near 0.5) = uncertain, worth testing. Low EIG = settled, deprioritize. Used by Thompson sampling to balance exploration.
+
+---
+
+## Phase detection
+
+The dynamics engine classifies the current behavioral phase from the most recent 5 entries:
+
+- **Disrupted** — Latest convergence >= 0.6 and prior 4 sessions averaged < 0.35. Sudden coordinated shift.
+- **Shifting** — Any dimension shows a monotonic trend (3+ of 4 consecutive steps in the same direction).
+- **Stable** — No disruption, no sustained trends.
+- **Insufficient** — Fewer than 5 entries.
+
+**Velocity** — rate of movement through 8D space over the last 5 entries. Normalized to [0, 1].
+
+**System entropy** — Shannon entropy of rolling variabilities across all 8 dimensions, normalized by max entropy (ln 8). High entropy = all dimensions equally variable. Low entropy = some rigid, some volatile.
+
+---
+
+## Light mode
+
+All observatory pages support light/dark mode via the `alice-theme` localStorage key and CSS custom properties. Theme toggle button in the nav bar. The journal index page controls the same localStorage key, so theme persists across all pages.
+
+Pages that remain dark-only: alice-negative, lab, gallery.
+
+---
+
+## Key thresholds
+
+| Constant | Value | Purpose |
+|----------|-------|---------|
+| Min entries for 8D state | 3 | Need enough history for z-scoring |
+| Min entries for dynamics | 5 | Need enough for baseline/variability |
+| Min entries for coupling | 10 | Need enough for meaningful correlations |
+| Rolling window | 30 entries | Baseline and variability calculation |
+| Max coupling lag | 3 sessions | How far ahead/behind to test |
+| Coupling threshold | \|r\| >= 0.3 | Minimum correlation to report |
+| Large deletion | 10+ chars | Distinguishes correction from revision |
+| Convergence high | >= 0.6 | Coordinated behavioral shift |
+| Log BF established | ~2.30 | Bayes factor > 10 |
+| Log BF retired | ~-2.30 | Bayes factor < 0.1, min 3 predictions |
+| Percentile min history | 5 | Minimum for percentile-based grading |
+
+---
+
+## Research foundations
+
+- **P-bursts**: Chenoweth & Hayes (2001), Deane (2015) — production bursts as fluency measure
+- **Revision taxonomy**: Faigley & Witte (1981) — surface vs. meaning-changing revisions
+- **Editing behavior**: Baaijen et al. (2012) — revision as cognitive process
+- **Emotion lexicon**: NRC Emotion Lexicon, Mohammad & Turney (2013)
+- **Linguistic markers**: Pennebaker (2011) — function words as psychological markers
+- **Mean reversion**: Ornstein-Uhlenbeck process — attractor force estimation
+- **Theory testing**: Sequential Probability Ratio Test — cumulative Bayes factors
+- **Exploration**: Thompson sampling — balancing exploration vs. exploitation in theory selection

@@ -780,7 +780,12 @@
       renderDynamics(data.dynamics);
     }
 
-    load();
+    // Defer drawing until layout is stable
+    if (document.readyState === 'complete') {
+      requestAnimationFrame(() => requestAnimationFrame(load));
+    } else {
+      window.addEventListener('load', () => requestAnimationFrame(load));
+    }
 
     // Overlay close
     document.getElementById('overlay')!.addEventListener('click', (e) => {
