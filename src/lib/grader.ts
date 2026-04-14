@@ -82,7 +82,7 @@ export interface StructuredPredictionCriteria {
   confirmCriteria: GradeCriterion;
   falsifyCriteria: GradeCriterion;
   windowSessions: number;
-  windowMode: 'any' | 'all' | 'latest';
+  windowMode: 'any' | 'all' | 'latest' | 'majority';
 }
 
 // ─── Grader Context ─────────────────────────────────────────────────
@@ -238,10 +238,12 @@ function evaluateCalibrationRelative(c: CalibrationRelativeCriterion, ctx: Grade
 }
 
 function evaluateTextSearch(c: TextSearchCriterion, ctx: GraderContext): CriterionResult {
+  // Strip inline regex flags (e.g. (?i), (?m)) — LLMs often use Python-style syntax
+  const cleaned = c.pattern.replace(/\(\?[gimsuy]+\)/g, '');
   const flags = c.caseSensitive ? 'g' : 'gi';
   let regex: RegExp;
   try {
-    regex = new RegExp(c.pattern, flags);
+    regex = new RegExp(cleaned, flags);
   } catch {
     return 'indeterminate'; // invalid regex
   }
@@ -303,7 +305,7 @@ export function gradeSession(
  */
 export function resolveWindowedGrade(
   checks: SessionCheckResult[],
-  windowMode: 'any' | 'all' | 'latest',
+  windowMode: 'any' | 'all' | 'latest' | 'majority',
 ): GradeOutput {
   if (checks.length === 0) {
     return { finalGrade: 'indeterminate', confirmResult: 'indeterminate', falsifyResult: 'indeterminate', rationale: 'No session checks recorded' };
@@ -323,13 +325,22 @@ export function resolveWindowedGrade(
     falsifyResult = checks.some(c => c.falsifyResult === 'confirmed') ? 'confirmed'
       : checks.every(c => c.falsifyResult === 'falsified') ? 'falsified'
       : 'indeterminate';
-  } else {
-    // 'all'
+  } else if (windowMode === 'all') {
     confirmResult = checks.every(c => c.confirmResult === 'confirmed') ? 'confirmed'
       : checks.some(c => c.confirmResult === 'falsified') ? 'falsified'
       : 'indeterminate';
     falsifyResult = checks.every(c => c.falsifyResult === 'confirmed') ? 'confirmed'
       : checks.some(c => c.falsifyResult === 'falsified') ? 'falsified'
+      : 'indeterminate';
+  } else {
+    // 'majority'
+    const confirmHits = checks.filter(c => c.confirmResult === 'confirmed').length;
+    const falsifyHits = checks.filter(c => c.falsifyResult === 'confirmed').length;
+    confirmResult = confirmHits > checks.length / 2 ? 'confirmed'
+      : (checks.length - confirmHits) > checks.length / 2 ? 'falsified'
+      : 'indeterminate';
+    falsifyResult = falsifyHits > checks.length / 2 ? 'confirmed'
+      : (checks.length - falsifyHits) > checks.length / 2 ? 'falsified'
       : 'indeterminate';
   }
 
@@ -429,7 +440,7 @@ export function validateCriteria(criteria: StructuredPredictionCriteria): string
   if (!['code', 'text_search', 'interpretive'].includes(criteria.gradeMethod)) {
     errors.push(`Invalid gradeMethod: ${criteria.gradeMethod}`);
   }
-  if (!['any', 'all', 'latest'].includes(criteria.windowMode)) {
+  if (!['any', 'all', 'latest', 'majority'].includes(criteria.windowMode)) {
     errors.push(`Invalid windowMode: ${criteria.windowMode}`);
   }
   if (typeof criteria.windowSessions !== 'number' || criteria.windowSessions < 1) {
@@ -448,9 +459,11 @@ function validateCriterionSignals(c: GradeCriterion, path: string, errors: strin
     case 'any_of':
       c.criteria.forEach((sub, i) => validateCriterionSignals(sub, `${path}.${c.type}[${i}]`, errors));
       return;
-    case 'text_search':
-      try { new RegExp(c.pattern); } catch { errors.push(`${path}: invalid regex pattern "${c.pattern}"`); }
+    case 'text_search': {
+      const cleanedPattern = c.pattern.replace(/\(\?[gimsuy]+\)/g, '');
+      try { new RegExp(cleanedPattern); } catch { errors.push(`${path}: invalid regex pattern "${c.pattern}"`); }
       return;
+    }
     case 'threshold':
     case 'percentile':
     case 'direction':

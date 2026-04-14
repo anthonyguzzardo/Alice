@@ -48,8 +48,25 @@ const TOTAL_DAYS = SELECTED_DAYS.length;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SIM_DB_PATH = path.resolve(__dirname, '../../data/simulation/alice-sim.db');
 
-// Clean DB for fresh run, or clean up from START_DAY for resume
+// Clean DB for fresh run — archive the old one first
 if (START_DAY === 1 && fs.existsSync(SIM_DB_PATH)) {
+  const archiveDir = path.resolve(__dirname, '../../data/simulation/archive');
+  if (!fs.existsSync(archiveDir)) fs.mkdirSync(archiveDir, { recursive: true });
+
+  // Determine version from existing reports
+  const reportsDir2 = path.resolve(__dirname, '../../data/simulation/reports');
+  let archiveVersion = 'unknown';
+  if (fs.existsSync(reportsDir2)) {
+    const reportFiles = fs.readdirSync(reportsDir2).filter(f => f.match(/^sim-v\d+/));
+    if (reportFiles.length > 0) {
+      archiveVersion = `v${Math.max(...reportFiles.map(f => parseInt(f.match(/sim-v(\d+)/)?.[1] ?? '0', 10)))}`;
+    }
+  }
+
+  const archivePath = path.resolve(archiveDir, `sim-${archiveVersion}.db`);
+  fs.copyFileSync(SIM_DB_PATH, archivePath);
+  console.log(`[sim] Archived previous DB to ${path.relative(process.cwd(), archivePath)}`);
+
   for (const suffix of ['', '-shm', '-wal']) {
     const f = SIM_DB_PATH + suffix;
     if (fs.existsSync(f)) fs.unlinkSync(f);
@@ -679,7 +696,9 @@ All checks passed.
 
 ## Pipeline Changes Since v1
 
-- Observation split into two API calls (observe + predict) to prevent token truncation
+- Observation split into three API calls (observe + suppress + predict) to prevent token truncation
+- Suppressed question generation in dedicated call (10/10 reliability)
+- Prediction generation uses tool use for structured output (no regex parsing)
 - Prediction grading now has correct observation ID linkage
 - Timestamps use simulated dates, not wall-clock
 - Deletion halves are pattern-driven (P1=late-heavy, P4=early-heavy)

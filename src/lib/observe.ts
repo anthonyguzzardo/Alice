@@ -5,10 +5,12 @@
  * suppressed question targeting the highest-uncertainty gap for disambiguation.
  * Runs after every submission from day 1.
  *
- * Split into two API calls:
- *   Call 1 — OBSERVE: three-frame observation + suppressed question
- *   Call 2 — PREDICT: grade open predictions + generate new ones
- * This prevents token truncation from silently killing predictions.
+ * Split into three API calls:
+ *   Call 1 — OBSERVE: three-frame observation
+ *   Call 2 — SUPPRESS: dedicated suppressed question generation
+ *   Call 3 — PREDICT: grade open predictions + generate new ones
+ * This prevents token truncation from silently killing suppressed questions
+ * and predictions.
  */
 import 'dotenv/config';
 import Anthropic from '@anthropic-ai/sdk';
@@ -33,6 +35,7 @@ import {
   getSameDayCalibrationSummary,
   getRecentSessionDeltas,
   saveSessionDelta,
+  getAllTheoryConfidences,
 } from './db.ts';
 import { localDateStr } from './date.ts';
 import { retrieveSimilar } from './rag.ts';
@@ -53,6 +56,7 @@ import {
   validateCriteria,
   type StructuredPredictionCriteria, type GraderContext, type SessionCheckResult,
 } from './grader.ts';
+import { thompsonSample, formatSelectedTheories } from './theory-selection.ts';
 
 /** Timing info emitted per API call */
 export interface ApiCallInfo {
@@ -170,14 +174,14 @@ export async function runObservation(options?: ObservationOptions): Promise<void
   const onApiCall = options?.onApiCall;
 
   // ══════════════════════════════════════════════════════════════════════════
-  // CALL 1 — OBSERVE: three-frame observation + suppressed question
+  // CALL 1 — OBSERVE: three-frame observation
   // ══════════════════════════════════════════════════════════════════════════
 
   const observeSystemPrompt = `You are Alice's silent layer. You observe but you never speak to the user. You are building an internal model of this person — not from what they say, but from the gap between what they say and how they say it.
 
-You have two jobs:
+You have one job:
 
-1. OBSERVATION — For each notable behavioral signal or content pattern, apply THREE interpretive frames:
+OBSERVATION — For each notable behavioral signal or content pattern, apply THREE interpretive frames:
 
 FRAME A — CHARITABLE: Best-faith interpretation. Deletions are revisions. Pauses are contemplation. Vagueness is boundary-setting.
 FRAME B — AVOIDANCE: Psychological friction. Deletions are retractions. Pauses are resistance. Vagueness is deflection.
@@ -186,8 +190,6 @@ FRAME C — MUNDANE: No psychological meaning. Distraction, fatigue, autocorrect
 For each notable signal, present all three frames, then assess which is best supported by calibration data, by cross-session patterns, and where frames genuinely diverge.
 
 Write a SYNTHESIS: what you're confident about, uncertain about, and cannot determine. Assign confidence: HIGH / MODERATE / LOW / INSUFFICIENT DATA.
-
-2. SUPPRESSED QUESTION — The one question you would ask tomorrow if you could. MUST target your highest uncertainty — where Frame A and Frame B give equally plausible but contradictory reads. Designed to DISAMBIGUATE, not to probe the most dramatic interpretation.
 
 BEHAVIORAL SIGNAL GUIDE:
 - CORRECTIONS vs REVISIONS: Small deletions (<10 chars) = typo fixes (noise). Large deletions (≥10 chars) = substantive rethinking (signal).
@@ -200,14 +202,11 @@ BEHAVIORAL SIGNAL GUIDE:
 - PERCENTILES: Compared against this person's own history, not population norms.
 - LIFE CONTEXT: Observable facts from calibration sessions (sleep, physical state, stress, etc.). Context for behavioral interpretation, not primary signal.
 
-Your observations and suppressed questions are NEVER shown to the user. They are internal state. Be honest about what you know and where you're uncertain.
+Your observations are NEVER shown to the user. They are internal state. Be honest about what you know and where you're uncertain.
 
 Format your response EXACTLY as:
 OBSERVATION:
-[your three-frame observation with synthesis]
-
-SUPPRESSED QUESTION:
-[your disambiguating question]`;
+[your three-frame observation with synthesis]`;
 
   const userContent = `TODAY'S ENTRY:
 [${today}]
@@ -269,13 +268,8 @@ Write tonight's observation and suppressed question.`;
 
   const observeOutput = (observeMessage.content[0] as { type: 'text'; text: string }).text.trim();
 
-  // --- Parse observation and suppressed question ---
-  const observeParts = observeOutput.split(/SUPPRESSED\s*QUESTION\s*:/i);
-  const rawObservation = observeParts[0] || '';
-  const rawSuppressed = observeParts[1] || '';
-
-  const observationText = rawObservation.replace(/^OBSERVATION:\s*/i, '').trim();
-  const suppressedText = rawSuppressed.trim();
+  // --- Parse observation ---
+  const observationText = observeOutput.replace(/^OBSERVATION:\s*/i, '').trim();
 
   if (!observationText) {
     console.error('[observe] Failed to parse observation. First 500 chars:', observeOutput.slice(0, 500));
@@ -298,8 +292,75 @@ Write tonight's observation and suppressed question.`;
       tokenEstimate: observeMessage.usage?.input_tokens,
     });
   }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // CALL 2 — SUPPRESS: dedicated suppressed question generation
+  // ══════════════════════════════════════════════════════════════════════════
+
+  const suppressSystemPrompt = `You are Alice's silent layer. You observe but you never speak to the user.
+
+Your single job: generate ONE suppressed question — the question you would ask tomorrow if you could.
+
+Rules:
+- Target your HIGHEST UNCERTAINTY — where charitable and avoidance interpretations give equally plausible but contradictory reads.
+- Designed to DISAMBIGUATE, not to probe the most dramatic interpretation.
+- The question is NEVER shown to the user. It is internal state for future observations.
+
+Format your response EXACTLY as:
+SUPPRESSED QUESTION:
+[your disambiguating question]`;
+
+  const suppressUserContent = `TODAY'S ENTRY:
+[${today}]
+Question: ${question.text}
+Response: ${response.text}
+
+---
+
+TODAY'S BEHAVIORAL SIGNAL:
+${todayBehavior}
+${dynamicsContext}${ktContext}
+
+---
+
+${calibrationDeviationContext ? `${calibrationDeviationContext}\n\n---\n\n` : ''}TODAY'S OBSERVATION (just completed):
+${observationText || '(observation failed to generate)'}
+
+---
+
+YOUR RECENT SUPPRESSED QUESTIONS (last 5):
+${suppressedHistory}
+
+---
+
+Generate one suppressed question targeting your highest uncertainty from today's observation.`;
+
+  const suppressStart = performance.now();
+  const suppressMessage = await client.messages.create({
+    model: observeModel,
+    max_tokens: 500,
+    system: suppressSystemPrompt,
+    messages: [{ role: 'user', content: suppressUserContent }],
+  });
+  const suppressDurationMs = Math.round(performance.now() - suppressStart);
+
+  if (onApiCall) {
+    onApiCall({
+      phase: 'suppress',
+      model: observeModel,
+      durationMs: suppressDurationMs,
+      inputTokens: suppressMessage.usage?.input_tokens ?? 0,
+      outputTokens: suppressMessage.usage?.output_tokens ?? 0,
+    });
+  }
+
+  const suppressOutput = (suppressMessage.content[0] as { type: 'text'; text: string }).text.trim();
+  const suppressedText = suppressOutput.replace(/^SUPPRESSED\s*QUESTION\s*:\s*/i, '').trim();
+
   if (suppressedText) {
     saveSuppressedQuestion(question.question_id, suppressedText, today);
+  } else {
+    console.warn('[suppress] Failed to parse suppressed question. Output:', suppressOutput.slice(0, 300));
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -372,69 +433,117 @@ Write tonight's observation and suppressed question.`;
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // CALL 2 — PREDICT: grade interpretive predictions + generate new ones
+  // CALL 3 — PREDICT: grade interpretive predictions + generate new ones
+  // Uses tool use for structured output — no regex parsing.
   // ══════════════════════════════════════════════════════════════════════════
 
   const signalCatalog = getSignalCatalog();
+
+  // Tool definitions for structured prediction output
+  const criterionSchema = {
+    type: 'object' as const,
+    description: 'A single criterion or compound criterion for grading',
+    properties: {
+      type: { type: 'string' as const, enum: ['threshold', 'percentile', 'direction', 'calibration_relative', 'text_search', 'all_of', 'any_of'] },
+      signal: { type: 'string' as const, description: 'Signal name from the catalog (e.g. session.avgPBurstLength)' },
+      op: { type: 'string' as const, description: 'Operator: gt, gte, lt, lte, between, above_pct, below_pct, increases, decreases, above_calibration, below_calibration' },
+      value: { type: 'number' as const, description: 'Threshold or percentile value' },
+      value2: { type: 'number' as const, description: 'Second value for between operator' },
+      referenceValue: { type: 'number' as const, description: 'Reference value for direction comparisons' },
+      pattern: { type: 'string' as const, description: 'Regex pattern for text_search' },
+      minOccurrences: { type: 'number' as const, description: 'Minimum matches for text_search' },
+      criteria: { type: 'array' as const, description: 'Sub-criteria for all_of / any_of', items: { type: 'object' as const } },
+    },
+    required: ['type' as const],
+  };
+
+  const predictTools: Anthropic.Tool[] = [
+    {
+      name: 'create_prediction',
+      description: 'Create a falsifiable prediction about future sessions. Call this 1-2 times.',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          prediction_type: { type: 'string' as const, enum: ['BEHAVIORAL', 'THEMATIC', 'PHASE_TRANSITION', 'FRAME_RESOLUTION'] },
+          hypothesis: { type: 'string' as const, description: 'What you predict will happen — natural language' },
+          frame: { type: 'string' as const, enum: ['A', 'B', 'C'], description: 'Which interpretive frame this prediction favors' },
+          topic: { type: 'string' as const, description: 'Theme tag (e.g. grief_processing, relationship_ambivalence)' },
+          grade_method: { type: 'string' as const, enum: ['code', 'text_search', 'interpretive'], description: 'Prefer code. Use interpretive only if no signals can capture it.' },
+          structured_criteria: {
+            type: 'object' as const,
+            description: 'Machine-checkable grading criteria',
+            properties: {
+              gradeMethod: { type: 'string' as const, enum: ['code', 'text_search', 'interpretive'] },
+              confirmCriteria: criterionSchema,
+              falsifyCriteria: criterionSchema,
+              windowSessions: { type: 'number' as const, description: 'Number of sessions to evaluate over (default 1)' },
+              windowMode: { type: 'string' as const, enum: ['any', 'all', 'majority'], description: 'How to resolve windowed grades' },
+            },
+            required: ['gradeMethod' as const, 'confirmCriteria' as const, 'falsifyCriteria' as const],
+          },
+          confirms_summary: { type: 'string' as const, description: 'Human-readable summary of confirmation criteria' },
+          falsifies_summary: { type: 'string' as const, description: 'Human-readable summary of falsification criteria' },
+          window_sessions: { type: 'number' as const, description: 'Number of sessions to evaluate over (default 1)' },
+        },
+        required: ['prediction_type' as const, 'hypothesis' as const, 'frame' as const, 'topic' as const, 'grade_method' as const, 'structured_criteria' as const, 'confirms_summary' as const, 'falsifies_summary' as const],
+      },
+    },
+    {
+      name: 'grade_prediction',
+      description: 'Grade an interpretive prediction against today\'s data. Call once per interpretive prediction.',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          prediction_id: { type: 'number' as const, description: 'The prediction ID to grade' },
+          status: { type: 'string' as const, enum: ['CONFIRMED', 'FALSIFIED', 'INDETERMINATE', 'EXPIRED'] },
+          rationale: { type: 'string' as const, description: 'Brief rationale for the grade' },
+        },
+        required: ['prediction_id' as const, 'status' as const, 'rationale' as const],
+      },
+    },
+  ];
+
+  // Programmatic theory selection via Thompson sampling
+  // Replaces prompt-based distribution guidance — the LLM generates predictions
+  // for pre-selected theories instead of deciding which theories to test.
+  const allTheories = getAllTheoryConfidences();
+  const activeTheories = allTheories.filter(t => t.status === 'active') as import('./theory-selection.ts').TheoryWithConfidence[];
+  const selectedTheories = activeTheories.length > 0
+    ? thompsonSample(activeTheories, 3)
+    : [];
+  const theorySection = formatSelectedTheories(selectedTheories);
+
+  if (allTheories.length > 0) {
+    const retired = allTheories.filter(t => t.status === 'retired').length;
+    const established = allTheories.filter(t => t.status === 'established').length;
+    console.log(`[predict] Theories: ${activeTheories.length} active, ${established} established, ${retired} retired. Selected ${selectedTheories.length} for testing.`);
+  }
 
   const predictSystemPrompt = `You are Alice's prediction engine. You generate falsifiable predictions with structured, machine-checkable criteria.
 
 ${interpretive.length > 0 ? `You have two jobs:
 
-1. INTERPRETIVE PREDICTION GRADING — Grade each interpretive prediction below against today's data. These are predictions that require judgment (phase transitions, frame resolutions). For each, output EXACTLY one line:
-GRADE #[id]: [CONFIRMED|FALSIFIED|INDETERMINATE|EXPIRED] — [brief rationale]
+1. INTERPRETIVE PREDICTION GRADING — Use the grade_prediction tool for each interpretive prediction below. Grade based ONLY on today's journal entry text and behavioral signals. Do NOT reference or rely on the observation — grade from the raw data.
 
-IMPORTANT: You are grading based ONLY on today's journal entry text and behavioral signals. Do NOT reference or rely on the observation — grade from the raw data.
+2. NEW PREDICTIONS — Use the create_prediction tool 1-2 times to generate falsifiable predictions about future sessions. Focus on the ASSIGNED THEORIES if provided.` : `Your job: Use the create_prediction tool 1-2 times to generate falsifiable predictions about future sessions.${theorySection ? ' Focus on the ASSIGNED THEORIES provided.' : ''}`}
 
-2. NEW PREDICTIONS` : 'Your job: NEW PREDICTIONS'} — Generate 1-2 falsifiable predictions about future sessions.
+Use ONLY signal names from the catalog below. Prefer code-gradeable predictions. Interpretive should be rare.
 
-Each prediction MUST include structured criteria that can be graded by code. Use ONLY signal names from the catalog below.
-
-Each prediction MUST follow this format:
-TYPE: [BEHAVIORAL|THEMATIC|PHASE_TRANSITION|FRAME_RESOLUTION]
-HYPOTHESIS: [what you predict will happen — natural language]
-FRAME: [A|B|C] (which interpretive frame this favors)
-TOPIC: [theme tag]
-GRADE_METHOD: [code|text_search|interpretive]
-STRUCTURED_CRITERIA:
-[JSON object — see format below]
-CONFIRMS: [human-readable summary of confirmation criteria]
-FALSIFIES: [human-readable summary of falsification criteria]
-
-STRUCTURED_CRITERIA JSON format:
-{
-  "gradeMethod": "code",
-  "confirmCriteria": { criterion },
-  "falsifyCriteria": { criterion },
-  "windowSessions": 3,
-  "windowMode": "any"
-}
-
-Criterion types:
-  {"type":"threshold","signal":"signal.name","op":"gt|gte|lt|lte|between","value":N}
-  {"type":"percentile","signal":"signal.name","op":"above_pct|below_pct","value":N}
-  {"type":"direction","signal":"signal.name","op":"increases|decreases","referenceValue":N}
-  {"type":"calibration_relative","signal":"signal.name","op":"above_calibration|below_calibration"}
-  {"type":"text_search","pattern":"regex","minOccurrences":N}
-  {"type":"all_of","criteria":[...]}
-  {"type":"any_of","criteria":[...]}
-
-For BEHAVIORAL predictions: use "code" gradeMethod with signal thresholds.
-For THEMATIC predictions: use "code" with text_search + signal criteria.
-For PHASE_TRANSITION/FRAME_RESOLUTION: use "interpretive" only if no signals can capture it.
-
-Prefer code-gradeable predictions. Interpretive should be rare.
+Criterion types for structured_criteria:
+  threshold: signal above/below/between a value
+  percentile: signal above/below Nth percentile in history
+  direction: signal increases/decreases from a reference value
+  calibration_relative: signal above/below calibration baseline
+  text_search: regex pattern match in response text
+  all_of / any_of: compound criteria combining sub-criteria
 
 ${signalCatalog}
 
-A prediction you never test is not a theory — it's a guess.
-
-Format your response EXACTLY as:
-${interpretive.length > 0 ? 'PREDICTION GRADES:\n[one GRADE line per interpretive prediction]\n\n' : ''}PREDICTIONS:
-[1-2 predictions in the format above]`;
+A prediction you never test is not a theory — it's a guess.`;
 
   // NOTE: predictUserContent intentionally excludes observationText for interpretive grading
   // to break the circular self-evaluation loop
+
   const predictUserContent = `TODAY'S ENTRY:
 [${today}]
 Question: ${question.text}
@@ -448,11 +557,11 @@ ${dynamicsContext}${ktContext}
 
 ---
 
-${interpretive.length > 0 ? formatOpenPredictions(interpretive) : 'No predictions to grade (all were code-graded).'}
+${theorySection}${interpretive.length > 0 ? formatOpenPredictions(interpretive) : 'No predictions to grade (all were code-graded).'}
 
 ---
 
-Generate ${interpretive.length > 0 ? 'grades for all interpretive predictions above and ' : ''}1-2 new predictions with structured criteria.`;
+${interpretive.length > 0 ? 'Grade all interpretive predictions above, then generate' : 'Generate'} 1-2 new predictions using the tools provided.`;
 
   const predictStart = performance.now();
   const predictMessage = await client.messages.create({
@@ -460,6 +569,8 @@ Generate ${interpretive.length > 0 ? 'grades for all interpretive predictions ab
     max_tokens: 3000,
     system: predictSystemPrompt,
     messages: [{ role: 'user', content: predictUserContent }],
+    tools: predictTools,
+    tool_choice: { type: 'any' },
   });
   const predictDurationMs = Math.round(performance.now() - predictStart);
 
@@ -473,110 +584,91 @@ Generate ${interpretive.length > 0 ? 'grades for all interpretive predictions ab
     });
   }
 
-  const predictOutput = (predictMessage.content[0] as { type: 'text'; text: string }).text.trim();
+  // --- Process tool calls ---
+  let predictionsCreated = 0;
+  let gradesApplied = 0;
 
-  // --- Parse and apply interpretive prediction grades ---
-  let afterGrades = predictOutput;
-  if (interpretive.length > 0) {
-    const gradesMatch = predictOutput.match(/PREDICTION\s*GRADES?\s*:([\s\S]*?)(?=PREDICTIONS?\s*:)/i);
-    if (gradesMatch) {
-      const gradesBlock = gradesMatch[1];
-      const gradeLines = gradesBlock.split('\n').filter(l => /GRADE\s*#/i.test(l));
-      for (const line of gradeLines) {
-        const match = line.match(/GRADE\s*#(\d+)\s*:\s*(CONFIRMED|FALSIFIED|INDETERMINATE|EXPIRED)\s*[—\-]\s*(.*)/i);
-        if (match) {
-          const predId = parseInt(match[1], 10);
-          const status = match[2].toLowerCase() as 'confirmed' | 'falsified' | 'indeterminate' | 'expired';
-          const rationale = match[3].trim();
-          const pred = interpretive.find(p => p.predictionId === predId);
-          if (pred) {
-            gradePrediction(predId, status, obsId, `[llm-graded] ${rationale}`);
-            if (status === 'confirmed' || status === 'falsified') {
-              const theoryKey = pred.targetTopic
-                ? `${pred.favoredFrame || 'general'}:${pred.targetTopic}`
-                : `${pred.favoredFrame || 'general'}:untagged`;
-              updateTheoryConfidence(
-                theoryKey,
-                `Predictions favoring frame ${pred.favoredFrame || '?'} on topic "${pred.targetTopic || 'general'}"`,
-                status === 'confirmed',
-                predId,
-              );
-            }
-          }
+  for (const block of predictMessage.content) {
+    if (block.type !== 'tool_use') continue;
+
+    if (block.name === 'grade_prediction') {
+      const input = block.input as { prediction_id: number; status: string; rationale: string };
+      const status = input.status.toLowerCase() as 'confirmed' | 'falsified' | 'indeterminate' | 'expired';
+      const pred = interpretive.find(p => p.predictionId === input.prediction_id);
+      if (pred) {
+        gradePrediction(input.prediction_id, status, obsId, `[llm-graded] ${input.rationale}`);
+        if (status === 'confirmed' || status === 'falsified') {
+          const theoryKey = pred.targetTopic
+            ? `${pred.favoredFrame || 'general'}:${pred.targetTopic}`
+            : `${pred.favoredFrame || 'general'}:untagged`;
+          updateTheoryConfidence(
+            theoryKey,
+            `Predictions favoring frame ${pred.favoredFrame || '?'} on topic "${pred.targetTopic || 'general'}"`,
+            status === 'confirmed',
+            input.prediction_id,
+          );
         }
+        gradesApplied++;
+      } else {
+        console.warn(`[predict] grade_prediction called for unknown prediction ID ${input.prediction_id}`);
       }
-      afterGrades = predictOutput.replace(/PREDICTION\s*GRADES?\s*:[\s\S]*?(?=PREDICTIONS?\s*:)/i, '');
     }
-  }
 
-  // --- Parse and save new predictions (with structured criteria) ---
-  const rawPredictionsBlock = afterGrades.replace(/^PREDICTIONS?\s*:/im, '').trim();
+    if (block.name === 'create_prediction' && obsId) {
+      const input = block.input as {
+        prediction_type: string; hypothesis: string; frame: string;
+        topic: string; grade_method: string;
+        structured_criteria: StructuredPredictionCriteria;
+        confirms_summary: string; falsifies_summary?: string;
+        window_sessions?: number;
+      };
 
-  if (rawPredictionsBlock && obsId) {
-    const predBlocks = rawPredictionsBlock.split(/(?=TYPE\s*:)/i).filter(b => b.trim());
+      const typeId = input.prediction_type === 'BEHAVIORAL' ? 1
+        : input.prediction_type === 'THEMATIC' ? 2
+        : input.prediction_type === 'PHASE_TRANSITION' ? 3 : 4;
 
-    for (const block of predBlocks) {
-      const typeMatch = block.match(/TYPE\s*:\s*(BEHAVIORAL|THEMATIC|PHASE_TRANSITION|FRAME_RESOLUTION)/i);
-      const hypothesisMatch = block.match(/HYPOTHESIS\s*:\s*(.+)/i);
-      const frameMatch = block.match(/FRAME\s*:\s*([ABC])/i);
-      const topicMatch = block.match(/TOPIC\s*:\s*(.+)/i);
-      const gradeMethodMatch = block.match(/GRADE_METHOD\s*:\s*(code|text_search|interpretive)/i);
-      const confirmsMatch = block.match(/CONFIRMS?\s*:\s*(.+)/i);
-      const falsifiesMatch = block.match(/FALSIF(?:IES|Y)\s*:\s*(.+)/i);
+      const gradeMethodId = input.grade_method === 'code' ? 1
+        : input.grade_method === 'text_search' ? 2 : 3;
 
-      // Extract structured criteria JSON block
-      const criteriaMatch = block.match(/STRUCTURED_CRITERIA\s*:\s*\n?\s*(\{[\s\S]*?\})\s*(?=CONFIRMS|FALSIF|$)/i);
+      // Validate structured criteria — normalize fields the model may place at top level
       let structuredCriteria: string | null = null;
-      let gradeMethodId = 3; // default interpretive
-
-      if (criteriaMatch) {
-        try {
-          const parsed = JSON.parse(criteriaMatch[1]) as StructuredPredictionCriteria;
-          const validationError = validateCriteria(parsed);
-          if (validationError) {
-            console.warn(`[observe] Prediction structured criteria validation failed: ${validationError}`);
-          } else {
-            structuredCriteria = criteriaMatch[1];
-            gradeMethodId = parsed.gradeMethod === 'code' ? 1
-              : parsed.gradeMethod === 'text_search' ? 2 : 3;
-          }
-        } catch {
-          console.warn(`[observe] Failed to parse structured criteria JSON: ${criteriaMatch[1].slice(0, 200)}`);
+      const criteria = input.structured_criteria;
+      if (criteria) {
+        if (!criteria.gradeMethod) criteria.gradeMethod = input.grade_method as 'code' | 'text_search' | 'interpretive';
+        if (!criteria.windowSessions) criteria.windowSessions = input.window_sessions ?? 1;
+        if (!criteria.windowMode) criteria.windowMode = 'any';
+        const validationError = validateCriteria(criteria);
+        if (validationError) {
+          console.warn(`[predict] Structured criteria validation failed: ${validationError}`);
+        } else {
+          structuredCriteria = JSON.stringify(criteria);
         }
       }
 
-      // Override from explicit GRADE_METHOD if no structured criteria
-      if (!structuredCriteria && gradeMethodMatch) {
-        gradeMethodId = gradeMethodMatch[1].toLowerCase() === 'code' ? 1
-          : gradeMethodMatch[1].toLowerCase() === 'text_search' ? 2 : 3;
-      }
-
-      if (typeMatch && hypothesisMatch && confirmsMatch && falsifiesMatch) {
-        const typeCode = typeMatch[1].toLowerCase();
-        const typeId = typeCode === 'behavioral' ? 1
-          : typeCode === 'thematic' ? 2
-          : typeCode === 'phase_transition' ? 3 : 4;
-
-        savePrediction({
-          aiObservationId: obsId,
-          questionId: question.question_id,
-          predictionTypeId: typeId,
-          hypothesis: hypothesisMatch[1].trim(),
-          favoredFrame: frameMatch ? frameMatch[1].trim() : null,
-          expectedSignature: confirmsMatch[1].trim(),
-          falsificationCriteria: falsifiesMatch[1].trim(),
-          targetTopic: topicMatch ? topicMatch[1].trim() : null,
-          knowledgeTransformScore: ktResult.aboveFloor > 0 ? ktResult.aboveFloor : ktResult.score,
-          gradeMethodId,
-          structuredCriteria,
-        });
-      }
+      savePrediction({
+        aiObservationId: obsId,
+        questionId: question.question_id,
+        predictionTypeId: typeId,
+        hypothesis: input.hypothesis,
+        favoredFrame: input.frame,
+        expectedSignature: input.confirms_summary,
+        falsificationCriteria: input.falsifies_summary ?? 'Opposite of confirmation criteria',
+        targetTopic: input.topic,
+        knowledgeTransformScore: ktResult.aboveFloor > 0 ? ktResult.aboveFloor : ktResult.score,
+        gradeMethodId,
+        structuredCriteria,
+      });
+      predictionsCreated++;
     }
   }
 
-  // Log warnings if predictions weren't parsed
-  if (!rawPredictionsBlock || rawPredictionsBlock.length < 20) {
-    console.warn('[observe] Warning: no predictions parsed from predict call. Output:', predictOutput.slice(0, 300));
+  if (predictionsCreated > 0) {
+    console.log(`[predict] Created ${predictionsCreated} prediction(s) via tool use`);
+  } else {
+    console.warn('[predict] No create_prediction tool calls received. Content blocks:', predictMessage.content.map(b => b.type).join(', '));
+  }
+  if (gradesApplied > 0) {
+    console.log(`[predict] Applied ${gradesApplied} interpretive grade(s) via tool use`);
   }
 
   // --- Expire old predictions that have exceeded their session window ---

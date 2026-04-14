@@ -609,8 +609,13 @@ db.exec(`
   -- PURPOSE: Bayesian confidence tracking per theory/topic/frame combination.
   --          Uses Beta-Binomial conjugate updating: alpha = hits + 1, beta = misses + 1.
   --          Posterior mean = alpha / (alpha + beta). Starts at 0.5 (uninformative).
+  --          Lifecycle managed by sequential Bayes factors (Kass & Raftery 1995):
+  --            active:      -2.3 < log_BF < 2.3 (eligible for Thompson sampling)
+  --            established: log_BF >= 2.3 (BF > 10, strong evidence for)
+  --            retired:     log_BF <= -2.3 (BF < 1/10, strong evidence against)
   -- USE CASE: "How reliable are the system's predictions about topic X using frame Y?"
   -- MUTABILITY: Mutable (updated on each prediction grade)
+  -- REFERENCED BY: observe.ts predict call, theory-selection.ts Thompson sampling
   -- FOOTER: Full
   -- --------------------------------------------------------------------------
   CREATE TABLE IF NOT EXISTS tb_theory_confidence (
@@ -620,6 +625,8 @@ db.exec(`
     ,alpha                 REAL    NOT NULL DEFAULT 1.0
     ,beta                  REAL    NOT NULL DEFAULT 1.0
     ,total_predictions     INTEGER NOT NULL DEFAULT 0
+    ,log_bayes_factor      REAL    NOT NULL DEFAULT 0.0
+    ,status                TEXT    NOT NULL DEFAULT 'active'
     ,last_prediction_id    INTEGER
     -- FOOTER
     ,dttm_created_utc      TEXT    NOT NULL DEFAULT (datetime('now'))
@@ -2120,12 +2127,17 @@ export function getRecentGradedPredictions(limit: number): Array<{
 
 export function getTheoryConfidence(theoryKey: string): {
   alpha: number; beta: number; totalPredictions: number; posteriorMean: number;
+  logBayesFactor: number; status: string;
 } | null {
   const row = db.prepare(`
-    SELECT alpha, beta, total_predictions as totalPredictions
+    SELECT alpha, beta, total_predictions as totalPredictions,
+           log_bayes_factor as logBayesFactor, status
     FROM tb_theory_confidence
     WHERE theory_key = ?
-  `).get(theoryKey) as { alpha: number; beta: number; totalPredictions: number } | null;
+  `).get(theoryKey) as {
+    alpha: number; beta: number; totalPredictions: number;
+    logBayesFactor: number; status: string;
+  } | null;
   if (!row) return null;
   return { ...row, posteriorMean: row.alpha / (row.alpha + row.beta) };
 }
@@ -2137,24 +2149,40 @@ export function updateTheoryConfidence(
   predictionId: number,
 ): void {
   const existing = db.prepare(
-    `SELECT theory_confidence_id FROM tb_theory_confidence WHERE theory_key = ?`
-  ).get(theoryKey) as { theory_confidence_id: number } | null;
+    `SELECT theory_confidence_id, alpha, beta, log_bayes_factor, total_predictions
+     FROM tb_theory_confidence WHERE theory_key = ?`
+  ).get(theoryKey) as {
+    theory_confidence_id: number; alpha: number; beta: number;
+    log_bayes_factor: number; total_predictions: number;
+  } | null;
 
   if (existing) {
     const col = hit ? 'alpha' : 'beta';
+    // Incremental Bayes factor: log predictive probability vs null (0.5)
+    const total = existing.alpha + existing.beta;
+    const predictiveProb = hit ? existing.alpha / total : existing.beta / total;
+    const logBFDelta = Math.log(predictiveProb) - Math.log(0.5);
+    const newLogBF = existing.log_bayes_factor + logBFDelta;
+    const newTotal = existing.total_predictions + 1;
+    // Lifecycle classification (Kass & Raftery 1995 thresholds)
+    const newStatus = newLogBF >= Math.log(10) ? 'established'
+      : (newLogBF <= -Math.log(10) && newTotal >= 3) ? 'retired'
+      : 'active';
     db.prepare(`
       UPDATE tb_theory_confidence
       SET ${col} = ${col} + 1
          ,total_predictions = total_predictions + 1
+         ,log_bayes_factor = ?
+         ,status = ?
          ,last_prediction_id = ?
          ,dttm_modified_utc = ?
          ,modified_by = 'system'
       WHERE theory_key = ?
-    `).run(predictionId, nowStr(), theoryKey);
+    `).run(newLogBF, newStatus, predictionId, nowStr(), theoryKey);
   } else {
     db.prepare(`
-      INSERT INTO tb_theory_confidence (theory_key, description, alpha, beta, total_predictions, last_prediction_id)
-      VALUES (?, ?, ?, ?, 1, ?)
+      INSERT INTO tb_theory_confidence (theory_key, description, alpha, beta, total_predictions, log_bayes_factor, status, last_prediction_id)
+      VALUES (?, ?, ?, ?, 1, 0.0, 'active', ?)
     `).run(theoryKey, description, hit ? 2.0 : 1.0, hit ? 1.0 : 2.0, predictionId);
   }
 }
@@ -2162,13 +2190,17 @@ export function updateTheoryConfidence(
 export function getAllTheoryConfidences(): Array<{
   theoryKey: string; description: string; alpha: number; beta: number;
   totalPredictions: number; posteriorMean: number;
+  logBayesFactor: number; status: string;
 }> {
   const rows = db.prepare(`
-    SELECT theory_key as theoryKey, description, alpha, beta, total_predictions as totalPredictions
+    SELECT theory_key as theoryKey, description, alpha, beta,
+           total_predictions as totalPredictions,
+           log_bayes_factor as logBayesFactor, status
     FROM tb_theory_confidence
     ORDER BY total_predictions DESC
   `).all() as Array<{
-    theoryKey: string; description: string; alpha: number; beta: number; totalPredictions: number;
+    theoryKey: string; description: string; alpha: number; beta: number;
+    totalPredictions: number; logBayesFactor: number; status: string;
   }>;
   return rows.map(r => ({ ...r, posteriorMean: r.alpha / (r.alpha + r.beta) }));
 }
