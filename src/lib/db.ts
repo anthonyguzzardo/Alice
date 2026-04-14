@@ -2539,4 +2539,84 @@ export function getRecentSessionDeltas(limit: number = 30): SessionDeltaRow[] {
   `).all(limit) as SessionDeltaRow[];
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// OBSERVATORY QUERIES
+// ═══════════════════════════════════════════════════════════════════
+
+export function getEntryStatesWithDates(): Array<EntryStateRow & { date: string; question_id: number }> {
+  return db.prepare(`
+    SELECT es.*, q.scheduled_for as date, q.question_id
+    FROM tb_entry_states es
+    JOIN tb_responses r ON es.response_id = r.response_id
+    JOIN tb_questions q ON r.question_id = q.question_id
+    ORDER BY es.entry_state_id ASC
+  `).all() as Array<EntryStateRow & { date: string; question_id: number }>;
+}
+
+export function getEntryStateByResponseId(responseId: number): (EntryStateRow & {
+  date: string; question_id: number; question_text: string;
+}) | null {
+  return db.prepare(`
+    SELECT es.*, q.scheduled_for as date, q.question_id, q.text as question_text
+    FROM tb_entry_states es
+    JOIN tb_responses r ON es.response_id = r.response_id
+    JOIN tb_questions q ON r.question_id = q.question_id
+    WHERE es.response_id = ?
+  `).get(responseId) as (EntryStateRow & {
+    date: string; question_id: number; question_text: string;
+  }) | null;
+}
+
+export function getObservationForQuestion(questionId: number): {
+  ai_observation_id: number; observation_text: string; observation_date: string;
+} | null {
+  return db.prepare(`
+    SELECT ai_observation_id, observation_text, observation_date
+    FROM tb_ai_observations
+    WHERE question_id = ?
+  `).get(questionId) as {
+    ai_observation_id: number; observation_text: string; observation_date: string;
+  } | null;
+}
+
+export function getSuppressedQuestionForQuestion(questionId: number): {
+  suppressed_text: string; suppressed_date: string;
+} | null {
+  return db.prepare(`
+    SELECT suppressed_text, suppressed_date
+    FROM tb_ai_suppressed_questions
+    WHERE question_id = ?
+  `).get(questionId) as {
+    suppressed_text: string; suppressed_date: string;
+  } | null;
+}
+
+export function getPredictionsForQuestion(questionId: number): Array<{
+  predictionId: number; hypothesis: string; favoredFrame: string | null;
+  expectedSignature: string; falsificationCriteria: string;
+  statusCode: string; gradeRationale: string | null;
+  targetTopic: string | null;
+  dttmCreatedUtc: string; dttmGradedUtc: string | null;
+}> {
+  return db.prepare(`
+    SELECT p.prediction_id as predictionId, p.hypothesis,
+           p.favored_frame as favoredFrame,
+           p.expected_signature as expectedSignature,
+           p.falsification_criteria as falsificationCriteria,
+           s.enum_code as statusCode, p.grade_rationale as gradeRationale,
+           p.target_topic as targetTopic,
+           p.dttm_created_utc as dttmCreatedUtc, p.dttm_graded_utc as dttmGradedUtc
+    FROM tb_predictions p
+    JOIN te_prediction_status s ON p.prediction_status_id = s.prediction_status_id
+    WHERE p.question_id = ?
+    ORDER BY p.dttm_created_utc ASC
+  `).all(questionId) as Array<{
+    predictionId: number; hypothesis: string; favoredFrame: string | null;
+    expectedSignature: string; falsificationCriteria: string;
+    statusCode: string; gradeRationale: string | null;
+    targetTopic: string | null;
+    dttmCreatedUtc: string; dttmGradedUtc: string | null;
+  }>;
+}
+
 export default db;

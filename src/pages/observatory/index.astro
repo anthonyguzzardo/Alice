@@ -1,0 +1,411 @@
+---
+/**
+ * Observatory — Macro View
+ *
+ * 8 stacked behavioral sparklines across all entries.
+ * Click any point to drill into that entry.
+ * The system shows trajectories, not verdicts.
+ */
+---
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Observatory</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0a0a;
+      color: #666;
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 11px;
+      overflow-x: hidden;
+    }
+    .nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 24px;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    .nav a {
+      color: #555;
+      text-decoration: none;
+      font-size: 11px;
+      letter-spacing: 0.05em;
+    }
+    .nav a:hover { color: #888; }
+    .nav-title {
+      color: #444;
+      font-size: 12px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+    .sparkline-stack {
+      padding: 8px 0;
+    }
+    .sparkline-row {
+      display: flex;
+      align-items: center;
+      height: 72px;
+      border-bottom: 1px solid #111;
+    }
+    .sparkline-row:last-child { border-bottom: none; }
+    .dim-label {
+      width: 110px;
+      padding-left: 24px;
+      color: #444;
+      font-size: 10px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+    .sparkline-canvas {
+      flex: 1;
+      height: 100%;
+      cursor: crosshair;
+    }
+    .dim-value {
+      width: 60px;
+      padding-right: 24px;
+      text-align: right;
+      color: #444;
+      font-size: 10px;
+      flex-shrink: 0;
+    }
+    .convergence-section {
+      padding: 0 0 0 110px;
+      margin: 0 24px 0 0;
+    }
+    .convergence-label {
+      color: #333;
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 4px 0 2px 24px;
+    }
+    .convergence-canvas {
+      width: calc(100% - 60px);
+      height: 20px;
+      display: block;
+    }
+    .date-axis {
+      display: flex;
+      padding: 6px 0 16px 0;
+      margin-left: 134px;
+      margin-right: 84px;
+    }
+    .date-axis span {
+      color: #333;
+      font-size: 9px;
+      position: absolute;
+    }
+    .date-axis-container {
+      position: relative;
+      width: 100%;
+      height: 14px;
+    }
+    .tooltip {
+      display: none;
+      position: fixed;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      padding: 8px 12px;
+      font-size: 10px;
+      color: #888;
+      pointer-events: none;
+      z-index: 100;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <div class="nav">
+    <a href="/">&larr; journal</a>
+    <span class="nav-title">observatory</span>
+    <a href="/observatory/coupling">coupling &rarr;</a>
+  </div>
+
+  <div class="sparkline-stack" id="sparkline-stack"></div>
+
+  <div class="convergence-section">
+    <div class="convergence-label">convergence</div>
+    <canvas class="convergence-canvas" id="convergence-canvas"></canvas>
+  </div>
+
+  <div class="date-axis">
+    <div class="date-axis-container" id="date-axis"></div>
+  </div>
+
+  <div class="tooltip" id="tooltip"></div>
+
+  <script>
+    const DIMS = ['fluency', 'deliberation', 'revision', 'expression', 'commitment', 'volatility', 'thermal', 'presence'];
+    const COLORS = {
+      fluency:      '#3a6ea5',
+      deliberation: '#8a5a44',
+      revision:     '#5a7a5a',
+      expression:   '#7a5a7a',
+      commitment:   '#5a8a8a',
+      volatility:   '#8a7a3a',
+      thermal:      '#8a3a3a',
+      presence:     '#4a6a4a',
+    };
+    const DOT_COLORS = {
+      fluency:      '#5a9ed6',
+      deliberation: '#c4836a',
+      revision:     '#7aaa7a',
+      expression:   '#aa7aaa',
+      commitment:   '#7ababa',
+      volatility:   '#baa85a',
+      thermal:      '#ba5a5a',
+      presence:     '#6a9a6a',
+    };
+
+    interface EntryState {
+      response_id: number;
+      date: string;
+      fluency: number;
+      deliberation: number;
+      revision: number;
+      expression: number;
+      commitment: number;
+      volatility: number;
+      thermal: number;
+      presence: number;
+      convergence: number;
+    }
+
+    // Hit targets for click-to-navigate
+    const hitTargets: Map<string, Array<{ x: number; responseId: number; value: number }>> = new Map();
+
+    function buildRows() {
+      const stack = document.getElementById('sparkline-stack')!;
+      stack.innerHTML = '';
+      for (const dim of DIMS) {
+        const row = document.createElement('div');
+        row.className = 'sparkline-row';
+
+        const label = document.createElement('span');
+        label.className = 'dim-label';
+        label.textContent = dim;
+
+        const canvas = document.createElement('canvas');
+        canvas.className = 'sparkline-canvas';
+        canvas.id = `canvas-${dim}`;
+
+        const val = document.createElement('span');
+        val.className = 'dim-value';
+        val.id = `val-${dim}`;
+        val.textContent = '--';
+
+        row.appendChild(label);
+        row.appendChild(canvas);
+        row.appendChild(val);
+        stack.appendChild(row);
+
+        // Click handler
+        canvas.addEventListener('click', (e) => {
+          const targets = hitTargets.get(dim);
+          if (!targets || targets.length === 0) return;
+          const rect = canvas.getBoundingClientRect();
+          const clickX = e.clientX - rect.left;
+          let closest = targets[0];
+          let minDist = Math.abs(clickX - closest.x);
+          for (const t of targets) {
+            const d = Math.abs(clickX - t.x);
+            if (d < minDist) { minDist = d; closest = t; }
+          }
+          if (minDist < 30) {
+            window.location.href = `/observatory/entry/${closest.responseId}`;
+          }
+        });
+
+        // Hover handler
+        canvas.addEventListener('mousemove', (e) => {
+          const targets = hitTargets.get(dim);
+          if (!targets || targets.length === 0) return;
+          const rect = canvas.getBoundingClientRect();
+          const mouseX = e.clientX - rect.left;
+          let closest = targets[0];
+          let minDist = Math.abs(mouseX - closest.x);
+          for (const t of targets) {
+            const d = Math.abs(mouseX - t.x);
+            if (d < minDist) { minDist = d; closest = t; }
+          }
+          if (minDist < 20) {
+            const tooltip = document.getElementById('tooltip')!;
+            const state = (window as any).__states[targets.indexOf(closest)];
+            tooltip.innerHTML = `<strong>Entry ${targets.indexOf(closest) + 1}</strong> &middot; ${closest.responseId}<br>${dim}: ${closest.value.toFixed(3)}`;
+            tooltip.style.display = 'block';
+            tooltip.style.left = (e.clientX + 12) + 'px';
+            tooltip.style.top = (e.clientY - 10) + 'px';
+          } else {
+            document.getElementById('tooltip')!.style.display = 'none';
+          }
+        });
+
+        canvas.addEventListener('mouseleave', () => {
+          document.getElementById('tooltip')!.style.display = 'none';
+        });
+      }
+    }
+
+    function drawSparkline(canvas: HTMLCanvasElement, dim: string, states: EntryState[]) {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      const ctx = canvas.getContext('2d')!;
+      ctx.scale(dpr, dpr);
+
+      const w = rect.width;
+      const h = rect.height;
+      const pad = { left: 4, right: 4, top: 8, bottom: 8 };
+      const plotW = w - pad.left - pad.right;
+      const plotH = h - pad.top - pad.bottom;
+
+      const values = states.map(s => (s as any)[dim] as number);
+      const maxAbs = Math.max(3, ...values.map(Math.abs)); // at least +/- 3 sigma
+
+      const xStep = states.length > 1 ? plotW / (states.length - 1) : plotW;
+      const toY = (v: number) => pad.top + plotH / 2 - (v / maxAbs) * (plotH / 2);
+      const toX = (i: number) => pad.left + i * xStep;
+
+      // Zero line
+      ctx.strokeStyle = '#1a1a1a';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(pad.left, toY(0));
+      ctx.lineTo(w - pad.right, toY(0));
+      ctx.stroke();
+
+      // +/- 1 sigma reference lines
+      ctx.strokeStyle = '#111';
+      ctx.setLineDash([2, 4]);
+      for (const ref of [1, -1]) {
+        ctx.beginPath();
+        ctx.moveTo(pad.left, toY(ref));
+        ctx.lineTo(w - pad.right, toY(ref));
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+
+      // Line
+      ctx.strokeStyle = COLORS[dim as keyof typeof COLORS];
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      for (let i = 0; i < values.length; i++) {
+        const x = toX(i);
+        const y = toY(values[i]);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+
+      // Dots + hit targets
+      const targets: Array<{ x: number; responseId: number; value: number }> = [];
+      const dotColor = DOT_COLORS[dim as keyof typeof DOT_COLORS];
+      for (let i = 0; i < values.length; i++) {
+        const x = toX(i);
+        const y = toY(values[i]);
+        ctx.fillStyle = dotColor;
+        ctx.beginPath();
+        ctx.arc(x, y, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+        targets.push({ x, responseId: states[i].response_id, value: values[i] });
+      }
+      hitTargets.set(dim, targets);
+
+      // Current value label
+      const latest = values[values.length - 1];
+      const valEl = document.getElementById(`val-${dim}`)!;
+      valEl.textContent = (latest >= 0 ? '+' : '') + latest.toFixed(2);
+      valEl.style.color = COLORS[dim as keyof typeof COLORS];
+    }
+
+    function drawConvergence(states: EntryState[]) {
+      const canvas = document.getElementById('convergence-canvas') as HTMLCanvasElement;
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      const ctx = canvas.getContext('2d')!;
+      ctx.scale(dpr, dpr);
+
+      const w = rect.width;
+      const h = rect.height;
+      const barW = states.length > 0 ? w / states.length : w;
+
+      for (let i = 0; i < states.length; i++) {
+        const conv = states[i].convergence;
+        const alpha = Math.min(1, conv * 1.5);
+        // Low convergence = dim, high = bright amber/red
+        const r = Math.round(180 + conv * 60);
+        const g = Math.round(120 - conv * 80);
+        const b = Math.round(40 - conv * 30);
+        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        ctx.fillRect(i * barW, 0, barW + 1, h);
+      }
+    }
+
+    function drawDateAxis(states: EntryState[]) {
+      const container = document.getElementById('date-axis')!;
+      container.innerHTML = '';
+      if (states.length === 0) return;
+
+      const containerW = container.getBoundingClientRect().width;
+      const step = states.length > 1 ? containerW / (states.length - 1) : 0;
+
+      // Show every Nth date to avoid overlap
+      const labelEvery = Math.max(1, Math.ceil(states.length / 10));
+      for (let i = 0; i < states.length; i += labelEvery) {
+        const span = document.createElement('span');
+        const date = states[i].date;
+        span.textContent = date.slice(5); // MM-DD
+        span.style.left = (i * step) + 'px';
+        container.appendChild(span);
+      }
+      // Always show last
+      if ((states.length - 1) % labelEvery !== 0) {
+        const span = document.createElement('span');
+        span.textContent = states[states.length - 1].date.slice(5);
+        span.style.left = ((states.length - 1) * step) + 'px';
+        container.appendChild(span);
+      }
+    }
+
+    async function load() {
+      const res = await fetch('/api/observatory/states');
+      const { states } = await res.json();
+      (window as any).__states = states;
+
+      buildRows();
+      for (const dim of DIMS) {
+        const canvas = document.getElementById(`canvas-${dim}`) as HTMLCanvasElement;
+        drawSparkline(canvas, dim, states);
+      }
+      drawConvergence(states);
+      drawDateAxis(states);
+    }
+
+    load();
+
+    let resizeTimer: number;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        const states = (window as any).__states;
+        if (states) {
+          for (const dim of DIMS) {
+            const canvas = document.getElementById(`canvas-${dim}`) as HTMLCanvasElement;
+            drawSparkline(canvas, dim, states);
+          }
+          drawConvergence(states);
+          drawDateAxis(states);
+        }
+      }, 100);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,580 @@
+---
+/**
+ * Observatory — Entry Drill-Down
+ *
+ * Everything about a single entry: 8D radar, session metrics,
+ * three-frame observation, predictions, suppressed question.
+ * The system shows competing interpretations. You decide.
+ */
+---
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Observatory — Entry</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0a0a;
+      color: #666;
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 11px;
+    }
+    .nav {
+      position: sticky;
+      top: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 24px;
+      border-bottom: 1px solid #1a1a1a;
+      background: #0a0a0a;
+      z-index: 50;
+    }
+    .nav a, .nav-btn {
+      color: #555;
+      text-decoration: none;
+      font-size: 11px;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      background: none;
+      border: none;
+      font-family: inherit;
+    }
+    .nav a:hover, .nav-btn:hover { color: #888; }
+    .nav-btn:disabled { color: #222; cursor: default; }
+    .nav-center {
+      color: #444;
+      font-size: 11px;
+      letter-spacing: 0.05em;
+    }
+    .nav-arrows {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+    }
+    .content {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    .question-text {
+      color: #555;
+      font-size: 12px;
+      font-style: italic;
+      padding: 16px 0 24px;
+      border-bottom: 1px solid #111;
+      margin-bottom: 24px;
+      line-height: 1.6;
+    }
+    .section {
+      margin-bottom: 36px;
+    }
+    .section-title {
+      color: #444;
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    .radar-container {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 8px;
+    }
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+    .metric-card {
+      background: #0f0f0f;
+      padding: 8px 12px;
+      border: 1px solid #141414;
+    }
+    .metric-name {
+      color: #3a3a3a;
+      font-size: 8px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .metric-value {
+      color: #777;
+      font-size: 13px;
+    }
+    .metric-group-title {
+      grid-column: 1 / -1;
+      color: #333;
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 8px 0 4px;
+    }
+    .frame-card {
+      background: #0f0f0f;
+      border: 1px solid #1a1a1a;
+      padding: 16px 20px;
+      margin-bottom: 8px;
+      line-height: 1.7;
+      color: #666;
+    }
+    .frame-card-a { border-left: 3px solid #3a6ea5; }
+    .frame-card-b { border-left: 3px solid #aa8833; }
+    .frame-card-c { border-left: 3px solid #5a7a5a; }
+    .frame-label {
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+      font-weight: normal;
+    }
+    .frame-label-a { color: #3a6ea5; }
+    .frame-label-b { color: #aa8833; }
+    .frame-label-c { color: #5a7a5a; }
+    .prediction-card {
+      background: #0f0f0f;
+      border: 1px solid #1a1a1a;
+      padding: 12px 16px;
+      margin-bottom: 8px;
+    }
+    .prediction-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .prediction-hypothesis {
+      color: #777;
+      line-height: 1.6;
+      font-size: 11px;
+    }
+    .status-badge {
+      font-size: 9px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border-radius: 2px;
+      flex-shrink: 0;
+      margin-left: 12px;
+    }
+    .status-open { background: #1a1a1a; color: #666; }
+    .status-confirmed { background: #1a2a1a; color: #5a8a5a; }
+    .status-falsified { background: #2a1a1a; color: #8a5a5a; }
+    .status-expired { background: #1a1a1a; color: #444; }
+    .status-indeterminate { background: #1a1a18; color: #8a8a5a; }
+    .prediction-meta {
+      color: #444;
+      font-size: 9px;
+      margin-top: 6px;
+    }
+    .prediction-rationale {
+      color: #555;
+      font-size: 10px;
+      margin-top: 8px;
+      padding-top: 6px;
+      border-top: 1px solid #151515;
+      line-height: 1.5;
+    }
+    .suppressed-block {
+      background: #0c0c0c;
+      border-left: 3px solid #333;
+      padding: 16px 20px;
+      color: #555;
+      font-style: italic;
+      line-height: 1.6;
+    }
+    .suppressed-label {
+      font-style: normal;
+      color: #333;
+      font-size: 9px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .loading {
+      color: #333;
+      text-align: center;
+      padding: 80px 0;
+      letter-spacing: 0.1em;
+    }
+  </style>
+</head>
+<body>
+  <div class="nav">
+    <a href="/observatory">&larr; observatory</a>
+    <span class="nav-center" id="nav-date">--</span>
+    <div class="nav-arrows">
+      <button class="nav-btn" id="btn-prev" disabled>&larr; prev</button>
+      <button class="nav-btn" id="btn-next" disabled>next &rarr;</button>
+    </div>
+  </div>
+
+  <div class="content">
+    <div class="question-text" id="question-text"></div>
+
+    <div class="section">
+      <div class="section-title">behavioral state</div>
+      <div class="radar-container">
+        <canvas id="radar-canvas" width="400" height="400"></canvas>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">session metrics</div>
+      <div class="metrics-grid" id="metrics-grid"></div>
+    </div>
+
+    <div class="section" id="observation-section" style="display:none">
+      <div class="section-title">observation (three frames)</div>
+      <div id="frames-container"></div>
+    </div>
+
+    <div class="section" id="predictions-section" style="display:none">
+      <div class="section-title">predictions from this entry</div>
+      <div id="predictions-container"></div>
+    </div>
+
+    <div class="section" id="suppressed-section" style="display:none">
+      <div class="section-title">suppressed question</div>
+      <div id="suppressed-container"></div>
+    </div>
+
+    <div class="loading" id="loading">loading...</div>
+  </div>
+
+  <script>
+    const DIMS = ['fluency', 'deliberation', 'revision', 'expression', 'commitment', 'volatility', 'thermal', 'presence'];
+
+    function drawRadar(entryState: any) {
+      const canvas = document.getElementById('radar-canvas') as HTMLCanvasElement;
+      const dpr = window.devicePixelRatio || 1;
+      const size = 400;
+      canvas.width = size * dpr;
+      canvas.height = size * dpr;
+      canvas.style.width = size + 'px';
+      canvas.style.height = size + 'px';
+      const ctx = canvas.getContext('2d')!;
+      ctx.scale(dpr, dpr);
+
+      const cx = size / 2;
+      const cy = size / 2;
+      const maxRadius = 160;
+      const n = DIMS.length;
+      const angleStep = (2 * Math.PI) / n;
+
+      // Map z-score to radius (0 at center, maxRadius at +/-3)
+      const maxZ = 3;
+      const toRadius = (z: number) => (Math.abs(z) / maxZ) * maxRadius;
+      const toRadiusSigned = (z: number) => ((z + maxZ) / (2 * maxZ)) * maxRadius;
+
+      // Reference rings at -2, -1, 0, 1, 2 sigma
+      for (const ring of [-2, -1, 0, 1, 2]) {
+        const r = toRadiusSigned(ring);
+        ctx.strokeStyle = ring === 0 ? '#2a2a2a' : '#151515';
+        ctx.lineWidth = ring === 0 ? 1.5 : 0.5;
+        ctx.beginPath();
+        for (let i = 0; i <= n; i++) {
+          const angle = -Math.PI / 2 + i * angleStep;
+          const x = cx + Math.cos(angle) * r;
+          const y = cy + Math.sin(angle) * r;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+
+        // Ring label
+        if (ring !== 0) {
+          const labelAngle = -Math.PI / 2;
+          ctx.fillStyle = '#222';
+          ctx.font = '8px SF Mono, monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText(`${ring > 0 ? '+' : ''}${ring}\u03c3`, cx + 14, cy - r + 3);
+        }
+      }
+
+      // Axes + labels
+      for (let i = 0; i < n; i++) {
+        const angle = -Math.PI / 2 + i * angleStep;
+        const ax = cx + Math.cos(angle) * maxRadius;
+        const ay = cy + Math.sin(angle) * maxRadius;
+
+        ctx.strokeStyle = '#1a1a1a';
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(ax, ay);
+        ctx.stroke();
+
+        // Label
+        const lx = cx + Math.cos(angle) * (maxRadius + 18);
+        const ly = cy + Math.sin(angle) * (maxRadius + 18);
+        ctx.fillStyle = '#444';
+        ctx.font = '9px SF Mono, monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(DIMS[i], lx, ly);
+      }
+
+      // Data polygon
+      const values = DIMS.map(d => entryState[d] as number);
+      ctx.fillStyle = 'rgba(58, 110, 165, 0.12)';
+      ctx.strokeStyle = '#3a6ea5';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (let i = 0; i < n; i++) {
+        const angle = -Math.PI / 2 + i * angleStep;
+        const r = toRadiusSigned(Math.max(-maxZ, Math.min(maxZ, values[i])));
+        const x = cx + Math.cos(angle) * r;
+        const y = cy + Math.sin(angle) * r;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Dots
+      for (let i = 0; i < n; i++) {
+        const angle = -Math.PI / 2 + i * angleStep;
+        const r = toRadiusSigned(Math.max(-maxZ, Math.min(maxZ, values[i])));
+        const x = cx + Math.cos(angle) * r;
+        const y = cy + Math.sin(angle) * r;
+        ctx.fillStyle = '#5a9ed6';
+        ctx.beginPath();
+        ctx.arc(x, y, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function formatMs(ms: number | null): string {
+      if (ms == null) return '--';
+      if (ms < 1000) return ms + 'ms';
+      return (ms / 1000).toFixed(1) + 's';
+    }
+    function formatPct(v: number | null): string {
+      if (v == null) return '--';
+      return (v * 100).toFixed(1) + '%';
+    }
+    function formatDensity(v: number | null): string {
+      if (v == null) return '--';
+      return (v * 100).toFixed(1) + '%';
+    }
+    function formatNum(v: number | null): string {
+      if (v == null) return '--';
+      return String(Math.round(v));
+    }
+    function formatFloat(v: number | null, dec = 1): string {
+      if (v == null) return '--';
+      return v.toFixed(dec);
+    }
+
+    function renderMetrics(s: any) {
+      if (!s) return;
+      const grid = document.getElementById('metrics-grid')!;
+
+      const groups = [
+        { title: 'Timing', metrics: [
+          { name: 'first keystroke', value: formatMs(s.firstKeystrokeMs) },
+          { name: 'total duration', value: formatMs(s.totalDurationMs) },
+          { name: 'active typing', value: formatMs(s.activeTypingMs) },
+        ]},
+        { title: 'Production', metrics: [
+          { name: 'chars typed', value: formatNum(s.totalCharsTyped) },
+          { name: 'final chars', value: formatNum(s.finalCharCount) },
+          { name: 'commitment', value: formatPct(s.commitmentRatio) },
+          { name: 'chars/min', value: formatNum(s.charsPerMinute) },
+          { name: 'words', value: formatNum(s.wordCount) },
+          { name: 'sentences', value: formatNum(s.sentenceCount) },
+        ]},
+        { title: 'Revision', metrics: [
+          { name: 'small deletions', value: formatNum(s.smallDeletionCount) },
+          { name: 'large deletions', value: formatNum(s.largeDeletionCount) },
+          { name: 'large del chars', value: formatNum(s.largeDeletionChars) },
+        ]},
+        { title: 'Engagement', metrics: [
+          { name: 'pause count', value: formatNum(s.pauseCount) },
+          { name: 'total pause', value: formatMs(s.totalPauseMs) },
+          { name: 'tab-away count', value: formatNum(s.tabAwayCount) },
+          { name: 'tab-away time', value: formatMs(s.totalTabAwayMs) },
+        ]},
+        { title: 'Fluency', metrics: [
+          { name: 'P-burst count', value: formatNum(s.pBurstCount) },
+          { name: 'avg P-burst len', value: formatFloat(s.avgPBurstLength) },
+          { name: 'IKI mean', value: formatMs(s.interKeyIntervalMean) },
+          { name: 'IKI std', value: formatMs(s.interKeyIntervalStd) },
+        ]},
+        { title: 'Emotion (NRC)', metrics: [
+          { name: 'anger', value: formatDensity(s.nrcAngerDensity) },
+          { name: 'fear', value: formatDensity(s.nrcFearDensity) },
+          { name: 'joy', value: formatDensity(s.nrcJoyDensity) },
+          { name: 'sadness', value: formatDensity(s.nrcSadnessDensity) },
+          { name: 'trust', value: formatDensity(s.nrcTrustDensity) },
+          { name: 'anticipation', value: formatDensity(s.nrcAnticipationDensity) },
+        ]},
+        { title: 'Linguistic', metrics: [
+          { name: 'cognitive', value: formatDensity(s.cognitiveDensity) },
+          { name: 'hedging', value: formatDensity(s.hedgingDensity) },
+          { name: 'first person', value: formatDensity(s.firstPersonDensity) },
+        ]},
+      ];
+
+      grid.innerHTML = groups.map(g =>
+        `<div class="metric-group-title">${g.title}</div>` +
+        g.metrics.map(m =>
+          `<div class="metric-card"><div class="metric-name">${m.name}</div><div class="metric-value">${m.value}</div></div>`
+        ).join('')
+      ).join('');
+    }
+
+    function parseFrames(text: string): Array<{ label: string; cls: string; labelCls: string; body: string }> {
+      const frames: Array<{ label: string; cls: string; labelCls: string; body: string }> = [];
+      const framePatterns = [
+        { marker: '**FRAME A', label: 'Frame A — Charitable', cls: 'frame-card-a', labelCls: 'frame-label-a' },
+        { marker: '**FRAME B', label: 'Frame B — Avoidance', cls: 'frame-card-b', labelCls: 'frame-label-b' },
+        { marker: '**FRAME C', label: 'Frame C — Mundane', cls: 'frame-card-c', labelCls: 'frame-label-c' },
+      ];
+
+      for (let i = 0; i < framePatterns.length; i++) {
+        const pat = framePatterns[i];
+        const idx = text.indexOf(pat.marker);
+        if (idx === -1) continue;
+
+        // Find end: next frame marker or end of string
+        let endIdx = text.length;
+        for (let j = i + 1; j < framePatterns.length; j++) {
+          const nextIdx = text.indexOf(framePatterns[j].marker);
+          if (nextIdx !== -1) { endIdx = nextIdx; break; }
+        }
+
+        let body = text.slice(idx, endIdx).trim();
+        // Remove the marker line
+        const colonIdx = body.indexOf(':');
+        if (colonIdx !== -1) {
+          body = body.slice(colonIdx + 1).trim();
+          // Remove trailing ** if present
+          body = body.replace(/^\*\*\s*/, '');
+        }
+
+        frames.push({ label: pat.label, cls: pat.cls, labelCls: pat.labelCls, body });
+      }
+
+      // Fallback: if no frames parsed, show the whole text
+      if (frames.length === 0) {
+        frames.push({ label: 'Observation', cls: '', labelCls: '', body: text });
+      }
+
+      return frames;
+    }
+
+    function renderObservation(obs: any) {
+      if (!obs) return;
+      const section = document.getElementById('observation-section')!;
+      section.style.display = '';
+      const container = document.getElementById('frames-container')!;
+      const frames = parseFrames(obs.observation_text);
+      container.innerHTML = frames.map(f =>
+        `<div class="frame-card ${f.cls}">
+          <div class="frame-label ${f.labelCls}">${f.label}</div>
+          ${f.body}
+        </div>`
+      ).join('');
+    }
+
+    function renderPredictions(predictions: any[]) {
+      if (!predictions || predictions.length === 0) return;
+      const section = document.getElementById('predictions-section')!;
+      section.style.display = '';
+      const container = document.getElementById('predictions-container')!;
+      container.innerHTML = predictions.map(p => {
+        const statusClass = `status-${p.statusCode}`;
+        return `<div class="prediction-card">
+          <div class="prediction-header">
+            <span class="prediction-hypothesis">${p.hypothesis}</span>
+            <span class="status-badge ${statusClass}">${p.statusCode}</span>
+          </div>
+          ${p.favoredFrame ? `<div class="prediction-meta">Frame ${p.favoredFrame}${p.targetTopic ? ' \u00b7 ' + p.targetTopic : ''}</div>` : ''}
+          ${p.gradeRationale ? `<div class="prediction-rationale">${p.gradeRationale}</div>` : ''}
+        </div>`;
+      }).join('');
+    }
+
+    function renderSuppressed(sq: any) {
+      if (!sq) return;
+      const section = document.getElementById('suppressed-section')!;
+      section.style.display = '';
+      const container = document.getElementById('suppressed-container')!;
+      container.innerHTML = `<div class="suppressed-block">
+        <div class="suppressed-label">what the system wanted to ask</div>
+        ${sq.suppressed_text}
+      </div>`;
+    }
+
+    async function load() {
+      const pathParts = window.location.pathname.split('/');
+      const id = pathParts[pathParts.length - 1];
+
+      const res = await fetch(`/api/observatory/entry/${id}`);
+      if (!res.ok) {
+        document.getElementById('loading')!.textContent = 'entry not found';
+        return;
+      }
+
+      const data = await res.json();
+      document.getElementById('loading')!.style.display = 'none';
+
+      // Nav
+      const navDate = document.getElementById('nav-date')!;
+      navDate.textContent = `Entry ${data.entryState.response_id} \u00b7 ${data.entryState.date}`;
+
+      const btnPrev = document.getElementById('btn-prev') as HTMLButtonElement;
+      const btnNext = document.getElementById('btn-next') as HTMLButtonElement;
+      if (data.navigation.prev) {
+        btnPrev.disabled = false;
+        btnPrev.addEventListener('click', () => {
+          window.location.href = `/observatory/entry/${data.navigation.prev}`;
+        });
+      }
+      if (data.navigation.next) {
+        btnNext.disabled = false;
+        btnNext.addEventListener('click', () => {
+          window.location.href = `/observatory/entry/${data.navigation.next}`;
+        });
+      }
+
+      // Question
+      document.getElementById('question-text')!.textContent = data.entryState.question_text;
+
+      // Radar
+      drawRadar(data.entryState);
+
+      // Metrics
+      renderMetrics(data.sessionSummary);
+
+      // Observation
+      renderObservation(data.observation);
+
+      // Predictions
+      renderPredictions(data.predictions);
+
+      // Suppressed question
+      renderSuppressed(data.suppressedQuestion);
+    }
+
+    load();
+
+    // Keyboard navigation
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowLeft') {
+        const btn = document.getElementById('btn-prev') as HTMLButtonElement;
+        if (!btn.disabled) btn.click();
+      } else if (e.key === 'ArrowRight') {
+        const btn = document.getElementById('btn-next') as HTMLButtonElement;
+        if (!btn.disabled) btn.click();
+      }
+    });
+  </script>
+</body>
+</html>
