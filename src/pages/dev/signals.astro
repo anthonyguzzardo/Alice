@@ -65,8 +65,11 @@
 
       body {
         display: flex;
+        justify-content: center;
         padding: 2rem;
         gap: 2rem;
+        max-width: 1200px;
+        margin: 0 auto;
       }
 
       .write-col {
@@ -81,6 +84,17 @@
         align-items: baseline;
         gap: 1.5rem;
         margin-bottom: 1.5rem;
+      }
+
+      .back-btn {
+        color: var(--text-muted);
+        text-decoration: none;
+        font-size: 1.3rem;
+        transition: color 0.2s;
+      }
+
+      .back-btn:hover {
+        color: var(--text);
       }
 
       .header h1 {
@@ -134,6 +148,16 @@
         border-color: var(--negative);
       }
 
+      .prompt-question {
+        font-family: 'EB Garamond', Georgia, serif;
+        font-size: 1.6rem;
+        font-style: italic;
+        font-weight: 400;
+        color: var(--text-muted);
+        margin-bottom: 1rem;
+        line-height: 1.5;
+      }
+
       .prompt-label {
         font-size: 1rem;
         color: var(--text-faint);
@@ -158,6 +182,43 @@
       }
 
       textarea:focus { border-color: var(--border-focus); }
+
+      .submit-row {
+        margin-top: 1rem;
+      }
+
+      .submit-row.hidden {
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.6s ease;
+      }
+
+      .submit-row.visible {
+        opacity: 1;
+        pointer-events: auto;
+        transition: opacity 0.6s ease;
+      }
+
+      .submit-btn {
+        background: var(--panel-bg);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        color: var(--text);
+        font-family: inherit;
+        font-size: 1.1rem;
+        padding: 0.6rem 1.8rem;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .submit-btn:hover:not(:disabled) {
+        border-color: var(--border-focus);
+      }
+
+      .submit-btn:disabled {
+        opacity: 0.3;
+        cursor: default;
+      }
 
       .metrics-col {
         width: 380px;
@@ -237,32 +298,144 @@
         margin-top: 0.5rem;
         font-style: italic;
       }
+
+      .info-toggle {
+        background: none;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        color: var(--text-faint);
+        font-family: inherit;
+        font-size: 0.85rem;
+        padding: 0.3rem 0.8rem;
+        cursor: pointer;
+        width: 100%;
+        text-align: left;
+        margin-bottom: 0.8rem;
+        transition: all 0.2s;
+      }
+
+      .info-toggle:hover {
+        color: var(--text-muted);
+        border-color: var(--border-focus);
+      }
+
+      .info-panel {
+        display: none;
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        line-height: 1.6;
+      }
+
+      .info-panel.open { display: block; }
+
+      .info-panel dt {
+        color: var(--text);
+        font-weight: 500;
+        margin-top: 0.8rem;
+      }
+
+      .info-panel dt:first-child { margin-top: 0; }
+
+      .info-panel dd {
+        margin-left: 0;
+        margin-bottom: 0.4rem;
+        color: var(--text-muted);
+      }
+
+      .info-panel .cite {
+        color: var(--text-faint);
+        font-size: 0.8rem;
+      }
     </style>
   </head>
   <body>
     <div class="write-col">
       <div class="header">
+        <a href="/" class="back-btn" aria-label="Back to Alice">&larr;</a>
         <h1>Signal Sandbox</h1>
         <div class="mode-toggle">
           <button class="mode-btn active" id="mode-journal">Journal</button>
           <button class="mode-btn" id="mode-calib">Calibration</button>
         </div>
         <button class="reset-btn" id="reset">Reset</button>
+        <button class="mode-btn" id="theme-toggle" style="margin-left: 0.5rem;"></button>
       </div>
+      <div class="prompt-question" id="prompt-question"></div>
       <div class="prompt-label" id="prompt-label">Write anything. Metrics update live.</div>
       <textarea id="input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" autofocus></textarea>
+      <div class="submit-row hidden" id="submit-row">
+        <button class="submit-btn" id="submit" disabled>Submit</button>
+      </div>
     </div>
 
-    <div class="metrics-col" id="metrics">
-      <!-- Populated by JS -->
+    <div class="metrics-col">
+      <button class="info-toggle" id="info-toggle">What do these numbers mean?</button>
+      <div class="info-panel" id="info-panel">
+        <dl>
+          <dt>P-Burst (Production Burst)</dt>
+          <dd>A continuous run of typing with no pause longer than 2 seconds. Each burst roughly maps to one "thought unit." Longer bursts = more fluent, ideas flowing. Short bursts = more fragmented, stop-and-think processing.</dd>
+          <dd class="cite">Chenoweth & Hayes, 2001</dd>
+
+          <dt>IKI (Inter-Key Interval)</dt>
+          <dd>Milliseconds between consecutive keystrokes, capped at 5s. The mean captures average hesitation — higher = more deliberation per keystroke. The std dev captures consistency — high means you alternate between rapid and slow typing.</dd>
+          <dd class="cite">Epp et al., 2011 (CHI)</dd>
+
+          <dt>Commitment Ratio</dt>
+          <dd>Final character count divided by total characters typed (including deleted). Low ratio = heavy self-editing. A ratio of 1.0 means you kept everything you typed.</dd>
+
+          <dt>Large vs Small Deletions</dt>
+          <dd>Small deletions (&lt;10 chars) are corrections — typos, word swaps. Large deletions (&ge;10 chars) are revisions — rethinking what you meant. The split between first-half and second-half deletion chars shows whether revision happens early (planning) or late (restructuring).</dd>
+          <dd class="cite">Faigley & Witte, 1981</dd>
+
+          <dt>Revision Chains</dt>
+          <dd>Sequential deletion keystrokes within 500ms of each other count as one chain. More chains = more revision episodes. Longer chains = deeper per-episode rethinking.</dd>
+          <dd class="cite">Leijten & Van Waes, 2013</dd>
+
+          <dt>Linguistic Densities</dt>
+          <dd>Word category counts divided by total words. NRC emotion categories (anger, fear, joy, sadness, trust, anticipation) come from the NRC Emotion Lexicon. Cognitive, hedging, and first-person densities come from Pennebaker's LIWC categories. Slopes of these over time are the real signal.</dd>
+          <dd class="cite">Mohammad & Turney, 2013; Pennebaker, 2011</dd>
+
+          <dt>Session Delta</dt>
+          <dd>Journal value minus calibration value across 8 dimensions. Isolates what the reflective question provoked beyond your neutral writing behavior. Same person, same keyboard, same day — any shift came from the prompt, not the typist. In production, these get z-normalized against your personal history after 10+ sessions.</dd>
+        </dl>
+      </div>
+      <div id="metrics">
+        <!-- Populated by JS -->
+      </div>
     </div>
 
     <script>
       const textarea = document.getElementById('input') as HTMLTextAreaElement;
       const metricsEl = document.getElementById('metrics')!;
+      const infoToggle = document.getElementById('info-toggle')!;
+      const infoPanel = document.getElementById('info-panel')!;
+
+      // Theme toggle
+      const themeBtn = document.getElementById('theme-toggle')!;
+      const savedTheme = localStorage.getItem('alice-theme') || 'light';
+      document.documentElement.setAttribute('data-theme', savedTheme);
+      themeBtn.textContent = savedTheme === 'dark' ? '☀' : '☾';
+
+      themeBtn.addEventListener('click', () => {
+        const current = document.documentElement.getAttribute('data-theme');
+        const next = current === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        localStorage.setItem('alice-theme', next);
+        themeBtn.textContent = next === 'dark' ? '☀' : '☾';
+      });
+
+      infoToggle.addEventListener('click', () => {
+        infoPanel.classList.toggle('open');
+        infoToggle.textContent = infoPanel.classList.contains('open')
+          ? 'Hide explanations'
+          : 'What do these numbers mean?';
+      });
       const resetBtn = document.getElementById('reset')!;
+      const submitBtn = document.getElementById('submit') as HTMLButtonElement;
+      const submitRow = document.getElementById('submit-row')!;
       const modeJournalBtn = document.getElementById('mode-journal')!;
       const modeCalibBtn = document.getElementById('mode-calib')!;
+      const promptQuestion = document.getElementById('prompt-question')!;
       const promptLabel = document.getElementById('prompt-label')!;
 
       // ── State ──────────────────────────────────────────────
@@ -326,11 +499,39 @@
         mode = m;
         modeJournalBtn.classList.toggle('active', m === 'journal');
         modeCalibBtn.classList.toggle('active', m === 'calibration');
-        promptLabel.textContent = m === 'calibration'
-          ? 'Calibration mode — write something neutral.'
-          : 'Journal mode — write reflectively.';
+        updatePrompt();
 
         resetSession();
+      }
+
+      const journalPrompts = [
+        'This is a deep question?',
+        'How does this question make you feel?',
+        'Write something that matters. Or don\'t.',
+        'What if you just typed words right now?',
+        'Reflect on the act of reflecting.',
+      ];
+
+      const calibrationPrompts = [
+        'The word color is spelled in this sentence.',
+        'Type some words here. Any words. These ones work.',
+        'This prompt is intentionally unremarkable.',
+        'Describe something you don\'t care about.',
+        'Write normally. Whatever that means.',
+      ];
+
+      function pickRandom(arr: string[]): string {
+        return arr[Math.floor(Math.random() * arr.length)];
+      }
+
+      function updatePrompt() {
+        if (mode === 'journal') {
+          promptQuestion.textContent = pickRandom(journalPrompts);
+          promptLabel.textContent = 'Journal mode — write reflectively.';
+        } else {
+          promptQuestion.textContent = pickRandom(calibrationPrompts);
+          promptLabel.textContent = 'Calibration mode — write something neutral.';
+        }
       }
 
       modeJournalBtn.addEventListener('click', () => setMode('journal'));
@@ -340,6 +541,27 @@
         savedCalibMetrics = null;
         savedJournalMetrics = null;
         resetSession();
+      });
+
+      submitBtn.addEventListener('click', async () => {
+        if (!textarea.value.trim()) return;
+
+        // Fetch final linguistic densities before snapshot
+        await fetchLinguistic(textarea.value);
+
+        const snapshot = { ...computeAllMetrics(), ...linguisticDensities };
+        if (mode === 'calibration') {
+          savedCalibMetrics = snapshot;
+          setMode('journal');
+        } else {
+          savedJournalMetrics = snapshot;
+          if (!savedCalibMetrics) {
+            setMode('calibration');
+          } else {
+            // Both done — just reset the textarea, keep deltas visible
+            resetSession();
+          }
+        }
       });
 
       function resetSession() {
@@ -377,6 +599,9 @@
         scrollBackCount = 0;
         lastScrollTop = 0;
         linguisticDensities = {};
+        submitRow.classList.add('hidden');
+        submitRow.classList.remove('visible');
+        submitBtn.disabled = true;
         renderMetrics();
         textarea.focus();
       }
@@ -454,6 +679,13 @@
         }
 
         lastTextLength = currentLength;
+
+        // Enable/show submit
+        submitBtn.disabled = !textarea.value.trim();
+        if (textarea.value.trim() && submitRow.classList.contains('hidden')) {
+          submitRow.classList.remove('hidden');
+          submitRow.classList.add('visible');
+        }
 
         if (!firstKeystrokeSent && delta > 0) {
           firstKeystrokeTime = Date.now();
@@ -781,6 +1013,7 @@
       }
 
       // Initial render
+      updatePrompt();
       renderMetrics();
 
       // Tick duration every second
