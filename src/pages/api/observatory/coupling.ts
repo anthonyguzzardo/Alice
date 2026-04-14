@@ -31,11 +31,19 @@ export const GET: APIRoute = async () => {
       ORDER BY dimension
     `).all(entryCount);
 
+    const theories = simDb.prepare(`
+      SELECT theory_key, description, alpha, beta, total_predictions,
+             log_bayes_factor, status
+      FROM tb_theory_confidence
+      ORDER BY ABS(log_bayes_factor) DESC
+    `).all();
+
     return new Response(JSON.stringify({
       entryCount,
       couplings,
       emotionCouplings,
       dynamics,
+      theories,
     }, null, 2), {
       headers: { 'Content-Type': 'application/json' },
     });

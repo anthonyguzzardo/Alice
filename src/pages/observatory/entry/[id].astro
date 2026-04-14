@@ -2,9 +2,9 @@
 /**
  * Observatory — Entry Drill-Down
  *
- * Everything about a single entry: 8D radar, session metrics,
- * three-frame observation, predictions, suppressed question.
- * The system shows competing interpretations. You decide.
+ * Question Alice asked → Bob's three-frame observation →
+ * predictions → suppressed question → collapsible behavioral detail.
+ * Narrative first, math second.
  */
 ---
 <html lang="en">
@@ -58,18 +58,19 @@
       margin: 0 auto;
       padding: 24px;
     }
+
+    /* --- Question (the lead) --- */
     .question-text {
-      color: #555;
-      font-size: 12px;
+      color: #777;
+      font-size: 14px;
       font-style: italic;
-      padding: 16px 0 24px;
-      border-bottom: 1px solid #111;
-      margin-bottom: 24px;
-      line-height: 1.6;
+      padding: 20px 0 28px;
+      border-bottom: 1px solid #1a1a1a;
+      margin-bottom: 28px;
+      line-height: 1.7;
     }
-    .section {
-      margin-bottom: 36px;
-    }
+
+    .section { margin-bottom: 36px; }
     .section-title {
       color: #444;
       font-size: 10px;
@@ -79,42 +80,10 @@
       padding-bottom: 6px;
       border-bottom: 1px solid #1a1a1a;
     }
-    .radar-container {
-      display: flex;
-      justify-content: center;
-      margin-bottom: 8px;
-    }
-    .metrics-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 8px;
-    }
-    .metric-card {
-      background: #0f0f0f;
-      padding: 8px 12px;
-      border: 1px solid #141414;
-    }
-    .metric-name {
-      color: #3a3a3a;
-      font-size: 8px;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      margin-bottom: 4px;
-    }
-    .metric-value {
-      color: #777;
-      font-size: 13px;
-    }
-    .metric-group-title {
-      grid-column: 1 / -1;
-      color: #333;
-      font-size: 9px;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      padding: 8px 0 4px;
-    }
+
+    /* --- Three frames --- */
     .frame-card {
-      background: #0f0f0f;
+      background: #0c0c0c;
       border: 1px solid #1a1a1a;
       padding: 16px 20px;
       margin-bottom: 8px;
@@ -134,8 +103,10 @@
     .frame-label-a { color: #3a6ea5; }
     .frame-label-b { color: #aa8833; }
     .frame-label-c { color: #5a7a5a; }
+
+    /* --- Predictions --- */
     .prediction-card {
-      background: #0f0f0f;
+      background: #0c0c0c;
       border: 1px solid #1a1a1a;
       padding: 12px 16px;
       margin-bottom: 8px;
@@ -178,6 +149,8 @@
       border-top: 1px solid #151515;
       line-height: 1.5;
     }
+
+    /* --- Suppressed question --- */
     .suppressed-block {
       background: #0c0c0c;
       border-left: 3px solid #333;
@@ -194,6 +167,75 @@
       text-transform: uppercase;
       margin-bottom: 8px;
     }
+
+    /* --- Collapsible detail section --- */
+    .detail-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      padding: 12px 0;
+      border-bottom: 1px solid #1a1a1a;
+      margin-bottom: 16px;
+      user-select: none;
+    }
+    .detail-toggle:hover .section-title { color: #666; }
+    .detail-toggle .section-title {
+      margin-bottom: 0;
+      padding-bottom: 0;
+      border-bottom: none;
+    }
+    .detail-toggle-arrow {
+      color: #333;
+      font-size: 10px;
+      transition: transform 0.2s;
+    }
+    .detail-toggle-arrow.open {
+      transform: rotate(90deg);
+    }
+    .detail-content {
+      display: none;
+    }
+    .detail-content.open {
+      display: block;
+    }
+
+    /* --- Radar + metrics --- */
+    .radar-container {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 8px;
+    }
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+    .metric-card {
+      background: #0f0f0f;
+      padding: 8px 12px;
+      border: 1px solid #141414;
+    }
+    .metric-name {
+      color: #3a3a3a;
+      font-size: 8px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .metric-value {
+      color: #777;
+      font-size: 13px;
+    }
+    .metric-group-title {
+      grid-column: 1 / -1;
+      color: #333;
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 8px 0 4px;
+    }
+
     .loading {
       color: #333;
       text-align: center;
@@ -213,33 +255,39 @@
   </div>
 
   <div class="content">
+    <!-- The question Alice asked -->
     <div class="question-text" id="question-text"></div>
 
-    <div class="section">
-      <div class="section-title">behavioral state</div>
-      <div class="radar-container">
-        <canvas id="radar-canvas" width="400" height="400"></canvas>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-title">session metrics</div>
-      <div class="metrics-grid" id="metrics-grid"></div>
-    </div>
-
+    <!-- Bob's observation (three frames) — the main content -->
     <div class="section" id="observation-section" style="display:none">
-      <div class="section-title">observation (three frames)</div>
+      <div class="section-title">observation</div>
       <div id="frames-container"></div>
     </div>
 
+    <!-- Predictions generated from this entry -->
     <div class="section" id="predictions-section" style="display:none">
-      <div class="section-title">predictions from this entry</div>
+      <div class="section-title">predictions</div>
       <div id="predictions-container"></div>
     </div>
 
+    <!-- What Alice wanted to ask but didn't -->
     <div class="section" id="suppressed-section" style="display:none">
       <div class="section-title">suppressed question</div>
       <div id="suppressed-container"></div>
+    </div>
+
+    <!-- Behavioral detail (collapsed by default) -->
+    <div class="section">
+      <div class="detail-toggle" id="detail-toggle">
+        <span class="detail-toggle-arrow" id="detail-arrow">&#9654;</span>
+        <span class="section-title">behavioral detail</span>
+      </div>
+      <div class="detail-content" id="detail-content">
+        <div class="radar-container">
+          <canvas id="radar-canvas" width="400" height="400"></canvas>
+        </div>
+        <div class="metrics-grid" id="metrics-grid"></div>
+      </div>
     </div>
 
     <div class="loading" id="loading">loading...</div>
@@ -264,13 +312,10 @@
       const maxRadius = 160;
       const n = DIMS.length;
       const angleStep = (2 * Math.PI) / n;
-
-      // Map z-score to radius (0 at center, maxRadius at +/-3)
       const maxZ = 3;
-      const toRadius = (z: number) => (Math.abs(z) / maxZ) * maxRadius;
       const toRadiusSigned = (z: number) => ((z + maxZ) / (2 * maxZ)) * maxRadius;
 
-      // Reference rings at -2, -1, 0, 1, 2 sigma
+      // Reference rings
       for (const ring of [-2, -1, 0, 1, 2]) {
         const r = toRadiusSigned(ring);
         ctx.strokeStyle = ring === 0 ? '#2a2a2a' : '#151515';
@@ -285,9 +330,7 @@
         }
         ctx.stroke();
 
-        // Ring label
         if (ring !== 0) {
-          const labelAngle = -Math.PI / 2;
           ctx.fillStyle = '#222';
           ctx.font = '8px SF Mono, monospace';
           ctx.textAlign = 'center';
@@ -308,7 +351,6 @@
         ctx.lineTo(ax, ay);
         ctx.stroke();
 
-        // Label
         const lx = cx + Math.cos(angle) * (maxRadius + 18);
         const ly = cy + Math.sin(angle) * (maxRadius + 18);
         ctx.fillStyle = '#444';
@@ -358,10 +400,6 @@
       if (v == null) return '--';
       return (v * 100).toFixed(1) + '%';
     }
-    function formatDensity(v: number | null): string {
-      if (v == null) return '--';
-      return (v * 100).toFixed(1) + '%';
-    }
     function formatNum(v: number | null): string {
       if (v == null) return '--';
       return String(Math.round(v));
@@ -407,17 +445,17 @@
           { name: 'IKI std', value: formatMs(s.interKeyIntervalStd) },
         ]},
         { title: 'Emotion (NRC)', metrics: [
-          { name: 'anger', value: formatDensity(s.nrcAngerDensity) },
-          { name: 'fear', value: formatDensity(s.nrcFearDensity) },
-          { name: 'joy', value: formatDensity(s.nrcJoyDensity) },
-          { name: 'sadness', value: formatDensity(s.nrcSadnessDensity) },
-          { name: 'trust', value: formatDensity(s.nrcTrustDensity) },
-          { name: 'anticipation', value: formatDensity(s.nrcAnticipationDensity) },
+          { name: 'anger', value: formatPct(s.nrcAngerDensity) },
+          { name: 'fear', value: formatPct(s.nrcFearDensity) },
+          { name: 'joy', value: formatPct(s.nrcJoyDensity) },
+          { name: 'sadness', value: formatPct(s.nrcSadnessDensity) },
+          { name: 'trust', value: formatPct(s.nrcTrustDensity) },
+          { name: 'anticipation', value: formatPct(s.nrcAnticipationDensity) },
         ]},
         { title: 'Linguistic', metrics: [
-          { name: 'cognitive', value: formatDensity(s.cognitiveDensity) },
-          { name: 'hedging', value: formatDensity(s.hedgingDensity) },
-          { name: 'first person', value: formatDensity(s.firstPersonDensity) },
+          { name: 'cognitive', value: formatPct(s.cognitiveDensity) },
+          { name: 'hedging', value: formatPct(s.hedgingDensity) },
+          { name: 'first person', value: formatPct(s.firstPersonDensity) },
         ]},
       ];
 
@@ -442,7 +480,6 @@
         const idx = text.indexOf(pat.marker);
         if (idx === -1) continue;
 
-        // Find end: next frame marker or end of string
         let endIdx = text.length;
         for (let j = i + 1; j < framePatterns.length; j++) {
           const nextIdx = text.indexOf(framePatterns[j].marker);
@@ -450,18 +487,15 @@
         }
 
         let body = text.slice(idx, endIdx).trim();
-        // Remove the marker line
         const colonIdx = body.indexOf(':');
         if (colonIdx !== -1) {
           body = body.slice(colonIdx + 1).trim();
-          // Remove trailing ** if present
           body = body.replace(/^\*\*\s*/, '');
         }
 
         frames.push({ label: pat.label, cls: pat.cls, labelCls: pat.labelCls, body });
       }
 
-      // Fallback: if no frames parsed, show the whole text
       if (frames.length === 0) {
         frames.push({ label: 'Observation', cls: '', labelCls: '', body: text });
       }
@@ -507,7 +541,7 @@
       section.style.display = '';
       const container = document.getElementById('suppressed-container')!;
       container.innerHTML = `<div class="suppressed-block">
-        <div class="suppressed-label">what the system wanted to ask</div>
+        <div class="suppressed-label">what alice wanted to ask but didn't</div>
         ${sq.suppressed_text}
       </div>`;
     }
@@ -544,16 +578,10 @@
         });
       }
 
-      // Question
+      // Question (the lead)
       document.getElementById('question-text')!.textContent = data.entryState.question_text;
 
-      // Radar
-      drawRadar(data.entryState);
-
-      // Metrics
-      renderMetrics(data.sessionSummary);
-
-      // Observation
+      // Observation — immediately after question
       renderObservation(data.observation);
 
       // Predictions
@@ -561,9 +589,21 @@
 
       // Suppressed question
       renderSuppressed(data.suppressedQuestion);
+
+      // Behavioral detail (collapsed)
+      drawRadar(data.entryState);
+      renderMetrics(data.sessionSummary);
     }
 
     load();
+
+    // Collapsible detail section
+    document.getElementById('detail-toggle')!.addEventListener('click', () => {
+      const content = document.getElementById('detail-content')!;
+      const arrow = document.getElementById('detail-arrow')!;
+      content.classList.toggle('open');
+      arrow.classList.toggle('open');
+    });
 
     // Keyboard navigation
     document.addEventListener('keydown', (e) => {

@@ -2,9 +2,10 @@
 /**
  * Observatory — Macro View
  *
- * 8 stacked behavioral sparklines across all entries.
- * Click any point to drill into that entry.
- * The system shows trajectories, not verdicts.
+ * 8 stacked behavioral sparklines with narrative annotations.
+ * Event markers show when predictions resolve and theories retire.
+ * Hover any point to see the question Alice asked.
+ * Click to drill into that entry.
  */
 ---
 <html lang="en">
@@ -41,8 +42,29 @@
       letter-spacing: 0.1em;
       text-transform: uppercase;
     }
+
+    /* --- Event strip --- */
+    .event-strip {
+      padding: 0 0 0 110px;
+      margin: 12px 24px 0 0;
+    }
+    .event-strip-label {
+      color: #333;
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 0 0 4px 24px;
+    }
+    .event-strip-canvas {
+      width: calc(100% - 60px);
+      height: 24px;
+      display: block;
+      cursor: crosshair;
+    }
+
+    /* --- Sparklines --- */
     .sparkline-stack {
-      padding: 8px 0;
+      padding: 0;
     }
     .sparkline-row {
       display: flex;
@@ -73,6 +95,8 @@
       font-size: 10px;
       flex-shrink: 0;
     }
+
+    /* --- Convergence --- */
     .convergence-section {
       padding: 0 0 0 110px;
       margin: 0 24px 0 0;
@@ -89,9 +113,11 @@
       height: 20px;
       display: block;
     }
+
+    /* --- Date axis --- */
     .date-axis {
       display: flex;
-      padding: 6px 0 16px 0;
+      padding: 6px 0 8px 0;
       margin-left: 134px;
       margin-right: 84px;
     }
@@ -105,17 +131,116 @@
       width: 100%;
       height: 14px;
     }
+
+    /* --- Narrative feed --- */
+    .narrative-section {
+      margin: 0 24px 24px;
+      padding: 16px 0 0;
+      border-top: 1px solid #1a1a1a;
+    }
+    .narrative-label {
+      color: #333;
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+      padding-left: 24px;
+    }
+    .narrative-feed {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      max-height: 280px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: #222 #0a0a0a;
+    }
+    .narrative-entry {
+      display: flex;
+      gap: 12px;
+      padding: 6px 24px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .narrative-entry:hover {
+      background: #0f0f0f;
+    }
+    .narrative-entry.has-events {
+      background: #0c0c0c;
+    }
+    .narrative-date {
+      color: #333;
+      font-size: 9px;
+      flex-shrink: 0;
+      width: 50px;
+      padding-top: 1px;
+    }
+    .narrative-question {
+      color: #555;
+      font-size: 10px;
+      line-height: 1.5;
+      flex: 1;
+    }
+    .narrative-events {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      margin-top: 4px;
+    }
+    .narrative-event {
+      font-size: 9px;
+      color: #555;
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+    }
+    .event-marker-confirmed {
+      color: #5a8a5a;
+    }
+    .event-marker-falsified {
+      color: #8a5a5a;
+    }
+    .event-marker-retired {
+      color: #8a8a5a;
+    }
+    .narrative-convergence {
+      flex-shrink: 0;
+      width: 4px;
+      border-radius: 1px;
+      align-self: stretch;
+    }
+
+    /* --- Tooltip --- */
     .tooltip {
       display: none;
       position: fixed;
-      background: #1a1a1a;
-      border: 1px solid #333;
-      padding: 8px 12px;
+      background: #141414;
+      border: 1px solid #2a2a2a;
+      padding: 10px 14px;
       font-size: 10px;
       color: #888;
       pointer-events: none;
       z-index: 100;
-      line-height: 1.6;
+      line-height: 1.7;
+      max-width: 340px;
+    }
+    .tooltip-question {
+      color: #777;
+      font-style: italic;
+      margin-bottom: 6px;
+      line-height: 1.5;
+    }
+    .tooltip-dim {
+      color: #666;
+    }
+    .tooltip-events {
+      margin-top: 6px;
+      padding-top: 6px;
+      border-top: 1px solid #222;
+    }
+    .tooltip-event {
+      font-size: 9px;
+      margin-top: 2px;
     }
   </style>
 </head>
@@ -124,6 +249,12 @@
     <a href="/">&larr; journal</a>
     <span class="nav-title">observatory</span>
     <a href="/observatory/coupling">coupling &rarr;</a>
+  </div>
+
+  <!-- Event strip: prediction/theory markers across timeline -->
+  <div class="event-strip">
+    <div class="event-strip-label">events</div>
+    <canvas class="event-strip-canvas" id="event-strip-canvas"></canvas>
   </div>
 
   <div class="sparkline-stack" id="sparkline-stack"></div>
@@ -137,11 +268,17 @@
     <div class="date-axis-container" id="date-axis"></div>
   </div>
 
+  <!-- Narrative feed: question + events per day -->
+  <div class="narrative-section">
+    <div class="narrative-label">what alice asked &middot; what happened</div>
+    <div class="narrative-feed" id="narrative-feed"></div>
+  </div>
+
   <div class="tooltip" id="tooltip"></div>
 
   <script>
     const DIMS = ['fluency', 'deliberation', 'revision', 'expression', 'commitment', 'volatility', 'thermal', 'presence'];
-    const COLORS = {
+    const COLORS: Record<string, string> = {
       fluency:      '#3a6ea5',
       deliberation: '#8a5a44',
       revision:     '#5a7a5a',
@@ -151,7 +288,7 @@
       thermal:      '#8a3a3a',
       presence:     '#4a6a4a',
     };
-    const DOT_COLORS = {
+    const DOT_COLORS: Record<string, string> = {
       fluency:      '#5a9ed6',
       deliberation: '#c4836a',
       revision:     '#7aaa7a',
@@ -162,9 +299,20 @@
       presence:     '#6a9a6a',
     };
 
+    interface EntryEvent {
+      type: 'confirmed' | 'falsified' | 'theory_retired';
+      hypothesis?: string;
+      originDate?: string;
+      rationale?: string;
+      theoryKey?: string;
+      bayesFactor?: number;
+      predictionCount?: number;
+    }
+
     interface EntryState {
       response_id: number;
       date: string;
+      question: string;
       fluency: number;
       deliberation: number;
       revision: number;
@@ -174,10 +322,46 @@
       thermal: number;
       presence: number;
       convergence: number;
+      events?: EntryEvent[];
+      suppressed?: string;
     }
 
     // Hit targets for click-to-navigate
-    const hitTargets: Map<string, Array<{ x: number; responseId: number; value: number }>> = new Map();
+    const hitTargets: Map<string, Array<{ x: number; idx: number; responseId: number; value: number }>> = new Map();
+
+    function getTooltipHtml(state: EntryState, dim?: string, value?: number): string {
+      let html = `<div class="tooltip-question">"${state.question}"</div>`;
+      if (dim && value !== undefined) {
+        html += `<div class="tooltip-dim">${dim}: ${value >= 0 ? '+' : ''}${value.toFixed(2)}\u03c3 &middot; day ${state.date.slice(8)}</div>`;
+      }
+      if (state.events && state.events.length > 0) {
+        html += `<div class="tooltip-events">`;
+        for (const ev of state.events) {
+          if (ev.type === 'confirmed') {
+            html += `<div class="tooltip-event event-marker-confirmed">\u2713 confirmed: ${truncate(ev.hypothesis || '', 80)}</div>`;
+          } else if (ev.type === 'falsified') {
+            html += `<div class="tooltip-event event-marker-falsified">\u2717 falsified: ${truncate(ev.hypothesis || '', 80)}</div>`;
+          } else if (ev.type === 'theory_retired') {
+            html += `<div class="tooltip-event event-marker-retired">\u25a0 theory retired: ${formatTheoryKey(ev.theoryKey || '')}</div>`;
+          }
+        }
+        html += `</div>`;
+      }
+      return html;
+    }
+
+    function truncate(s: string, n: number): string {
+      return s.length > n ? s.slice(0, n) + '\u2026' : s;
+    }
+
+    function formatTheoryKey(key: string): string {
+      // "A:relationship_ambivalence" → "relationship ambivalence (frame A)"
+      const parts = key.split(':');
+      if (parts.length === 2) {
+        return parts[1].replace(/_/g, ' ') + ` (frame ${parts[0]})`;
+      }
+      return key.replace(/_/g, ' ');
+    }
 
     function buildRows() {
       const stack = document.getElementById('sparkline-stack')!;
@@ -235,8 +419,8 @@
           }
           if (minDist < 20) {
             const tooltip = document.getElementById('tooltip')!;
-            const state = (window as any).__states[targets.indexOf(closest)];
-            tooltip.innerHTML = `<strong>Entry ${targets.indexOf(closest) + 1}</strong> &middot; ${closest.responseId}<br>${dim}: ${closest.value.toFixed(3)}`;
+            const state = (window as any).__states[closest.idx] as EntryState;
+            tooltip.innerHTML = getTooltipHtml(state, dim, closest.value);
             tooltip.style.display = 'block';
             tooltip.style.left = (e.clientX + 12) + 'px';
             tooltip.style.top = (e.clientY - 10) + 'px';
@@ -266,7 +450,7 @@
       const plotH = h - pad.top - pad.bottom;
 
       const values = states.map(s => (s as any)[dim] as number);
-      const maxAbs = Math.max(3, ...values.map(Math.abs)); // at least +/- 3 sigma
+      const maxAbs = Math.max(3, ...values.map(Math.abs));
 
       const xStep = states.length > 1 ? plotW / (states.length - 1) : plotW;
       const toY = (v: number) => pad.top + plotH / 2 - (v / maxAbs) * (plotH / 2);
@@ -292,7 +476,7 @@
       ctx.setLineDash([]);
 
       // Line
-      ctx.strokeStyle = COLORS[dim as keyof typeof COLORS];
+      ctx.strokeStyle = COLORS[dim];
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       for (let i = 0; i < values.length; i++) {
@@ -303,17 +487,40 @@
       }
       ctx.stroke();
 
-      // Dots + hit targets
-      const targets: Array<{ x: number; responseId: number; value: number }> = [];
-      const dotColor = DOT_COLORS[dim as keyof typeof DOT_COLORS];
+      // Dots + event markers + hit targets
+      const targets: Array<{ x: number; idx: number; responseId: number; value: number }> = [];
+      const dotColor = DOT_COLORS[dim];
       for (let i = 0; i < values.length; i++) {
         const x = toX(i);
         const y = toY(values[i]);
+        const state = states[i];
+        const hasEvents = state.events && state.events.length > 0;
+
+        if (hasEvents) {
+          // Draw event ring behind the dot
+          const hasConfirmed = state.events!.some(e => e.type === 'confirmed');
+          const hasFalsified = state.events!.some(e => e.type === 'falsified');
+          const hasRetired = state.events!.some(e => e.type === 'theory_retired');
+
+          ctx.lineWidth = 1.5;
+          if (hasRetired) {
+            ctx.strokeStyle = '#8a8a5a';
+          } else if (hasFalsified) {
+            ctx.strokeStyle = '#8a5a5a';
+          } else {
+            ctx.strokeStyle = '#5a8a5a';
+          }
+          ctx.beginPath();
+          ctx.arc(x, y, 6, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
         ctx.fillStyle = dotColor;
         ctx.beginPath();
-        ctx.arc(x, y, 2.5, 0, Math.PI * 2);
+        ctx.arc(x, y, hasEvents ? 3 : 2.5, 0, Math.PI * 2);
         ctx.fill();
-        targets.push({ x, responseId: states[i].response_id, value: values[i] });
+
+        targets.push({ x, idx: i, responseId: state.response_id, value: values[i] });
       }
       hitTargets.set(dim, targets);
 
@@ -321,7 +528,108 @@
       const latest = values[values.length - 1];
       const valEl = document.getElementById(`val-${dim}`)!;
       valEl.textContent = (latest >= 0 ? '+' : '') + latest.toFixed(2);
-      valEl.style.color = COLORS[dim as keyof typeof COLORS];
+      valEl.style.color = COLORS[dim];
+    }
+
+    function drawEventStrip(states: EntryState[]) {
+      const canvas = document.getElementById('event-strip-canvas') as HTMLCanvasElement;
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      const ctx = canvas.getContext('2d')!;
+      ctx.scale(dpr, dpr);
+
+      const w = rect.width;
+      const h = rect.height;
+      const n = states.length;
+      if (n === 0) return;
+
+      const xStep = n > 1 ? w / (n - 1) : w;
+
+      // Tick marks for each entry
+      for (let i = 0; i < n; i++) {
+        const x = i * xStep;
+        ctx.strokeStyle = '#1a1a1a';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x, h);
+        ctx.lineTo(x, h - 4);
+        ctx.stroke();
+      }
+
+      // Event markers
+      for (let i = 0; i < n; i++) {
+        const state = states[i];
+        if (!state.events || state.events.length === 0) continue;
+        const x = i * xStep;
+
+        const confirmed = state.events.filter(e => e.type === 'confirmed').length;
+        const falsified = state.events.filter(e => e.type === 'falsified').length;
+        const retired = state.events.filter(e => e.type === 'theory_retired').length;
+
+        let y = 4;
+
+        // Draw stacked markers
+        if (confirmed > 0) {
+          ctx.fillStyle = '#5a8a5a';
+          ctx.font = '10px SF Mono, monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText('\u2713', x, y + 8);
+          if (confirmed > 1) {
+            ctx.font = '7px SF Mono, monospace';
+            ctx.fillText(String(confirmed), x + 7, y + 6);
+          }
+          y += 10;
+        }
+        if (falsified > 0) {
+          ctx.fillStyle = '#8a5a5a';
+          ctx.font = '10px SF Mono, monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText('\u2717', x, y + 8);
+          if (falsified > 1) {
+            ctx.font = '7px SF Mono, monospace';
+            ctx.fillText(String(falsified), x + 7, y + 6);
+          }
+          y += 10;
+        }
+        if (retired > 0) {
+          ctx.fillStyle = '#8a8a5a';
+          ctx.font = '8px SF Mono, monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText('\u25a0', x, y + 8);
+        }
+      }
+
+      // Hover on event strip
+      canvas.addEventListener('mousemove', (e) => {
+        const crect = canvas.getBoundingClientRect();
+        const mx = e.clientX - crect.left;
+        const idx = Math.round(mx / xStep);
+        if (idx >= 0 && idx < n) {
+          const state = states[idx];
+          if (state.events && state.events.length > 0) {
+            const tooltip = document.getElementById('tooltip')!;
+            tooltip.innerHTML = getTooltipHtml(state);
+            tooltip.style.display = 'block';
+            tooltip.style.left = (e.clientX + 12) + 'px';
+            tooltip.style.top = (e.clientY + 12) + 'px';
+          } else {
+            document.getElementById('tooltip')!.style.display = 'none';
+          }
+        }
+      });
+      canvas.addEventListener('mouseleave', () => {
+        document.getElementById('tooltip')!.style.display = 'none';
+      });
+      canvas.addEventListener('click', (e) => {
+        const crect = canvas.getBoundingClientRect();
+        const mx = e.clientX - crect.left;
+        const idx = Math.round(mx / xStep);
+        if (idx >= 0 && idx < n) {
+          window.location.href = `/observatory/entry/${states[idx].response_id}`;
+        }
+      });
     }
 
     function drawConvergence(states: EntryState[]) {
@@ -340,7 +648,6 @@
       for (let i = 0; i < states.length; i++) {
         const conv = states[i].convergence;
         const alpha = Math.min(1, conv * 1.5);
-        // Low convergence = dim, high = bright amber/red
         const r = Math.round(180 + conv * 60);
         const g = Math.round(120 - conv * 80);
         const b = Math.round(40 - conv * 30);
@@ -357,16 +664,13 @@
       const containerW = container.getBoundingClientRect().width;
       const step = states.length > 1 ? containerW / (states.length - 1) : 0;
 
-      // Show every Nth date to avoid overlap
       const labelEvery = Math.max(1, Math.ceil(states.length / 10));
       for (let i = 0; i < states.length; i += labelEvery) {
         const span = document.createElement('span');
-        const date = states[i].date;
-        span.textContent = date.slice(5); // MM-DD
+        span.textContent = states[i].date.slice(5);
         span.style.left = (i * step) + 'px';
         container.appendChild(span);
       }
-      // Always show last
       if ((states.length - 1) % labelEvery !== 0) {
         const span = document.createElement('span');
         span.textContent = states[states.length - 1].date.slice(5);
@@ -375,9 +679,72 @@
       }
     }
 
+    function buildNarrativeFeed(states: EntryState[]) {
+      const feed = document.getElementById('narrative-feed')!;
+      feed.innerHTML = '';
+
+      for (const state of states) {
+        const entry = document.createElement('div');
+        entry.className = 'narrative-entry' + (state.events && state.events.length > 0 ? ' has-events' : '');
+        entry.addEventListener('click', () => {
+          window.location.href = `/observatory/entry/${state.response_id}`;
+        });
+
+        // Convergence bar
+        const convBar = document.createElement('div');
+        convBar.className = 'narrative-convergence';
+        const conv = state.convergence;
+        const r = Math.round(180 + conv * 60);
+        const g = Math.round(120 - conv * 80);
+        const b = Math.round(40 - conv * 30);
+        const alpha = Math.min(1, conv * 1.5);
+        convBar.style.background = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+
+        // Date
+        const dateEl = document.createElement('div');
+        dateEl.className = 'narrative-date';
+        dateEl.textContent = state.date.slice(5);
+
+        // Content
+        const content = document.createElement('div');
+        content.style.flex = '1';
+
+        // Question
+        const questionEl = document.createElement('div');
+        questionEl.className = 'narrative-question';
+        questionEl.textContent = state.question;
+        content.appendChild(questionEl);
+
+        // Events
+        if (state.events && state.events.length > 0) {
+          const eventsEl = document.createElement('div');
+          eventsEl.className = 'narrative-events';
+
+          for (const ev of state.events) {
+            const evEl = document.createElement('div');
+            evEl.className = 'narrative-event';
+            if (ev.type === 'confirmed') {
+              evEl.innerHTML = `<span class="event-marker-confirmed">\u2713</span> <span>prediction confirmed: ${truncate(ev.hypothesis || '', 70)}</span>`;
+            } else if (ev.type === 'falsified') {
+              evEl.innerHTML = `<span class="event-marker-falsified">\u2717</span> <span>prediction falsified: ${truncate(ev.hypothesis || '', 70)}</span>`;
+            } else if (ev.type === 'theory_retired') {
+              evEl.innerHTML = `<span class="event-marker-retired">\u25a0</span> <span>theory retired: ${formatTheoryKey(ev.theoryKey || '')}</span>`;
+            }
+            eventsEl.appendChild(evEl);
+          }
+          content.appendChild(eventsEl);
+        }
+
+        entry.appendChild(convBar);
+        entry.appendChild(dateEl);
+        entry.appendChild(content);
+        feed.appendChild(entry);
+      }
+    }
+
     async function load() {
       const res = await fetch('/api/observatory/states');
-      const { states } = await res.json();
+      const { states } = await res.json() as { states: EntryState[] };
       (window as any).__states = states;
 
       buildRows();
@@ -385,8 +752,10 @@
         const canvas = document.getElementById(`canvas-${dim}`) as HTMLCanvasElement;
         drawSparkline(canvas, dim, states);
       }
+      drawEventStrip(states);
       drawConvergence(states);
       drawDateAxis(states);
+      buildNarrativeFeed(states);
     }
 
     load();
@@ -395,12 +764,13 @@
     window.addEventListener('resize', () => {
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => {
-        const states = (window as any).__states;
+        const states = (window as any).__states as EntryState[];
         if (states) {
           for (const dim of DIMS) {
             const canvas = document.getElementById(`canvas-${dim}`) as HTMLCanvasElement;
             drawSparkline(canvas, dim, states);
           }
+          drawEventStrip(states);
           drawConvergence(states);
           drawDateAxis(states);
         }

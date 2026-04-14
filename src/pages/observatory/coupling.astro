@@ -2,8 +2,9 @@
 /**
  * Observatory — Coupling View
  *
- * 8x8 behavioral coupling heatmap, emotion-behavior table,
- * and per-dimension dynamics summary. The math layer.
+ * Leads with plain-English behavioral discoveries.
+ * 8x8 heatmap, emotion-behavior table, dynamics, and theory status
+ * serve as supporting evidence below.
  */
 ---
 <html lang="en">
@@ -53,15 +54,93 @@
       padding-bottom: 6px;
       border-bottom: 1px solid #1a1a1a;
     }
+    .section { margin-bottom: 40px; }
+
+    /* --- Discoveries --- */
+    .discoveries {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .discovery {
+      background: #0c0c0c;
+      border-left: 3px solid #2a2a2a;
+      padding: 14px 18px;
+      line-height: 1.7;
+    }
+    .discovery-finding {
+      color: #888;
+      font-size: 11px;
+    }
+    .discovery-evidence {
+      color: #444;
+      font-size: 9px;
+      margin-top: 6px;
+      letter-spacing: 0.02em;
+    }
+    .discovery-strong { border-left-color: #3a5a7a; }
+    .discovery-moderate { border-left-color: #4a4a3a; }
+
+    /* --- Theories --- */
+    .theory-card {
+      background: #0c0c0c;
+      border: 1px solid #1a1a1a;
+      padding: 12px 16px;
+      margin-bottom: 8px;
+    }
+    .theory-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+    .theory-name {
+      color: #666;
+      font-size: 10px;
+    }
+    .theory-status {
+      font-size: 9px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border-radius: 2px;
+    }
+    .theory-active { background: #1a1a1a; color: #666; }
+    .theory-established { background: #1a2a1a; color: #5a8a5a; }
+    .theory-retired { background: #2a1a1a; color: #8a5a5a; }
+    .theory-meta {
+      color: #444;
+      font-size: 9px;
+      margin-top: 4px;
+    }
+    .theory-desc {
+      color: #555;
+      font-size: 10px;
+      margin-top: 6px;
+      line-height: 1.5;
+    }
+    .theory-bar-container {
+      margin-top: 6px;
+      height: 4px;
+      background: #1a1a1a;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .theory-bar {
+      height: 100%;
+      border-radius: 2px;
+      transition: width 0.3s;
+    }
+
+    /* --- Heatmap --- */
     .heatmap-container {
       display: flex;
       justify-content: center;
       margin-bottom: 32px;
     }
-    #heatmap-canvas {
-      cursor: crosshair;
-    }
-    .section { margin-bottom: 40px; }
+    #heatmap-canvas { cursor: crosshair; }
+
+    /* --- Table --- */
     table {
       width: 100%;
       border-collapse: collapse;
@@ -83,6 +162,8 @@
     }
     .corr-positive { color: #5a8aaa; }
     .corr-negative { color: #aa5a5a; }
+
+    /* --- Dynamics --- */
     .dynamics-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -112,6 +193,8 @@
     .attractor-rigid { color: #aa5a5a; }
     .attractor-moderate { color: #8a8a5a; }
     .attractor-malleable { color: #5a8a5a; }
+
+    /* --- Tooltip --- */
     .tooltip {
       display: none;
       position: fixed;
@@ -125,6 +208,8 @@
       line-height: 1.6;
       max-width: 300px;
     }
+
+    /* --- Overlay --- */
     .overlay {
       display: none;
       position: fixed;
@@ -159,13 +244,27 @@
   </div>
 
   <div class="content">
+    <!-- Discoveries: plain-English findings -->
+    <div class="section">
+      <div class="section-title">what the patterns say</div>
+      <div class="discoveries" id="discoveries"></div>
+    </div>
+
+    <!-- Theory status -->
+    <div class="section">
+      <div class="section-title">theories</div>
+      <div id="theories-container"></div>
+    </div>
+
+    <!-- Heatmap (supporting evidence) -->
     <div class="section">
       <div class="section-title">behavioral coupling matrix</div>
       <div class="heatmap-container">
-        <canvas id="heatmap-canvas" width="480" height="480"></canvas>
+        <canvas id="heatmap-canvas" width="490" height="500"></canvas>
       </div>
     </div>
 
+    <!-- Emotion table -->
     <div class="section">
       <div class="section-title">emotion &rarr; behavior coupling</div>
       <table id="emotion-table">
@@ -182,6 +281,7 @@
       </table>
     </div>
 
+    <!-- Dynamics -->
     <div class="section">
       <div class="section-title">dynamics per dimension</div>
       <div class="dynamics-grid" id="dynamics-grid"></div>
@@ -203,6 +303,30 @@
       commitment: '#5a8a8a', volatility: '#8a7a3a', thermal: '#8a3a3a', presence: '#4a6a4a',
     };
 
+    // Human-readable dimension descriptions
+    const DIM_MEANING: Record<string, string> = {
+      fluency: 'sustained writing flow',
+      deliberation: 'cognitive load and hesitation',
+      revision: 'how much they delete and rewrite',
+      expression: 'deviation from their normal style',
+      commitment: 'how much they keep vs. discard',
+      volatility: 'behavioral instability between entries',
+      thermal: 'correction intensity',
+      presence: 'focus and attention',
+    };
+
+    const EMOTION_MEANING: Record<string, string> = {
+      anger: 'anger words',
+      fear: 'fear words',
+      joy: 'joy words',
+      sadness: 'sadness words',
+      trust: 'trust words',
+      anticipation: 'anticipation words',
+      cognitive: 'reasoning language',
+      hedging: 'hedging language',
+      firstPerson: 'first-person pronouns',
+    };
+
     interface CouplingRow {
       leader: string; follower: string; lag_sessions: number; correlation: number; direction: number;
     }
@@ -213,55 +337,196 @@
       dimension: string; baseline: number; variability: number; attractor_force: number;
       current_state: number; deviation: number; window_size: number;
     }
+    interface TheoryRow {
+      theory_key: string; description: string; alpha: number; beta: number;
+      total_predictions: number; log_bayes_factor: number; status: string;
+    }
 
     let couplingData: CouplingRow[] = [];
     let statesData: any[] | null = null;
 
+    /**
+     * Generate plain-English discoveries from coupling + emotion + dynamics data.
+     */
+    function generateDiscoveries(
+      couplings: CouplingRow[],
+      emotionCouplings: EmotionCouplingRow[],
+      dynamics: DynamicRow[]
+    ): Array<{ finding: string; evidence: string; strength: 'strong' | 'moderate' }> {
+      const discoveries: Array<{ finding: string; evidence: string; strength: 'strong' | 'moderate' }> = [];
+
+      // Sort by absolute correlation
+      const sorted = [...couplings].sort((a, b) => Math.abs(b.correlation) - Math.abs(a.correlation));
+
+      // Top behavioral couplings → discoveries
+      for (const c of sorted.slice(0, 5)) {
+        const absR = Math.abs(c.correlation);
+        if (absR < 0.3) continue;
+
+        const leader = DIM_MEANING[c.leader] || c.leader;
+        const follower = DIM_MEANING[c.follower] || c.follower;
+        const lagLabel = c.lag_sessions === 0 ? 'at the same time' : `${c.lag_sessions} session${c.lag_sessions > 1 ? 's' : ''} later`;
+        const sign = c.direction > 0 ? 'increases' : 'decreases';
+
+        let finding: string;
+        if (absR >= 0.8) {
+          // Very strong — state it as a behavioral pattern
+          if (c.direction < 0) {
+            finding = `When ${c.leader} goes up, ${c.follower} drops — almost perfectly. ${capitalize(leader)} and ${follower} move in opposite directions ${lagLabel}.`;
+          } else {
+            finding = `${capitalize(leader)} and ${follower} move together ${lagLabel}. When one rises, so does the other.`;
+          }
+        } else if (absR >= 0.5) {
+          finding = `When ${leader} increases, ${follower} ${sign} ${lagLabel}.`;
+        } else {
+          finding = `There's a moderate link between ${leader} and ${follower} ${lagLabel}.`;
+        }
+
+        const evidence = `${c.leader} \u2192 ${c.follower}: r=${c.direction > 0 ? '+' : '-'}${absR.toFixed(3)} (${c.lag_sessions === 0 ? 'concurrent' : 'lag-' + c.lag_sessions})`;
+        discoveries.push({
+          finding,
+          evidence,
+          strength: absR >= 0.5 ? 'strong' : 'moderate',
+        });
+      }
+
+      // Top emotion coupling
+      const sortedEmotion = [...emotionCouplings].sort((a, b) => Math.abs(b.correlation) - Math.abs(a.correlation));
+      for (const c of sortedEmotion.slice(0, 2)) {
+        const absR = Math.abs(c.correlation);
+        if (absR < 0.3) continue;
+
+        const emotion = EMOTION_MEANING[c.emotion_dim] || c.emotion_dim;
+        const behavior = DIM_MEANING[c.behavior_dim] || c.behavior_dim;
+        const lagLabel = c.lag_sessions === 0 ? 'in the same session' : `${c.lag_sessions} session${c.lag_sessions > 1 ? 's' : ''} later`;
+        const effect = c.direction > 0 ? 'increases' : 'decreases';
+
+        const finding = `When ${emotion} increase in their writing, ${behavior} ${effect} ${lagLabel}.`;
+        const evidence = `${c.emotion_dim} \u2192 ${c.behavior_dim}: r=${c.direction > 0 ? '+' : '-'}${absR.toFixed(3)} (${c.lag_sessions === 0 ? 'concurrent' : 'lag-' + c.lag_sessions})`;
+        discoveries.push({ finding, evidence, strength: absR >= 0.5 ? 'strong' : 'moderate' });
+      }
+
+      // Dynamics — find most/least malleable
+      const sortedDyn = [...dynamics].sort((a, b) => a.attractor_force - b.attractor_force);
+      if (sortedDyn.length >= 2) {
+        const malleable = sortedDyn[0];
+        const rigid = sortedDyn[sortedDyn.length - 1];
+
+        const mLabel = malleable.attractor_force < 0.4 ? 'malleable' : 'moderate';
+        const rLabel = rigid.attractor_force >= 0.7 ? 'rigid' : 'moderate';
+
+        if (malleable.attractor_force < 0.5 && rigid.attractor_force > 0.55) {
+          const finding = `${capitalize(malleable.dimension)} is the most changeable dimension (attractor: ${malleable.attractor_force.toFixed(2)}) — when it shifts, it stays shifted. ${capitalize(rigid.dimension)} snaps back to baseline faster (attractor: ${rigid.attractor_force.toFixed(2)}).`;
+          discoveries.push({
+            finding,
+            evidence: `${malleable.dimension} attractor=${malleable.attractor_force.toFixed(3)} (${mLabel}), ${rigid.dimension} attractor=${rigid.attractor_force.toFixed(3)} (${rLabel})`,
+            strength: 'moderate',
+          });
+        }
+      }
+
+      return discoveries;
+    }
+
+    function capitalize(s: string): string {
+      return s.charAt(0).toUpperCase() + s.slice(1);
+    }
+
+    function renderDiscoveries(
+      couplings: CouplingRow[],
+      emotionCouplings: EmotionCouplingRow[],
+      dynamics: DynamicRow[]
+    ) {
+      const container = document.getElementById('discoveries')!;
+      const discoveries = generateDiscoveries(couplings, emotionCouplings, dynamics);
+
+      container.innerHTML = discoveries.map(d =>
+        `<div class="discovery ${d.strength === 'strong' ? 'discovery-strong' : 'discovery-moderate'}">
+          <div class="discovery-finding">${d.finding}</div>
+          <div class="discovery-evidence">${d.evidence}</div>
+        </div>`
+      ).join('');
+    }
+
+    function renderTheories(theories: TheoryRow[]) {
+      const container = document.getElementById('theories-container')!;
+      if (!theories || theories.length === 0) {
+        container.innerHTML = '<div style="color: #333; font-size: 10px;">No theories yet.</div>';
+        return;
+      }
+
+      container.innerHTML = theories.map(t => {
+        const statusClass = `theory-${t.status}`;
+        const posteriorMean = t.alpha / (t.alpha + t.beta);
+        const barWidth = Math.round(posteriorMean * 100);
+        const barColor = t.status === 'retired' ? '#5a3a3a' : t.status === 'established' ? '#3a5a3a' : '#3a3a5a';
+
+        // Parse theory key: "A:topic" → "topic (frame A)"
+        const parts = t.theory_key.split(':');
+        const displayName = parts.length === 2
+          ? parts[1].replace(/_/g, ' ')
+          : t.theory_key.replace(/_/g, ' ');
+        const frame = parts.length === 2 ? parts[0] : '';
+
+        return `<div class="theory-card">
+          <div class="theory-header">
+            <span class="theory-name">${displayName}${frame ? ` <span style="color:#444">(frame ${frame})</span>` : ''}</span>
+            <span class="theory-status ${statusClass}">${t.status}</span>
+          </div>
+          <div class="theory-desc">${t.description}</div>
+          <div class="theory-bar-container">
+            <div class="theory-bar" style="width: ${barWidth}%; background: ${barColor};"></div>
+          </div>
+          <div class="theory-meta">
+            ${t.total_predictions} predictions &middot; posterior: ${(posteriorMean * 100).toFixed(0)}% &middot; log BF: ${t.log_bayes_factor.toFixed(2)}
+          </div>
+        </div>`;
+      }).join('');
+    }
+
     function drawHeatmap(couplings: CouplingRow[]) {
       const canvas = document.getElementById('heatmap-canvas') as HTMLCanvasElement;
       const dpr = window.devicePixelRatio || 1;
-      const size = 480;
+      const labelLeft = 90;
+      const labelTop = 100;
+      const gridSize = 400;
+      const size = labelLeft + gridSize;
+      const totalH = labelTop + gridSize;
       canvas.width = size * dpr;
-      canvas.height = size * dpr;
+      canvas.height = totalH * dpr;
       canvas.style.width = size + 'px';
-      canvas.style.height = size + 'px';
+      canvas.style.height = totalH + 'px';
       const ctx = canvas.getContext('2d')!;
       ctx.scale(dpr, dpr);
-
-      const labelW = 80;
-      const gridSize = size - labelW;
       const cellSize = gridSize / DIMS.length;
 
-      // Build lookup
       const lookup = new Map<string, CouplingRow>();
       for (const c of couplings) {
         lookup.set(`${c.leader}:${c.follower}`, c);
         lookup.set(`${c.follower}:${c.leader}`, { ...c, leader: c.follower, follower: c.leader });
       }
 
-      // Draw labels
       ctx.fillStyle = '#444';
       ctx.font = '9px SF Mono, Fira Code, monospace';
       ctx.textAlign = 'right';
       for (let i = 0; i < DIMS.length; i++) {
-        const y = labelW + i * cellSize + cellSize / 2 + 3;
-        ctx.fillText(DIMS[i], labelW - 8, y);
+        const y = labelTop + i * cellSize + cellSize / 2 + 3;
+        ctx.fillText(DIMS[i], labelLeft - 8, y);
       }
       ctx.textAlign = 'center';
       for (let j = 0; j < DIMS.length; j++) {
         ctx.save();
-        const x = labelW + j * cellSize + cellSize / 2;
-        ctx.translate(x, labelW - 8);
+        const x = labelLeft + j * cellSize + cellSize / 2;
+        ctx.translate(x, labelTop - 40);
         ctx.rotate(-Math.PI / 4);
         ctx.fillText(DIMS[j], 0, 0);
         ctx.restore();
       }
 
-      // Draw cells
       for (let i = 0; i < DIMS.length; i++) {
         for (let j = 0; j < DIMS.length; j++) {
-          const x = labelW + j * cellSize;
-          const y = labelW + i * cellSize;
+          const x = labelLeft + j * cellSize;
+          const y = labelTop + i * cellSize;
 
           if (i === j) {
             ctx.fillStyle = '#0f0f0f';
@@ -285,28 +550,26 @@
           }
           ctx.fillRect(x, y, cellSize, cellSize);
 
-          // Grid lines
           ctx.strokeStyle = '#151515';
           ctx.lineWidth = 0.5;
           ctx.strokeRect(x, y, cellSize, cellSize);
 
-          // Correlation text for strong couplings
           if (coupling && Math.abs(coupling.correlation) >= 0.4) {
             ctx.fillStyle = '#999';
             ctx.font = '8px SF Mono, monospace';
             ctx.textAlign = 'center';
-            ctx.fillText(coupling.correlation.toFixed(2), x + cellSize / 2, y + cellSize / 2 + 3);
+            const sign = coupling.direction > 0 ? '+' : '-';
+            ctx.fillText(sign + coupling.correlation.toFixed(2), x + cellSize / 2, y + cellSize / 2 + 3);
           }
         }
       }
 
-      // Hover
       canvas.addEventListener('mousemove', (e) => {
         const rect = canvas.getBoundingClientRect();
         const mx = e.clientX - rect.left;
         const my = e.clientY - rect.top;
-        const j = Math.floor((mx - labelW) / cellSize);
-        const i = Math.floor((my - labelW) / cellSize);
+        const j = Math.floor((mx - labelLeft) / cellSize);
+        const i = Math.floor((my - labelTop) / cellSize);
 
         if (i >= 0 && i < DIMS.length && j >= 0 && j < DIMS.length && i !== j) {
           const key = `${DIMS[i]}:${DIMS[j]}`;
@@ -331,13 +594,12 @@
         document.getElementById('tooltip')!.style.display = 'none';
       });
 
-      // Click to show overlay
       canvas.addEventListener('click', async (e) => {
         const rect = canvas.getBoundingClientRect();
         const mx = e.clientX - rect.left;
         const my = e.clientY - rect.top;
-        const j = Math.floor((mx - labelW) / cellSize);
-        const i = Math.floor((my - labelW) / cellSize);
+        const j = Math.floor((mx - labelLeft) / cellSize);
+        const i = Math.floor((my - labelTop) / cellSize);
 
         if (i >= 0 && i < DIMS.length && j >= 0 && j < DIMS.length && i !== j) {
           const key = `${DIMS[i]}:${DIMS[j]}`;
@@ -390,7 +652,6 @@
       const toX = (i: number) => pad.left + i * xStep;
       const toY = (v: number) => pad.top + plotH / 2 - (v / maxAbs) * (plotH / 2);
 
-      // Zero line
       ctx.strokeStyle = '#222';
       ctx.lineWidth = 1;
       ctx.beginPath();
@@ -398,7 +659,6 @@
       ctx.lineTo(w - pad.right, toY(0));
       ctx.stroke();
 
-      // Leader line
       ctx.strokeStyle = COLORS[coupling.leader] || '#666';
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -410,7 +670,6 @@
       }
       ctx.stroke();
 
-      // Follower line (shifted by lag)
       ctx.strokeStyle = COLORS[coupling.follower] || '#888';
       ctx.lineWidth = 2;
       ctx.setLineDash([4, 3]);
@@ -426,7 +685,6 @@
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // Legend
       ctx.font = '10px SF Mono, monospace';
       ctx.fillStyle = COLORS[coupling.leader] || '#666';
       ctx.fillText(coupling.leader, pad.left, h - 8);
@@ -476,6 +734,8 @@
       const res = await fetch('/api/observatory/coupling');
       const data = await res.json();
       couplingData = data.couplings;
+      renderDiscoveries(data.couplings, data.emotionCouplings, data.dynamics);
+      renderTheories(data.theories);
       drawHeatmap(data.couplings);
       renderEmotionTable(data.emotionCouplings);
       renderDynamics(data.dynamics);
