@@ -1,7 +1,7 @@
 # Roadmap
 
-**Date:** 2026-04-14
-**Predecessors:** Theories 1-5, simulation handoffs v1-v2, observatory spec, README
+**Date:** 2026-04-15
+**Predecessors:** Theories 1-9, simulation handoffs v1-v2, observatory spec, README
 
 ---
 
@@ -47,6 +47,18 @@ Layers 1 and 2 are what researchers buy. Layer 3 is what makes the consumer prod
 
 ---
 
+## The Three Survival Constraints (Theory 7)
+
+Every architectural decision must satisfy all three simultaneously. These are not aspirational — they are reverse-engineered from $1.8B in digital health failures.
+
+**1. Modality-Agnostic.** The clock-drawing test is failing because Gen Z can't read analog clocks. Keyboard-only assessment will fail next — keyboarding course enrollment dropped from 44% to 2.5% between 2000 and 2019. The instrument must capture the cognitive act of composition independent of the input device. The core diagnostic signal comes from modality-invariant features (word retrieval latency, revision frequency, compositional fluency, coherence structure) — not modality-specific features (hold time, flight time). Modality-specific features add value when available but are not load-bearing.
+
+**2. Process-First.** LLMs miss 60-70% of dementia cases because they equate verbal fluency with cognitive health (Zadok et al. 2026). Content is the last thing to go. Process is the first. The diagnostic power is in pause patterns, revision behavior, production fluency, and timing — not in the text itself. Content analysis is complementary, not primary.
+
+**3. Payment-Ready.** Four companies with FDA-authorized products and >$300M in combined capital died because insurers wouldn't pay. CMS ACCESS (launching July 2026) has no cognitive track. The instrument enters through existing payment doors — research licensing (immediate), behavioral health monitoring via ACCESS Track 4 (2026-2028), cognitive assessment (2028+ as evidence matures). No disease claims in the consumer product (General Wellness exemption).
+
+---
+
 ## The Sequence
 
 ### Phase 1: The Instrument
@@ -58,6 +70,7 @@ Layers 1 and 2 are what researchers buy. Layer 3 is what makes the consumer prod
 - Signal export layer (CSV/JSON of all computed signals per session)
 - Multi-tenant hosting (each study gets an isolated instance)
 - Documentation mapping each signal to its research basis
+- Modality abstraction layer — separate modality-specific features (hold time, flight time) from modality-invariant features (pause-to-production ratio, revision frequency, coherence trajectory) so the pipeline works across input channels
 - Strip Layer 3 — researchers get raw signals, not AI interpretation
 
 **Who buys:**
@@ -71,46 +84,49 @@ Layers 1 and 2 are what researchers buy. Layer 3 is what makes the consumer prod
 - Build the evidence base we can't build alone
 - Every paper citing the methodology is free distribution
 
-**Revenue:** Academic licenses ($15-30K/year per lab). Small but real.
+**Revenue:** Academic licenses ($15-30K/year per lab). TAM is $7.5-15M at full penetration — a stepping stone, not a destination.
 
-**Funding:** R21 ($275K/2yr) or SBIR Phase I ($323K) — zero competition in this exact niche. NIA digital biomarker track funded 10 SBIR awards in FY2024-2025.
+**Funding:** R21 ($275K/2yr) or SBIR Phase I ($323K) — zero competition in this exact niche. NIA digital biomarker track funded 10 SBIR awards in FY2024-2025. Next receipt date: September 5, 2026 (programs reauthorized April 13, 2026 after congressional lapse).
 
 **The incumbent to displace:** Inputlog (University of Antwerp). Windows-only, no longitudinal tracking, no content analysis, no web deployment. A generational upgrade, not an incremental one.
 
-### Phase 2: Clinical Validation
+### Phase 2: Behavioral Health Entry + Clinical Validation
 
-**Goal:** Published evidence that the signals predict real clinical outcomes.
+**Goal:** Published evidence that the signals predict real clinical outcomes, entering through a payment door that already exists.
+
+**The payment entry (Theory 7, Constraint 3):**
+- CMS ACCESS Track 4 covers behavioral health (depression/anxiety) starting July 2026
+- Depression and cognitive decline are comorbid in 30-50% of early dementia cases
+- An instrument positioned as a behavioral health monitoring tool that *also* captures cognitive process metrics enters through this existing door
+- This is not regulatory arbitrage — depression screening that includes cognitive process metrics is better depression screening
 
 **What happens:**
 - Partner with 2-3 labs running 12-week studies (50+ participants, MCI vs healthy aging)
-- Correlate 8D behavioral dimensions against established instruments
-- Target publication: "Longitudinal Writing Process Signals Differentiate MCI from Healthy Aging"
-- This paper turns the instrument into a clinically credible tool
+- Correlate 8D behavioral dimensions against established instruments (MoCA, MMSE, PHQ-9, GAD-7)
+- Target publications: (1) "Longitudinal Writing Process Signals Differentiate MCI from Healthy Aging" and (2) the demographic choke point argument from Theory 6 as a standalone methods paper
+- Publish every validation study (the Mindstrong anti-pattern: five trials, zero publications)
 
 **What this unlocks:**
 - Conversations with Linus Health, Cambridge Cognition, Cogstate (potential licensing or acquisition)
-- Insurance reimbursement pathway (CPT 96127 for brief behavioral assessment, no FDA clearance needed for measurement)
+- Behavioral health reimbursement via ACCESS Track 4 ($30/service quarterly for co-management)
 - Credibility for the consumer pitch — not "we think this works" but "University of Edinburgh published the study"
 
 **Timeline:** Dependent on Phase 1 adoption. First validation study realistically starts 6-12 months after first lab deployment.
 
 ### Phase 3: Consumer Product with Clinical Anchor
 
-**Goal:** Market to consumers as a longitudinal cognitive baseline tracker.
+**Goal:** Market to consumers as a cognitive wellness journal — no disease claims (General Wellness exemption).
 
 **The pitch:** We built this for clinical research. It detects early cognitive decline better than the gold-standard screening tests. But it's also a depth practice — a daily journal that happens to accumulate the richest longitudinal cognitive dataset ever collected about you. Use it for the journaling. The protection accrues as a byproduct.
 
 **The clinical anchor:**
-- Early-onset dementia detection is the insurance-reimbursable use case
-- Prescribed by neuropsychologists as a 30-day writing protocol
+- Behavioral health monitoring as the reimbursable framing (not standalone cognitive assessment — that category doesn't exist yet)
 - Trajectory view instead of snapshot score: not "your MoCA is 26/30" but "your cognitive processing markers are stable over 30 days"
-- This is the revenue floor
+- Cognitive process metrics embedded within behavioral health assessment, not as standalone cognitive claims
+- The cognitive assessment claim emerges from the evidence base over time — it is the destination, not the starting position
 
 **The mass appeal:**
 - After years of data, the system tells you things about yourself you can't see from inside your own life
-- "Your cognitive fluency drops every February"
-- "The last time your signals looked like this, you were six weeks from a major depressive episode"
-- "Your deliberation patterns have been strengthening for two years"
 - This is Bob. The longitudinal AI thinking partner. The payoff of years of validated signal data.
 
 **Retention model:**
@@ -118,27 +134,38 @@ Layers 1 and 2 are what researchers buy. Layer 3 is what makes the consumer prod
 - A 40-year-old who journals for 20 years has a personal cognitive trajectory no clinical instrument could reconstruct
 - Leaving means abandoning your own longitudinal dataset
 - No gamification needed. The value compounds with time. Depth is what keeps someone writing at year 15.
+- The same data architecture that monitors cognition also captures cognitive identity — characteristic thought patterns, reasoning style, revision strategies (Theory 8). The health use case provides the reason to start writing. The reconstruction use case provides the reason to never stop. This is an architectural fact, not a marketing claim.
 
-### Phase 4 (Much Later): Pharma Trial Endpoints
+### Phase 4 (Much Later): Pharma Trial Endpoints + Cognitive Assessment
 
-**Goal:** Continuous cognitive measurement between quarterly clinic visits.
+**Goal:** Continuous cognitive measurement between quarterly clinic visits. Standalone cognitive assessment claims backed by a mature evidence base.
 
 - Alzheimer's drug trials need cognitive endpoints measured more often than every 90 days
 - Participants journal daily from home
 - Trial sponsor gets continuous trajectory data supplementing standard ADAS-Cog
 - Writing-based endpoint fills the 90-day gaps with actual data instead of nothing
+- When the political will that produced the ASAP Act extends to digital biomarkers — or when a cognitive track is added to ACCESS — the instrument has years of validated data and an established user base
+- By 2040, 70-year-olds will have typed daily for 20-40+ years. The motor noise floor drops. The cognitive signal emerges. The first generation of lifelong typers enters the risk window with the science ready to meet them.
 
 ---
 
-## The Demographic Tailwind
+## The Demographic Tailwind (Theory 6)
 
-The current Alzheimer's research population (70s-80s today) learned to type in their 30s or 40s, if at all. Typing is not their native cognitive output channel.
+Every keystroke-cognition study published to date shares a confound no one has named: **the populations being studied for neurodegeneration learned to type in middle age or not at all.** The research community is evaluating the most promising digital cognitive biomarker modality on the generation least suited to produce clean signal through it.
 
-People who are 45-55 now — the ones who'll enter the early cognitive decline window in 15-25 years — have been typing daily since they were teenagers. By the time they're the target demographic, a writing-based instrument won't feel like a clinical task. It'll feel like something they already do.
+Total participants across all keystroke-cognition studies targeting neurodegeneration: **fewer than 500.** Sample sizes are small partly because researchers can't recruit enough elderly people who type fluently enough for the signal to mean anything.
 
-The generation behind them is even more saturated. The 30-year-olds of today have been producing text on keyboards and phones since childhood.
+Keystroke dynamics can only serve as a cognitive biomarker when typing is automatic enough (~40-50 WPM) that variation in timing reflects cognitive processes rather than motor execution. Below this threshold, keystroke timing is noise. Current study populations (born 1941-1961, encountered computers at ages 30-55) are largely below this threshold.
 
-**The instrument is early for the clinical market but perfectly timed for the research market.** The labs that validate writing-process biomarkers over the next 10-15 years are building the evidence base that'll be ready exactly when the first generation of lifelong typers enters the risk window. The science and the demographic arrive at the same time.
+**The timeline:**
+- **Now (2026):** The research population has the lowest typing fluency of any cohort that will ever be studied.
+- **2030-2035:** The 65+ population includes people born after 1965 — first cohort to use email in their 30s. Effect sizes should increase.
+- **2040:** 70-year-olds were born ~1970. Windows 95 at age 25. 20-40 years of daily typing. Automaticity threshold cleared for the vast majority.
+- **2050:** 70-year-olds were born ~1980. AIM/MSN generation. Peak keystroke biomarker validity.
+
+**The strategic implication:** Results published now are conservative lower bounds. The instrument that validates during the transition window owns the field when the signal gets clean. The science and the demographic arrive at the same time — the instrument must arrive first.
+
+**The ironic inversion:** Writing-based assessment gets better as populations get more digital. Clock drawing gets worse (Gen Z CDT error rate: 40%). Keyboard-specific assessment will eventually get worse too (keyboarding courses: 44% → 2.5%). Only the modality-agnostic writing-process instrument survives all three transitions — which is why Constraint 1 is non-negotiable.
 
 ---
 
@@ -149,15 +176,15 @@ Build instrument → Labs adopt it → Labs publish papers
        ↑                                    ↓
   Revenue funds              Papers validate signals
   continued R&D                        ↓
-       ↑                   Validation enables clinical pitch
-  Consumer revenue                     ↓
-       ↑                   Clinical anchor enables consumer product
+       ↑                   Validation enables behavioral health entry
+  Reimbursement +                      ↓
+  consumer revenue         ACCESS Track 4 generates clinical data
        ↑                                    ↓
-       └────────── Consumer data feeds ─────┘
-                   back into research
+       └────────── Clinical data + consumer data ──┘
+                   feed back into research
 ```
 
-Each phase funds and validates the next. The researchers do the burden-of-proof work. The papers are the marketing. The evidence base builds through the normal academic publication cycle. And the whole time, the consumer product runs in parallel — testing the depth thesis without depending on it.
+Each phase funds and validates the next. The researchers do the burden-of-proof work. The papers are the marketing. The evidence base builds through the normal academic publication cycle. The behavioral health entry (Phase 2) generates reimbursement revenue and clinical data simultaneously — not waiting for a cognitive assessment category that doesn't exist.
 
 ---
 
@@ -206,24 +233,40 @@ Every one died in the gap between technical proof and commercial viability in cl
 
 ---
 
+## Long-Term Architecture Notes
+
+These are not near-term priorities. They are architectural decisions informed by T8-T9 that shape how the instrument is built now.
+
+**Dual-use data architecture (Theory 8).** The same data that monitors cognition can model cognitive identity — characteristic thought patterns, reasoning style, revision strategies. This is architecturally free: the reconstruction use case requires no additional data collection beyond what the health use case demands. The 20-year journal corpus (~2.2M words, ~7,300 sessions, billions of timestamped motor events) exceeds every threshold for personality modeling by an order of magnitude. This changes retention economics: the health use case provides the reason to start; the reconstruction use case provides the reason to never stop. Current models can't do deep cognitive reconstruction — but the data architecture captures the data now, and the reconstruction improves as models do.
+
+**Full-arc extension (Theory 9).** Formation and degradation are the same signal observed from different directions (Lothian Birth Cohort: rate of cognitive gain from 11-70 predicts rate of decline from 70-82, independent of level). The modality-agnostic architecture designed for Constraint 1 also supports earlier capture — drawing process data from age 3-4, handwriting from 5-6, early typing from 7-8. The 11-12 convergence window (knowledge-transforming shift + handwriting automaticity + vocabulary deceleration) is when process data becomes maximally cognitive. This is 15-20 years of empirical work away from being actionable, but it means the modality abstraction layer in Phase 1 is load-bearing for the full vision — not just for generational technology shifts.
+
+---
+
 ## Immediate Next Steps
 
 1. **Keep using it.** The production database reset on 2026-04-14. Daily journaling builds the first real longitudinal dataset and dog-foods the instrument.
 
 2. **Build the research export layer.** CSV/JSON export of computed signals per session. This is the minimum viable instrument — what a lab needs to run their own analysis.
 
-3. **Build the research admin panel.** Study configuration: number of days, question source (seeds or custom), calibration protocol, participant management.
+3. **Build the modality abstraction layer.** Separate modality-specific features (hold time, flight time) from modality-invariant features (pause-to-production ratio, revision frequency, coherence trajectory). This satisfies Constraint 1 and prepares the pipeline for multi-modal input.
 
-4. **Write the whitepaper.** 10-page technical document: what the pipeline measures, how each signal is grounded, what it predicts. This is sales collateral for every path above.
+4. **Build the research admin panel.** Study configuration: number of days, question source (seeds or custom), calibration protocol, participant management.
 
-5. **Make contact.** Email writing process researchers (start with the Antwerp group — they already studied writing process in AD populations with Inputlog). The message: "I built a web-based longitudinal writing process instrument with 70+ deterministic signals covering both keystroke dynamics and linguistic content. No LLM in the measurement loop. Here's the whitepaper."
+5. **Write the whitepaper.** Lead with the demographic choke point argument (Theory 6) — this is a genuine intellectual contribution, not marketing. Then: what the pipeline measures, how each signal is grounded, the two-silo bridge (process researchers + medical keystroke researchers), and why the timing is right. This is the opening argument for every path above.
+
+6. **Make contact.** Email writing process researchers (start with the Antwerp group — they already studied writing process in AD populations with Inputlog). The message: "I built a web-based longitudinal writing process instrument with 70+ deterministic signals covering both keystroke dynamics and linguistic content. No LLM in the measurement loop. Here's the whitepaper."
+
+7. **Prepare grant application.** Target R21 ($275K/2yr) or SBIR Phase I ($323K) for the September 5, 2026 receipt date. NIA digital biomarker track. Zero competing applications in this exact niche.
 
 ---
 
 ## What This Document Is
 
-Theories 1-5 were exploration. This is the decision.
+Theories 1-5 were exploration. Theories 6-9 established the structural arguments — timing, shape, retention, and scope. This is the decision.
 
-The theories asked "what could this be?" This document answers "what is this, and in what order does it become that?" The answer: a longitudinal cognitive instrument that enters through research, validates through publication, and reaches consumers as a depth practice that happens to protect them.
+The theories asked "what could this be?" This document answers "what is this, and in what order does it become that?" The answer: a longitudinal cognitive instrument that enters through research, validates through publication, enters clinical use through behavioral health (the payment door that exists), and reaches consumers as a depth practice that happens to protect them.
+
+The three survival constraints (modality-agnostic, process-first, payment-ready) are not aspirational design principles. They are load-bearing walls derived from $1.8B in failures. The demographic tailwind is not a hope — it is a demographic inevitability on a known timeline. The instrument arrives during the transition window. The science and the population catch up.
 
 The codebase has been building Phase 1 the entire time. The next step is packaging it for the people whose job is to prove it works.
