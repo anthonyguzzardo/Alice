@@ -29,58 +29,80 @@ export interface SignalFamily {
 }
 
 export const SIGNAL_FAMILIES: SignalFamily[] = [
+  // ── Families that feed the 8D state engine ──────────────────────────
+  //
+  // The ground truth for what feeds which dimension lives in
+  // state-engine.ts → computeEntryStates(). Every feedsDimensions list
+  // and every neutralization function below is derived from reading that
+  // code line by line. If the engine changes, update this file to match.
+
   {
     id: 'timing',
     label: 'Timing',
-    description: 'Delay from page open to first keystroke, total session duration, active typing time. First keystroke delay measures initial hesitation — how long you sit with the question before starting. Active typing strips out pauses and tab-aways to isolate actual writing time.',
-    sessionFields: ['firstKeystrokeMs', 'totalDurationMs', 'activeTypingMs'],
+    description: 'First keystroke delay — how long you sit with the question before starting. Measures initial hesitation, the gap between reading and writing.',
+    sessionFields: ['firstKeystrokeMs'],
     feedsDimensions: ['deliberation'],
     citation: 'Deane 2015',
   },
   {
-    id: 'production',
-    label: 'Production',
-    description: 'Total characters typed (including deleted), final character count, commitment ratio (final/total — how much you kept), typing speed, word and sentence counts. Commitment ratio is the core metric: 1.0 means you kept everything, low means heavy self-editing.',
-    sessionFields: ['totalCharsTyped', 'finalCharCount', 'commitmentRatio', 'charsPerMinute', 'wordCount', 'sentenceCount'],
-    feedsDimensions: ['fluency', 'revision', 'commitment'],
-    citation: 'Flower & Hayes 1981',
-  },
-  {
-    id: 'engagement',
-    label: 'Engagement',
-    description: 'Pauses (>30s gaps), tab-aways (leaving the page), and their cumulative durations. Measures attention continuity — are you locked in or fragmented? High tab-away + high pause = low presence.',
-    sessionFields: ['pauseCount', 'totalPauseMs', 'tabAwayCount', 'totalTabAwayMs'],
-    feedsDimensions: ['deliberation', 'presence'],
-    citation: 'Czerwinski et al 2004',
-  },
-  {
-    id: 'deletion',
-    label: 'Deletion (Faigley-Witte)',
-    description: 'Small deletions (<10 chars) are corrections — typos, word swaps. Large deletions (>=10 chars) are revisions — rethinking what you meant. The split between first-half and second-half deletion chars shows whether revision happens early (planning) or late (restructuring). This decomposition is the backbone of the thermal and revision dimensions.',
-    sessionFields: ['deletionCount', 'totalCharsDeleted', 'largestDeletion', 'smallDeletionCount', 'largeDeletionCount', 'largeDeletionChars', 'firstHalfDeletionChars', 'secondHalfDeletionChars'],
-    feedsDimensions: ['deliberation', 'revision', 'thermal'],
-    citation: 'Faigley & Witte 1981',
-  },
-  {
     id: 'pbursts',
     label: 'P-Bursts',
-    description: 'A P-burst is a continuous run of typing with no pause longer than 2 seconds. Each burst roughly maps to one "thought unit." Longer bursts = more fluent, ideas flowing without interruption. Short bursts = fragmented, stop-and-think processing. This is the primary signal driving the fluency dimension.',
-    sessionFields: ['pBurstCount', 'avgPBurstLength'],
+    description: 'A P-burst is a continuous run of typing with no pause longer than 2 seconds. Each burst roughly maps to one "thought unit." Longer bursts = more fluent, ideas flowing without interruption. Short bursts = fragmented, stop-and-think processing. When P-burst data is available, this is the primary driver of the fluency dimension. When absent, chars/min is the fallback.',
+    sessionFields: ['pBurstCount', 'avgPBurstLength', 'charsPerMinute'],
     feedsDimensions: ['fluency'],
     citation: 'Chenoweth & Hayes 2001',
   },
   {
+    id: 'deletion',
+    label: 'Deletion (Faigley-Witte)',
+    description: 'Revision weight (large deletion chars / total chars typed) feeds deliberation. Substantive deletion rate (large deletions per 100 chars) and inverted commitment ratio feed revision. Correction rate (small deletions per 100 chars) and revision timing (early vs late large deletions) feed thermal. This family is the most cross-cutting — it touches four dimensions because different decompositions of deletion behavior measure different cognitive processes.',
+    sessionFields: ['revisionWeight', 'revisionRate', 'commitmentRatio', 'correctionRate', 'revisionTiming'],
+    feedsDimensions: ['deliberation', 'revision', 'commitment', 'thermal'],
+    citation: 'Faigley & Witte 1981',
+  },
+  {
+    id: 'engagement',
+    label: 'Engagement',
+    description: 'Pause rate (pauses per active minute) and tab-away rate (tab-aways per active minute). Pause rate feeds deliberation (more pauses = more cognitive load). Both feed presence inversely — high pause + high tab-away = low presence.',
+    sessionFields: ['pauseRatePerMinute', 'tabAwayRatePerMinute'],
+    feedsDimensions: ['deliberation', 'presence'],
+    citation: 'Czerwinski et al 2004',
+  },
+  {
+    id: 'pennebaker',
+    label: 'Pennebaker Linguistic',
+    description: 'Hedging density ("maybe", "perhaps", "might") measures uncertainty. First-person density (I, me, my) measures self-focus. These feed the expression dimension as absolute deviations from your personal norm — any direction of shift counts.',
+    sessionFields: ['hedgingDensity', 'firstPersonDensity'],
+    feedsDimensions: ['expression'],
+    citation: 'Pennebaker 1997',
+  },
+  {
+    id: 'lexical',
+    label: 'Lexical & Syntax',
+    description: 'Average sentence length and question density (questions per sentence) feed the expression dimension as absolute deviations from your personal norm. Captures syntactic complexity and interrogative style.',
+    sessionFields: ['avgSentenceLength', 'questionDensity'],
+    feedsDimensions: ['expression'],
+    citation: 'Biber 1988',
+  },
+
+  // ── Observation-only families ───────────────────────────────────────
+  //
+  // These signals are collected and fed to the LLM prompt for
+  // interpretation, but do NOT feed the 8D state engine. They add
+  // context the LLM can use without affecting deterministic dimensions.
+
+  {
     id: 'keystroke',
     label: 'Keystroke Dynamics',
-    description: 'IKI (inter-key interval) measures milliseconds between keystrokes — mean captures average hesitation, std dev captures consistency. Hold time (keydown to keyup) measures motor execution. Flight time (key release to next key press) measures cognitive planning — word retrieval, sentence planning. Keystroke entropy measures how unpredictable your typing rhythm is (Shannon entropy of IKI distribution). These are independent signals that most tools collapse into a single "typing speed."',
+    description: 'IKI (inter-key interval) mean and std dev capture average hesitation and consistency. Hold time (keydown to keyup) measures motor execution. Flight time (key release to next key press) measures cognitive planning. Keystroke entropy measures typing rhythm unpredictability (Shannon entropy of IKI distribution). These are observation-only — they feed the LLM prompt but not the 8D engine.',
     sessionFields: ['interKeyIntervalMean', 'interKeyIntervalStd', 'holdTimeMean', 'holdTimeStd', 'flightTimeMean', 'flightTimeStd', 'keystrokeEntropy'],
     feedsDimensions: [],
-    citation: 'Epp et al 2011; Kim et al 2024; Ajilore et al 2025',
+    citation: 'Epp et al 2011',
   },
   {
     id: 'revision_topology',
     label: 'Revision Topology',
-    description: 'Sequential deletion keystrokes within 500ms of each other count as one revision chain. More chains = more revision episodes. Longer chains = deeper per-episode rethinking. Captures editing structure that raw deletion counts miss.',
+    description: 'Sequential deletion keystrokes within 500ms count as one revision chain. More chains = more revision episodes. Longer chains = deeper per-episode rethinking. Observation-only — captures editing structure that the engine\'s deletion decomposition misses.',
     sessionFields: ['revisionChainCount', 'revisionChainAvgLength'],
     feedsDimensions: [],
     citation: 'Leijten & Van Waes 2013',
@@ -88,34 +110,34 @@ export const SIGNAL_FAMILIES: SignalFamily[] = [
   {
     id: 'reengagement',
     label: 'Re-engagement',
-    description: 'Scroll-backs (scrolling up to re-read your own text) and question re-reads (returning to the prompt). These are metacognitive loops — you\'re checking your work against the question, not just producing forward. A signal of reflective depth.',
+    description: 'Scroll-backs (scrolling up to re-read your own text) and question re-reads (returning to the prompt). Metacognitive loops — checking your work against the question. Observation-only.',
     sessionFields: ['scrollBackCount', 'questionRereadCount'],
     feedsDimensions: [],
-    citation: 'Czerwinski et al 2004',
+    citation: 'Bereiter & Scardamalia 1987',
   },
   {
     id: 'nrc_emotion',
     label: 'NRC Emotions',
-    description: 'Word-level emotion densities from the NRC Emotion Lexicon: anger, fear, joy, sadness, trust, anticipation. Each is count of matching words divided by total words. The absolute values matter less than the slopes over time and deviations from personal baseline.',
+    description: 'Word-level emotion densities from the NRC Emotion Lexicon: anger, fear, joy, sadness, trust, anticipation. Each is count of matching words divided by total words. Observation-only — the absolute values matter less than slopes over time.',
     sessionFields: ['nrcAngerDensity', 'nrcFearDensity', 'nrcJoyDensity', 'nrcSadnessDensity', 'nrcTrustDensity', 'nrcAnticipationDensity'],
     feedsDimensions: [],
     citation: 'Mohammad & Turney 2013',
   },
   {
-    id: 'pennebaker',
-    label: 'Pennebaker Linguistic',
-    description: 'Cognitive density ("think", "realize", "because") measures causal reasoning. Hedging density ("maybe", "perhaps", "might") measures uncertainty. First-person density (I, me, my) measures self-focus. These psychological distance markers shift measurably between neutral and reflective writing.',
-    sessionFields: ['cognitiveDensity', 'hedgingDensity', 'firstPersonDensity'],
-    feedsDimensions: ['expression'],
-    citation: 'Pennebaker 1997; Vrij 2000',
+    id: 'lexical_diversity',
+    label: 'Lexical Diversity',
+    description: 'MATTR (Moving-Average Type-Token Ratio) measures vocabulary diversity independent of text length. Sentence length variance captures syntactic regularity. Observation-only — these are collected but do not currently feed the 8D engine.',
+    sessionFields: ['mattr', 'sentenceLengthVariance'],
+    feedsDimensions: [],
+    citation: 'McCarthy & Jarvis 2010',
   },
   {
-    id: 'lexical',
-    label: 'Lexical & Syntax',
-    description: 'MATTR (Moving-Average Type-Token Ratio) measures vocabulary diversity independent of text length. Sentence length and its variance capture syntactic complexity and regularity — monotone sentence structure vs varied rhythm.',
-    sessionFields: ['mattr', 'avgSentenceLength', 'sentenceLengthVariance'],
-    feedsDimensions: ['expression'],
-    citation: 'McCarthy & Jarvis 2010',
+    id: 'pennebaker_cognitive',
+    label: 'Cognitive Density',
+    description: 'Cognitive mechanism word density ("think", "realize", "because") measures causal reasoning intensity. Observation-only — collected but does not feed the 8D engine.',
+    sessionFields: ['cognitiveDensity'],
+    feedsDimensions: [],
+    citation: 'Pennebaker 1997',
   },
 ];
 
@@ -209,31 +231,41 @@ export function computeVariantTree(): VariantTreeResult {
     baselineVariance[dim] = variance(vals);
   }
 
-  // ── Families that affect the 8D state engine ──
-  // Map family ID → which raw session fields to neutralize
+  // ── Neutralization functions ──────────────────────────────────────
+  //
+  // Each function replaces its family's raw SessionRaw fields with the
+  // personal mean, so the 8D engine sees no signal from that family.
+  // These MUST match the exact fields used in computeEntryStates().
+  //
+  // Shared fields: some raw fields feed multiple dimensions. Each field
+  // belongs to exactly ONE family for ablation purposes to avoid overlap:
+  //   - commitmentRatio → deletion (feeds revision + commitment)
+  //   - pauseRatePerMinute → engagement (feeds deliberation + presence)
+  //   - revisionWeight → deletion (feeds deliberation)
+  //   - revisionRate → deletion (feeds revision)
+  //
   const familyNeutralizations: Record<string, (session: any) => any> = {
-    timing: (s) => ({ ...s, firstKeystrokeMs: avg(sessions.map(x => x.firstKeystrokeMs)) }),
-    production: (s) => ({
+    timing: (s) => ({
       ...s,
-      charsPerMinute: avg(sessions.map(x => x.charsPerMinute)),
-      commitmentRatio: avg(sessions.map(x => x.commitmentRatio)),
-      revisionRate: avg(sessions.map(x => x.revisionRate)),
+      firstKeystrokeMs: avg(sessions.map(x => x.firstKeystrokeMs)),
     }),
-    engagement: (s) => ({
+    pbursts: (s) => ({
       ...s,
-      pauseRatePerMinute: avg(sessions.map(x => x.pauseRatePerMinute)),
-      tabAwayRatePerMinute: avg(sessions.map(x => x.tabAwayRatePerMinute)),
+      avgPBurstLength: avg(sessions.map(x => x.avgPBurstLength)),
+      charsPerMinute: avg(sessions.map(x => x.charsPerMinute)),
     }),
     deletion: (s) => ({
       ...s,
       revisionWeight: avg(sessions.map(x => x.revisionWeight)),
       revisionRate: avg(sessions.map(x => x.revisionRate)),
+      commitmentRatio: avg(sessions.map(x => x.commitmentRatio)),
       correctionRate: avg(sessions.map(x => x.correctionRate)),
       revisionTiming: avg(sessions.map(x => x.revisionTiming)),
     }),
-    pbursts: (s) => ({
+    engagement: (s) => ({
       ...s,
-      avgPBurstLength: avg(sessions.map(x => x.avgPBurstLength)),
+      pauseRatePerMinute: avg(sessions.map(x => x.pauseRatePerMinute)),
+      tabAwayRatePerMinute: avg(sessions.map(x => x.tabAwayRatePerMinute)),
     }),
     pennebaker: (s) => ({
       ...s,
