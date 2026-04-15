@@ -41,22 +41,25 @@ export const GET: APIRoute = async () => {
   // that day's last response. If none exists, use defaults.
   const states = sessionDays.map((day, i) => {
     const dayEnd = day.first_response_utc;
-    // Find the latest witness created up to or shortly after this day's response
+    // Find the latest witness created up to or shortly after this day's response.
+    // The witness renders after the response is saved, so it may be created
+    // minutes (or, after a crash + manual re-run, hours) later.
+    // For each day, pick the witness whose entry_count matches (version i+1),
+    // or fall back to the latest witness created before or within a window after.
     let bestWitness = null;
+    const targetEntryCount = i + 1;
+    // First pass: exact entry_count match (most reliable)
     for (const w of witnesses) {
-      if (w.dttm_created_utc <= dayEnd) {
+      if (w.entry_count === targetEntryCount) {
         bestWitness = w;
+        break;
       }
     }
-    // Also check if a witness was created within a few minutes after
-    // (the witness renders right after the response is saved)
+    // Second pass: latest witness created on or before the response
     if (!bestWitness) {
       for (const w of witnesses) {
-        const wTime = new Date(w.dttm_created_utc + 'Z').getTime();
-        const rTime = new Date(dayEnd + 'Z').getTime();
-        if (wTime - rTime < 5 * 60 * 1000) {
+        if (w.dttm_created_utc <= dayEnd) {
           bestWitness = w;
-          break;
         }
       }
     }
