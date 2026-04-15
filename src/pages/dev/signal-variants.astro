@@ -1,0 +1,792 @@
+---
+
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Signal Variant Tree</title>
+    <script is:inline>
+      (function() {
+        var t = localStorage.getItem('alice-theme') || 'light';
+        document.documentElement.setAttribute('data-theme', t);
+      })();
+    </script>
+    <style is:global>
+      @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap');
+
+      :root {
+        --bg: #f5f2ed;
+        --bg-input: #ebe7e1;
+        --text: #1a1a1a;
+        --text-muted: #6b6560;
+        --text-faint: #9a9590;
+        --border: #ccc5bc;
+        --panel-bg: #ebe7e1;
+        --section-border: #ddd8d2;
+        --bar-bg: #ddd8d2;
+        --bar-fill: #8a8580;
+        --bar-accent: #4a7c59;
+        --bar-warn: #8c4a4a;
+        --corr-pos: #4a7c59;
+        --corr-neg: #8c4a4a;
+        --corr-zero: #ddd8d2;
+      }
+
+      [data-theme="dark"] {
+        --bg: #0a0a0a;
+        --bg-input: #161514;
+        --text: #ffffff;
+        --text-muted: #7a7570;
+        --text-faint: #4a4540;
+        --border: #333;
+        --panel-bg: #141312;
+        --section-border: #2a2825;
+        --bar-bg: #2a2825;
+        --bar-fill: #7a7570;
+        --bar-accent: #6aaa79;
+        --bar-warn: #bb6a6a;
+        --corr-pos: #6aaa79;
+        --corr-neg: #bb6a6a;
+        --corr-zero: #2a2825;
+      }
+
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      html, body {
+        height: 100%;
+        background: var(--bg);
+        color: var(--text);
+        font-family: 'EB Garamond', Georgia, serif;
+      }
+
+      body {
+        padding: 2rem 2rem 10rem;
+        max-width: 1100px;
+        margin: 0 auto;
+      }
+
+      .header {
+        display: flex;
+        align-items: baseline;
+        gap: 1.5rem;
+        margin-bottom: 0.5rem;
+      }
+
+      .back-btn {
+        color: var(--text-muted);
+        text-decoration: none;
+        font-size: 1.3rem;
+        transition: color 0.2s;
+      }
+
+      .back-btn:hover { color: var(--text); }
+
+      h1 {
+        font-size: 1.6rem;
+        font-weight: 500;
+        letter-spacing: 0.01em;
+      }
+
+      .subtitle {
+        color: var(--text-muted);
+        font-size: 1rem;
+        font-style: italic;
+        margin-bottom: 2rem;
+      }
+
+      .entry-count {
+        color: var(--text-faint);
+        font-size: 0.9rem;
+        margin-bottom: 2rem;
+      }
+
+      /* ── Sections ── */
+
+      .section {
+        margin-bottom: 2.5rem;
+      }
+
+      .section h2 {
+        font-size: 1.2rem;
+        font-weight: 500;
+        margin-bottom: 0.3rem;
+      }
+
+      .section-desc {
+        color: var(--text-muted);
+        font-size: 0.9rem;
+        font-style: italic;
+        margin-bottom: 1rem;
+      }
+
+      /* ── Dependency tree ── */
+
+      .dep-tree {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.8rem;
+        margin-bottom: 1rem;
+      }
+
+      .dep-card {
+        background: var(--panel-bg);
+        border: 1px solid var(--section-border);
+        padding: 0.8rem 1rem;
+        border-radius: 3px;
+      }
+
+      .dep-dim {
+        font-weight: 500;
+        font-size: 1rem;
+        margin-bottom: 0.3rem;
+        text-transform: capitalize;
+      }
+
+      .dep-families {
+        color: var(--text-muted);
+        font-size: 0.85rem;
+      }
+
+      .obs-only {
+        background: var(--panel-bg);
+        border: 1px solid var(--section-border);
+        padding: 0.8rem 1rem;
+        border-radius: 3px;
+        margin-top: 0.8rem;
+      }
+
+      .obs-only-label {
+        font-weight: 500;
+        color: var(--text-muted);
+        font-size: 0.9rem;
+        margin-bottom: 0.3rem;
+      }
+
+      .obs-only-list {
+        color: var(--text-faint);
+        font-size: 0.85rem;
+      }
+
+      /* ── Ablation bars ── */
+
+      .ablation-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      .ablation-table th {
+        text-align: left;
+        font-weight: 500;
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        padding: 0.4rem 0.6rem;
+        border-bottom: 1px solid var(--section-border);
+      }
+
+      .ablation-table td {
+        padding: 0.5rem 0.6rem;
+        font-size: 0.9rem;
+        border-bottom: 1px solid var(--section-border);
+      }
+
+      .ablation-table .family-name {
+        font-weight: 500;
+        min-width: 140px;
+      }
+
+      .bar-cell {
+        width: 100%;
+      }
+
+      .bar-container {
+        background: var(--bar-bg);
+        height: 18px;
+        border-radius: 2px;
+        position: relative;
+        overflow: hidden;
+        min-width: 100px;
+      }
+
+      .bar-fill {
+        height: 100%;
+        border-radius: 2px;
+        transition: width 0.3s ease;
+      }
+
+      .bar-fill.accent { background: var(--bar-accent); }
+      .bar-fill.warn { background: var(--bar-warn); }
+      .bar-fill.neutral { background: var(--bar-fill); }
+
+      .bar-value {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        margin-left: 0.4rem;
+        white-space: nowrap;
+      }
+
+      .bar-row {
+        display: flex;
+        align-items: center;
+      }
+
+      /* ── Dimension heatmap ── */
+
+      .dim-heatmap {
+        display: grid;
+        gap: 2px;
+        margin-top: 0.5rem;
+      }
+
+      .dim-heatmap-row {
+        display: contents;
+      }
+
+      .dim-heatmap-cell {
+        padding: 0.3rem 0.4rem;
+        font-size: 0.75rem;
+        text-align: center;
+        border-radius: 2px;
+        min-width: 60px;
+      }
+
+      .dim-heatmap-header {
+        font-weight: 500;
+        color: var(--text-muted);
+        font-size: 0.7rem;
+        text-transform: capitalize;
+      }
+
+      .dim-heatmap-label {
+        font-weight: 500;
+        text-align: left;
+        font-size: 0.8rem;
+        padding-right: 0.5rem;
+      }
+
+      /* ── Correlation matrix ── */
+
+      .corr-matrix {
+        display: inline-grid;
+        gap: 2px;
+        margin-top: 0.5rem;
+      }
+
+      .corr-cell {
+        width: 50px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.7rem;
+        border-radius: 2px;
+        font-weight: 500;
+      }
+
+      .corr-label {
+        display: flex;
+        align-items: center;
+        font-size: 0.75rem;
+        font-weight: 500;
+        padding-right: 0.4rem;
+        white-space: nowrap;
+      }
+
+      .corr-header {
+        font-size: 0.65rem;
+        color: var(--text-muted);
+        text-align: center;
+        transform: rotate(-35deg);
+        white-space: nowrap;
+        padding-bottom: 0.3rem;
+      }
+
+      /* ── Family glossary ── */
+
+      .glossary {
+        display: grid;
+        gap: 0.6rem;
+      }
+
+      .glossary-card {
+        background: var(--panel-bg);
+        border: 1px solid var(--section-border);
+        padding: 0.8rem 1rem;
+        border-radius: 3px;
+      }
+
+      .glossary-name {
+        font-weight: 500;
+        font-size: 1rem;
+        margin-bottom: 0.2rem;
+      }
+
+      .glossary-desc {
+        color: var(--text-muted);
+        font-size: 0.9rem;
+        line-height: 1.5;
+        margin-bottom: 0.3rem;
+      }
+
+      .glossary-cite {
+        color: var(--text-faint);
+        font-size: 0.8rem;
+        font-style: italic;
+      }
+
+      .glossary-signals {
+        color: var(--text-faint);
+        font-size: 0.8rem;
+        margin-top: 0.2rem;
+      }
+
+      /* ── Loading ── */
+
+      #content {
+        padding-bottom: 8rem;
+      }
+
+      .loading {
+        color: var(--text-muted);
+        font-style: italic;
+        padding: 2rem 0;
+      }
+
+      .error {
+        color: var(--bar-warn);
+        padding: 1rem 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <a href="/dev/signals" class="back-btn">&larr;</a>
+      <h1>Signal Variant Tree</h1>
+    </div>
+    <p class="subtitle">Ablation study — which signal families carry weight, which are redundant</p>
+
+    <div id="content">
+      <p class="loading">Computing ablation across all entries...</p>
+    </div>
+
+    <script is:inline>
+      (async function() {
+        const root = document.getElementById('content');
+        try {
+          const res = await fetch('/api/signal-variants');
+          if (!res.ok) throw new Error(`API error: ${res.status}`);
+          const data = await res.json();
+
+          if (data.entryCount === 0) {
+            root.innerHTML = '<p class="error">Not enough entries for ablation (need at least 3).</p>';
+            return;
+          }
+
+          root.innerHTML = '';
+
+          // ── Entry count ──
+          const count = document.createElement('p');
+          count.className = 'entry-count';
+          count.textContent = `Analyzing ${data.entryCount} entries across ${data.families.length} signal families`;
+          root.appendChild(count);
+
+          // ── 0. Signal Family Glossary ──
+          root.appendChild(makeSection(
+            'Signal Families',
+            'What each family measures and why it matters',
+            buildGlossary(data)
+          ));
+
+          // ── 1. Dependency Tree ──
+          root.appendChild(makeSection(
+            'Dependency Map',
+            'Which signal families feed which 8D dimensions',
+            buildDependencyTree(data)
+          ));
+
+          // ── 2. Leave-One-Out ──
+          root.appendChild(makeSection(
+            'Leave-One-Out',
+            'Remove one family — how much does the 8D shape change?',
+            buildLeaveOneOut(data)
+          ));
+
+          // ── 3. Solo Family ──
+          root.appendChild(makeSection(
+            'Solo Family',
+            'Keep only one family — how much of the full shape does it explain?',
+            buildSoloFamily(data)
+          ));
+
+          // ── 4. Dimension Breakdown ──
+          root.appendChild(makeSection(
+            'Dimension Impact',
+            'Per-dimension variance retained when each family is removed',
+            buildDimensionHeatmap(data)
+          ));
+
+          // ── 5. Correlation Matrix ──
+          root.appendChild(makeSection(
+            'Family Correlation',
+            'High correlation = similar deviation pattern when removed = potentially redundant',
+            buildCorrelationMatrix(data)
+          ));
+
+        } catch (err) {
+          root.innerHTML = `<p class="error">${err.message}</p>`;
+        }
+      })();
+
+      function makeSection(title, desc, content) {
+        const section = document.createElement('div');
+        section.className = 'section';
+        const h2 = document.createElement('h2');
+        h2.textContent = title;
+        section.appendChild(h2);
+        const p = document.createElement('p');
+        p.className = 'section-desc';
+        p.textContent = desc;
+        section.appendChild(p);
+        section.appendChild(content);
+        return section;
+      }
+
+      // ── Dependency Tree ──
+
+      // ── Glossary ──
+
+      function buildGlossary(data) {
+        const grid = document.createElement('div');
+        grid.className = 'glossary';
+
+        for (const f of data.families) {
+          const card = document.createElement('div');
+          card.className = 'glossary-card';
+
+          const name = document.createElement('div');
+          name.className = 'glossary-name';
+          name.textContent = f.label;
+          if (f.isObservationOnly) {
+            const tag = document.createElement('span');
+            tag.textContent = ' (observation only)';
+            tag.style.color = 'var(--text-faint)';
+            tag.style.fontWeight = '400';
+            tag.style.fontSize = '0.85rem';
+            name.appendChild(tag);
+          }
+          card.appendChild(name);
+
+          const desc = document.createElement('div');
+          desc.className = 'glossary-desc';
+          desc.textContent = f.description;
+          card.appendChild(desc);
+
+          const cite = document.createElement('div');
+          cite.className = 'glossary-cite';
+          cite.textContent = f.citation;
+          card.appendChild(cite);
+
+          if (f.sessionFields && f.sessionFields.length > 0) {
+            const signals = document.createElement('div');
+            signals.className = 'glossary-signals';
+            signals.textContent = f.sessionFields.join(', ');
+            card.appendChild(signals);
+          }
+
+          grid.appendChild(card);
+        }
+
+        return grid;
+      }
+
+      // ── Dependency Tree ──
+
+      function buildDependencyTree(data) {
+        const frag = document.createDocumentFragment();
+        const grid = document.createElement('div');
+        grid.className = 'dep-tree';
+
+        const dims = ['fluency', 'deliberation', 'revision', 'expression', 'commitment', 'volatility', 'thermal', 'presence'];
+        const familyMap = {};
+        data.families.forEach(f => familyMap[f.id] = f);
+
+        for (const dim of dims) {
+          const card = document.createElement('div');
+          card.className = 'dep-card';
+          const dimLabel = document.createElement('div');
+          dimLabel.className = 'dep-dim';
+          dimLabel.textContent = dim;
+          card.appendChild(dimLabel);
+
+          const deps = data.dimensionDeps[dim] || [];
+          const fams = document.createElement('div');
+          fams.className = 'dep-families';
+          if (deps.length > 0) {
+            fams.textContent = deps.map(id => familyMap[id]?.label || id).join(' + ');
+          } else {
+            fams.textContent = '(derived from other dimensions)';
+            fams.style.fontStyle = 'italic';
+          }
+          card.appendChild(fams);
+          grid.appendChild(card);
+        }
+        frag.appendChild(grid);
+
+        // Observation-only families
+        const obsOnly = data.families.filter(f => f.isObservationOnly);
+        if (obsOnly.length > 0) {
+          const box = document.createElement('div');
+          box.className = 'obs-only';
+          const label = document.createElement('div');
+          label.className = 'obs-only-label';
+          label.textContent = 'Observation-only (feed LLM prompt, not 8D engine)';
+          box.appendChild(label);
+          const list = document.createElement('div');
+          list.className = 'obs-only-list';
+          list.textContent = obsOnly.map(f => f.label).join(', ');
+          box.appendChild(list);
+          frag.appendChild(box);
+        }
+
+        return frag;
+      }
+
+      // ── Leave-One-Out ──
+
+      function buildLeaveOneOut(data) {
+        const results = data.leaveOneOut
+          .filter(r => r.totalDeviation > 0)
+          .sort((a, b) => b.totalDeviation - a.totalDeviation);
+
+        if (results.length === 0) {
+          const p = document.createElement('p');
+          p.className = 'entry-count';
+          p.textContent = 'No measurable deviation from any single-family removal.';
+          return p;
+        }
+
+        const maxDev = Math.max(...results.map(r => r.totalDeviation));
+        const familyMap = {};
+        data.families.forEach(f => familyMap[f.id] = f);
+
+        return buildBarTable(results.map(r => ({
+          label: familyMap[r.removed[0]]?.label || r.removed[0],
+          value: r.totalDeviation,
+          max: maxDev,
+          pct: (r.totalDeviation / maxDev * 100).toFixed(0) + '% impact',
+          type: r.totalDeviation > maxDev * 0.5 ? 'warn' : 'neutral',
+        })));
+      }
+
+      // ── Solo Family ──
+
+      function buildSoloFamily(data) {
+        const familyMap = {};
+        data.families.forEach(f => familyMap[f.id] = f);
+
+        // For solo, we show variance retained — higher = this family alone explains more
+        const results = data.soloFamily
+          .map(r => {
+            // The "solo" result has `removed` = all other families.
+            // The solo family is the one NOT in removed.
+            const soloId = data.families
+              .filter(f => !f.isObservationOnly)
+              .find(f => !r.removed.includes(f.id))?.id || '?';
+            return { id: soloId, ...r };
+          })
+          .sort((a, b) => a.totalVarianceRetained - b.totalVarianceRetained);
+
+        if (results.length === 0) {
+          const p = document.createElement('p');
+          p.className = 'entry-count';
+          p.textContent = 'Not enough data for solo analysis.';
+          return p;
+        }
+
+        return buildBarTable(results.map(r => ({
+          label: familyMap[r.id]?.label || r.id,
+          value: r.totalVarianceRetained,
+          max: 1,
+          pct: (r.totalVarianceRetained * 100).toFixed(0) + '% variance retained alone',
+          type: r.totalVarianceRetained > 0.5 ? 'accent' : 'neutral',
+        })));
+      }
+
+      // ── Bar table builder ──
+
+      function buildBarTable(rows) {
+        const table = document.createElement('table');
+        table.className = 'ablation-table';
+
+        for (const row of rows) {
+          const tr = document.createElement('tr');
+
+          const tdName = document.createElement('td');
+          tdName.className = 'family-name';
+          tdName.textContent = row.label;
+          tr.appendChild(tdName);
+
+          const tdBar = document.createElement('td');
+          tdBar.className = 'bar-cell';
+          const barRow = document.createElement('div');
+          barRow.className = 'bar-row';
+
+          const container = document.createElement('div');
+          container.className = 'bar-container';
+          const fill = document.createElement('div');
+          fill.className = `bar-fill ${row.type}`;
+          fill.style.width = `${(row.value / row.max) * 100}%`;
+          container.appendChild(fill);
+          barRow.appendChild(container);
+
+          const val = document.createElement('span');
+          val.className = 'bar-value';
+          val.textContent = row.pct;
+          barRow.appendChild(val);
+
+          tdBar.appendChild(barRow);
+          tr.appendChild(tdBar);
+          table.appendChild(tr);
+        }
+
+        return table;
+      }
+
+      // ── Dimension Heatmap ──
+
+      function buildDimensionHeatmap(data) {
+        const results = data.leaveOneOut.filter(r => r.totalDeviation > 0);
+        if (results.length === 0) {
+          const p = document.createElement('p');
+          p.className = 'entry-count';
+          p.textContent = 'No data for dimension breakdown.';
+          return p;
+        }
+
+        const familyMap = {};
+        data.families.forEach(f => familyMap[f.id] = f);
+
+        const dims = ['fluency', 'deliberation', 'revision', 'expression', 'commitment', 'volatility', 'thermal', 'presence'];
+        const cols = dims.length + 1;
+
+        const grid = document.createElement('div');
+        grid.className = 'dim-heatmap';
+        grid.style.gridTemplateColumns = `140px repeat(${dims.length}, 1fr)`;
+
+        // Header row
+        const emptyHeader = document.createElement('div');
+        emptyHeader.className = 'dim-heatmap-header';
+        grid.appendChild(emptyHeader);
+        for (const dim of dims) {
+          const h = document.createElement('div');
+          h.className = 'dim-heatmap-header';
+          h.textContent = dim.slice(0, 5);
+          h.title = dim;
+          grid.appendChild(h);
+        }
+
+        // Data rows
+        results.sort((a, b) => b.totalDeviation - a.totalDeviation);
+        for (const r of results) {
+          const label = document.createElement('div');
+          label.className = 'dim-heatmap-label';
+          label.textContent = familyMap[r.removed[0]]?.label || r.removed[0];
+          grid.appendChild(label);
+
+          for (const dim of dims) {
+            const retained = r.varianceRetained[dim] ?? 1;
+            const lost = 1 - retained;
+            const cell = document.createElement('div');
+            cell.className = 'dim-heatmap-cell';
+            cell.textContent = (lost * 100).toFixed(0) + '%';
+            cell.title = `${dim}: ${(lost * 100).toFixed(1)}% variance lost`;
+
+            // Color: more lost = more red
+            if (lost > 0.3) {
+              cell.style.background = 'var(--bar-warn)';
+              cell.style.color = '#fff';
+            } else if (lost > 0.1) {
+              cell.style.background = 'var(--bar-fill)';
+              cell.style.color = '#fff';
+            } else {
+              cell.style.background = 'var(--bar-bg)';
+              cell.style.color = 'var(--text-muted)';
+            }
+            grid.appendChild(cell);
+          }
+        }
+
+        return grid;
+      }
+
+      // ── Correlation Matrix ──
+
+      function buildCorrelationMatrix(data) {
+        const matrix = data.correlationMatrix;
+        const ids = Object.keys(matrix);
+        if (ids.length === 0) {
+          const p = document.createElement('p');
+          p.className = 'entry-count';
+          p.textContent = 'Not enough families for correlation analysis.';
+          return p;
+        }
+
+        const familyMap = {};
+        data.families.forEach(f => familyMap[f.id] = f);
+
+        const grid = document.createElement('div');
+        grid.className = 'corr-matrix';
+        grid.style.gridTemplateColumns = `100px repeat(${ids.length}, 50px)`;
+
+        // Header row
+        const empty = document.createElement('div');
+        grid.appendChild(empty);
+        for (const id of ids) {
+          const h = document.createElement('div');
+          h.className = 'corr-header';
+          h.textContent = (familyMap[id]?.label || id).slice(0, 8);
+          h.title = familyMap[id]?.label || id;
+          grid.appendChild(h);
+        }
+
+        // Data rows
+        for (const rowId of ids) {
+          const label = document.createElement('div');
+          label.className = 'corr-label';
+          label.textContent = (familyMap[rowId]?.label || rowId).slice(0, 12);
+          label.title = familyMap[rowId]?.label || rowId;
+          grid.appendChild(label);
+
+          for (const colId of ids) {
+            const val = matrix[rowId]?.[colId] ?? 0;
+            const cell = document.createElement('div');
+            cell.className = 'corr-cell';
+
+            if (rowId === colId) {
+              cell.style.background = 'var(--corr-zero)';
+              cell.textContent = '—';
+              cell.style.color = 'var(--text-faint)';
+            } else {
+              const abs = Math.abs(val);
+              const opacity = Math.min(1, abs * 1.2);
+              if (val > 0.1) {
+                cell.style.background = `color-mix(in srgb, var(--corr-pos) ${opacity * 100}%, var(--corr-zero))`;
+              } else if (val < -0.1) {
+                cell.style.background = `color-mix(in srgb, var(--corr-neg) ${opacity * 100}%, var(--corr-zero))`;
+              } else {
+                cell.style.background = 'var(--corr-zero)';
+              }
+              cell.textContent = val.toFixed(2);
+              cell.style.color = abs > 0.5 ? '#fff' : 'var(--text-muted)';
+            }
+            cell.title = `${familyMap[rowId]?.label || rowId} × ${familyMap[colId]?.label || colId}: ${val.toFixed(3)}`;
+            grid.appendChild(cell);
+          }
+        }
+
+        return grid;
+      }
+    </script>
+  </body>
+</html>
