@@ -391,6 +391,14 @@
           <dd>Sequential deletion keystrokes within 500ms of each other count as one chain. More chains = more revision episodes. Longer chains = deeper per-episode rethinking.</dd>
           <dd class="cite">Leijten & Van Waes, 2013</dd>
 
+          <dt>Hold Time / Flight Time</dt>
+          <dd>Hold time = how long a key is pressed (keydown to keyup). Measures motor execution — tremor, rigidity, finger coordination. Flight time = gap between releasing one key and pressing the next. Measures cognitive planning — word retrieval, sentence planning. These are independent signals collapsed into IKI by most tools. Flight time alone achieved 97.9% sensitivity for MCI detection.</dd>
+          <dd class="cite">Kim et al., 2024 (JMIR)</dd>
+
+          <dt>Keystroke Entropy</dt>
+          <dd>Shannon entropy of the inter-key interval distribution. Measures how unpredictable your typing rhythm is. High entropy = irregular, switching between fast bursts and long pauses. Low entropy = metronomic, consistent rhythm. Different from IKI std — entropy captures the shape of the distribution, not just its spread. Correlated with executive function at d=-1.28.</dd>
+          <dd class="cite">Ajilore et al., 2025 (BiAffect/Frontiers in Psychiatry)</dd>
+
           <dt>Linguistic Densities</dt>
           <dd>Word category counts divided by total words. NRC emotion categories (anger, fear, joy, sadness, trust, anticipation) come from the NRC Emotion Lexicon. Cognitive, hedging, and first-person densities come from Pennebaker's LIWC categories. Slopes of these over time are the real signal.</dd>
           <dd class="cite">Mohammad & Turney, 2013; Pennebaker, 2011</dd>
@@ -627,19 +635,22 @@
       textarea.addEventListener('keydown', (e: KeyboardEvent) => {
         const now = Date.now();
 
-        if (lastKeystrokeTime !== null) {
-          const interval = now - lastKeystrokeTime;
-          if (interval < 5000) interKeyIntervals.push(interval);
-        }
-        lastKeystrokeTime = now;
+        // Skip auto-repeat events from held keys
+        if (!e.repeat) {
+          if (lastKeystrokeTime !== null) {
+            const interval = now - lastKeystrokeTime;
+            if (interval < 5000) interKeyIntervals.push(interval);
+          }
+          lastKeystrokeTime = now;
 
-        // Hold time: record keydown timestamp per key (Kim et al. 2024)
-        keydownTimes.set(e.code, now);
+          // Hold time: record keydown timestamp per key (Kim et al. 2024)
+          keydownTimes.set(e.code, now);
 
-        // Flight time: keyup[n-1] → keydown[n]
-        if (lastKeyupTime !== null) {
-          const ft = now - lastKeyupTime;
-          if (ft > 0 && ft < 5000) flightTimes.push(ft);
+          // Flight time: keyup[n-1] → keydown[n]
+          if (lastKeyupTime !== null) {
+            const ft = now - lastKeyupTime;
+            if (ft > 0 && ft < 5000) flightTimes.push(ft);
+          }
         }
 
         if (e.key === 'Backspace' || e.key === 'Delete') {
@@ -986,6 +997,9 @@
               ${deltaRow('Commitment', j.commitmentRatio, c.commitmentRatio)}
               ${deltaRow('Large deletions', j.largeDeletionCount, c.largeDeletionCount)}
               ${deltaRow('IKI mean', j.interKeyIntervalMean, c.interKeyIntervalMean)}
+              ${deltaRow('Hold time', j.holdTimeMean, c.holdTimeMean)}
+              ${deltaRow('Flight time', j.flightTimeMean, c.flightTimeMean)}
+              ${deltaRow('Entropy', j.keystrokeEntropy, c.keystrokeEntropy)}
               ${deltaRow('Avg P-burst len', j.avgPBurstLength, c.avgPBurstLength)}
             </div>
           `;
@@ -1052,6 +1066,20 @@
             ${row('Revision chains', m.revisionChainCount)}
             ${row('Avg chain length', fmt(m.revisionChainAvgLength, 1))}
             ${row('Scroll-backs', m.scrollBackCount)}
+          </div>
+
+          <div class="section">
+            <div class="section-title">Motor / Cognitive (Kim et al. 2024)</div>
+            ${row('Hold time mean', fmtMs(m.holdTimeMean))}
+            ${row('Hold time std', fmtMs(m.holdTimeStd))}
+            ${row('Flight time mean', fmtMs(m.flightTimeMean))}
+            ${row('Flight time std', fmtMs(m.flightTimeStd))}
+            ${row('Hold/flight ratio', m.holdTimeMean != null && m.flightTimeMean != null && m.flightTimeMean > 0 ? fmt(m.holdTimeMean / m.flightTimeMean, 2) : '—')}
+          </div>
+
+          <div class="section">
+            <div class="section-title">Entropy (Ajilore et al. 2025)</div>
+            ${row('Keystroke entropy', m.keystrokeEntropy != null ? fmt(m.keystrokeEntropy, 2) + ' bits' : '—')}
           </div>
 
           <div class="section">

@@ -476,22 +476,25 @@
           textarea.addEventListener('keydown', (e: KeyboardEvent) => {
             const now = Date.now();
 
-            // Inter-key interval tracking (Epp et al. 2011)
-            if (lastKeystrokeTime !== null) {
-              const interval = now - lastKeystrokeTime;
-              if (interval < 5000) { // cap at 5s to exclude pauses
-                interKeyIntervals.push(interval);
+            // Skip auto-repeat events from held keys — not real keypresses
+            if (!e.repeat) {
+              // Inter-key interval tracking (Epp et al. 2011)
+              if (lastKeystrokeTime !== null) {
+                const interval = now - lastKeystrokeTime;
+                if (interval < 5000) { // cap at 5s to exclude pauses
+                  interKeyIntervals.push(interval);
+                }
               }
-            }
-            lastKeystrokeTime = now;
+              lastKeystrokeTime = now;
 
-            // Hold time: record keydown timestamp per key (Kim et al. 2024)
-            keydownTimes.set(e.code, now);
+              // Hold time: record keydown timestamp per key (Kim et al. 2024)
+              keydownTimes.set(e.code, now);
 
-            // Flight time: keyup[n-1] → keydown[n] (cognitive planning interval)
-            if (lastKeyupTime !== null) {
-              const ft = now - lastKeyupTime;
-              if (ft > 0 && ft < 5000) flightTimes.push(ft);
+              // Flight time: keyup[n-1] → keydown[n] (cognitive planning interval)
+              if (lastKeyupTime !== null) {
+                const ft = now - lastKeyupTime;
+                if (ft > 0 && ft < 5000) flightTimes.push(ft);
+              }
             }
 
             // Revision chain detection (Leijten & Van Waes 2013)
@@ -965,19 +968,23 @@
 
         textarea.addEventListener('keydown', (e: KeyboardEvent) => {
           const now = Date.now();
-          if (lastKeystrokeTime !== null) {
-            const interval = now - lastKeystrokeTime;
-            if (interval < 5000) calInterKeyIntervals.push(interval);
-          }
-          lastKeystrokeTime = now;
 
-          // Hold time: record keydown timestamp per key (Kim et al. 2024)
-          calKeydownTimes.set(e.code, now);
+          // Skip auto-repeat events from held keys
+          if (!e.repeat) {
+            if (lastKeystrokeTime !== null) {
+              const interval = now - lastKeystrokeTime;
+              if (interval < 5000) calInterKeyIntervals.push(interval);
+            }
+            lastKeystrokeTime = now;
 
-          // Flight time: keyup[n-1] → keydown[n]
-          if (calLastKeyupTime !== null) {
-            const ft = now - calLastKeyupTime;
-            if (ft > 0 && ft < 5000) calFlightTimes.push(ft);
+            // Hold time: record keydown timestamp per key (Kim et al. 2024)
+            calKeydownTimes.set(e.code, now);
+
+            // Flight time: keyup[n-1] → keydown[n]
+            if (calLastKeyupTime !== null) {
+              const ft = now - calLastKeyupTime;
+              if (ft > 0 && ft < 5000) calFlightTimes.push(ft);
+            }
           }
 
           if (e.key === 'Backspace' || e.key === 'Delete') {
