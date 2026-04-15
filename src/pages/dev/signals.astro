@@ -481,6 +481,12 @@
       let lastDeletionTime: number | null = null;
       const revisionChains: number[] = [];
 
+      // Hold time + flight time decomposition (Kim et al. 2024)
+      const holdTimes: number[] = [];
+      const flightTimes: number[] = [];
+      let lastKeyupTime: number | null = null;
+      const keydownTimes = new Map<string, number>();
+
       // Scroll tracking
       let scrollBackCount = 0;
       let lastScrollTop = 0;
@@ -596,6 +602,10 @@
         currentRevisionChainLength = 0;
         lastDeletionTime = null;
         revisionChains.length = 0;
+        holdTimes.length = 0;
+        flightTimes.length = 0;
+        lastKeyupTime = null;
+        keydownTimes.clear();
         scrollBackCount = 0;
         lastScrollTop = 0;
         linguisticDensities = {};
@@ -623,6 +633,15 @@
         }
         lastKeystrokeTime = now;
 
+        // Hold time: record keydown timestamp per key (Kim et al. 2024)
+        keydownTimes.set(e.code, now);
+
+        // Flight time: keyup[n-1] → keydown[n]
+        if (lastKeyupTime !== null) {
+          const ft = now - lastKeyupTime;
+          if (ft > 0 && ft < 5000) flightTimes.push(ft);
+        }
+
         if (e.key === 'Backspace' || e.key === 'Delete') {
           if (lastDeletionTime !== null && (now - lastDeletionTime) < 500) {
             currentRevisionChainLength++;
@@ -636,6 +655,18 @@
             revisionChains.push(currentRevisionChainLength);
             currentRevisionChainLength = 0;
           }
+        }
+      });
+
+      // Hold time: keydown → keyup per key (motor execution duration)
+      textarea.addEventListener('keyup', (e: KeyboardEvent) => {
+        const now = Date.now();
+        lastKeyupTime = now;
+        const downTime = keydownTimes.get(e.code);
+        if (downTime != null) {
+          const ht = now - downTime;
+          if (ht > 0 && ht < 2000) holdTimes.push(ht);
+          keydownTimes.delete(e.code);
         }
       });
 
@@ -810,6 +841,40 @@
         const revChainAvgLength = revChainCount > 0
           ? allChains.reduce((a, b) => a + b, 0) / revChainCount : null;
 
+        // Hold time stats (Kim et al. 2024 — motor execution)
+        const htCount = holdTimes.length;
+        const holdTimeMean = htCount > 0
+          ? holdTimes.reduce((a, b) => a + b, 0) / htCount : null;
+        const holdTimeStd = htCount > 1
+          ? Math.sqrt(holdTimes.reduce((sum, v) => sum + (v - holdTimeMean!) ** 2, 0) / (htCount - 1)) : null;
+
+        // Flight time stats (Kim et al. 2024 — cognitive planning)
+        const ftCount = flightTimes.length;
+        const flightTimeMean = ftCount > 0
+          ? flightTimes.reduce((a, b) => a + b, 0) / ftCount : null;
+        const flightTimeStd = ftCount > 1
+          ? Math.sqrt(flightTimes.reduce((sum, v) => sum + (v - flightTimeMean!) ** 2, 0) / (ftCount - 1)) : null;
+
+        // Keystroke entropy (Ajilore et al. 2025, BiAffect)
+        let keystrokeEntropy: number | null = null;
+        if (ikiCount >= 10) {
+          const BIN_WIDTH = 50;
+          const NUM_BINS = 40;
+          const bins = new Array(NUM_BINS).fill(0);
+          for (const iki of interKeyIntervals) {
+            const bin = Math.min(NUM_BINS - 1, Math.floor(iki / BIN_WIDTH));
+            bins[bin]++;
+          }
+          let entropy = 0;
+          for (const count of bins) {
+            if (count > 0) {
+              const p = count / ikiCount;
+              entropy -= p * Math.log2(p);
+            }
+          }
+          keystrokeEntropy = entropy;
+        }
+
         return {
           totalDurationMs,
           firstKeystrokeMs,
@@ -843,6 +908,11 @@
           interKeyIntervalStd: ikiStd,
           revisionChainCount: revChainCount,
           revisionChainAvgLength: revChainAvgLength,
+          holdTimeMean,
+          holdTimeStd,
+          flightTimeMean,
+          flightTimeStd,
+          keystrokeEntropy,
           scrollBackCount,
         };
       }
