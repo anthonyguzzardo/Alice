@@ -57,6 +57,8 @@ const DELTA_DIMENSIONS = [
   'deltaLargeDeletionCount',
   'deltaInterKeyIntervalMean',
   'deltaAvgPBurstLength',
+  'deltaHoldTimeMean',
+  'deltaFlightTimeMean',
 ] as const;
 
 type DeltaDimension = typeof DELTA_DIMENSIONS[number];
@@ -125,6 +127,20 @@ const DIMENSION_META: Record<DeltaDimension, {
     format: (v) => `${v.toFixed(0)} chars`,
     higherMeans: 'longer thought-units',
   },
+  deltaHoldTimeMean: {
+    calField: 'holdTimeMean',
+    label: 'Hold time',
+    unit: 'ms',
+    format: (v) => `${v.toFixed(0)}ms`,
+    higherMeans: 'longer key press duration (motor)',
+  },
+  deltaFlightTimeMean: {
+    calField: 'flightTimeMean',
+    label: 'Flight time',
+    unit: 'ms',
+    format: (v) => `${v.toFixed(0)}ms`,
+    higherMeans: 'longer pause between keys (cognitive)',
+  },
 };
 
 // ----------------------------------------------------------------------------
@@ -155,6 +171,8 @@ export function computeSessionDelta(
     deltaLargeDeletionCount: safeDelta(calibration.largeDeletionCount, journal.largeDeletionCount),
     deltaInterKeyIntervalMean: safeDelta(calibration.interKeyIntervalMean, journal.interKeyIntervalMean),
     deltaAvgPBurstLength: safeDelta(calibration.avgPBurstLength, journal.avgPBurstLength),
+    deltaHoldTimeMean: safeDelta(calibration.holdTimeMean, journal.holdTimeMean),
+    deltaFlightTimeMean: safeDelta(calibration.flightTimeMean, journal.flightTimeMean),
     deltaMagnitude: null, // computed separately with history
     // Raw values for auditability
     calibrationFirstPerson: calibration.firstPersonDensity ?? null,
@@ -173,6 +191,10 @@ export function computeSessionDelta(
     journalInterKeyIntervalMean: journal.interKeyIntervalMean ?? null,
     calibrationAvgPBurstLength: calibration.avgPBurstLength ?? null,
     journalAvgPBurstLength: journal.avgPBurstLength ?? null,
+    calibrationHoldTimeMean: calibration.holdTimeMean ?? null,
+    journalHoldTimeMean: journal.holdTimeMean ?? null,
+    calibrationFlightTimeMean: calibration.flightTimeMean ?? null,
+    journalFlightTimeMean: journal.flightTimeMean ?? null,
   };
 
   return delta;

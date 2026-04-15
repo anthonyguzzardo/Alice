@@ -275,6 +275,21 @@ db.exec(`
     ,inter_key_interval_std     REAL             -- std dev of inter-key intervals
     ,revision_chain_count       INTEGER          -- count of sequential deletion chains
     ,revision_chain_avg_length  REAL             -- avg keystrokes per revision chain
+    -- HOLD TIME + FLIGHT TIME DECOMPOSITION (Kim et al. 2024, JMIR)
+    -- Hold time (keydown→keyup) = motor execution, tremor, rigidity
+    -- Flight time (keyup→next keydown) = cognitive planning, retrieval latency
+    ,hold_time_mean             REAL             -- mean hold time in ms
+    ,hold_time_std              REAL             -- std dev of hold times
+    ,flight_time_mean           REAL             -- mean flight time in ms
+    ,flight_time_std            REAL             -- std dev of flight times
+    -- KEYSTROKE ENTROPY (Ajilore et al. 2025, BiAffect — d=-1.28 for executive function)
+    -- Shannon entropy of IKI distribution: measures timing unpredictability
+    ,keystroke_entropy          REAL             -- bits; higher = more irregular timing
+    -- LEXICAL DIVERSITY (McCarthy & Jarvis 2010)
+    ,mattr                      REAL             -- Moving-Average Type-Token Ratio (25-word window)
+    -- SENTENCE METRICS
+    ,avg_sentence_length        REAL             -- mean words per sentence
+    ,sentence_length_variance   REAL             -- variance of sentence lengths
     -- SESSION METADATA (Czerwinski et al. 2004)
     ,scroll_back_count          INTEGER          -- times user scrolled back in textarea
     ,question_reread_count      INTEGER          -- times user scrolled to re-read question
@@ -896,6 +911,9 @@ db.exec(`
     ,delta_large_deletion_count          REAL    -- substantive rethinking (Faigley & Witte)
     ,delta_inter_key_interval_mean       REAL    -- keystroke hesitation (Epp et al 2011)
     ,delta_avg_p_burst_length            REAL    -- thought-unit length (Chenoweth & Hayes)
+    -- HOLD TIME + FLIGHT TIME DELTAS (Kim et al. 2024)
+    ,delta_hold_time_mean                REAL    -- motor execution shift
+    ,delta_flight_time_mean              REAL    -- cognitive planning shift
     -- COMPOSITE
     ,delta_magnitude                     REAL    -- Euclidean distance in z-normalized delta-space
     -- RAW VALUES (calibration then journal, for auditability)
@@ -915,6 +933,10 @@ db.exec(`
     ,journal_inter_key_interval_mean     REAL
     ,calibration_avg_p_burst_length      REAL
     ,journal_avg_p_burst_length          REAL
+    ,calibration_hold_time_mean          REAL
+    ,journal_hold_time_mean              REAL
+    ,calibration_flight_time_mean        REAL
+    ,journal_flight_time_mean            REAL
     -- FOOTER
     ,dttm_created_utc                    TEXT    NOT NULL DEFAULT (datetime('now'))
     ,created_by                          TEXT    NOT NULL DEFAULT 'system'
@@ -1006,6 +1028,52 @@ try {
   for (const [col, type] of keystrokeCols) {
     if (!cols2.some(c => c.name === col)) {
       db.exec(`ALTER TABLE tb_session_summaries ADD COLUMN ${col} ${type}`);
+    }
+  }
+} catch {
+  // safe to ignore
+}
+
+// --------------------------------------------------------------------------
+// MIGRATION: Add hold time, flight time, entropy, MATTR, sentence metrics
+// --------------------------------------------------------------------------
+try {
+  const cols3 = db.prepare(`PRAGMA table_info(tb_session_summaries)`).all() as Array<{ name: string }>;
+  const newCols: Array<[string, string]> = [
+    ['hold_time_mean', 'REAL'],
+    ['hold_time_std', 'REAL'],
+    ['flight_time_mean', 'REAL'],
+    ['flight_time_std', 'REAL'],
+    ['keystroke_entropy', 'REAL'],
+    ['mattr', 'REAL'],
+    ['avg_sentence_length', 'REAL'],
+    ['sentence_length_variance', 'REAL'],
+  ];
+  for (const [col, type] of newCols) {
+    if (!cols3.some(c => c.name === col)) {
+      db.exec(`ALTER TABLE tb_session_summaries ADD COLUMN ${col} ${type}`);
+    }
+  }
+} catch {
+  // safe to ignore
+}
+
+// --------------------------------------------------------------------------
+// MIGRATION: Add hold time + flight time delta columns to tb_session_delta
+// --------------------------------------------------------------------------
+try {
+  const deltaCols = db.prepare(`PRAGMA table_info(tb_session_delta)`).all() as Array<{ name: string }>;
+  const newDeltaCols: Array<[string, string]> = [
+    ['delta_hold_time_mean', 'REAL'],
+    ['delta_flight_time_mean', 'REAL'],
+    ['calibration_hold_time_mean', 'REAL'],
+    ['journal_hold_time_mean', 'REAL'],
+    ['calibration_flight_time_mean', 'REAL'],
+    ['journal_flight_time_mean', 'REAL'],
+  ];
+  for (const [col, type] of newDeltaCols) {
+    if (!deltaCols.some(c => c.name === col)) {
+      db.exec(`ALTER TABLE tb_session_delta ADD COLUMN ${col} ${type}`);
     }
   }
 } catch {
@@ -1133,6 +1201,18 @@ export interface SessionSummaryInput {
   interKeyIntervalStd: number | null;
   revisionChainCount: number | null;
   revisionChainAvgLength: number | null;
+  // Hold time + flight time decomposition (Kim et al. 2024)
+  holdTimeMean: number | null;
+  holdTimeStd: number | null;
+  flightTimeMean: number | null;
+  flightTimeStd: number | null;
+  // Keystroke entropy (Ajilore et al. 2025, BiAffect)
+  keystrokeEntropy: number | null;
+  // Lexical diversity (McCarthy & Jarvis 2010)
+  mattr: number | null;
+  // Sentence metrics
+  avgSentenceLength: number | null;
+  sentenceLengthVariance: number | null;
   // Session metadata (Czerwinski et al. 2004)
   scrollBackCount: number | null;
   questionRereadCount: number | null;
@@ -1159,9 +1239,12 @@ export function saveSessionSummary(s: SessionSummaryInput): void {
        cognitive_density, hedging_density, first_person_density,
        inter_key_interval_mean, inter_key_interval_std,
        revision_chain_count, revision_chain_avg_length,
+       hold_time_mean, hold_time_std, flight_time_mean, flight_time_std,
+       keystroke_entropy,
+       mattr, avg_sentence_length, sentence_length_variance,
        scroll_back_count, question_reread_count,
        device_type, user_agent, hour_of_day, day_of_week
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     s.questionId, s.firstKeystrokeMs, s.totalDurationMs,
     s.totalCharsTyped, s.finalCharCount, s.commitmentRatio,
@@ -1176,6 +1259,9 @@ export function saveSessionSummary(s: SessionSummaryInput): void {
     s.cognitiveDensity, s.hedgingDensity, s.firstPersonDensity,
     s.interKeyIntervalMean, s.interKeyIntervalStd,
     s.revisionChainCount, s.revisionChainAvgLength,
+    s.holdTimeMean, s.holdTimeStd, s.flightTimeMean, s.flightTimeStd,
+    s.keystrokeEntropy,
+    s.mattr, s.avgSentenceLength, s.sentenceLengthVariance,
     s.scrollBackCount, s.questionRereadCount,
     s.deviceType, s.userAgent, s.hourOfDay, s.dayOfWeek
   );
@@ -1238,6 +1324,11 @@ const SESSION_SUMMARY_COLS = `
   inter_key_interval_std as interKeyIntervalStd,
   revision_chain_count as revisionChainCount,
   revision_chain_avg_length as revisionChainAvgLength,
+  hold_time_mean as holdTimeMean, hold_time_std as holdTimeStd,
+  flight_time_mean as flightTimeMean, flight_time_std as flightTimeStd,
+  keystroke_entropy as keystrokeEntropy,
+  mattr, avg_sentence_length as avgSentenceLength,
+  sentence_length_variance as sentenceLengthVariance,
   scroll_back_count as scrollBackCount,
   question_reread_count as questionRereadCount,
   device_type as deviceType, user_agent as userAgent,
@@ -1273,6 +1364,17 @@ export function getAllSessionSummaries(): Array<SessionSummaryInput & { date: st
            s.nrc_trust_density as nrcTrustDensity, s.nrc_anticipation_density as nrcAnticipationDensity,
            s.cognitive_density as cognitiveDensity, s.hedging_density as hedgingDensity,
            s.first_person_density as firstPersonDensity,
+           s.inter_key_interval_mean as interKeyIntervalMean,
+           s.inter_key_interval_std as interKeyIntervalStd,
+           s.revision_chain_count as revisionChainCount,
+           s.revision_chain_avg_length as revisionChainAvgLength,
+           s.hold_time_mean as holdTimeMean, s.hold_time_std as holdTimeStd,
+           s.flight_time_mean as flightTimeMean, s.flight_time_std as flightTimeStd,
+           s.keystroke_entropy as keystrokeEntropy,
+           s.mattr, s.avg_sentence_length as avgSentenceLength,
+           s.sentence_length_variance as sentenceLengthVariance,
+           s.scroll_back_count as scrollBackCount,
+           s.question_reread_count as questionRereadCount,
            s.device_type as deviceType,
            s.user_agent as userAgent, s.hour_of_day as hourOfDay, s.day_of_week as dayOfWeek
     FROM tb_session_summaries s
@@ -1388,6 +1490,17 @@ export function getCalibrationSessionsWithText(): Array<SessionSummaryInput & { 
            s.nrc_trust_density as nrcTrustDensity, s.nrc_anticipation_density as nrcAnticipationDensity,
            s.cognitive_density as cognitiveDensity, s.hedging_density as hedgingDensity,
            s.first_person_density as firstPersonDensity,
+           s.inter_key_interval_mean as interKeyIntervalMean,
+           s.inter_key_interval_std as interKeyIntervalStd,
+           s.revision_chain_count as revisionChainCount,
+           s.revision_chain_avg_length as revisionChainAvgLength,
+           s.hold_time_mean as holdTimeMean, s.hold_time_std as holdTimeStd,
+           s.flight_time_mean as flightTimeMean, s.flight_time_std as flightTimeStd,
+           s.keystroke_entropy as keystrokeEntropy,
+           s.mattr, s.avg_sentence_length as avgSentenceLength,
+           s.sentence_length_variance as sentenceLengthVariance,
+           s.scroll_back_count as scrollBackCount,
+           s.question_reread_count as questionRereadCount,
            s.device_type as deviceType,
            s.user_agent as userAgent, s.hour_of_day as hourOfDay, s.day_of_week as dayOfWeek
     FROM tb_session_summaries s
@@ -1635,6 +1748,17 @@ export function getSessionSummariesForQuestions(questionIds: number[]): Array<Se
            s.nrc_trust_density as nrcTrustDensity, s.nrc_anticipation_density as nrcAnticipationDensity,
            s.cognitive_density as cognitiveDensity, s.hedging_density as hedgingDensity,
            s.first_person_density as firstPersonDensity,
+           s.inter_key_interval_mean as interKeyIntervalMean,
+           s.inter_key_interval_std as interKeyIntervalStd,
+           s.revision_chain_count as revisionChainCount,
+           s.revision_chain_avg_length as revisionChainAvgLength,
+           s.hold_time_mean as holdTimeMean, s.hold_time_std as holdTimeStd,
+           s.flight_time_mean as flightTimeMean, s.flight_time_std as flightTimeStd,
+           s.keystroke_entropy as keystrokeEntropy,
+           s.mattr, s.avg_sentence_length as avgSentenceLength,
+           s.sentence_length_variance as sentenceLengthVariance,
+           s.scroll_back_count as scrollBackCount,
+           s.question_reread_count as questionRereadCount,
            s.device_type as deviceType,
            s.user_agent as userAgent, s.hour_of_day as hourOfDay, s.day_of_week as dayOfWeek
     FROM tb_session_summaries s
@@ -2404,6 +2528,8 @@ export interface SessionDeltaRow {
   deltaLargeDeletionCount: number | null;
   deltaInterKeyIntervalMean: number | null;
   deltaAvgPBurstLength: number | null;
+  deltaHoldTimeMean: number | null;
+  deltaFlightTimeMean: number | null;
   deltaMagnitude: number | null;
   calibrationFirstPerson: number | null;
   journalFirstPerson: number | null;
@@ -2421,6 +2547,10 @@ export interface SessionDeltaRow {
   journalInterKeyIntervalMean: number | null;
   calibrationAvgPBurstLength: number | null;
   journalAvgPBurstLength: number | null;
+  calibrationHoldTimeMean: number | null;
+  journalHoldTimeMean: number | null;
+  calibrationFlightTimeMean: number | null;
+  journalFlightTimeMean: number | null;
 }
 
 export function getSameDayCalibrationSummary(date: string): SessionSummaryInput | null {
@@ -2451,6 +2581,8 @@ export function saveSessionDelta(delta: SessionDeltaRow): void {
       ,delta_large_deletion_count
       ,delta_inter_key_interval_mean
       ,delta_avg_p_burst_length
+      ,delta_hold_time_mean
+      ,delta_flight_time_mean
       ,delta_magnitude
       ,calibration_first_person
       ,journal_first_person
@@ -2468,7 +2600,11 @@ export function saveSessionDelta(delta: SessionDeltaRow): void {
       ,journal_inter_key_interval_mean
       ,calibration_avg_p_burst_length
       ,journal_avg_p_burst_length
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ,calibration_hold_time_mean
+      ,journal_hold_time_mean
+      ,calibration_flight_time_mean
+      ,journal_flight_time_mean
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     delta.sessionDate,
     delta.calibrationQuestionId,
@@ -2481,6 +2617,8 @@ export function saveSessionDelta(delta: SessionDeltaRow): void {
     delta.deltaLargeDeletionCount,
     delta.deltaInterKeyIntervalMean,
     delta.deltaAvgPBurstLength,
+    delta.deltaHoldTimeMean,
+    delta.deltaFlightTimeMean,
     delta.deltaMagnitude,
     delta.calibrationFirstPerson,
     delta.journalFirstPerson,
@@ -2498,6 +2636,10 @@ export function saveSessionDelta(delta: SessionDeltaRow): void {
     delta.journalInterKeyIntervalMean,
     delta.calibrationAvgPBurstLength,
     delta.journalAvgPBurstLength,
+    delta.calibrationHoldTimeMean,
+    delta.journalHoldTimeMean,
+    delta.calibrationFlightTimeMean,
+    delta.journalFlightTimeMean,
   );
 }
 
@@ -2516,6 +2658,8 @@ export function getRecentSessionDeltas(limit: number = 30): SessionDeltaRow[] {
       ,delta_large_deletion_count as deltaLargeDeletionCount
       ,delta_inter_key_interval_mean as deltaInterKeyIntervalMean
       ,delta_avg_p_burst_length as deltaAvgPBurstLength
+      ,delta_hold_time_mean as deltaHoldTimeMean
+      ,delta_flight_time_mean as deltaFlightTimeMean
       ,delta_magnitude as deltaMagnitude
       ,calibration_first_person as calibrationFirstPerson
       ,journal_first_person as journalFirstPerson
@@ -2533,6 +2677,10 @@ export function getRecentSessionDeltas(limit: number = 30): SessionDeltaRow[] {
       ,journal_inter_key_interval_mean as journalInterKeyIntervalMean
       ,calibration_avg_p_burst_length as calibrationAvgPBurstLength
       ,journal_avg_p_burst_length as journalAvgPBurstLength
+      ,calibration_hold_time_mean as calibrationHoldTimeMean
+      ,journal_hold_time_mean as journalHoldTimeMean
+      ,calibration_flight_time_mean as calibrationFlightTimeMean
+      ,journal_flight_time_mean as journalFlightTimeMean
     FROM tb_session_delta
     ORDER BY session_date DESC
     LIMIT ?

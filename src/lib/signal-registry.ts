@@ -79,6 +79,22 @@ const SESSION_SIGNALS: Record<string, SignalDefinition> = {
   'session.revisionChainCount':     { name: 'session.revisionChainCount',     source: 'session', field: 'revisionChainCount',     unit: 'count',       description: 'Sequential deletion chains',                              nullable: true },
   'session.revisionChainAvgLength': { name: 'session.revisionChainAvgLength', source: 'session', field: 'revisionChainAvgLength', unit: 'keystrokes',  description: 'Avg keystrokes per revision chain',                       nullable: true },
 
+  // Hold time + flight time decomposition (Kim et al 2024)
+  'session.holdTimeMean':           { name: 'session.holdTimeMean',           source: 'session', field: 'holdTimeMean',           unit: 'ms',          description: 'Mean key hold time (motor execution)',                    nullable: true },
+  'session.holdTimeStd':            { name: 'session.holdTimeStd',            source: 'session', field: 'holdTimeStd',            unit: 'ms',          description: 'Std dev of key hold times',                               nullable: true },
+  'session.flightTimeMean':         { name: 'session.flightTimeMean',         source: 'session', field: 'flightTimeMean',         unit: 'ms',          description: 'Mean flight time between keys (cognitive planning)',       nullable: true },
+  'session.flightTimeStd':          { name: 'session.flightTimeStd',          source: 'session', field: 'flightTimeStd',          unit: 'ms',          description: 'Std dev of flight times',                                 nullable: true },
+
+  // Keystroke entropy (Ajilore et al 2025, BiAffect)
+  'session.keystrokeEntropy':       { name: 'session.keystrokeEntropy',       source: 'session', field: 'keystrokeEntropy',       unit: 'bits',        description: 'Shannon entropy of IKI distribution (timing unpredictability)', nullable: true },
+
+  // Lexical diversity (McCarthy & Jarvis 2010)
+  'session.mattr':                  { name: 'session.mattr',                  source: 'session', field: 'mattr',                  unit: 'ratio 0-1',   description: 'Moving-Average Type-Token Ratio (vocabulary diversity)',   nullable: true },
+
+  // Sentence metrics
+  'session.avgSentenceLength':      { name: 'session.avgSentenceLength',      source: 'session', field: 'avgSentenceLength',      unit: 'words',       description: 'Mean words per sentence',                                 nullable: true },
+  'session.sentenceLengthVariance':  { name: 'session.sentenceLengthVariance',  source: 'session', field: 'sentenceLengthVariance',  unit: 'variance',    description: 'Variance of sentence lengths (syntactic regularity)',      nullable: true },
+
   // Re-engagement (Czerwinski et al 2004)
   'session.scrollBackCount':        { name: 'session.scrollBackCount',        source: 'session', field: 'scrollBackCount',        unit: 'count',       description: 'Times user scrolled back in own text',                    nullable: true },
   'session.questionRereadCount':    { name: 'session.questionRereadCount',    source: 'session', field: 'questionRereadCount',    unit: 'count',       description: 'Times user re-read the question prompt',                  nullable: true },
@@ -106,6 +122,8 @@ const DELTA_SIGNALS: Record<string, SignalDefinition> = {
   'delta.largeDeletionCount':      { name: 'delta.largeDeletionCount',      source: 'delta', field: 'deltaLargeDeletionCount',  unit: 'count diff',   description: 'Large deletion count shift',                               nullable: true },
   'delta.interKeyIntervalMean':    { name: 'delta.interKeyIntervalMean',    source: 'delta', field: 'deltaInterKeyIntervalMean',unit: 'ms diff',      description: 'Keystroke interval shift',                                 nullable: true },
   'delta.avgPBurstLength':         { name: 'delta.avgPBurstLength',         source: 'delta', field: 'deltaAvgPBurstLength',     unit: 'chars diff',   description: 'P-burst length shift',                                     nullable: true },
+  'delta.holdTimeMean':            { name: 'delta.holdTimeMean',            source: 'delta', field: 'deltaHoldTimeMean',        unit: 'ms diff',      description: 'Hold time shift (motor execution)',                        nullable: true },
+  'delta.flightTimeMean':          { name: 'delta.flightTimeMean',          source: 'delta', field: 'deltaFlightTimeMean',      unit: 'ms diff',      description: 'Flight time shift (cognitive planning)',                    nullable: true },
   'delta.magnitude':               { name: 'delta.magnitude',               source: 'delta', field: 'deltaMagnitude',           unit: 'RMS z-score',  description: 'Overall behavioral displacement magnitude',                nullable: true },
 };
 

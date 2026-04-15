@@ -40,6 +40,16 @@ interface PersonalBaselines {
   revisionChainAvgLengths: number[];
   scrollBackCounts: number[];
   questionRereadCounts: number[];
+  // Hold time + flight time (Kim et al. 2024)
+  holdTimeMeans: number[];
+  flightTimeMeans: number[];
+  // Keystroke entropy (Ajilore et al. 2025)
+  keystrokeEntropies: number[];
+  // MATTR (McCarthy & Jarvis 2010)
+  mattrs: number[];
+  // Sentence metrics
+  avgSentenceLengths: number[];
+  sentenceLengthVariances: number[];
 }
 
 function computePersonalBaselines(allSummaries: SessionSummaryInput[]): PersonalBaselines {
@@ -59,6 +69,16 @@ function computePersonalBaselines(allSummaries: SessionSummaryInput[]): Personal
     revisionChainAvgLengths: allSummaries.filter(s => s.revisionChainAvgLength != null).map(s => s.revisionChainAvgLength!),
     scrollBackCounts: allSummaries.filter(s => s.scrollBackCount != null).map(s => s.scrollBackCount!),
     questionRereadCounts: allSummaries.filter(s => s.questionRereadCount != null).map(s => s.questionRereadCount!),
+    // Hold time + flight time (Kim et al. 2024)
+    holdTimeMeans: allSummaries.filter(s => s.holdTimeMean != null).map(s => s.holdTimeMean!),
+    flightTimeMeans: allSummaries.filter(s => s.flightTimeMean != null).map(s => s.flightTimeMean!),
+    // Keystroke entropy (Ajilore et al. 2025)
+    keystrokeEntropies: allSummaries.filter(s => s.keystrokeEntropy != null).map(s => s.keystrokeEntropy!),
+    // MATTR (McCarthy & Jarvis 2010)
+    mattrs: allSummaries.filter(s => s.mattr != null).map(s => s.mattr!),
+    // Sentence metrics
+    avgSentenceLengths: allSummaries.filter(s => s.avgSentenceLength != null).map(s => s.avgSentenceLength!),
+    sentenceLengthVariances: allSummaries.filter(s => s.sentenceLengthVariance != null).map(s => s.sentenceLengthVariance!),
   };
 }
 
@@ -243,6 +263,36 @@ export function formatObserveSignals(
       lines.push('- Low interval variability — uniform rhythm, suggests flow state or automatic writing');
     }
 
+    // Hold time + flight time decomposition (Kim et al. 2024)
+    if (session.holdTimeMean != null && session.flightTimeMean != null) {
+      lines.push('');
+      lines.push('Motor vs cognitive decomposition (Kim et al. 2024):');
+      lines.push(`- Hold time (motor execution): mean ${session.holdTimeMean.toFixed(0)}ms, std ${(session.holdTimeStd ?? 0).toFixed(0)}ms`);
+      lines.push(`- Flight time (cognitive planning): mean ${session.flightTimeMean.toFixed(0)}ms, std ${(session.flightTimeStd ?? 0).toFixed(0)}ms`);
+      if (baselines.holdTimeMeans.length > 1) {
+        const htPct = percentileRank(session.holdTimeMean, baselines.holdTimeMeans);
+        const ftPct = percentileRank(session.flightTimeMean, baselines.flightTimeMeans);
+        lines.push(`- Hold time: ${verbalizePercentile(htPct)}. Flight time: ${verbalizePercentile(ftPct)}.`);
+      }
+      const htFtRatio = session.flightTimeMean > 0 ? session.holdTimeMean / session.flightTimeMean : 0;
+      if (htFtRatio > 1.5) {
+        lines.push('- Hold/flight ratio elevated — motor execution dominates over cognitive planning');
+      } else if (htFtRatio < 0.3) {
+        lines.push('- Flight time dominates — long pauses between keys suggest deliberate word retrieval');
+      }
+    }
+
+    // Keystroke entropy (Ajilore et al. 2025, BiAffect)
+    if (session.keystrokeEntropy != null) {
+      lines.push('');
+      lines.push('Keystroke entropy (Ajilore et al. 2025):');
+      lines.push(`- Timing entropy: ${session.keystrokeEntropy.toFixed(2)} bits`);
+      if (baselines.keystrokeEntropies.length > 1) {
+        const entPct = percentileRank(session.keystrokeEntropy, baselines.keystrokeEntropies);
+        lines.push(`- ${verbalizePercentile(entPct)}. Higher entropy = more irregular typing rhythm; lower = more metronomic.`);
+      }
+    }
+
     // Revision chains
     if (session.revisionChainCount != null) {
       const chains = session.revisionChainCount;
@@ -318,6 +368,22 @@ export function formatObserveSignals(
     lines.push(`Cognitive mechanism words: ${(session.cognitiveDensity! * 100).toFixed(1)}%${cogPct}`);
     lines.push(`Hedging language: ${(session.hedgingDensity! * 100).toFixed(1)}%${hedgePct}`);
     lines.push(`First-person density: ${(session.firstPersonDensity! * 100).toFixed(1)}%${fpPct}`);
+
+    // MATTR — vocabulary diversity (McCarthy & Jarvis 2010)
+    if (session.mattr != null) {
+      const mattrPct = baselines.mattrs.length > 1 ? ` (${verbalizePercentile(percentileRank(session.mattr, baselines.mattrs))})` : '';
+      lines.push(`Vocabulary diversity (MATTR): ${session.mattr.toFixed(3)}${mattrPct}`);
+    }
+
+    // Sentence metrics
+    if (session.avgSentenceLength != null) {
+      const aslPct = baselines.avgSentenceLengths.length > 1 ? ` (${verbalizePercentile(percentileRank(session.avgSentenceLength, baselines.avgSentenceLengths))})` : '';
+      lines.push(`Avg sentence length: ${session.avgSentenceLength.toFixed(1)} words${aslPct}`);
+    }
+    if (session.sentenceLengthVariance != null && session.sentenceLengthVariance > 0) {
+      const slvPct = baselines.sentenceLengthVariances.length > 1 ? ` (${verbalizePercentile(percentileRank(session.sentenceLengthVariance, baselines.sentenceLengthVariances))})` : '';
+      lines.push(`Sentence length variance: ${session.sentenceLengthVariance.toFixed(1)}${slvPct}`);
+    }
   }
 
   return lines.join('\n');
@@ -366,7 +432,17 @@ export function formatCompactSignals(
         ? `scrollback=${s.scrollBackCount ?? '?'} rereads=${s.questionRereadCount ?? '?'}`
         : '';
 
-      return `[${s.date}] device=${s.deviceType || '?'} hour=${s.hourOfDay ?? '?'} duration=${dur} ${cpmStr} ${commitStr} ${revStr} ${burstStr} ${ikiStr} ${chainStr} ${scrollStr} pauses=${s.pauseCount} tabs=${s.tabAwayCount} words=${s.wordCount} ${lingStr}`.replace(/  +/g, ' ').trim();
+      const htftStr = s.holdTimeMean != null && s.flightTimeMean != null
+        ? `hold=${s.holdTimeMean.toFixed(0)}ms flight=${s.flightTimeMean.toFixed(0)}ms`
+        : '';
+      const entropyStr = s.keystrokeEntropy != null
+        ? `entropy=${s.keystrokeEntropy.toFixed(2)}bits`
+        : '';
+      const mattrStr = s.mattr != null
+        ? `mattr=${s.mattr.toFixed(3)}`
+        : '';
+
+      return `[${s.date}] device=${s.deviceType || '?'} hour=${s.hourOfDay ?? '?'} duration=${dur} ${cpmStr} ${commitStr} ${revStr} ${burstStr} ${ikiStr} ${htftStr} ${entropyStr} ${chainStr} ${scrollStr} pauses=${s.pauseCount} tabs=${s.tabAwayCount} words=${s.wordCount} ${mattrStr} ${lingStr}`.replace(/  +/g, ' ').trim();
     } else {
       // Pre-V3 fallback
       return `[${s.date}] device=${s.deviceType || '?'} hour=${s.hourOfDay ?? '?'} duration=${dur} commitment=${s.commitmentRatio?.toFixed(2) ?? '?'} deletions=${s.deletionCount}(largest=${s.largestDeletion}) pauses=${s.pauseCount} tabs=${s.tabAwayCount} words=${s.wordCount} [pre-V3]`;

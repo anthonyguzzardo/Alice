@@ -189,6 +189,15 @@ export function buildSessionSummary(
     cognitiveDensity: null,
     hedgingDensity: null,
     firstPersonDensity: null,
+    // Simulated signals — null for simulation (computed client-side in real usage)
+    holdTimeMean: null,
+    holdTimeStd: null,
+    flightTimeMean: null,
+    flightTimeStd: null,
+    keystrokeEntropy: null,
+    mattr: null,
+    avgSentenceLength: null,
+    sentenceLengthVariance: null,
   };
 }
 

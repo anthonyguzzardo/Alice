@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import { saveCalibrationSession, getUsedCalibrationPrompts } from '../../lib/db.ts';
 import { CALIBRATION_PROMPTS } from '../../lib/calibration-prompts.ts';
 import { computeLinguisticDensities } from '../../lib/linguistic.ts';
+import { computeMATTR } from '../../lib/alice-negative/helpers.ts';
 import { runCalibrationExtraction } from '../../lib/calibration-extract.ts';
 
 export const GET: APIRoute = () => {
@@ -26,6 +27,17 @@ export const POST: APIRoute = async ({ request }) => {
   }
 
   const densities = computeLinguisticDensities(text.trim());
+
+  // Compute MATTR + sentence metrics server-side
+  const trimmedText = text.trim();
+  const mattrWords = trimmedText.toLowerCase().replace(/[^a-z'\s-]/g, '').split(/\s+/).filter((w: string) => w.length > 0);
+  const mattrValue = mattrWords.length >= 25 ? computeMATTR(mattrWords) : null;
+  const sentences = trimmedText.split(/[.!?]+/).filter((s: string) => s.trim().length > 0);
+  const sentWordCounts = sentences.map((s: string) => s.trim().split(/\s+/).filter(Boolean).length);
+  const avgSentLen = sentWordCounts.length > 0
+    ? sentWordCounts.reduce((a: number, b: number) => a + b, 0) / sentWordCounts.length : null;
+  const sentLenVar = sentWordCounts.length > 1 && avgSentLen != null
+    ? sentWordCounts.reduce((sum: number, c: number) => sum + (c - avgSentLen) ** 2, 0) / (sentWordCounts.length - 1) : null;
 
   const questionId = saveCalibrationSession(prompt, text.trim(), {
     questionId: 0,
@@ -57,6 +69,14 @@ export const POST: APIRoute = async ({ request }) => {
     interKeyIntervalStd: sessionSummary.interKeyIntervalStd ?? null,
     revisionChainCount: sessionSummary.revisionChainCount ?? null,
     revisionChainAvgLength: sessionSummary.revisionChainAvgLength ?? null,
+    holdTimeMean: sessionSummary.holdTimeMean ?? null,
+    holdTimeStd: sessionSummary.holdTimeStd ?? null,
+    flightTimeMean: sessionSummary.flightTimeMean ?? null,
+    flightTimeStd: sessionSummary.flightTimeStd ?? null,
+    keystrokeEntropy: sessionSummary.keystrokeEntropy ?? null,
+    mattr: mattrValue,
+    avgSentenceLength: avgSentLen,
+    sentenceLengthVariance: sentLenVar,
     scrollBackCount: sessionSummary.scrollBackCount ?? null,
     questionRereadCount: sessionSummary.questionRereadCount ?? null,
     deviceType: sessionSummary.deviceType ?? null,

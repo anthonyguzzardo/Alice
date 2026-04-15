@@ -446,6 +446,13 @@
           let lastDeletionTime: number | null = null;
           const revisionChains: number[] = [];
 
+          // Hold time + flight time decomposition (Kim et al. 2024, JMIR)
+          // Hold time (keydown→keyup) = motor execution; flight time (keyup→next keydown) = cognitive planning
+          const holdTimes: number[] = [];
+          const flightTimes: number[] = [];
+          let lastKeyupTime: number | null = null;
+          const keydownTimes = new Map<string, number>();
+
           // Enriched: session metadata (Czerwinski et al. 2004)
           // Scroll-back and re-read behavior correlate with engagement depth
           let scrollBackCount = 0;
@@ -478,6 +485,15 @@
             }
             lastKeystrokeTime = now;
 
+            // Hold time: record keydown timestamp per key (Kim et al. 2024)
+            keydownTimes.set(e.code, now);
+
+            // Flight time: keyup[n-1] → keydown[n] (cognitive planning interval)
+            if (lastKeyupTime !== null) {
+              const ft = now - lastKeyupTime;
+              if (ft > 0 && ft < 5000) flightTimes.push(ft);
+            }
+
             // Revision chain detection (Leijten & Van Waes 2013)
             // Sequential deletions within 500ms = one revision chain
             if (e.key === 'Backspace' || e.key === 'Delete') {
@@ -495,6 +511,18 @@
                 revisionChains.push(currentRevisionChainLength);
                 currentRevisionChainLength = 0;
               }
+            }
+          });
+
+          // Hold time: keydown → keyup per key (motor execution duration)
+          textarea.addEventListener('keyup', (e: KeyboardEvent) => {
+            const now = Date.now();
+            lastKeyupTime = now;
+            const downTime = keydownTimes.get(e.code);
+            if (downTime != null) {
+              const ht = now - downTime;
+              if (ht > 0 && ht < 2000) holdTimes.push(ht); // cap at 2s — held keys are not motor signal
+              keydownTimes.delete(e.code);
             }
           });
 
@@ -670,6 +698,42 @@
             const ikiStd = ikiCount > 1
               ? Math.sqrt(interKeyIntervals.reduce((sum, v) => sum + (v - ikiMean!) ** 2, 0) / (ikiCount - 1)) : null;
 
+            // Derived: hold time stats (Kim et al. 2024 — motor execution)
+            const htCount = holdTimes.length;
+            const holdTimeMean = htCount > 0
+              ? holdTimes.reduce((a, b) => a + b, 0) / htCount : null;
+            const holdTimeStd = htCount > 1
+              ? Math.sqrt(holdTimes.reduce((sum, v) => sum + (v - holdTimeMean!) ** 2, 0) / (htCount - 1)) : null;
+
+            // Derived: flight time stats (Kim et al. 2024 — cognitive planning)
+            const ftCount = flightTimes.length;
+            const flightTimeMean = ftCount > 0
+              ? flightTimes.reduce((a, b) => a + b, 0) / ftCount : null;
+            const flightTimeStd = ftCount > 1
+              ? Math.sqrt(flightTimes.reduce((sum, v) => sum + (v - flightTimeMean!) ** 2, 0) / (ftCount - 1)) : null;
+
+            // Derived: keystroke entropy (Ajilore et al. 2025, BiAffect)
+            // Shannon entropy of IKI distribution — measures timing unpredictability
+            // Bins: 50ms width over 0-2000ms range (40 bins)
+            let keystrokeEntropy: number | null = null;
+            if (ikiCount >= 10) {
+              const BIN_WIDTH = 50;
+              const NUM_BINS = 40;
+              const bins = new Array(NUM_BINS).fill(0);
+              for (const iki of interKeyIntervals) {
+                const bin = Math.min(NUM_BINS - 1, Math.floor(iki / BIN_WIDTH));
+                bins[bin]++;
+              }
+              let entropy = 0;
+              for (const count of bins) {
+                if (count > 0) {
+                  const p = count / ikiCount;
+                  entropy -= p * Math.log2(p);
+                }
+              }
+              keystrokeEntropy = entropy;
+            }
+
             // Derived: revision chain stats (Leijten & Van Waes 2013)
             const revChainCount = revisionChains.length;
             const revChainAvgLength = revChainCount > 0
@@ -707,6 +771,13 @@
               interKeyIntervalStd: ikiStd,
               revisionChainCount: revChainCount,
               revisionChainAvgLength: revChainAvgLength,
+              // Hold time + flight time decomposition (Kim et al. 2024)
+              holdTimeMean,
+              holdTimeStd,
+              flightTimeMean,
+              flightTimeStd,
+              // Keystroke entropy (Ajilore et al. 2025, BiAffect)
+              keystrokeEntropy,
               // Session metadata (Czerwinski et al. 2004)
               scrollBackCount,
               questionRereadCount,
@@ -875,6 +946,12 @@
         let calLastDeletionTime: number | null = null;
         const calRevisionChains: number[] = [];
 
+        // Hold time + flight time decomposition (Kim et al. 2024)
+        const calHoldTimes: number[] = [];
+        const calFlightTimes: number[] = [];
+        let calLastKeyupTime: number | null = null;
+        const calKeydownTimes = new Map<string, number>();
+
         // Session metadata (Czerwinski et al. 2004)
         let calScrollBackCount = 0;
         let calLastScrollTop = 0;
@@ -894,6 +971,15 @@
           }
           lastKeystrokeTime = now;
 
+          // Hold time: record keydown timestamp per key (Kim et al. 2024)
+          calKeydownTimes.set(e.code, now);
+
+          // Flight time: keyup[n-1] → keydown[n]
+          if (calLastKeyupTime !== null) {
+            const ft = now - calLastKeyupTime;
+            if (ft > 0 && ft < 5000) calFlightTimes.push(ft);
+          }
+
           if (e.key === 'Backspace' || e.key === 'Delete') {
             if (calLastDeletionTime !== null && (now - calLastDeletionTime) < 500) {
               calCurrentRevChainLength++;
@@ -907,6 +993,18 @@
               calRevisionChains.push(calCurrentRevChainLength);
               calCurrentRevChainLength = 0;
             }
+          }
+        });
+
+        // Hold time: keydown → keyup per key (motor execution duration)
+        textarea.addEventListener('keyup', (e: KeyboardEvent) => {
+          const now = Date.now();
+          calLastKeyupTime = now;
+          const downTime = calKeydownTimes.get(e.code);
+          if (downTime != null) {
+            const ht = now - downTime;
+            if (ht > 0 && ht < 2000) calHoldTimes.push(ht);
+            calKeydownTimes.delete(e.code);
           }
         });
 
@@ -1017,6 +1115,40 @@
           const calIkiStd = calIkiCount > 1
             ? Math.sqrt(calInterKeyIntervals.reduce((sum, v) => sum + (v - calIkiMean!) ** 2, 0) / (calIkiCount - 1)) : null;
 
+          // Derived: hold time stats (Kim et al. 2024 — motor execution)
+          const calHtCount = calHoldTimes.length;
+          const calHoldTimeMean = calHtCount > 0
+            ? calHoldTimes.reduce((a, b) => a + b, 0) / calHtCount : null;
+          const calHoldTimeStd = calHtCount > 1
+            ? Math.sqrt(calHoldTimes.reduce((sum, v) => sum + (v - calHoldTimeMean!) ** 2, 0) / (calHtCount - 1)) : null;
+
+          // Derived: flight time stats (Kim et al. 2024 — cognitive planning)
+          const calFtCount = calFlightTimes.length;
+          const calFlightTimeMean = calFtCount > 0
+            ? calFlightTimes.reduce((a, b) => a + b, 0) / calFtCount : null;
+          const calFlightTimeStd = calFtCount > 1
+            ? Math.sqrt(calFlightTimes.reduce((sum, v) => sum + (v - calFlightTimeMean!) ** 2, 0) / (calFtCount - 1)) : null;
+
+          // Derived: keystroke entropy (Ajilore et al. 2025, BiAffect)
+          let calKeystrokeEntropy: number | null = null;
+          if (calIkiCount >= 10) {
+            const BIN_WIDTH = 50;
+            const NUM_BINS = 40;
+            const bins = new Array(NUM_BINS).fill(0);
+            for (const iki of calInterKeyIntervals) {
+              const bin = Math.min(NUM_BINS - 1, Math.floor(iki / BIN_WIDTH));
+              bins[bin]++;
+            }
+            let entropy = 0;
+            for (const count of bins) {
+              if (count > 0) {
+                const p = count / calIkiCount;
+                entropy -= p * Math.log2(p);
+              }
+            }
+            calKeystrokeEntropy = entropy;
+          }
+
           // Derived: revision chain stats (Leijten & Van Waes 2013)
           const calRevChainCount = calRevisionChains.length;
           const calRevChainAvgLen = calRevChainCount > 0
@@ -1051,6 +1183,13 @@
             interKeyIntervalStd: calIkiStd,
             revisionChainCount: calRevChainCount,
             revisionChainAvgLength: calRevChainAvgLen,
+            // Hold time + flight time decomposition (Kim et al. 2024)
+            holdTimeMean: calHoldTimeMean,
+            holdTimeStd: calHoldTimeStd,
+            flightTimeMean: calFlightTimeMean,
+            flightTimeStd: calFlightTimeStd,
+            // Keystroke entropy (Ajilore et al. 2025, BiAffect)
+            keystrokeEntropy: calKeystrokeEntropy,
             scrollBackCount: calScrollBackCount,
             questionRereadCount: 0, // not tracked in calibration — no persistent question to re-read
             // Context
