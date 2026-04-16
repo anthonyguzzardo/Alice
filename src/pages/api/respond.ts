@@ -70,19 +70,6 @@ export const POST: APIRoute = async ({ request }) => {
       saveBurstSequence(questionId, sessionSummary.burstSequence);
     }
 
-    // Persist deletion event timing log (compact JSON) for slice-3 metadata
-    if (Array.isArray(sessionSummary.deletionEvents)) {
-      try {
-        const compact = sessionSummary.deletionEvents.map((d: any) => ({
-          c: Math.max(1, d.chars ?? d.c ?? 1),
-          t: Math.max(0, d.time ?? d.t ?? 0),
-        }));
-        updateDeletionEvents(questionId, JSON.stringify(compact));
-      } catch (err) {
-        logError('respond.deletionEvents', err, { questionId });
-      }
-    }
-
     // Persist per-keystroke event log for read-only playback
     if (Array.isArray(sessionSummary.eventLog) && sessionSummary.eventLog.length > 0) {
       try {
@@ -142,6 +129,21 @@ export const POST: APIRoute = async ({ request }) => {
       hourOfDay: sessionSummary.hourOfDay ?? null,
       dayOfWeek: sessionSummary.dayOfWeek ?? null,
     });
+
+    // Persist deletion event timing log (compact JSON) for slice-3 metadata.
+    // Must run AFTER saveSessionSummary — updateDeletionEvents is an UPDATE,
+    // and saveSessionSummary creates the row being updated.
+    if (Array.isArray(sessionSummary.deletionEvents)) {
+      try {
+        const compact = sessionSummary.deletionEvents.map((d: any) => ({
+          c: Math.max(1, d.chars ?? d.c ?? 1),
+          t: Math.max(0, d.time ?? d.t ?? 0),
+        }));
+        updateDeletionEvents(questionId, JSON.stringify(compact));
+      } catch (err) {
+        logError('respond.deletionEvents', err, { questionId });
+      }
+    }
 
     // Compute and persist slice-3 session metadata (hour-typicality,
     // deletion-density curve, burst trajectory shape, inter-burst interval,

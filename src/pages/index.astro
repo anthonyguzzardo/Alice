@@ -548,15 +548,22 @@
         presenceEvents.forEach((e) => window.addEventListener(e, onPresence, { passive: true } as any));
       }
 
-      // Keep the writing surface focused — if you click empty space (closing
-      // a menu, dismissing a panel, missing the textarea), focus snaps back
-      // to your words instead of vanishing into the void.
+      // Keep the writing surface focused — the top controls (theme, health,
+      // nav) steal focus when clicked; this snaps it back. Deferred to the
+      // next tick so the clicked element can run its own handler first
+      // (including DOM replacements like free-write → calibration surface).
+      // Exclusions: form controls (don't steal from checkbox/slider in the
+      // calibration target UI), panel content (let you interact with open
+      // popovers), and links (they navigate away).
       document.addEventListener('click', (e) => {
         const t = e.target as HTMLElement | null;
         if (!t) return;
-        if (t.closest('button, a, input, textarea, .nav-dropdown, .health-panel')) return;
-        const ta = document.getElementById('response') as HTMLTextAreaElement | null;
-        if (ta) ta.focus();
+        if (t.closest('input, select, a[href]')) return;
+        if (t.closest('.nav-dropdown, .health-panel')) return;
+        setTimeout(() => {
+          const ta = document.getElementById('response') as HTMLTextAreaElement | null;
+          if (ta) ta.focus();
+        }, 0);
       });
 
       // Time-based prompt fade — the scaffolding recedes because you've
