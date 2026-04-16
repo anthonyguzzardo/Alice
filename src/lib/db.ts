@@ -491,8 +491,11 @@ db.exec(`
   -- --------------------------------------------------------------------------
   -- tb_entry_states
   -- --------------------------------------------------------------------------
-  -- PURPOSE: Per-entry 8D deterministic state vector. Each entry produces one
-  --          state measurement — pure math, no AI interpretation.
+  -- PURPOSE: Per-entry 7D deterministic behavioral state vector. Each entry
+  --          produces one state measurement — pure math, no AI interpretation.
+  --          Slice 3 (2026-04-16) pulled "expression" out of PersDyn into a
+  --          parallel semantic state space (tb_semantic_states); 8D vectors
+  --          are archived as zz_archive_entry_states_8d_20260416.
   -- USE CASE: "What was the behavioral state for entry N?"
   -- MUTABILITY: Append-only (one row per journal entry)
   -- REFERENCED BY: dynamics engine reads full history for trait inference
@@ -500,7 +503,6 @@ db.exec(`
   --   fluency      — Chenoweth & Hayes (2001), Deane (2015) P-burst length
   --   deliberation — Deane (2015) cognitive load composite
   --   revision     — Baaijen et al. (2012) commitment + substantive deletion
-  --   expression   — linguistic deviation from personal norm
   --   commitment   — final/typed ratio z-scored
   --   volatility   — session-to-session behavioral distance
   --   thermal      — correction rate + revision timing composite
@@ -513,7 +515,6 @@ db.exec(`
     ,fluency           REAL    NOT NULL
     ,deliberation      REAL    NOT NULL
     ,revision          REAL    NOT NULL
-    ,expression        REAL    NOT NULL
     ,commitment        REAL    NOT NULL
     ,volatility        REAL    NOT NULL
     ,thermal           REAL    NOT NULL
@@ -598,6 +599,98 @@ db.exec(`
     ,direction            REAL    NOT NULL
     ,dttm_created_utc     TEXT    DEFAULT (datetime('now'))
     ,created_by           TEXT    DEFAULT 'system'
+  );
+
+  -- --------------------------------------------------------------------------
+  -- tb_semantic_states
+  -- --------------------------------------------------------------------------
+  -- PURPOSE: Per-entry semantic state vector. Parallel to tb_entry_states.
+  --          Z-scored linguistic / affective densities per session, designed
+  --          to be orthogonal to the behavioral 7D space at construction time.
+  --          Slice 3 (2026-04-16) introduced this table when "expression" was
+  --          pulled out of PersDyn.
+  -- USE CASE: "What was the semantic state for entry N?"
+  -- MUTABILITY: Append-only (one row per journal entry)
+  -- REFERENCED BY: dynamics engine (called over SEMANTIC_DIMENSIONS list);
+  --                downstream joint-embedding / distance-function work.
+  -- DIMENSIONS (deterministic, populated now):
+  --   syntactic_complexity  — z(avgSentenceLength)
+  --   interrogation         — z(questionDensity)
+  --   self_focus            — z(firstPersonDensity)
+  --   uncertainty           — z(hedgingDensity)
+  --   cognitive_processing  — z(cognitiveDensity)
+  --   nrc_anger / nrc_fear / nrc_joy / nrc_sadness / nrc_trust / nrc_anticipation
+  --                         — z(NRC emotion lexicon densities)
+  -- DIMENSIONS (LLM-extracted, schema-ready, populated null until extraction):
+  --   sentiment / abstraction / agency_framing / temporal_orientation
+  -- FOOTER: dttm_created_utc, created_by
+  -- --------------------------------------------------------------------------
+  CREATE TABLE IF NOT EXISTS tb_semantic_states (
+     semantic_state_id     INTEGER PRIMARY KEY AUTOINCREMENT
+    ,response_id           INTEGER NOT NULL
+    ,syntactic_complexity  REAL    NOT NULL
+    ,interrogation         REAL    NOT NULL
+    ,self_focus            REAL    NOT NULL
+    ,uncertainty           REAL    NOT NULL
+    ,cognitive_processing  REAL    NOT NULL
+    ,nrc_anger             REAL    NOT NULL
+    ,nrc_fear              REAL    NOT NULL
+    ,nrc_joy               REAL    NOT NULL
+    ,nrc_sadness           REAL    NOT NULL
+    ,nrc_trust             REAL    NOT NULL
+    ,nrc_anticipation      REAL    NOT NULL
+    -- LLM-extracted features (schema-ready, populated null until extraction lands)
+    ,sentiment             REAL
+    ,abstraction           REAL
+    ,agency_framing        REAL
+    ,temporal_orientation  REAL
+    ,convergence           REAL    NOT NULL
+    ,dttm_created_utc      TEXT    DEFAULT (datetime('now'))
+    ,created_by            TEXT    DEFAULT 'system'
+  );
+
+  -- --------------------------------------------------------------------------
+  -- tb_semantic_dynamics
+  -- --------------------------------------------------------------------------
+  -- PURPOSE: PersDyn-style parameters per semantic dimension. Parallel to
+  --          tb_trait_dynamics. Same generic dynamics engine, different
+  --          dimension list.
+  -- MUTABILITY: Recomputed when entry count changes (latest row is canonical)
+  -- REFERENCED BY: downstream coupling-graph / mode-cluster work
+  -- FOOTER: dttm_created_utc, created_by
+  -- --------------------------------------------------------------------------
+  CREATE TABLE IF NOT EXISTS tb_semantic_dynamics (
+     semantic_dynamic_id  INTEGER PRIMARY KEY AUTOINCREMENT
+    ,entry_count          INTEGER NOT NULL
+    ,dimension            TEXT    NOT NULL
+    ,baseline             REAL    NOT NULL
+    ,variability          REAL    NOT NULL
+    ,attractor_force      REAL    NOT NULL
+    ,current_state        REAL    NOT NULL
+    ,deviation            REAL    NOT NULL
+    ,window_size          INTEGER NOT NULL
+    ,dttm_created_utc     TEXT    DEFAULT (datetime('now'))
+    ,created_by           TEXT    DEFAULT 'system'
+  );
+
+  -- --------------------------------------------------------------------------
+  -- tb_semantic_coupling
+  -- --------------------------------------------------------------------------
+  -- PURPOSE: Empirically-discovered lagged coupling between semantic
+  --          dimensions. Parallel to tb_coupling_matrix.
+  -- MUTABILITY: Recomputed when entry count changes
+  -- FOOTER: dttm_created_utc, created_by
+  -- --------------------------------------------------------------------------
+  CREATE TABLE IF NOT EXISTS tb_semantic_coupling (
+     semantic_coupling_id  INTEGER PRIMARY KEY AUTOINCREMENT
+    ,entry_count           INTEGER NOT NULL
+    ,leader                TEXT    NOT NULL
+    ,follower              TEXT    NOT NULL
+    ,lag_sessions          INTEGER NOT NULL
+    ,correlation           REAL    NOT NULL
+    ,direction             REAL    NOT NULL
+    ,dttm_created_utc      TEXT    DEFAULT (datetime('now'))
+    ,created_by            TEXT    DEFAULT 'system'
   );
 `);
 
@@ -1694,7 +1787,7 @@ export function getLatestWitnessState(): { witness_state_id: number; entry_count
 }
 
 // ----------------------------------------------------------------------------
-// ENTRY STATES (8D deterministic state vectors)
+// ENTRY STATES (7D deterministic behavioral state vectors)
 // ----------------------------------------------------------------------------
 
 export interface EntryStateRow {
@@ -1703,7 +1796,6 @@ export interface EntryStateRow {
   fluency: number;
   deliberation: number;
   revision: number;
-  expression: number;
   commitment: number;
   volatility: number;
   thermal: number;
@@ -1714,12 +1806,12 @@ export interface EntryStateRow {
 export function saveEntryState(state: Omit<EntryStateRow, 'entry_state_id'>): number {
   const result = db.prepare(`
     INSERT INTO tb_entry_states (
-       response_id, fluency, deliberation, revision, expression,
+       response_id, fluency, deliberation, revision,
        commitment, volatility, thermal, presence, convergence
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     state.response_id, state.fluency, state.deliberation,
-    state.revision, state.expression, state.commitment,
+    state.revision, state.commitment,
     state.volatility, state.thermal, state.presence, state.convergence,
   );
   return Number(result.lastInsertRowid);
@@ -1735,6 +1827,114 @@ export function getEntryStateCount(): number {
   return (db.prepare(
     `SELECT COUNT(*) as c FROM tb_entry_states`
   ).get() as { c: number }).c;
+}
+
+// ----------------------------------------------------------------------------
+// SEMANTIC STATES (parallel space; deterministic densities + LLM placeholders)
+// ----------------------------------------------------------------------------
+
+export interface SemanticStateRow {
+  semantic_state_id: number;
+  response_id: number;
+  // Deterministic dimensions (always populated)
+  syntactic_complexity: number;
+  interrogation: number;
+  self_focus: number;
+  uncertainty: number;
+  cognitive_processing: number;
+  nrc_anger: number;
+  nrc_fear: number;
+  nrc_joy: number;
+  nrc_sadness: number;
+  nrc_trust: number;
+  nrc_anticipation: number;
+  // LLM-extracted (schema-ready, null until extraction lands)
+  sentiment: number | null;
+  abstraction: number | null;
+  agency_framing: number | null;
+  temporal_orientation: number | null;
+  convergence: number;
+}
+
+export function saveSemanticState(state: Omit<SemanticStateRow, 'semantic_state_id'>): number {
+  const result = db.prepare(`
+    INSERT INTO tb_semantic_states (
+       response_id,
+       syntactic_complexity, interrogation, self_focus, uncertainty,
+       cognitive_processing,
+       nrc_anger, nrc_fear, nrc_joy, nrc_sadness, nrc_trust, nrc_anticipation,
+       sentiment, abstraction, agency_framing, temporal_orientation,
+       convergence
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    state.response_id,
+    state.syntactic_complexity, state.interrogation, state.self_focus, state.uncertainty,
+    state.cognitive_processing,
+    state.nrc_anger, state.nrc_fear, state.nrc_joy, state.nrc_sadness, state.nrc_trust, state.nrc_anticipation,
+    state.sentiment, state.abstraction, state.agency_framing, state.temporal_orientation,
+    state.convergence,
+  );
+  return Number(result.lastInsertRowid);
+}
+
+export function getSemanticStateCount(): number {
+  return (db.prepare(
+    `SELECT COUNT(*) as c FROM tb_semantic_states`
+  ).get() as { c: number }).c;
+}
+
+export interface SemanticDynamicRow {
+  semantic_dynamic_id: number;
+  entry_count: number;
+  dimension: string;
+  baseline: number;
+  variability: number;
+  attractor_force: number;
+  current_state: number;
+  deviation: number;
+  window_size: number;
+}
+
+export function saveSemanticDynamics(dynamics: Omit<SemanticDynamicRow, 'semantic_dynamic_id'>[]): void {
+  const stmt = db.prepare(`
+    INSERT INTO tb_semantic_dynamics (
+       entry_count, dimension, baseline, variability,
+       attractor_force, current_state, deviation, window_size
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const tx = db.transaction(() => {
+    for (const d of dynamics) {
+      stmt.run(
+        d.entry_count, d.dimension, d.baseline, d.variability,
+        d.attractor_force, d.current_state, d.deviation, d.window_size,
+      );
+    }
+  });
+  tx();
+}
+
+export interface SemanticCouplingRow {
+  semantic_coupling_id: number;
+  entry_count: number;
+  leader: string;
+  follower: string;
+  lag_sessions: number;
+  correlation: number;
+  direction: number;
+}
+
+export function saveSemanticCoupling(couplings: Omit<SemanticCouplingRow, 'semantic_coupling_id'>[]): void {
+  const stmt = db.prepare(`
+    INSERT INTO tb_semantic_coupling (
+       entry_count, leader, follower, lag_sessions, correlation, direction
+    ) VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  const tx = db.transaction(() => {
+    for (const c of couplings) {
+      stmt.run(c.entry_count, c.leader, c.follower, c.lag_sessions, c.correlation, c.direction);
+    }
+  });
+  tx();
 }
 
 // ----------------------------------------------------------------------------

@@ -1,188 +1,187 @@
-# Handoff — April 12, 2026 (Session 6)
+# Handoff — April 16, 2026
 
-## What This Session Did
-
-Built the same-day session delta pipeline — a within-person control system that computes the behavioral difference between calibration (neutral writing) and journal (reflective writing) on the same day. This isolates what the real question provoked, controlling for daily confounds (sleep, stress, device, time-of-day).
-
-Also conducted extensive literature research validating the approach and updated the README.
+Pick up here. The prior session executed a major restructure. Slices 1 and 2 are done on disk but **uncommitted**. Slice 3 (and follow-ups) are next.
 
 ---
 
-## Feature: Same-Day Session Delta Pipeline
+## Read these first, in order
 
-### The Concept
+1. `CLAUDE.md` — project conventions (table prefixes, surrogate keys, footer columns, no ALTER TABLE, etc.). Non-negotiable.
+2. `ROADMAP.md` — the thesis. The practice that protects your mind is the same one that would detect if something changes.
+3. This file — what changed and what's next.
+4. `src/lib/signal-registry.ts` — the ~100 deterministic signals, the system's actual moat.
 
-Every day with both a calibration session and a journal session is a mini within-subjects experiment (Pennebaker & Beall, 1986). The calibration session captures how the person writes when nothing is at stake. The journal session captures how they write when the question matters. The delta between them — computed across 8 research-backed dimensions — is the cleanest behavioral signal available because it controls for everything that happened that day. Toledo et al. (2024) showed 76-89% of stress response variance is within-day, validating same-day controls over between-day baselines.
-
-The existing `formatCalibrationDeviation` compared journal sessions against the rolling average of all past calibration sessions. That's useful but blurry — the average includes tired days, wired days, stressed days. The same-day delta compares against today's calibration only, isolating the question-specific response.
-
-### Research Basis
-
-**Core methodology:**
-- Pennebaker & Beall (1986) — PMID 3745650. Expressive writing paradigm: neutral vs emotional writing as within-person control. The foundational design.
-- Toledo et al. (2024) — PMID 39530726, *Stress and Health*. Multilevel models with moments nested within days nested within persons. 76-89% of reactivity/recovery variance is within-day.
-- Shimokawa, Lambert & Smart (2010) — PMID 20515206, BYU, N=6,151. OQ-45 deviation-from-expected-trajectory detects 85-100% of deteriorating cases. Reduced deterioration from 20.1% to 5.5%.
-
-**Delta dimension selection:**
-- First-person density — Newman et al. (2003) PMID 14599238. Distancing marker; strongest single linguistic deception cue.
-- Cognitive density — Vrij (2000-2020s). Cognitive load from managing dual representations leaks into word choice.
-- Hedging density — uncertainty/performance language.
-- Typing speed (chars/min) — production fluency disruption.
-- Commitment ratio — self-censoring (wrote a lot, kept little).
-- Large deletion count — Faigley & Witte (1981). Substantive rethinking, not surface correction.
-- Inter-key interval mean — Epp, Lippold & Mandryk (2011). Keystroke hesitation as affect signal.
-- P-burst length — Chenoweth & Hayes (2001). Thought-unit fluency.
-
-**Supporting research:**
-- Collins et al. (2025) — PMID 40208744, N=258, 90 days. Self-referential language in diary text detects depression AUC 0.68.
-- Shin et al. (2024) — PMID 39292502, N=91. LLM analysis of diary text detects depression with 90.2% accuracy.
-- Bogaard et al. (2022) — DOI 10.1002/acp.3990, N=138. Automated feature coding detects truth/lie differences from personal baselines; naive observers cannot.
-- Yoshizawa (2022) — arXiv 2201.02325. Standard Bayesian Online Change Point Detection fails on permanently shifting baselines. Extended version handles evolving baselines.
-- Fisher, Medaglia & Jeronimus (2018) — PNAS. Group-level structures don't replicate at individual level. Individual models stabilize at ~50-60 observations.
-
-### What Was Built
-
-**New table: `tb_session_delta`** — stores computed delta vectors per date. 8 delta dimensions, composite magnitude, plus 16 raw value columns (calibration + journal per dimension) for auditability. Append-only, one row per date.
-
-**New module: `src/lib/session-delta.ts`**
-- `computeSessionDelta(calibration, journal, date)` — pure arithmetic, journal minus calibration across 8 dimensions. Null-safe.
-- `computeDeltaMagnitude(delta, history)` — RMS z-score across dimensions using personal delta history. Returns null if < 10 historical deltas (cold start).
-- `formatSessionDelta(delta, history)` — full format for observe.ts. Shows raw deltas with direction labels. After 15+ days: PERSONAL DELTA RANGE section (sigma deviations from typical). After 7+ days: DELTA TREND section (7-day moving direction per dimension).
-- `formatCompactDelta(deltas)` — compact format for generate.ts and reflect.ts. One line per date, only flagging dimensions outside 1σ. 7-day trend summary.
-- `runSessionDelta(journalQuestionId, date)` — fire-and-forget wrapper.
-
-**New DB functions:**
-- `getSameDayCalibrationSummary(date)` — uses `DATE(q.dttm_created_utc)` since calibration questions have `scheduled_for = NULL`. Takes most recent if multiple same-day calibrations.
-- `saveSessionDelta(delta)` — INSERT OR REPLACE.
-- `getRecentSessionDeltas(limit)` — for history and trend computation.
-
-**Wired into `observe.ts`:**
-- Imports delta computation and formatting
-- After existing calibration baseline fetch, checks for same-day calibration
-- If both sessions exist: computes delta, saves it, formats it
-- Added to user content after calibration deviation section
-- System prompt updated: SAME-DAY SESSION DELTA explanation, instructs AI to prefer same-day delta over historical-average deviation when available
-
-**Wired into `generate.ts`:**
-- Imports `getRecentSessionDeltas` and `formatCompactDelta`
-- Fetches 14 most recent deltas
-- Included in user prompt after life context section
-
-**Wired into `reflect.ts`:**
-- Same pattern as generate, but fetches 30 recent deltas (covers reflection window)
-
-### Files Modified
-- `src/lib/db.ts` — new table DDL, `SessionDeltaRow` type, 3 new query functions
-- `src/lib/session-delta.ts` — **new file**, delta computation and formatting module
-- `src/lib/observe.ts` — imports, delta computation + save, prompt section, system prompt update
-- `src/lib/generate.ts` — imports, compact delta trends in prompt
-- `src/lib/reflect.ts` — imports, compact delta trends in prompt
+Don't re-read the theory docs (theory-5, 6, 7). They're superseded by the restructure below.
 
 ---
 
-## README Updated
+## What just shipped (uncommitted)
 
-- Scientific Foundation: added "Same-Day Session Delta (Within-Person Control)" section with 6 citations (Pennebaker 1986, Toledo 2024, Collins 2025, Shimokawa/Lambert 2010, Bogaard 2022, Yoshizawa 2022)
-- Calibration: expanded to describe same-day delta computation and its 8 dimensions
-- Event-Driven Architecture: updated observation step to mention delta computation
-- What Alice Feeds: updated to include session deltas with personal range context
+The entire LLM-narrated interpretive layer was removed. The epistemic case: predict-and-grade on N=1 self-built data has a three-loop circularity (designer = subject = stimulus source) that deterministic grounding doesn't fix. Text-only narrative reflection is commoditizable by any future frontier model. The behavioral signal pipeline (keystroke dynamics, P-bursts, revision topology, calibration deltas) is the actual moat and survives arbitrarily capable future models.
 
-Copied to `README_AUDIT/V16/V16_README.md`.
+**Slice 1 — data archive + neutralization.** 9 tables renamed to `zz_archive_*_20260416` via `scripts/archive-interpretive-layer-20260416.ts` (idempotent, already run). `tb_predictions`, `tb_theory_confidence`, `tb_ai_observations`, `tb_ai_suppressed_questions`, `tb_question_candidates`, `te_prediction_status`, `te_prediction_type`, `te_grade_method`, `te_intervention_intent`. Schema no longer recreates them. `db.ts` has 24 stub functions returning empty/noop to keep signatures. Five API routes neutralized: `observatory/predictions`, `observatory/entry/[id]`, `observatory/synthesis`, `observatory/coupling`, `health`. `respond.ts` no longer calls `runObservation` or `runReflection`.
 
----
+**Slice 2 — dead code removal.** Deleted entirely: `src/lib/observe.ts`, `src/lib/grader.ts`, `src/lib/theory-selection.ts`, `src/scripts/observe.ts`, `src/scripts/surface-patterns.ts`, `src/scripts/simulate-v1.ts` (~1,830 lines). `src/lib/reflect.ts` rewritten from ~400 lines to ~90 lines as a deterministic structured-receipt writer (no LLM calls, no narrative). `src/lib/generate.ts` pruned of all prediction/theory/observation/suppressed context. `src/lib/signals.ts` lost `formatOpenPredictions` and `formatPredictionTrackRecord`. `src/scripts/simulate.ts` updated to drop observation pipeline. `package.json` lost `observe` and `reflect` scripts.
 
-## Verification
+**Build:** `npm run build` clean.
 
-TypeScript compiles with **zero errors**.
-
-Delta pipeline is structurally complete. Live testing requires a day with both a calibration session and a journal session. The module gracefully skips days without same-day calibration (logs a message, no errors). Delta magnitude and personal range context degrade gracefully with insufficient history.
+**Not done:** frontend pages (`observatory/entry/[id].astro`, `observatory/index.astro`, `coupling.astro`) still contain rendering blocks for predictions/observations/suppressed/theories. They consume empty API responses, so they don't crash — they render empty cards. UX cleanup is pending.
 
 ---
 
-## Current State of the Data
+## Architecture as of now
 
-- **3 real entries:** April 10, 11, 12
-- **17+ calibration sessions.** All have behavioral metrics + linguistic densities. Sessions from today have keystroke dynamics.
-- **0 session deltas computed yet.** Pipeline is live but no day has had both calibration and journal submission processed through this code path. Deltas will accumulate from the next day both occur.
-- **0 calibration context tags extracted yet.** Pipeline is live but test prompts didn't surface extractable life context.
-- **1 observation** (April 12)
-- **2 open predictions**
-- **Generation: still in seed phase** through ~May 11
+**Three interlocking systems, same as before:**
+- **Alice** — writing interface + signal capture (`src/pages/index.astro`).
+- **Bob** — interaction layer surfacing today's question with conviction. Underspecified; see decisions below.
+- **Alice Negative** — designer-facing visualization (decision 3 below): repurposed from user-facing aesthetic rendering to designer-only coupling graph / mode landscape.
 
----
+**What runs on submit now (`src/pages/api/respond.ts`):**
+1. `saveResponse`, `saveSessionSummary`, `saveBurstSequence` — signal capture.
+2. Background: `embedResponse` (RAG), `runGeneration` (question for tomorrow), `renderWitnessState` (Alice Negative).
+3. **No three-frame analysis. No predictions. No narrative reflection. No suppressed questions.**
 
-## What's NOT Done
+**Signal inventory:** ~100 deterministic signals across session / delta / dynamics sources. See `src/lib/signal-registry.ts` — canonical registry. Per-session signals (~52) include timing, production, pauses, deletion decomposition (Faigley & Witte), P-bursts (Chenoweth & Hayes), inter-key intervals (Epp), hold/flight time (Kim), keystroke entropy (Ajilore/BiAffect), revision chains (Leijten & Van Waes), MATTR, NRC emotions, Pennebaker densities, sentence metrics, scrollback. Delta signals (~11) via same-day calibration control. Dynamics signals (~42) from the 8D PersDyn engine in `src/lib/alice-negative/state-engine.ts`.
 
-1. **Behavioral clustering** — PCA/UMAP + HDBSCAN on 8D dynamics states. Not needed until ~100 sessions. Session deltas will feed into this as additional feature dimensions when the time comes.
-
-2. **Ambient byproduct signals** — time-of-day drift and inter-session interval as features in the behavioral vector. Free signals from session metadata already captured. Should be next build.
-
-3. **Retrodiction prediction type** — needs clustering first.
-
-4. **Full DTW for coupling** — revisit around day 60.
-
-5. **Test suite** — still not built.
-
-6. **Alice Negative interaction surface** — not started.
-
-7. **Anomaly detection / honesty signal** — the same-day delta is the foundational infrastructure for this. The delta itself IS the detection channel. When delta baseline stabilizes (30-50 days per Fisher 2018), deviations from the delta become the three-way signal: flatline delta (disengagement), spike delta with effort markers (performance/construction), drifting delta (genuine change). This is not a separate feature — it emerges from tracking the delta over time. The system adapts its behavior based on confidence without surfacing any diagnosis.
+**What the LLM still does:**
+- Question generation (`generate.ts`) — for tomorrow, conditioned on recent entries + RAG + behavioral signals + dynamics. After day-30 seed phase.
+- Witness rendering (`render-witness.ts`) — Alice Negative visual.
+- That's it. ~80% of prior LLM footprint is gone.
 
 ---
 
-## Research Conducted This Session
+## Non-negotiable design principles
 
-**Anomaly detection / honesty-as-residual concept:**
-Extensive literature search across deception detection, digital phenotyping, idiographic modeling, and change point detection. Key findings:
+These are chosen positions, not defaults. Do not propose alternatives.
 
-- Within-person deception detection from text is theoretically endorsed (Vrij) but empirically almost unstudied. The field is stuck on between-subjects designs.
-- "Model normal, detect abnormal" is validated at scale (Lambert OQ-45, N=6,151; insurance fraud; intrusion detection; stylometric verification).
-- Minimum baseline for reliable within-person models: 30-50 daily observations for moderate complexity (convergent finding from Fisher 2018 PNAS, Bolger & Laurenceau 2013, single-case design literature).
-- Three-way discrimination (disengagement vs. deception vs. genuine change) is NOT validated as a classification task. The field hasn't solved two-way reliably within-person. But the trajectory signatures are theoretically distinguishable: flat (disengagement), effortful-but-inconsistent (deception), gradual-and-persistent (genuine change).
-- Standard change point detection breaks on permanently shifting baselines (Yoshizawa 2022). The system needs to handle evolving baselines, which is exactly what genuine psychological change looks like.
-- Anthropic's own honesty research (2025) achieved AUROC 0.88 for lie detection — described as "borderline adequate for offline monitoring."
-
-**Key architectural insight:** The anomaly detection idea doesn't require a new system. It falls out of the existing plan: cluster fit distance (from clustering) + calibration-behavior agreement (from session deltas) + prediction confidence drops (from prediction engine) = the anomaly signal, for free. The only future addition is the response layer — how Alice Negative adjusts behavior when confidence drops.
+1. **Black box sacred.** The system never surfaces response text back at the user. Ever.
+2. **No signal surfacing to user.** No dashboards, no trend lines, no numerical metrics, no trait floats.
+3. **No future-question reveal.** One question per day. Tomorrow's is not visible today.
+4. **N=1 by design.** Not a limitation. A chosen scope.
+5. **Anti-engagement.** No streaks, notifications, retention mechanics.
+6. **GPT-6 filter on every new feature.** If a future frontier model with the same chat transcript could reproduce it, it's commodity. Invest only where the keystroke substrate is load-bearing.
+7. **Signal-anchored interpretation only.** Any LLM output that could read the same without behavioral signal evidence goes in the commodity zone. Rework or cut.
 
 ---
 
-## Architecture Note for Future Sessions
+## Decisions already made (do not relitigate)
 
-The same-day session delta is the bridge between the calibration system and the eventual anomaly detection layer. The data flow is:
+1. **Bob's rhyme utterance has retrieval.** At submit, Bob will say "this rhymes with [date]" with a tap-to-open affordance opening both responses side by side. Not built yet. The black box stays intact because *the system* still says nothing about what either session means — it just juxtaposes.
+2. **No structural-noticing Bob utterance yet.** ("This session's position predicts X downstream.") Defer until couplings are validated at N > 5. Risk: brain processes it as prediction regardless of framing.
+3. **Alice Negative becomes designer-only coupling-graph visualization.** Strict wall against user-facing drift.
+4. **Expression pulled out of PersDyn.** 7D behavioral (fluency, deliberation, revision, commitment, volatility, thermal, presence). Expression moves into a parallel first-class semantic space along with NRC, Pennebaker, and future LLM-extracted features. This is slice 3 work.
+5. **Archived data kept under `zz_archive_*_20260416`.** Do not drop. Methodology paper may need receipts of what the old architecture attempted.
+6. **Weekly reflection is a structured receipt, not narrative.** Already implemented in the new `reflect.ts`. No LLM call. No comparisons-to-goals, no trends, no interpretation.
 
-```
-Calibration session → tb_session_summaries (neutral metrics)
-Journal session    → tb_session_summaries (reflective metrics)
-                          ↓
-            computeSessionDelta() [8D arithmetic]
-                          ↓
-              tb_session_delta (delta vector per day)
-                          ↓
-            formatSessionDelta() → observe.ts prompt
-            formatCompactDelta() → generate.ts / reflect.ts prompts
-                          ↓
-         [future: delta baseline → deviation-from-delta → anomaly signal]
-         [future: delta vectors → clustering feature dimensions]
+---
+
+## Next up — slice 3 (7D PersDyn + semantic space)
+
+This is the substantial architectural change. Do not skip to signal additions until this is done — the joint embedding quality depends on behavioral and semantic spaces being orthogonal at construction time.
+
+**Files that must change:**
+- `src/lib/alice-negative/state-engine.ts` — remove expression from the 8D array, recompute convergence over 7D. `STATE_DIMENSIONS` becomes 7.
+- `src/lib/alice-negative/dynamics.ts` — coupling discovery runs over 7 dimensions.
+- `src/lib/signal-registry.ts` — `DYNAMICS_PER_DIM` generated from the new 7.
+- `src/lib/signals.ts` — `formatDynamicsContext` dimension labels.
+- Any consumer that reads the 8D vector (trajectory page, observatory entry page, Alice Negative renderer).
+
+**New file to create:** `src/lib/semantic-space.ts` — parallel structure to state-engine. Inputs: expression components (avgSentenceLength, questionDensity, firstPersonDensity, hedgingDensity), NRC emotion densities, Pennebaker densities, and LLM-extracted features (sentiment, abstraction, agency framing, temporal orientation — placeholder for now, schema-ready). Outputs: semantic state vector z-scored against personal history. Same treatment as behavioral: baselines, attractor force, coupling-discoverable.
+
+**Key engineering question:** how to extract the LLM-based semantic features cheaply. Probably one call per submit, structured output schema, Haiku. Defer the actual LLM feature extraction until after the orthogonal space is stood up — the schema can be populated from NRC + Pennebaker alone for now.
+
+**Phase classification, systemEntropy, velocity** all recompute over 7D (or 7D + semantic, if doing combined). Decide: run phase/entropy/velocity separately on behavioral vs semantic spaces, or on the concatenated joint space? My instinct: separately. Joint space is for the distance-function work later.
+
+---
+
+## Then, in order
+
+**Week 1–2: Signal additions (pure pipeline, no LLM).** Build into the clean 7D architecture:
+- Deletion-density curve classification over session time (early-loaded / late-loaded / uniform / bimodal / terminal-burst). Use the existing `deletionTimestamps[]` which is collected but only binarized at midpoint.
+- Burst trajectory shape classification (monotonic up / down / U / inverted-U / flat) from `tb_burst_sequences`.
+- Burst rhythm metric: inter-burst interval distribution, separate from `avgPBurstLength`.
+- Burst-deletion proximity: deletions during bursts vs. between bursts.
+
+Decision already made: these live as session metadata, feed joint embedding, do not perturb 7D z-score discipline.
+
+**Week 2 (parallel): Pre-registration exercise.** Before touching distance-function code, Anthony hand-writes 10 sessions he remembers well with their remembered-rhyme pairs and the "why" for each. This is the feature-importance prior for the distance metric. Prepare the template document but this is Anthony's homework, not yours to fill in.
+
+**Week 2–4: Joint embedding + distance function.** Simple concat(behavioral 7D, semantic ND) + cosine first. Validate against the pre-registered list. Learned metric only if simple fails.
+
+**Week 4–8: Mode clustering scaffolding.** k-means or HDBSCAN on joint embedding. Don't run yet; validate on synthetic. Triggers at N ≥ 20.
+
+**Week 8+: First real clustering pass + mode naming by LLM on cluster representatives. Coupling graph visualization for Anthony becomes interpretable.**
+
+**Ongoing: systemEntropy regime-change analysis.** Log weekly, look at it.
+
+---
+
+## Frontend cleanup — pending, not blocking
+
+Three `.astro` pages still render blocks for predictions/observations/suppressed/theories:
+- `src/pages/observatory/entry/[id].astro` — three-frame cards, prediction cards, suppressed block
+- `src/pages/observatory/index.astro` — prediction scoreboard, theory table, prediction/suppressed in entry loop
+- `src/pages/observatory/coupling.astro` — theory heatmap
+
+They currently render empty. Clean them up when doing slice 3 or any adjacent work; no rush.
+
+---
+
+## Commands
+
+```bash
+# Verify build
+npm run build
+
+# Dev server
+npm run dev
+
+# Inspect archived tables
+sqlite3 data/alice.db ".tables zz_archive_%"
+
+# Force-regenerate tomorrow's question (after day-30 threshold)
+npm run generate
+
+# Simulation (dev/research only)
+npm run simulate
 ```
 
-The delta module reads from the same `tb_session_summaries` table as Alice Negative (state-engine, dynamics) but they don't interact. They're parallel readers feeding into the same AI prompts from different angles. Alice Negative says "here's where you are in 8D behavioral space." The delta says "here's how today's neutral and real writing differ."
+---
 
-## Rename (Executed 2026-04-12)
+## Uncommitted changes
 
-Full system rename. No product philosophy, system prompts, or voice changes — naming only.
+Anthony is testing before committing. When ready, slices 1+2 make one clean commit:
 
-| Before | After | Role |
-|--------|-------|------|
-| Marrow | **Alice** | The journal. The sender. |
-| Einstein | **Bob** | The thinking partner. The receiver. |
-| Bob | **Alice Negative** | The behavioral signal visualization. A mirror of Alice's data. |
+```
+refactor: remove interpretive layer (three-frame, prediction, theory, narrative reflection)
 
-Naming follows the Alice-and-Bob cryptography metaphor: Alice sends, Bob receives.
+- archive 9 tables to zz_archive_*_20260416 (data preserved)
+- delete observe.ts, grader.ts, theory-selection.ts (~1,830 lines)
+- rewrite reflect.ts as deterministic structured receipt (no LLM)
+- prune generate.ts and signals.ts of prediction/theory context
+- neutralize 5 API routes; remove runObservation/runReflection from respond.ts
+- signal pipeline, PersDyn, calibration, session deltas, witness rendering intact
 
-**Scope of changes:**
-- All live source code (imports, types, routes, system prompts, CSS, HTML IDs)
-- Database file: `data/marrow.db` → `data/alice.db`
-- Package name: `marrow` → `alice`
-- Files/directories: `src/lib/bob/` → `src/lib/alice-negative/`, `BOB.md` → `ALICE_NEGATIVE.md`, `BOB_AUDIT/` → `ALICE_NEGATIVE_AUDIT/`, etc.
-- Types: `BobSignal` → `AliceNegativeSignal`, `BobSignalRaw` → `AliceNegativeSignalRaw`
-- Remote: `https://github.com/anthonyguzzardo/Alice.git`
-- Historical audit files (`README_AUDIT/`, `ALICE_NEGATIVE_AUDIT/`) left intact with a note at the top of each file
+rationale: LLM-narrated interpretation on N=1 self-built data has a
+three-loop circularity that deterministic grounding doesn't fix, and the
+text-only narrative layer is commoditizable by future frontier models.
+the behavioral signal substrate is the moat. see handoff.md.
+```
+
+Do not commit without testing: `npm run dev`, submit a session, verify no 500s.
+
+---
+
+## Gotchas
+
+- `voyageai` in `embeddings.ts` has a CJS-in-ESM type issue. Existing workaround uses `createRequire`. Do not touch unless you're fixing type errors there specifically.
+- `tb_reflections` table is retained. The structured receipt still writes to it. Do not assume it's orphaned.
+- `data/alice.db` has real data (Anthony's day-1 through day-3 sessions + archived tables). Do not `rm` it. Do not re-run the migration — it's idempotent but there's no reason to.
+- `CLAUDE.md` says "no ALTER TABLE" — except the archive migration uses it to rename tables. One-time migration, acceptable departure. Don't generalize.
+- The `STATE_DIMENSIONS` constant in `state-engine.ts` is imported by `signal-registry.ts` to programmatically generate `dynamics.{dim}.{param}` entries. Changing it from 8 to 7 ripples through the registry automatically — but double-check anything that hard-codes dimension names.
+
+---
+
+## The thing to hold in mind
+
+The project's telos is daily practice, primary. Dataset + methodology paper are durable byproducts. Do not invert these. Do not propose consumer-product, clinical-instrument, or company-pivot framings — those were considered and declined. If a new feature doesn't survive the GPT-6 filter and doesn't serve the practice, it doesn't ship.

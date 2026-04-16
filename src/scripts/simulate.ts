@@ -126,8 +126,9 @@ const { runGeneration } = await import('../lib/generate.ts');
 const { runReflection } = await import('../lib/reflect.ts');
 const { JORDAN_ENTRIES, buildSessionSummary } = await import('./simulation-data.ts');
 
-// Import state engine (8D behavioral states, dynamics, coupling)
+// Import state engines (7D behavioral + parallel semantic), dynamics, coupling
 const { computeEntryStates } = await import('../lib/alice-negative/state-engine.ts');
+const { computeSemanticStates, SEMANTIC_DIMENSIONS } = await import('../lib/alice-negative/semantic-space.ts');
 const { computeDynamics } = await import('../lib/alice-negative/dynamics.ts');
 const { computeEmotionAnalysis } = await import('../lib/alice-negative/emotion-profile.ts');
 const {
@@ -136,6 +137,10 @@ const {
   saveTraitDynamics,
   saveCouplingMatrix,
   saveEmotionBehaviorCoupling,
+  saveSemanticState,
+  getSemanticStateCount,
+  saveSemanticDynamics,
+  saveSemanticCoupling,
 } = await import('../lib/db.ts');
 
 // Conditional embedding import
@@ -378,11 +383,11 @@ for (let i = START_DAY - 1; i < TOTAL_DAYS; i++) {
     }
   }
 
-  // 6. Compute 8D state engine (deterministic — no AI)
+  // 6. Compute deterministic engines (behavioral 7D + parallel semantic ND)
   try {
     const states = computeEntryStates();
     if (states.length >= 3) {
-      // Persist any new entry states
+      // Persist any new behavioral entry states
       const existingCount = getEntryStateCount();
       if (states.length > existingCount) {
         const newStates = states.slice(existingCount);
@@ -392,7 +397,6 @@ for (let i = START_DAY - 1; i < TOTAL_DAYS; i++) {
             fluency: s.fluency,
             deliberation: s.deliberation,
             revision: s.revision,
-            expression: s.expression,
             commitment: s.commitment,
             volatility: s.volatility,
             thermal: s.thermal,
@@ -402,7 +406,7 @@ for (let i = START_DAY - 1; i < TOTAL_DAYS; i++) {
         }
       }
 
-      // Compute dynamics + coupling
+      // Behavioral dynamics + coupling (over 7D)
       const dynamics = computeDynamics(states);
       saveTraitDynamics(dynamics.dimensions.map(d => ({
         entry_count: states.length,
@@ -426,6 +430,60 @@ for (let i = START_DAY - 1; i < TOTAL_DAYS; i++) {
         })));
       }
 
+      // Semantic state + dynamics + coupling (parallel space)
+      const semanticStates = computeSemanticStates();
+      const existingSemanticCount = getSemanticStateCount();
+      if (semanticStates.length > existingSemanticCount) {
+        const newSemantic = semanticStates.slice(existingSemanticCount);
+        for (const s of newSemantic) {
+          saveSemanticState({
+            response_id: s.responseId,
+            syntactic_complexity: s.syntactic_complexity,
+            interrogation: s.interrogation,
+            self_focus: s.self_focus,
+            uncertainty: s.uncertainty,
+            cognitive_processing: s.cognitive_processing,
+            nrc_anger: s.nrc_anger,
+            nrc_fear: s.nrc_fear,
+            nrc_joy: s.nrc_joy,
+            nrc_sadness: s.nrc_sadness,
+            nrc_trust: s.nrc_trust,
+            nrc_anticipation: s.nrc_anticipation,
+            sentiment: s.sentiment,
+            abstraction: s.abstraction,
+            agency_framing: s.agency_framing,
+            temporal_orientation: s.temporal_orientation,
+            convergence: s.convergence,
+          });
+        }
+      }
+
+      let semanticDynamics: ReturnType<typeof computeDynamics> | null = null;
+      if (semanticStates.length >= 3) {
+        semanticDynamics = computeDynamics(semanticStates, SEMANTIC_DIMENSIONS);
+        saveSemanticDynamics(semanticDynamics.dimensions.map(d => ({
+          entry_count: semanticStates.length,
+          dimension: d.dimension,
+          baseline: d.baseline,
+          variability: d.variability,
+          attractor_force: d.attractorForce,
+          current_state: d.currentState,
+          deviation: d.deviation,
+          window_size: d.windowSize,
+        })));
+
+        if (semanticDynamics.coupling.length > 0) {
+          saveSemanticCoupling(semanticDynamics.coupling.map(c => ({
+            entry_count: semanticStates.length,
+            leader: c.leader,
+            follower: c.follower,
+            lag_sessions: c.lagSessions,
+            correlation: c.correlation,
+            direction: c.direction,
+          })));
+        }
+      }
+
       // Emotion→behavior coupling
       const emotionAnalysis = computeEmotionAnalysis(states);
       if (emotionAnalysis.emotionBehaviorCoupling.length > 0) {
@@ -439,7 +497,10 @@ for (let i = START_DAY - 1; i < TOTAL_DAYS; i++) {
         })));
       }
 
-      console.log(`   States: ${states.length} entries, phase=${dynamics.phase}, velocity=${dynamics.velocity.toFixed(3)}, coupling=${dynamics.coupling.length}`);
+      const semStr = semanticDynamics
+        ? `, semantic phase=${semanticDynamics.phase}/coupling=${semanticDynamics.coupling.length}`
+        : '';
+      console.log(`   States: ${states.length} entries, phase=${dynamics.phase}, velocity=${dynamics.velocity.toFixed(3)}, coupling=${dynamics.coupling.length}${semStr}`);
     }
   } catch (err: any) {
     console.error(`   State engine error: ${err.message}`);

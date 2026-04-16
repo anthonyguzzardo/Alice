@@ -516,9 +516,9 @@ export function formatTrajectoryContext(
 }
 
 /**
- * 8D behavioral dynamics context block (PersDyn model).
- * Replaces the legacy 4D trajectory context with the full dynamics engine:
- * 8 dimensions + attractor force + empirical coupling + system entropy.
+ * Behavioral dynamics context block (7D PersDyn model since slice 3, 2026-04-16).
+ * Dimension list is whatever the analysis carries — generic over the dim set
+ * so the same formatter works for the parallel semantic space if needed.
  *
  * @param mode 'observe' for full verbalized block, 'compact' for summary
  */
@@ -534,6 +534,7 @@ export function formatDynamicsContext(
       : 'Dynamics: insufficient data';
   }
 
+  const dimCount = analysis.dimensions.length;
   const latest = analysis.dimensions;
 
   // Find notable deviations (>1.5σ from baseline)
@@ -561,7 +562,7 @@ export function formatDynamicsContext(
   if (mode === 'observe') {
     const lines: string[] = [];
     lines.push('');
-    lines.push(`=== BEHAVIORAL DYNAMICS (8D PersDyn model, ${analysis.entryCount} entries) ===`);
+    lines.push(`=== BEHAVIORAL DYNAMICS (${dimCount}D PersDyn model, ${analysis.entryCount} entries) ===`);
     lines.push('');
     lines.push(`Phase: ${phaseDesc[analysis.phase]}`);
     lines.push(`Velocity: ${analysis.velocity.toFixed(2)} — ${velocityDesc}`);
@@ -663,7 +664,7 @@ export function formatDynamicsContext(
       }).join(' ')}`
     : '';
 
-  return `Dynamics(8D): phase=${analysis.phase} velocity=${analysis.velocity.toFixed(2)} entropy=${analysis.systemEntropy.toFixed(2)} | ${dimStr}${couplingStr}`;
+  return `Dynamics(${dimCount}D): phase=${analysis.phase} velocity=${analysis.velocity.toFixed(2)} entropy=${analysis.systemEntropy.toFixed(2)} | ${dimStr}${couplingStr}`;
 }
 
 /**

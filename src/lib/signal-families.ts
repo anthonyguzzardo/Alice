@@ -71,17 +71,17 @@ export const SIGNAL_FAMILIES: SignalFamily[] = [
   {
     id: 'pennebaker',
     label: 'Pennebaker Linguistic',
-    description: 'Hedging density ("maybe", "perhaps", "might") measures uncertainty. First-person density (I, me, my) measures self-focus. These feed the expression dimension as absolute deviations from your personal norm — any direction of shift counts.',
+    description: 'Hedging density ("maybe", "perhaps", "might") and first-person density (I, me, my) measure uncertainty and self-focus. As of slice 3 (2026-04-16) these feed the parallel SEMANTIC space (uncertainty, self_focus dimensions in semantic-space.ts), not the 7D behavioral PersDyn engine. Behavioral and semantic spaces are kept orthogonal at construction time.',
     sessionFields: ['hedgingDensity', 'firstPersonDensity'],
-    feedsDimensions: ['expression'],
+    feedsDimensions: [],
     citation: 'Pennebaker 1997',
   },
   {
     id: 'lexical',
     label: 'Lexical & Syntax',
-    description: 'Average sentence length and question density (questions per sentence) feed the expression dimension as absolute deviations from your personal norm. Captures syntactic complexity and interrogative style.',
+    description: 'Average sentence length and question density. As of slice 3 (2026-04-16) these feed the parallel SEMANTIC space (syntactic_complexity, interrogation dimensions in semantic-space.ts), not the 7D behavioral PersDyn engine.',
     sessionFields: ['avgSentenceLength', 'questionDensity'],
-    feedsDimensions: ['expression'],
+    feedsDimensions: [],
     citation: 'Biber 1988',
   },
 
@@ -244,6 +244,11 @@ export function computeVariantTree(): VariantTreeResult {
   //   - revisionWeight → deletion (feeds deliberation)
   //   - revisionRate → deletion (feeds revision)
   //
+  // Slice 3 (2026-04-16): the `pennebaker` and `lexical` families used to
+  // neutralize `s.shape` to ablate the `expression` dimension. With expression
+  // pulled into the parallel semantic space, those families have
+  // feedsDimensions: [] and are skipped by `stateEngineFamilies` below; their
+  // neutralizers are no longer needed in this engine's ablation.
   const familyNeutralizations: Record<string, (session: any) => any> = {
     timing: (s) => ({
       ...s,
@@ -267,22 +272,6 @@ export function computeVariantTree(): VariantTreeResult {
       pauseRatePerMinute: avg(sessions.map(x => x.pauseRatePerMinute)),
       tabAwayRatePerMinute: avg(sessions.map(x => x.tabAwayRatePerMinute)),
     }),
-    pennebaker: (s) => ({
-      ...s,
-      shape: {
-        ...s.shape,
-        firstPersonDensity: avg(sessions.map(x => x.shape.firstPersonDensity)),
-        hedgingDensity: avg(sessions.map(x => x.shape.hedgingDensity)),
-      },
-    }),
-    lexical: (s) => ({
-      ...s,
-      shape: {
-        ...s.shape,
-        avgSentenceLength: avg(sessions.map(x => x.shape.avgSentenceLength)),
-        questionDensity: avg(sessions.map(x => x.shape.questionDensity)),
-      },
-    }),
   };
 
   // ── Leave-one-out ──
@@ -305,7 +294,7 @@ export function computeVariantTree(): VariantTreeResult {
       .filter(Boolean);
 
     let soloSessions = sessions.map(s => {
-      let result = { ...s, shape: { ...s.shape } };
+      let result: any = { ...s };
       for (const neutralize of othersToNeutralize) {
         result = neutralize(result);
       }

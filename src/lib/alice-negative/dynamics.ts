@@ -1,13 +1,17 @@
 /**
- * PersDyn Behavioral Dynamics Engine
+ * PersDyn Dynamics Engine (dimension-agnostic)
  *
- * Computes three parameters per behavioral dimension from entry state history:
+ * Computes three parameters per dimension from entry state history:
  *   baseline       — stable set point (rolling mean)
  *   variability    — fluctuation width (rolling standard deviation)
  *   attractor_force — how quickly deviations snap back to baseline
  *
  * Also discovers empirical coupling between dimensions via lagged
  * cross-correlations (signed Pearson, not just magnitude).
+ *
+ * Generic over dimension list: defaults to behavioral STATE_DIMENSIONS (7D
+ * since slice 3, 2026-04-16) but can be invoked over the parallel semantic
+ * space (`SEMANTIC_DIMENSIONS`) by passing the dim list explicitly.
  *
  * Research basis:
  *   PersDyn model  — Sosnowska, Kuppens, De Fruyt & Hofmans (KU Leuven, 2019)
@@ -25,13 +29,22 @@
  *   This is the Ornstein-Uhlenbeck mean-reversion parameter estimate.
  */
 
-import { avg, stddev, crossCorrelation, type LeadLagResult } from './helpers.ts';
-import { type EntryState, STATE_DIMENSIONS, type StateDimension } from './state-engine.ts';
+import { avg, stddev } from './helpers.ts';
+import { STATE_DIMENSIONS } from './state-engine.ts';
 
 // ─── Types ──────────────────────────────────────────────────────────
 
+/**
+ * Minimal shape for a dynamics-input entry: dimension values keyed by
+ * dimension name, plus an optional convergence scalar used by phase
+ * detection's "disrupted" branch.
+ */
+export type DynamicsInputEntry = Record<string, number | string | undefined> & {
+  convergence?: number;
+};
+
 export interface DimensionDynamic {
-  dimension: StateDimension;
+  dimension: string;
   baseline: number;
   variability: number;
   attractorForce: number;
@@ -41,8 +54,8 @@ export interface DimensionDynamic {
 }
 
 export interface CouplingEdge {
-  leader: StateDimension;
-  follower: StateDimension;
+  leader: string;
+  follower: string;
   lagSessions: number;
   correlation: number;
   direction: number; // +1 = positive coupling, -1 = negative coupling
@@ -68,14 +81,10 @@ const COUPLING_THRESHOLD = 0.3; // minimum |r| to report a coupling
 // ─── Attractor Force Estimation ─────────────────────────────────────
 // Ornstein-Uhlenbeck mean-reversion parameter from lag-1 autocorrelation
 // of deviations from baseline.
-//
-// If deviations persist (high autocorrelation), attractor force is low.
-// If deviations decay quickly (low autocorrelation), attractor force is high.
 
 function estimateAttractorForce(deviations: number[]): number {
   if (deviations.length < 4) return 0.5; // insufficient data, assume moderate
 
-  // Lag-1 autocorrelation
   const n = deviations.length;
   const m = avg(deviations);
   let num = 0;
@@ -91,19 +100,22 @@ function estimateAttractorForce(deviations: number[]): number {
   const autocorr = num / denom;
 
   // Convert: high autocorrelation → low attractor force, and vice versa
-  // autocorr ranges roughly from -1 to 1
-  // attractor force: 0 = no pull back, 1 = instant snap back
-  // Map: autocorr 1.0 → force 0.0, autocorr 0.0 → force 0.5, autocorr -1.0 → force 1.0
+  // Map: autocorr +1 → force 0, autocorr 0 → force 0.5, autocorr -1 → force 1
   return Math.max(0, Math.min(1, 0.5 - autocorr * 0.5));
 }
 
 // ─── Dimension Dynamics ─────────────────────────────────────────────
 
+function dimValue(entry: DynamicsInputEntry, dim: string): number {
+  const v = entry[dim];
+  return typeof v === 'number' ? v : 0;
+}
+
 function computeDimensionDynamic(
-  states: EntryState[],
-  dim: StateDimension,
+  states: ReadonlyArray<DynamicsInputEntry>,
+  dim: string,
 ): DimensionDynamic {
-  const values = states.map(s => s[dim] as number);
+  const values = states.map(s => dimValue(s, dim));
   const windowSize = Math.min(ROLLING_WINDOW, values.length);
   const window = values.slice(-windowSize);
 
@@ -133,8 +145,6 @@ function computeDimensionDynamic(
 }
 
 // ─── Signed Cross-Correlation for Coupling ──────────────────────────
-// Unlike the existing crossCorrelation in helpers.ts (which uses |r|),
-// we need the sign to know if dimensions move together (+) or oppose (-).
 
 function signedPearson(a: number[], b: number[]): number {
   if (a.length < 3 || a.length !== b.length) return 0;
@@ -153,20 +163,23 @@ function signedPearson(a: number[], b: number[]): number {
   return denom < 1e-10 ? 0 : num / denom;
 }
 
-function discoverCoupling(states: EntryState[]): CouplingEdge[] {
+function discoverCoupling(
+  states: ReadonlyArray<DynamicsInputEntry>,
+  dimensions: ReadonlyArray<string>,
+): CouplingEdge[] {
   if (states.length < MIN_ENTRIES_FOR_COUPLING) return [];
 
   const series: Record<string, number[]> = {};
-  for (const dim of STATE_DIMENSIONS) {
-    series[dim] = states.map(s => s[dim] as number);
+  for (const dim of dimensions) {
+    series[dim] = states.map(s => dimValue(s, dim));
   }
 
   const edges: CouplingEdge[] = [];
 
-  for (let i = 0; i < STATE_DIMENSIONS.length; i++) {
-    for (let j = i + 1; j < STATE_DIMENSIONS.length; j++) {
-      const dimA = STATE_DIMENSIONS[i];
-      const dimB = STATE_DIMENSIONS[j];
+  for (let i = 0; i < dimensions.length; i++) {
+    for (let j = i + 1; j < dimensions.length; j++) {
+      const dimA = dimensions[i];
+      const dimB = dimensions[j];
       const seriesA = series[dimA];
       const seriesB = series[dimB];
       const n = Math.min(seriesA.length, seriesB.length);
@@ -197,8 +210,8 @@ function discoverCoupling(states: EntryState[]): CouplingEdge[] {
       const follower = bestLag >= 0 ? dimB : dimA;
 
       edges.push({
-        leader: leader as StateDimension,
-        follower: follower as StateDimension,
+        leader,
+        follower,
         lagSessions: Math.abs(bestLag),
         correlation: Math.abs(bestCorr),
         direction: bestSign,
@@ -211,25 +224,29 @@ function discoverCoupling(states: EntryState[]): CouplingEdge[] {
   return edges;
 }
 
-// ─── Phase Detection (8D) ──────────────────────────────────────────
+// ─── Phase Detection ───────────────────────────────────────────────
 
-function detectPhase(states: EntryState[]): DynamicsAnalysis['phase'] {
+function detectPhase(
+  states: ReadonlyArray<DynamicsInputEntry>,
+  dimensions: ReadonlyArray<string>,
+): DynamicsAnalysis['phase'] {
   if (states.length < MIN_ENTRIES_FOR_DYNAMICS) return 'insufficient';
 
   const recent = states.slice(-5);
   const latest = recent[recent.length - 1];
   const beforeLatest = recent.slice(0, -1);
-  const priorAvgConvergence = avg(beforeLatest.map(p => p.convergence));
+  const priorAvgConvergence = avg(beforeLatest.map(p => p.convergence ?? 0));
 
-  // Disrupted: latest entry is a big outlier
-  if (latest.convergence > 0.6 && priorAvgConvergence < 0.35) {
+  // Disrupted: latest entry is a big outlier in convergence (only meaningful
+  // when entries carry a convergence scalar — semantic and behavioral both do)
+  if (latest.convergence != null && latest.convergence > 0.6 && priorAvgConvergence < 0.35) {
     return 'disrupted';
   }
 
   // Shifting: monotonic trend in any dimension over recent window
   if (recent.length >= 3) {
-    for (const dim of STATE_DIMENSIONS) {
-      const values = recent.map(p => p[dim] as number);
+    for (const dim of dimensions) {
+      const values = recent.map(p => dimValue(p, dim));
       let increasing = 0;
       let decreasing = 0;
       for (let i = 1; i < values.length; i++) {
@@ -244,9 +261,12 @@ function detectPhase(states: EntryState[]): DynamicsAnalysis['phase'] {
   return 'stable';
 }
 
-// ─── Velocity (rate of change in 8D space) ──────────────────────────
+// ─── Velocity (rate of change in dim-space) ─────────────────────────
 
-function computeVelocity(states: EntryState[]): number {
+function computeVelocity(
+  states: ReadonlyArray<DynamicsInputEntry>,
+  dimensions: ReadonlyArray<string>,
+): number {
   if (states.length < 2) return 0;
 
   const recent = states.slice(-5);
@@ -256,8 +276,8 @@ function computeVelocity(states: EntryState[]): number {
     const prev = recent[i - 1];
     const curr = recent[i];
     let sumSq = 0;
-    for (const dim of STATE_DIMENSIONS) {
-      sumSq += ((curr[dim] as number) - (prev[dim] as number)) ** 2;
+    for (const dim of dimensions) {
+      sumSq += (dimValue(curr, dim) - dimValue(prev, dim)) ** 2;
     }
     totalDist += Math.sqrt(sumSq);
   }
@@ -269,18 +289,16 @@ function computeVelocity(states: EntryState[]): number {
 // ─── System Entropy (Shannon entropy of variabilities) ──────────────
 // ECTO framework (Rodriguez, 2025): entropy from psychometric distributions
 // serves as both a compression mechanism and an active driver of evolution.
-// High entropy = behavioral dimensions are all similarly variable (unpredictable).
-// Low entropy = some dimensions are rigid while others are volatile (structured).
+// High entropy = dimensions are all similarly variable (unpredictable).
+// Low entropy = some dimensions rigid while others volatile (structured).
 
 function computeSystemEntropy(dynamics: DimensionDynamic[]): number {
   const variabilities = dynamics.map(d => d.variability);
   const total = variabilities.reduce((s, v) => s + v, 0);
   if (total < 1e-10) return 0;
 
-  // Normalize to probability distribution
   const probs = variabilities.map(v => v / total);
 
-  // Shannon entropy, normalized to [0, 1]
   const maxEntropy = Math.log(probs.length);
   if (maxEntropy < 1e-10) return 0;
 
@@ -296,10 +314,13 @@ function computeSystemEntropy(dynamics: DimensionDynamic[]): number {
 
 // ─── Public API ─────────────────────────────────────────────────────
 
-export function computeDynamics(states: EntryState[]): DynamicsAnalysis {
+export function computeDynamics(
+  states: ReadonlyArray<DynamicsInputEntry>,
+  dimensions: ReadonlyArray<string> = STATE_DIMENSIONS,
+): DynamicsAnalysis {
   if (states.length < MIN_ENTRIES_FOR_DYNAMICS) {
     return {
-      dimensions: STATE_DIMENSIONS.map(dim => ({
+      dimensions: dimensions.map(dim => ({
         dimension: dim,
         baseline: 0,
         variability: 0,
@@ -316,14 +337,14 @@ export function computeDynamics(states: EntryState[]): DynamicsAnalysis {
     };
   }
 
-  const dimensions = STATE_DIMENSIONS.map(dim => computeDimensionDynamic(states, dim));
-  const coupling = discoverCoupling(states);
-  const phase = detectPhase(states);
-  const velocity = computeVelocity(states);
-  const systemEntropy = computeSystemEntropy(dimensions);
+  const dimensionDynamics = dimensions.map(dim => computeDimensionDynamic(states, dim));
+  const coupling = discoverCoupling(states, dimensions);
+  const phase = detectPhase(states, dimensions);
+  const velocity = computeVelocity(states, dimensions);
+  const systemEntropy = computeSystemEntropy(dimensionDynamics);
 
   return {
-    dimensions,
+    dimensions: dimensionDynamics,
     coupling,
     entryCount: states.length,
     phase,
@@ -332,14 +353,13 @@ export function computeDynamics(states: EntryState[]): DynamicsAnalysis {
   };
 }
 
-// ─── Format dynamics for LLM renderer ──────────────────────────────
-// Produces a human-readable summary of the dynamics state for the
-// visual trait renderer (the LLM's new role: art, not science).
+// ─── Format dynamics for human-readable diagnostics ────────────────
+// Used by simulation reports and dev tooling. Not surfaced to the user.
 
 export function formatDynamicsForRenderer(analysis: DynamicsAnalysis): string {
   const lines: string[] = [];
 
-  lines.push(`=== BEHAVIORAL DYNAMICS (${analysis.entryCount} entries) ===`);
+  lines.push(`=== DYNAMICS (${analysis.entryCount} entries) ===`);
   lines.push(`Phase: ${analysis.phase} | Velocity: ${analysis.velocity.toFixed(3)} | System entropy: ${analysis.systemEntropy.toFixed(3)}`);
   lines.push('');
 
@@ -376,9 +396,9 @@ export function formatDynamicsForRenderer(analysis: DynamicsAnalysis): string {
     }
   }
 
-  // Narrative summary for the renderer
+  // Narrative summary
   lines.push('');
-  lines.push('=== BEHAVIORAL NARRATIVE ===');
+  lines.push('=== NARRATIVE ===');
 
   // Find extreme deviations
   const extremes = analysis.dimensions
@@ -413,9 +433,9 @@ export function formatDynamicsForRenderer(analysis: DynamicsAnalysis): string {
 
   // Entropy interpretation
   if (analysis.systemEntropy >= 0.85) {
-    lines.push('System entropy is HIGH — behavioral dimensions are uniformly variable. Unpredictable.');
+    lines.push('System entropy is HIGH — dimensions are uniformly variable. Unpredictable.');
   } else if (analysis.systemEntropy <= 0.5) {
-    lines.push('System entropy is LOW — behavioral structure is well-defined. Some dimensions rigid, others volatile.');
+    lines.push('System entropy is LOW — structure is well-defined. Some dimensions rigid, others volatile.');
   }
 
   // Active coupling narratives

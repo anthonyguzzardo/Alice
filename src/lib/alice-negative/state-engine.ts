@@ -1,32 +1,38 @@
 /**
- * 8D Deterministic State Engine
+ * 7D Deterministic Behavioral State Engine
  *
  * Computes a per-entry behavioral state vector from raw session data.
- * Each entry produces one point in 8-dimensional behavioral space.
+ * Each entry produces one point in 7-dimensional behavioral space.
  * All values are z-scored against personal history. No AI. Pure math.
+ *
+ * As of 2026-04-16 (slice 3): `expression` was pulled out of PersDyn and
+ * relocated to a parallel semantic state space (see semantic-space.ts).
+ * The behavioral and semantic spaces are kept orthogonal at construction
+ * time so coupling discovery and joint-embedding work downstream remain
+ * meaningful. Prior 8D vectors are archived under
+ * zz_archive_entry_states_8d_20260416.
  *
  * Dimensions (research-validated):
  *   fluency      — P-burst length: sustained production flow (Chenoweth & Hayes 2001, Deane 2015)
  *   deliberation — hesitation + pause rate + revision weight: cognitive load (Deane 2015)
  *   revision     — commitment ratio + substantive deletion rate (Baaijen et al. 2012)
- *   expression   — linguistic deviation from personal norm (sentence length, questions, pronouns, hedging)
  *   commitment   — final/typed ratio: how much they kept (z-scored)
  *   volatility   — behavioral distance from previous entry: session-to-session instability
  *   thermal      — correction intensity + revision timing: editing heat (Faigley & Witte 1981)
  *   presence     — inverse distraction: low tab-away + low pause rate = high presence
  *
  * Convergence:
- *   Euclidean distance from personal center in 8D space.
+ *   Euclidean distance from personal center in 7D space.
  *   Normalized to [0, 1]. High convergence = multiple dimensions moved together.
  */
 
 import db from '../db.ts';
-import { avg, stddev, FIRST_PERSON, HEDGING_WORDS } from './helpers.ts';
+import { avg, stddev } from './helpers.ts';
 
 // ─── Types ──────────────────────────────────────────────────────────
 
 export const STATE_DIMENSIONS = [
-  'fluency', 'deliberation', 'revision', 'expression',
+  'fluency', 'deliberation', 'revision',
   'commitment', 'volatility', 'thermal', 'presence',
 ] as const;
 
@@ -39,7 +45,6 @@ export interface EntryState {
   fluency: number;
   deliberation: number;
   revision: number;
-  expression: number;
   commitment: number;
   volatility: number;
   thermal: number;
@@ -57,38 +62,6 @@ function zScore(value: number, mean: number, std: number): number {
   return (value - mean) / std;
 }
 
-// ─── Per-entry shape metrics from response text ─────────────────────
-
-interface ShapeMetrics {
-  avgSentenceLength: number;
-  questionDensity: number;
-  firstPersonDensity: number;
-  hedgingDensity: number;
-}
-
-function computeShape(text: string): ShapeMetrics {
-  const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
-  const words = text.toLowerCase()
-    .replace(/[^a-z'\s-]/g, '')
-    .split(/\s+/)
-    .filter(w => w.length > 1);
-
-  const avgSentenceLength = sentences.length > 0
-    ? words.length / sentences.length : 0;
-
-  const questionCount = (text.match(/\?/g) || []).length;
-  const questionDensity = sentences.length > 0
-    ? questionCount / sentences.length : 0;
-
-  const fpCount = words.filter(w => FIRST_PERSON.has(w)).length;
-  const firstPersonDensity = words.length > 0 ? fpCount / words.length : 0;
-
-  const hedgeCount = words.filter(w => HEDGING_WORDS.has(w)).length;
-  const hedgingDensity = words.length > 0 ? hedgeCount / words.length : 0;
-
-  return { avgSentenceLength, questionDensity, firstPersonDensity, hedgingDensity };
-}
-
 // ─── Raw session data ───────────────────────────────────────────────
 
 interface SessionRaw {
@@ -104,12 +77,10 @@ interface SessionRaw {
   // Revision
   commitmentRatio: number;
   revisionRate: number;
-  // Expression
-  shape: ShapeMetrics;
-  // Thermal (new)
+  // Thermal
   correctionRate: number;
   revisionTiming: number;
-  // Presence (new)
+  // Presence
   tabAwayRatePerMinute: number;
 }
 
@@ -137,7 +108,6 @@ export function loadSessions(): SessionRaw[] {
       ,ss.tab_away_count
       ,ss.second_half_deletion_chars
       ,ss.first_half_deletion_chars
-      ,r.text
     FROM tb_session_summaries ss
     JOIN tb_responses r ON ss.question_id = r.question_id
     JOIN tb_questions q ON r.question_id = q.question_id
@@ -201,7 +171,6 @@ export function loadSessions(): SessionRaw[] {
       revisionWeight,
       commitmentRatio: row.commitment_ratio ?? 1,
       revisionRate,
-      shape: computeShape(row.text || ''),
       correctionRate,
       revisionTiming,
       tabAwayRatePerMinute,
@@ -209,7 +178,7 @@ export function loadSessions(): SessionRaw[] {
   });
 }
 
-// ─── 8D State computation ──────────────────────────────────────────
+// ─── 7D State computation ──────────────────────────────────────────
 
 export function computeEntryStates(sessions?: SessionRaw[]): EntryState[] {
   if (!sessions) sessions = loadSessions();
@@ -229,11 +198,6 @@ export function computeEntryStates(sessions?: SessionRaw[]): EntryState[] {
     // Revision
     commitmentRatio:    { mean: avg(sessions.map(s => s.commitmentRatio)),    std: stddev(sessions.map(s => s.commitmentRatio)) },
     revisionRate:       { mean: avg(sessions.map(s => s.revisionRate)),       std: stddev(sessions.map(s => s.revisionRate)) },
-    // Expression
-    avgSentenceLen:     { mean: avg(sessions.map(s => s.shape.avgSentenceLength)),   std: stddev(sessions.map(s => s.shape.avgSentenceLength)) },
-    questionDensity:    { mean: avg(sessions.map(s => s.shape.questionDensity)),      std: stddev(sessions.map(s => s.shape.questionDensity)) },
-    firstPersonDensity: { mean: avg(sessions.map(s => s.shape.firstPersonDensity)),   std: stddev(sessions.map(s => s.shape.firstPersonDensity)) },
-    hedgingDensity:     { mean: avg(sessions.map(s => s.shape.hedgingDensity)),       std: stddev(sessions.map(s => s.shape.hedgingDensity)) },
     // Thermal
     correctionRate:     { mean: avg(sessions.map(s => s.correctionRate)),     std: stddev(sessions.map(s => s.correctionRate)) },
     revisionTiming:     { mean: avg(sessions.map(s => s.revisionTiming)),     std: stddev(sessions.map(s => s.revisionTiming)) },
@@ -262,14 +226,6 @@ export function computeEntryStates(sessions?: SessionRaw[]): EntryState[] {
       -z('commitmentRatio', session.commitmentRatio) +
       z('revisionRate', session.revisionRate)
     ) / 2;
-
-    // ── Expression: absolute linguistic deviation from norm ──
-    const expression = (
-      Math.abs(z('avgSentenceLen', session.shape.avgSentenceLength)) +
-      Math.abs(z('questionDensity', session.shape.questionDensity)) +
-      Math.abs(z('firstPersonDensity', session.shape.firstPersonDensity)) +
-      Math.abs(z('hedgingDensity', session.shape.hedgingDensity))
-    ) / 4;
 
     // ── Commitment: how much they kept (z-scored, positive = kept more) ──
     const commitment = z('commitmentRatio', session.commitmentRatio);
@@ -314,18 +270,20 @@ export function computeEntryStates(sessions?: SessionRaw[]): EntryState[] {
       z('pauseRatePerMinute', session.pauseRatePerMinute)
     ) / 2;
 
-    // ── Convergence: Euclidean distance from personal center in 8D ──
+    // ── Convergence: Euclidean distance from personal center in 7D ──
     const raw = Math.sqrt(
       fluency ** 2 +
       deliberation ** 2 +
       revision ** 2 +
-      expression ** 2 +
       commitment ** 2 +
       volatility ** 2 +
       thermal ** 2 +
       presence ** 2
     );
-    const convergence = Math.min(1, raw / 6); // Normalize by expected max for 8D
+    // Expected max ≈ sqrt(7) * typical-z-magnitude; keep prior normalization
+    // scale (was /6 for 8D — 7D divisor is /5.6 to preserve [0,1] bounds for
+    // typical z-deviations).
+    const convergence = Math.min(1, raw / 5.6);
 
     const convergenceLevel: EntryState['convergenceLevel'] =
       convergence >= 0.6 ? 'high' :
@@ -338,7 +296,6 @@ export function computeEntryStates(sessions?: SessionRaw[]): EntryState[] {
       fluency,
       deliberation,
       revision,
-      expression,
       commitment,
       volatility,
       thermal,
