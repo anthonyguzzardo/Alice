@@ -294,14 +294,94 @@
         pointer-events: none;
         transition: opacity 0.3s ease;
       }
+
+      .nav-menu {
+        position: relative;
+      }
+
+      .nav-menu-btn {
+        background: none;
+        border: 1px solid var(--border);
+        border-radius: 50%;
+        width: 36px;
+        height: 36px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s ease;
+        color: var(--text-muted);
+        font-size: 1.1rem;
+      }
+
+      .nav-menu-btn:hover {
+        border-color: var(--border-focus);
+        color: var(--text);
+      }
+
+      .nav-menu-btn.open {
+        border-color: var(--border-focus);
+        color: var(--text);
+      }
+
+      .nav-dropdown {
+        position: absolute;
+        top: calc(100% + 0.6rem);
+        right: 0;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 0.5rem 0;
+        min-width: 180px;
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(-4px);
+        transition: opacity 0.2s ease, transform 0.2s ease;
+        z-index: 100;
+      }
+
+      .nav-dropdown.open {
+        opacity: 1;
+        pointer-events: auto;
+        transform: translateY(0);
+      }
+
+      .nav-dropdown a {
+        display: block;
+        padding: 0.6rem 1.2rem;
+        color: var(--text-muted);
+        text-decoration: none;
+        font-size: 1.05rem;
+        letter-spacing: 0.03em;
+        transition: color 0.2s ease, background 0.2s ease;
+      }
+
+      .nav-dropdown a:hover {
+        color: var(--text);
+        background: var(--bg-input);
+      }
+
+      .nav-dropdown .nav-divider {
+        height: 1px;
+        background: var(--border);
+        margin: 0.4rem 1.2rem;
+      }
     </style>
   </head>
   <body>
     <div class="top-controls">
-      <a href="/alice-negative" class="top-btn nav-btn" id="alice-negative-btn" aria-label="Alice Negative" title="Alice Negative">&#x25CF;</a>
-      <a href="/trajectory" class="top-btn nav-btn" id="trajectory-btn" aria-label="Trajectory" title="Trajectory">&#x2237;</a>
-      <a href="/observatory" class="top-btn nav-btn" id="observatory-btn" aria-label="Observatory" title="Observatory">&#x25A1;</a>
-      <a href="/dev/signals" class="top-btn nav-btn" id="signals-btn" aria-label="Signal Sandbox" title="Signal Sandbox">&#x2261;</a>
+      <div class="nav-menu nav-btn" id="nav-menu">
+        <button class="nav-menu-btn" id="nav-menu-btn" aria-label="Navigation" title="Navigation">&#x2022;&#x2022;&#x2022;</button>
+        <div class="nav-dropdown" id="nav-dropdown">
+          <a href="/about">About</a>
+          <div class="nav-divider"></div>
+          <a href="/alice-negative">Alice Negative</a>
+          <a href="/trajectory">Trajectory</a>
+          <a href="/observatory">Observatory</a>
+          <div class="nav-divider"></div>
+          <a href="/dev/signals">Signal Sandbox</a>
+        </div>
+      </div>
       <button class="top-btn" id="theme-toggle" aria-label="Toggle theme"></button>
     </div>
     <div class="container">
@@ -311,6 +391,21 @@
     </div>
 
     <script>
+      // Nav menu dropdown
+      const navMenuBtn = document.getElementById('nav-menu-btn')!;
+      const navDropdown = document.getElementById('nav-dropdown')!;
+
+      navMenuBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = navDropdown.classList.toggle('open');
+        navMenuBtn.classList.toggle('open', isOpen);
+      });
+
+      document.addEventListener('click', () => {
+        navDropdown.classList.remove('open');
+        navMenuBtn.classList.remove('open');
+      });
+
       // Theme toggle
       const themeBtn = document.getElementById('theme-toggle')!;
       const savedTheme = localStorage.getItem('alice-theme') || 'light';

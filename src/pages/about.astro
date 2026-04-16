@@ -1,0 +1,330 @@
+---
+
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Alice — About</title>
+    <script is:inline>
+      (function() {
+        var t = localStorage.getItem('alice-theme') || 'light';
+        document.documentElement.setAttribute('data-theme', t);
+      })();
+    </script>
+    <style is:global>
+      @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap');
+
+      :root {
+        --bg: #f5f2ed;
+        --bg-input: #ebe7e1;
+        --text: #1a1a1a;
+        --text-muted: #6b6560;
+        --text-faint: #9a9590;
+        --border: #ccc5bc;
+        --border-focus: #8a8580;
+      }
+
+      [data-theme="dark"] {
+        --bg: #0a0a0a;
+        --bg-input: #161514;
+        --text: #ffffff;
+        --text-muted: #7a7570;
+        --text-faint: #4a4540;
+        --border: #333;
+        --border-focus: #666;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      html, body {
+        min-height: 100%;
+        background: var(--bg);
+        color: var(--text);
+        font-family: 'EB Garamond', Georgia, serif;
+      }
+
+      body {
+        display: flex;
+        justify-content: center;
+        padding: 6rem 2rem 8rem;
+      }
+
+      .page {
+        max-width: 640px;
+        width: 100%;
+        padding-bottom: 6rem;
+      }
+
+      .top-controls {
+        position: fixed;
+        top: 2rem;
+        right: 2rem;
+        display: flex;
+        gap: 0.6rem;
+        align-items: center;
+        z-index: 10;
+      }
+
+      .top-btn {
+        background: none;
+        border: 1px solid var(--border);
+        border-radius: 50%;
+        width: 36px;
+        height: 36px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s ease;
+        color: var(--text-muted);
+        font-size: 1rem;
+        text-decoration: none;
+      }
+
+      .top-btn:hover {
+        border-color: var(--border-focus);
+        color: var(--text);
+      }
+
+      .nav-menu {
+        position: relative;
+      }
+
+      .nav-menu-btn {
+        background: none;
+        border: 1px solid var(--border);
+        border-radius: 50%;
+        width: 36px;
+        height: 36px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s ease;
+        color: var(--text-muted);
+        font-size: 1.1rem;
+      }
+
+      .nav-menu-btn:hover {
+        border-color: var(--border-focus);
+        color: var(--text);
+      }
+
+      .nav-menu-btn.open {
+        border-color: var(--border-focus);
+        color: var(--text);
+      }
+
+      .nav-dropdown {
+        position: absolute;
+        top: calc(100% + 0.6rem);
+        right: 0;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 0.5rem 0;
+        min-width: 180px;
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(-4px);
+        transition: opacity 0.2s ease, transform 0.2s ease;
+        z-index: 100;
+      }
+
+      .nav-dropdown.open {
+        opacity: 1;
+        pointer-events: auto;
+        transform: translateY(0);
+      }
+
+      .nav-dropdown a {
+        display: block;
+        padding: 0.6rem 1.2rem;
+        color: var(--text-muted);
+        text-decoration: none;
+        font-size: 1.05rem;
+        letter-spacing: 0.03em;
+        transition: color 0.2s ease, background 0.2s ease;
+      }
+
+      .nav-dropdown a:hover {
+        color: var(--text);
+        background: var(--bg-input);
+      }
+
+      .nav-dropdown a.current {
+        color: var(--text);
+      }
+
+      .nav-dropdown .nav-divider {
+        height: 1px;
+        background: var(--border);
+        margin: 0.4rem 1.2rem;
+      }
+
+      .title {
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-size: 3.2rem;
+        font-weight: 300;
+        font-style: italic;
+        line-height: 1.4;
+        letter-spacing: 0.03em;
+        color: var(--text);
+        margin-bottom: 1rem;
+      }
+
+      .subtitle {
+        font-size: 1.3rem;
+        color: var(--text-muted);
+        line-height: 1.6;
+        margin-bottom: 4rem;
+        letter-spacing: 0.02em;
+      }
+
+      .section {
+        margin-bottom: 3.5rem;
+      }
+
+      .section-heading {
+        font-size: 0.85rem;
+        color: var(--text-faint);
+        text-transform: uppercase;
+        letter-spacing: 0.15em;
+        margin-bottom: 1.2rem;
+      }
+
+      .section p {
+        font-size: 1.25rem;
+        line-height: 1.8;
+        color: var(--text-muted);
+        margin-bottom: 1rem;
+      }
+
+      .section p:last-child {
+        margin-bottom: 0;
+      }
+
+      .divider {
+        width: 3rem;
+        height: 1px;
+        background: var(--border);
+        margin: 4rem 0;
+      }
+
+      .principles {
+        list-style: none;
+        padding: 0;
+      }
+
+      .principles li {
+        font-size: 1.25rem;
+        line-height: 1.8;
+        color: var(--text-muted);
+        margin-bottom: 1.2rem;
+        padding-left: 1.5rem;
+        position: relative;
+      }
+
+      .principles li::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0.85em;
+        width: 6px;
+        height: 1px;
+        background: var(--border-focus);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="top-controls">
+      <div class="nav-menu">
+        <button class="nav-menu-btn" id="nav-menu-btn" aria-label="Navigation" title="Navigation">&#x2022;&#x2022;&#x2022;</button>
+        <div class="nav-dropdown" id="nav-dropdown">
+          <a href="/">Journal</a>
+          <a href="/about" class="current">About</a>
+          <div class="nav-divider"></div>
+          <a href="/alice-negative">Alice Negative</a>
+          <a href="/trajectory">Trajectory</a>
+          <a href="/observatory">Observatory</a>
+          <div class="nav-divider"></div>
+          <a href="/dev/signals">Signal Sandbox</a>
+        </div>
+      </div>
+      <button class="top-btn" id="theme-toggle" aria-label="Toggle theme"></button>
+    </div>
+
+    <div class="page">
+      <h1 class="title">Alice</h1>
+      <p class="subtitle">A personal thinking journal. One question per day. No gamification. No dashboard. Just depth.</p>
+
+      <div class="section">
+        <div class="section-heading">How it works</div>
+        <p>Each day, Alice asks you one question. You write. That's it.</p>
+        <p>The question is generated from what you've written before — not to summarize you, but to push you somewhere you haven't gone yet. There is no archive to browse, no streak to maintain, no score to optimize.</p>
+      </div>
+
+      <div class="section">
+        <div class="section-heading">What it isn't</div>
+        <p>Alice is not a therapist, not a chatbot, not a productivity tool. It doesn't give advice. It doesn't respond to what you write. It listens, and then it asks a better question.</p>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="section">
+        <div class="section-heading">Principles</div>
+        <ul class="principles">
+          <li>One question per day. Not because more would be hard — because depth requires constraint.</li>
+          <li>No history visible. What you wrote is yours. The journal remembers so you don't have to perform for it.</li>
+          <li>No engagement metrics. No streaks, no badges, no notifications. If you don't open it, it waits.</li>
+          <li>Slow by design. The interface enforces a pause before you write and delays the submit button. Speed is not the point.</li>
+        </ul>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="section">
+        <div class="section-heading">Why</div>
+        <p>Most tools designed for thinking are actually designed for producing. They optimize for output, frequency, and engagement — the exact pressures that prevent honest reflection.</p>
+        <p>Alice takes the opposite position. Every technical decision serves depth over speed. If it optimizes for engagement or throughput, it's wrong.</p>
+      </div>
+    </div>
+
+    <script>
+      // Nav menu dropdown
+      const navMenuBtn = document.getElementById('nav-menu-btn')!;
+      const navDropdown = document.getElementById('nav-dropdown')!;
+
+      navMenuBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = navDropdown.classList.toggle('open');
+        navMenuBtn.classList.toggle('open', isOpen);
+      });
+
+      document.addEventListener('click', () => {
+        navDropdown.classList.remove('open');
+        navMenuBtn.classList.remove('open');
+      });
+
+      // Theme toggle
+      const themeBtn = document.getElementById('theme-toggle')!;
+      const saved = localStorage.getItem('alice-theme') || 'light';
+      document.documentElement.setAttribute('data-theme', saved);
+      themeBtn.textContent = saved === 'dark' ? '☀' : '☾';
+
+      themeBtn.addEventListener('click', () => {
+        const current = document.documentElement.getAttribute('data-theme');
+        const next = current === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        localStorage.setItem('alice-theme', next);
+        themeBtn.textContent = next === 'dark' ? '☀' : '☾';
+      });
+    </script>
+  </body>
+</html>
