@@ -1178,6 +1178,13 @@ export function hasQuestionForDate(date: string): boolean {
   return !!row;
 }
 
+export function countScheduledSeedQuestions(): number {
+  return (db.prepare(
+    `SELECT COUNT(*) AS c FROM tb_questions
+     WHERE question_source_id = 1 AND scheduled_for IS NOT NULL`
+  ).get() as { c: number }).c;
+}
+
 // ----------------------------------------------------------------------------
 // SESSION SUMMARIES
 // ----------------------------------------------------------------------------
