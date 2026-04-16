@@ -1,14 +1,17 @@
 import type { APIRoute } from 'astro';
 import { saveResponse, getTodaysQuestion, getTodaysResponse, saveSessionSummary, saveBurstSequence, getResponseCount } from '../../lib/db.ts';
-import { runObservation } from '../../lib/observe.ts';
 import { runGeneration } from '../../lib/generate.ts';
-import { runReflection } from '../../lib/reflect.ts';
 import { embedResponse } from '../../lib/embeddings.ts';
 import { logError } from '../../lib/error-log.ts';
 import { localDateStr } from '../../lib/date.ts';
 import { computeLinguisticDensities } from '../../lib/linguistic.ts';
 import { computeMATTR } from '../../lib/alice-negative/helpers.ts';
 import { renderWitnessState } from '../../lib/alice-negative/render-witness.ts';
+
+// Note: runObservation (three-frame + prediction + suppressed question) and
+// runReflection (weekly narrative) removed 2026-04-16 in interpretive-layer
+// restructure. The background pipeline now only generates tomorrow's question
+// and renders the witness state.
 
 export const POST: APIRoute = async ({ request }) => {
   const body = await request.json();
@@ -118,16 +121,8 @@ export const POST: APIRoute = async ({ request }) => {
   // tagged with its stage so you can see exactly what broke.
   (async () => {
     const ctx = { questionId, responseId, responseCount };
-    try { await runObservation(); }
-    catch (err) { logError('respond.observation', err, ctx); }
-
     try { await runGeneration(); }
     catch (err) { logError('respond.generation', err, ctx); }
-
-    if (responseCount >= 5 && responseCount % 7 === 0) {
-      try { await runReflection(); }
-      catch (err) { logError('respond.reflection', err, ctx); }
-    }
 
     try { await renderWitnessState(); }
     catch (err) { logError('respond.witness', err, ctx); }

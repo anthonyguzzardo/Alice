@@ -12,7 +12,7 @@
  *   Structure        — Prompt formatting (2024): labeled sections > flat lists
  */
 
-import type { SessionSummaryInput, CalibrationBaseline, OpenPrediction } from './db.ts';
+import type { SessionSummaryInput, CalibrationBaseline } from './db.ts';
 import { getCalibrationSessionsWithText, getBurstSequence } from './db.ts';
 import type { TrajectoryAnalysis } from './alice-negative/trajectory.ts';
 import type { DynamicsAnalysis } from './alice-negative/dynamics.ts';
@@ -877,77 +877,10 @@ export function computeKnowledgeTransformScore(
   return { score: rawScore, calibrationFloor, aboveFloor, signals };
 }
 
-// ─── Prediction formatting for LLM consumption ───────────────────
-
-/**
- * Format open predictions for the observation prompt so the AI can grade them.
- */
-export function formatOpenPredictions(predictions: OpenPrediction[]): string {
-  if (predictions.length === 0) return '';
-
-  const lines: string[] = [];
-  lines.push('=== OPEN PREDICTIONS (grade these against today\'s data) ===');
-  lines.push('');
-  lines.push('For each prediction below, assess whether today\'s session data CONFIRMS, FALSIFIES, or is INDETERMINATE. If the prediction\'s expiry window has passed, mark it EXPIRED.');
-  lines.push('');
-
-  const methodNames: Record<number, string> = { 1: 'code', 2: 'text_search', 3: 'interpretive' };
-
-  for (const p of predictions) {
-    const method = methodNames[p.gradeMethodId] ?? 'interpretive';
-    lines.push(`[Prediction #${p.predictionId}] (created ${p.dttmCreatedUtc}, grade: ${method})`);
-    lines.push(`  Hypothesis: ${p.hypothesis}`);
-    if (p.favoredFrame) lines.push(`  Favored frame: ${p.favoredFrame}`);
-    if (p.targetTopic) lines.push(`  Topic: ${p.targetTopic}`);
-    lines.push(`  Would confirm: ${p.expectedSignature}`);
-    lines.push(`  Would falsify: ${p.falsificationCriteria}`);
-    lines.push(`  Expires after: ${p.expirySessions} sessions`);
-    lines.push('');
-  }
-
-  return lines.join('\n');
-}
-
-/**
- * Format prediction track record + theory confidence for generation/reflection prompts.
- */
-export function formatPredictionTrackRecord(
-  stats: { total: number; confirmed: number; falsified: number; expired: number; open: number },
-  theories: Array<{ theoryKey: string; description: string; posteriorMean: number; totalPredictions: number }>,
-  recentGraded: Array<{ hypothesis: string; statusCode: string; gradeRationale: string | null }>,
-): string {
-  if (stats.total === 0) return '';
-
-  const lines: string[] = [];
-  lines.push('=== PREDICTION TRACK RECORD ===');
-  lines.push('');
-  lines.push(`Total predictions: ${stats.total} | Confirmed: ${stats.confirmed} | Falsified: ${stats.falsified} | Expired: ${stats.expired} | Open: ${stats.open}`);
-
-  if (stats.confirmed + stats.falsified > 0) {
-    const hitRate = stats.confirmed / (stats.confirmed + stats.falsified);
-    lines.push(`Hit rate (excluding expired/open): ${(hitRate * 100).toFixed(0)}%`);
-  }
-  lines.push('');
-
-  if (theories.length > 0) {
-    lines.push('Theory confidence (Bayesian posterior, 0.5 = no evidence):');
-    for (const t of theories) {
-      const bar = t.posteriorMean > 0.65 ? 'strong' : t.posteriorMean > 0.5 ? 'leaning confirmed' : t.posteriorMean > 0.35 ? 'leaning falsified' : 'weak';
-      lines.push(`  ${t.theoryKey}: ${t.posteriorMean.toFixed(2)} (${bar}, n=${t.totalPredictions}) — ${t.description}`);
-    }
-    lines.push('');
-  }
-
-  if (recentGraded.length > 0) {
-    lines.push('Recent graded predictions:');
-    for (const g of recentGraded.slice(0, 5)) {
-      lines.push(`  [${g.statusCode}] ${g.hypothesis}${g.gradeRationale ? ` — ${g.gradeRationale}` : ''}`);
-    }
-    lines.push('');
-  }
-
-  return lines.join('\n');
-}
+// ─── Prediction formatting — REMOVED 2026-04-16 ─────────────────
+// formatOpenPredictions and formatPredictionTrackRecord removed with the
+// prediction + theory machinery. Data archived under
+// zz_archive_predictions_20260416 / zz_archive_theory_confidence_20260416.
 
 /**
  * Format calibration-relative deviations for the observation prompt.

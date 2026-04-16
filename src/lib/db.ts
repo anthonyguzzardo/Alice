@@ -321,50 +321,11 @@ db.exec(`
     ,created_by                 TEXT    NOT NULL DEFAULT 'system'
   );
 
-  -- --------------------------------------------------------------------------
-  -- tb_ai_observations
-  -- --------------------------------------------------------------------------
-  -- PURPOSE: Store the AI's nightly silent observations about the user
-  -- USE CASE: "What did the AI notice today that it couldn't say?"
-  -- SCOPE: Sessions only. Calibration responses are skipped by observe.ts
-  --        (see the isCalibrationQuestion() early return). Expected row count
-  --        equals count of tb_responses WHERE question_source_id != 3.
-  -- MUTABILITY: Mutable (append-only, one row per session question)
-  -- LOGICAL FK: question_id → tb_questions.question_id
-  -- FOOTER: Minimal (append-only)
-  -- --------------------------------------------------------------------------
-  CREATE TABLE IF NOT EXISTS tb_ai_observations (
-     ai_observation_id   INTEGER PRIMARY KEY AUTOINCREMENT
-    ,question_id         INTEGER NOT NULL UNIQUE
-    ,observation_text    TEXT    NOT NULL
-    ,observation_date    TEXT    NOT NULL
-    -- FOOTER
-    ,dttm_created_utc    TEXT    NOT NULL DEFAULT (datetime('now'))
-    ,created_by          TEXT    NOT NULL DEFAULT 'system'
-  );
-
-  -- --------------------------------------------------------------------------
-  -- tb_ai_suppressed_questions
-  -- --------------------------------------------------------------------------
-  -- PURPOSE: Store questions the AI wanted to ask but couldn't (seed phase)
-  --          or chose not to (generated phase — the runner-up)
-  -- USE CASE: "What has the AI been building toward asking?"
-  -- SCOPE: Sessions only. Generated during observe.ts — calibration responses
-  --        are skipped. Expected row count equals the session count.
-  -- MUTABILITY: Mutable (append-only, one row per session question)
-  -- LOGICAL FK: question_id → tb_questions.question_id (the question that
-  --             WAS asked that day, not this suppressed one)
-  -- FOOTER: Minimal (append-only)
-  -- --------------------------------------------------------------------------
-  CREATE TABLE IF NOT EXISTS tb_ai_suppressed_questions (
-     ai_suppressed_question_id  INTEGER PRIMARY KEY AUTOINCREMENT
-    ,question_id                INTEGER NOT NULL UNIQUE
-    ,suppressed_text            TEXT    NOT NULL
-    ,suppressed_date            TEXT    NOT NULL
-    -- FOOTER
-    ,dttm_created_utc           TEXT    NOT NULL DEFAULT (datetime('now'))
-    ,created_by                 TEXT    NOT NULL DEFAULT 'system'
-  );
+  -- tb_ai_observations, tb_ai_suppressed_questions — archived 2026-04-16
+  -- (interpretive-layer restructure). Data preserved under
+  -- zz_archive_ai_observations_20260416 and
+  -- zz_archive_ai_suppressed_questions_20260416. Schema no longer recreated.
+  -- See scripts/archive-interpretive-layer-20260416.ts.
 
   -- --------------------------------------------------------------------------
   -- te_prompt_trace_type
@@ -477,202 +438,11 @@ db.exec(`
 // PREDICTION SYSTEM TABLES
 // ----------------------------------------------------------------------------
 
-db.exec(`
-  -- --------------------------------------------------------------------------
-  -- te_prediction_status
-  -- --------------------------------------------------------------------------
-  -- PURPOSE: Track lifecycle of falsifiable predictions
-  -- USE CASE: "Is this prediction still open, confirmed, or falsified?"
-  -- MUTABILITY: Static
-  -- VALUES: open (1), confirmed (2), falsified (3), expired (4), indeterminate (5)
-  -- REFERENCED BY: tb_predictions.prediction_status_id
-  -- FOOTER: None
-  -- --------------------------------------------------------------------------
-  CREATE TABLE IF NOT EXISTS te_prediction_status (
-     prediction_status_id  INTEGER PRIMARY KEY
-    ,enum_code             TEXT    UNIQUE NOT NULL
-    ,name                  TEXT    NOT NULL
-  );
-
-  INSERT OR IGNORE INTO te_prediction_status (prediction_status_id, enum_code, name)
-  VALUES
-     (1, 'open',           'Open')
-    ,(2, 'confirmed',      'Confirmed')
-    ,(3, 'falsified',      'Falsified')
-    ,(4, 'expired',        'Expired')
-    ,(5, 'indeterminate',  'Indeterminate');
-
-  -- --------------------------------------------------------------------------
-  -- te_prediction_type
-  -- --------------------------------------------------------------------------
-  -- PURPOSE: Categorize what kind of prediction the system is making
-  -- USE CASE: "Is this a behavioral prediction, a thematic one, or a phase transition?"
-  -- MUTABILITY: Static
-  -- VALUES: behavioral (1), thematic (2), phase_transition (3), frame_resolution (4)
-  -- REFERENCED BY: tb_predictions.prediction_type_id
-  -- FOOTER: None
-  -- --------------------------------------------------------------------------
-  CREATE TABLE IF NOT EXISTS te_prediction_type (
-     prediction_type_id  INTEGER PRIMARY KEY
-    ,enum_code           TEXT    UNIQUE NOT NULL
-    ,name                TEXT    NOT NULL
-  );
-
-  INSERT OR IGNORE INTO te_prediction_type (prediction_type_id, enum_code, name)
-  VALUES
-     (1, 'behavioral',       'Behavioral')
-    ,(2, 'thematic',         'Thematic')
-    ,(3, 'phase_transition', 'Phase Transition')
-    ,(4, 'frame_resolution', 'Frame Resolution');
-
-  -- --------------------------------------------------------------------------
-  -- te_grade_method
-  -- --------------------------------------------------------------------------
-  -- PURPOSE: How a prediction gets graded — code (deterministic), text search,
-  --          or interpretive (LLM-based, isolated from observer)
-  -- USE CASE: "Was this prediction graded by code or by the LLM?"
-  -- MUTABILITY: Static
-  -- VALUES: code (1), text_search (2), interpretive (3)
-  -- REFERENCED BY: tb_predictions.grade_method_id
-  -- FOOTER: None
-  -- --------------------------------------------------------------------------
-  CREATE TABLE IF NOT EXISTS te_grade_method (
-     grade_method_id  INTEGER PRIMARY KEY
-    ,enum_code        TEXT    UNIQUE NOT NULL
-    ,name             TEXT    NOT NULL
-  );
-
-  INSERT OR IGNORE INTO te_grade_method (grade_method_id, enum_code, name)
-  VALUES
-     (1, 'code',         'Code-Graded')
-    ,(2, 'text_search',  'Text Search')
-    ,(3, 'interpretive', 'Interpretive');
-
-  -- --------------------------------------------------------------------------
-  -- te_intervention_intent
-  -- --------------------------------------------------------------------------
-  -- PURPOSE: Tag why a generated question was chosen
-  -- USE CASE: "Was this question a promoted suppressed question or a contrarian break?"
-  -- MUTABILITY: Static
-  -- VALUES: suppressed_promotion (1), theme_targeting (2), contrarian_break (3),
-  --         frame_disambiguation (4), trajectory_probe (5), depth_test (6)
-  -- REFERENCED BY: tb_questions.intervention_intent_id
-  -- FOOTER: None
-  -- --------------------------------------------------------------------------
-  CREATE TABLE IF NOT EXISTS te_intervention_intent (
-     intervention_intent_id  INTEGER PRIMARY KEY
-    ,enum_code               TEXT    UNIQUE NOT NULL
-    ,name                    TEXT    NOT NULL
-  );
-
-  INSERT OR IGNORE INTO te_intervention_intent (intervention_intent_id, enum_code, name)
-  VALUES
-     (1, 'suppressed_promotion',  'Suppressed Promotion')
-    ,(2, 'theme_targeting',       'Theme Targeting')
-    ,(3, 'contrarian_break',      'Contrarian Break')
-    ,(4, 'frame_disambiguation',  'Frame Disambiguation')
-    ,(5, 'trajectory_probe',      'Trajectory Probe')
-    ,(6, 'depth_test',            'Depth Test');
-
-  -- --------------------------------------------------------------------------
-  -- tb_question_candidates
-  -- --------------------------------------------------------------------------
-  -- PURPOSE: Store the candidate questions considered during generation,
-  --          not just the one selected. Harrison et al. (2017) showed the
-  --          sequence of what an adaptive system needed to ask is itself
-  --          diagnostic signal.
-  -- USE CASE: "What alternatives did the system consider? What uncertainty
-  --           dimension drove selection?"
-  -- MUTABILITY: Mutable (append-only, rows per generation run)
-  -- LOGICAL FK: question_id → tb_questions.question_id (the selected question)
-  -- FOOTER: Minimal (append-only)
-  -- --------------------------------------------------------------------------
-  CREATE TABLE IF NOT EXISTS tb_question_candidates (
-     question_candidate_id   INTEGER PRIMARY KEY AUTOINCREMENT
-    ,question_id             INTEGER NOT NULL     -- the question that was selected
-    ,candidate_rank          INTEGER NOT NULL     -- 1=selected, 2-3=runners up
-    ,candidate_text          TEXT    NOT NULL
-    ,selection_rationale     TEXT                 -- why this one was/wasn't selected
-    ,uncertainty_dimension   TEXT                 -- what the system was most uncertain about
-    ,theme_tags              TEXT                 -- comma-separated theme tags
-    ,dttm_created_utc        TEXT    NOT NULL DEFAULT (datetime('now'))
-    ,created_by              TEXT    NOT NULL DEFAULT 'system'
-  );
-
-  -- --------------------------------------------------------------------------
-  -- tb_predictions
-  -- --------------------------------------------------------------------------
-  -- PURPOSE: Alice Negative's lab notebook — falsifiable predictions generated by
-  --          the observation layer, graded against future behavioral data.
-  --          This is the mechanism that turns interpretation into science.
-  -- USE CASE: "What did the system predict would happen, and was it right?"
-  -- MUTABILITY: Mutable (created open, updated when graded)
-  -- LOGICAL FK: ai_observation_id → tb_ai_observations.ai_observation_id
-  -- LOGICAL FK: question_id → tb_questions.question_id
-  -- LOGICAL FK: prediction_type_id → te_prediction_type.prediction_type_id
-  -- LOGICAL FK: prediction_status_id → te_prediction_status.prediction_status_id
-  -- LOGICAL FK: grade_method_id → te_grade_method.grade_method_id
-  -- LOGICAL FK: graded_by_observation_id → tb_ai_observations.ai_observation_id
-  -- FOOTER: Full
-  -- --------------------------------------------------------------------------
-  CREATE TABLE IF NOT EXISTS tb_predictions (
-     prediction_id             INTEGER PRIMARY KEY AUTOINCREMENT
-    ,ai_observation_id         INTEGER NOT NULL
-    ,question_id               INTEGER NOT NULL
-    ,prediction_type_id        INTEGER NOT NULL
-    ,prediction_status_id      INTEGER NOT NULL DEFAULT 1
-    ,hypothesis                TEXT    NOT NULL
-    ,favored_frame             TEXT
-    ,expected_signature        TEXT    NOT NULL
-    ,falsification_criteria    TEXT    NOT NULL
-    ,target_topic              TEXT
-    ,expiry_sessions           INTEGER NOT NULL DEFAULT 14
-    ,grade_method_id           INTEGER NOT NULL DEFAULT 3
-    ,structured_criteria       TEXT                          -- JSON: StructuredPredictionCriteria
-    ,session_check_results     TEXT                          -- JSON array for windowed predictions
-    ,graded_by_observation_id  INTEGER
-    ,grade_rationale           TEXT
-    ,knowledge_transform_score REAL
-    ,dttm_graded_utc           TEXT
-    -- FOOTER
-    ,dttm_created_utc          TEXT    NOT NULL DEFAULT (datetime('now'))
-    ,created_by                TEXT    NOT NULL DEFAULT 'system'
-    ,dttm_modified_utc         TEXT
-    ,modified_by               TEXT
-  );
-
-  -- --------------------------------------------------------------------------
-  -- tb_theory_confidence
-  -- --------------------------------------------------------------------------
-  -- PURPOSE: Bayesian confidence tracking per theory/topic/frame combination.
-  --          Uses Beta-Binomial conjugate updating: alpha = hits + 1, beta = misses + 1.
-  --          Posterior mean = alpha / (alpha + beta). Starts at 0.5 (uninformative).
-  --          Lifecycle managed by sequential Bayes factors (Kass & Raftery 1995):
-  --            active:      -2.3 < log_BF < 2.3 (eligible for Thompson sampling)
-  --            established: log_BF >= 2.3 (BF > 10, strong evidence for)
-  --            retired:     log_BF <= -2.3 (BF < 1/10, strong evidence against)
-  -- USE CASE: "How reliable are the system's predictions about topic X using frame Y?"
-  -- MUTABILITY: Mutable (updated on each prediction grade)
-  -- REFERENCED BY: observe.ts predict call, theory-selection.ts Thompson sampling
-  -- FOOTER: Full
-  -- --------------------------------------------------------------------------
-  CREATE TABLE IF NOT EXISTS tb_theory_confidence (
-     theory_confidence_id  INTEGER PRIMARY KEY AUTOINCREMENT
-    ,theory_key            TEXT    NOT NULL UNIQUE
-    ,description           TEXT    NOT NULL
-    ,alpha                 REAL    NOT NULL DEFAULT 1.0
-    ,beta                  REAL    NOT NULL DEFAULT 1.0
-    ,total_predictions     INTEGER NOT NULL DEFAULT 0
-    ,log_bayes_factor      REAL    NOT NULL DEFAULT 0.0
-    ,status                TEXT    NOT NULL DEFAULT 'active'
-    ,last_prediction_id    INTEGER
-    -- FOOTER
-    ,dttm_created_utc      TEXT    NOT NULL DEFAULT (datetime('now'))
-    ,created_by            TEXT    NOT NULL DEFAULT 'system'
-    ,dttm_modified_utc     TEXT
-    ,modified_by           TEXT
-  );
-`);
+// te_prediction_status, te_prediction_type, te_grade_method,
+// te_intervention_intent, tb_question_candidates, tb_predictions,
+// tb_theory_confidence — archived 2026-04-16 (interpretive-layer restructure).
+// Data preserved under zz_archive_*_20260416. Schema no longer recreated.
+// See scripts/archive-interpretive-layer-20260416.ts.
 
 db.exec(`
   -- --------------------------------------------------------------------------
@@ -1550,36 +1320,25 @@ export function isCalibrationQuestion(questionId: number): boolean {
 }
 
 // ----------------------------------------------------------------------------
-// AI OBSERVATIONS & SUPPRESSED QUESTIONS
+// AI OBSERVATIONS & SUPPRESSED QUESTIONS — ARCHIVED 2026-04-16
+// Functions retained as no-op stubs so imports don't break during slice-2
+// deletions. Called surfaces are being removed piecewise.
 // ----------------------------------------------------------------------------
 
-export function saveAiObservation(questionId: number, text: string, date: string): number {
-  const result = db.prepare(
-    `INSERT OR IGNORE INTO tb_ai_observations (question_id, observation_text, observation_date, dttm_created_utc) VALUES (?, ?, ?, ?)`
-  ).run(questionId, text, date, nowStr());
-  return Number(result.lastInsertRowid);
+export function saveAiObservation(_questionId: number, _text: string, _date: string): number {
+  return 0;
 }
 
-export function saveSuppressedQuestion(questionId: number, text: string, date: string): void {
-  db.prepare(
-    `INSERT OR IGNORE INTO tb_ai_suppressed_questions (question_id, suppressed_text, suppressed_date, dttm_created_utc) VALUES (?, ?, ?, ?)`
-  ).run(questionId, text, date, nowStr());
+export function saveSuppressedQuestion(_questionId: number, _text: string, _date: string): void {
+  // archived
 }
 
 export function getAllAiObservations(): Array<{ date: string; observation: string }> {
-  return db.prepare(`
-    SELECT observation_date as date, observation_text as observation
-    FROM tb_ai_observations
-    ORDER BY observation_date ASC
-  `).all() as Array<{ date: string; observation: string }>;
+  return [];
 }
 
 export function getAllSuppressedQuestions(): Array<{ date: string; question: string }> {
-  return db.prepare(`
-    SELECT suppressed_date as date, suppressed_text as question
-    FROM tb_ai_suppressed_questions
-    ORDER BY suppressed_date ASC
-  `).all() as Array<{ date: string; question: string }>;
+  return [];
 }
 
 export function getResponseCount(): number {
@@ -1677,39 +1436,20 @@ export function getResponsesSinceId(sinceResponseId: number): Array<{
   }>;
 }
 
-export function getRecentObservations(limit: number): Array<{
+export function getRecentObservations(_limit: number): Array<{
   ai_observation_id: number; date: string; observation: string;
 }> {
-  return db.prepare(`
-    SELECT ai_observation_id, observation_date as date, observation_text as observation
-    FROM tb_ai_observations
-    ORDER BY observation_date DESC
-    LIMIT ?
-  `).all(limit) as Array<{
-    ai_observation_id: number; date: string; observation: string;
-  }>;
+  return []; // archived 2026-04-16
 }
 
-export function getObservationsSinceDate(sinceDate: string): Array<{
+export function getObservationsSinceDate(_sinceDate: string): Array<{
   ai_observation_id: number; date: string; observation: string;
 }> {
-  return db.prepare(`
-    SELECT ai_observation_id, observation_date as date, observation_text as observation
-    FROM tb_ai_observations
-    WHERE observation_date > ?
-    ORDER BY observation_date ASC
-  `).all(sinceDate) as Array<{
-    ai_observation_id: number; date: string; observation: string;
-  }>;
+  return []; // archived 2026-04-16
 }
 
-export function getRecentSuppressedQuestions(limit: number): Array<{ date: string; question: string }> {
-  return db.prepare(`
-    SELECT suppressed_date as date, suppressed_text as question
-    FROM tb_ai_suppressed_questions
-    ORDER BY suppressed_date DESC
-    LIMIT ?
-  `).all(limit) as Array<{ date: string; question: string }>;
+export function getRecentSuppressedQuestions(_limit: number): Array<{ date: string; question: string }> {
+  return []; // archived 2026-04-16
 }
 
 export function getAllReflections(): Array<{
@@ -1853,17 +1593,7 @@ export function getUnembeddedResponses(): Array<{
 export function getUnembeddedObservations(): Array<{
   ai_observation_id: number; observation: string; date: string;
 }> {
-  return db.prepare(`
-    SELECT o.ai_observation_id, o.observation_text as observation, o.observation_date as date
-    FROM tb_ai_observations o
-    WHERE NOT EXISTS (
-      SELECT 1 FROM tb_embeddings e
-      WHERE e.embedding_source_id = 2 AND e.source_record_id = o.ai_observation_id
-    )
-    ORDER BY o.observation_date ASC
-  `).all() as Array<{
-    ai_observation_id: number; observation: string; date: string;
-  }>;
+  return []; // archived 2026-04-16
 }
 
 export function getUnembeddedReflections(): Array<{
@@ -2122,7 +1852,10 @@ export function getLatestEmotionBehaviorCoupling(entryCount: number): EmotionBeh
 }
 
 // ----------------------------------------------------------------------------
-// PREDICTIONS
+// PREDICTIONS + THEORY CONFIDENCE — ARCHIVED 2026-04-16
+// Retained as no-op stubs while callers are removed in slice 2.
+// Data preserved under zz_archive_predictions_20260416 and
+// zz_archive_theory_confidence_20260416.
 // ----------------------------------------------------------------------------
 
 export interface PredictionInput {
@@ -2136,27 +1869,12 @@ export interface PredictionInput {
   targetTopic: string | null;
   expirySessions?: number;
   knowledgeTransformScore?: number | null;
-  gradeMethodId?: number;              // 1=code, 2=text_search, 3=interpretive (default 3)
-  structuredCriteria?: string | null;  // JSON: StructuredPredictionCriteria
+  gradeMethodId?: number;
+  structuredCriteria?: string | null;
 }
 
-export function savePrediction(p: PredictionInput): number {
-  const result = db.prepare(`
-    INSERT INTO tb_predictions (
-       ai_observation_id, question_id, prediction_type_id,
-       hypothesis, favored_frame, expected_signature,
-       falsification_criteria, target_topic, expiry_sessions,
-       grade_method_id, structured_criteria,
-       knowledge_transform_score, dttm_created_utc
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    p.aiObservationId, p.questionId, p.predictionTypeId,
-    p.hypothesis, p.favoredFrame, p.expectedSignature,
-    p.falsificationCriteria, p.targetTopic, p.expirySessions ?? 14,
-    p.gradeMethodId ?? 3, p.structuredCriteria ?? null,
-    p.knowledgeTransformScore ?? null, nowStr(),
-  );
-  return Number(result.lastInsertRowid);
+export function savePrediction(_p: PredictionInput): number {
+  return 0; // archived
 }
 
 export interface OpenPrediction {
@@ -2177,169 +1895,50 @@ export interface OpenPrediction {
 }
 
 export function getOpenPredictions(): OpenPrediction[] {
-  return db.prepare(`
-    SELECT
-       prediction_id as predictionId
-      ,ai_observation_id as aiObservationId
-      ,question_id as questionId
-      ,prediction_type_id as predictionTypeId
-      ,hypothesis
-      ,favored_frame as favoredFrame
-      ,expected_signature as expectedSignature
-      ,falsification_criteria as falsificationCriteria
-      ,target_topic as targetTopic
-      ,expiry_sessions as expirySessions
-      ,grade_method_id as gradeMethodId
-      ,structured_criteria as structuredCriteria
-      ,session_check_results as sessionCheckResults
-      ,dttm_created_utc as dttmCreatedUtc
-    FROM tb_predictions
-    WHERE prediction_status_id = 1
-    ORDER BY dttm_created_utc ASC
-  `).all() as OpenPrediction[];
+  return []; // archived
 }
 
-/** Update session check results for windowed predictions */
-export function updateSessionCheckResults(predictionId: number, results: string): void {
-  db.prepare(`
-    UPDATE tb_predictions
-    SET session_check_results = ?
-       ,dttm_modified_utc = ?
-       ,modified_by = 'system'
-    WHERE prediction_id = ?
-  `).run(results, nowStr(), predictionId);
+export function updateSessionCheckResults(_predictionId: number, _results: string): void {
+  // archived
 }
 
 export function gradePrediction(
-  predictionId: number,
-  statusCode: 'confirmed' | 'falsified' | 'expired' | 'indeterminate',
-  gradedByObservationId: number | null,
-  rationale: string,
+  _predictionId: number,
+  _statusCode: 'confirmed' | 'falsified' | 'expired' | 'indeterminate',
+  _gradedByObservationId: number | null,
+  _rationale: string,
 ): void {
-  const statusId = statusCode === 'confirmed' ? 2
-    : statusCode === 'falsified' ? 3
-    : statusCode === 'expired' ? 4 : 5;
-  const now = nowStr();
-  db.prepare(`
-    UPDATE tb_predictions
-    SET prediction_status_id = ?
-       ,graded_by_observation_id = ?
-       ,grade_rationale = ?
-       ,dttm_graded_utc = ?
-       ,dttm_modified_utc = ?
-       ,modified_by = 'system'
-    WHERE prediction_id = ?
-  `).run(statusId, gradedByObservationId, rationale, now, now, predictionId);
+  // archived
 }
 
 export function getPredictionStats(): {
   total: number; confirmed: number; falsified: number; expired: number; indeterminate: number; open: number;
 } {
-  const rows = db.prepare(`
-    SELECT prediction_status_id as status, COUNT(*) as count
-    FROM tb_predictions
-    GROUP BY prediction_status_id
-  `).all() as Array<{ status: number; count: number }>;
-
-  const stats = { total: 0, confirmed: 0, falsified: 0, expired: 0, indeterminate: 0, open: 0 };
-  for (const row of rows) {
-    stats.total += row.count;
-    if (row.status === 1) stats.open = row.count;
-    else if (row.status === 2) stats.confirmed = row.count;
-    else if (row.status === 3) stats.falsified = row.count;
-    else if (row.status === 4) stats.expired = row.count;
-    else if (row.status === 5) stats.indeterminate = row.count;
-  }
-  return stats;
+  return { total: 0, confirmed: 0, falsified: 0, expired: 0, indeterminate: 0, open: 0 };
 }
 
-export function getRecentGradedPredictions(limit: number): Array<{
+export function getRecentGradedPredictions(_limit: number): Array<{
   predictionId: number; hypothesis: string; favoredFrame: string | null;
   statusCode: string; gradeRationale: string | null; targetTopic: string | null;
   dttmCreatedUtc: string; dttmGradedUtc: string | null;
 }> {
-  return db.prepare(`
-    SELECT p.prediction_id as predictionId, p.hypothesis, p.favored_frame as favoredFrame,
-           s.enum_code as statusCode, p.grade_rationale as gradeRationale,
-           p.target_topic as targetTopic,
-           p.dttm_created_utc as dttmCreatedUtc, p.dttm_graded_utc as dttmGradedUtc
-    FROM tb_predictions p
-    JOIN te_prediction_status s ON p.prediction_status_id = s.prediction_status_id
-    WHERE p.prediction_status_id != 1
-    ORDER BY p.dttm_graded_utc DESC
-    LIMIT ?
-  `).all(limit) as Array<{
-    predictionId: number; hypothesis: string; favoredFrame: string | null;
-    statusCode: string; gradeRationale: string | null; targetTopic: string | null;
-    dttmCreatedUtc: string; dttmGradedUtc: string | null;
-  }>;
+  return []; // archived
 }
 
-// ----------------------------------------------------------------------------
-// THEORY CONFIDENCE (Bayesian Beta-Binomial)
-// ----------------------------------------------------------------------------
-
-export function getTheoryConfidence(theoryKey: string): {
+export function getTheoryConfidence(_theoryKey: string): {
   alpha: number; beta: number; totalPredictions: number; posteriorMean: number;
   logBayesFactor: number; status: string;
 } | null {
-  const row = db.prepare(`
-    SELECT alpha, beta, total_predictions as totalPredictions,
-           log_bayes_factor as logBayesFactor, status
-    FROM tb_theory_confidence
-    WHERE theory_key = ?
-  `).get(theoryKey) as {
-    alpha: number; beta: number; totalPredictions: number;
-    logBayesFactor: number; status: string;
-  } | null;
-  if (!row) return null;
-  return { ...row, posteriorMean: row.alpha / (row.alpha + row.beta) };
+  return null; // archived
 }
 
 export function updateTheoryConfidence(
-  theoryKey: string,
-  description: string,
-  hit: boolean,
-  predictionId: number,
+  _theoryKey: string,
+  _description: string,
+  _hit: boolean,
+  _predictionId: number,
 ): void {
-  const existing = db.prepare(
-    `SELECT theory_confidence_id, alpha, beta, log_bayes_factor, total_predictions
-     FROM tb_theory_confidence WHERE theory_key = ?`
-  ).get(theoryKey) as {
-    theory_confidence_id: number; alpha: number; beta: number;
-    log_bayes_factor: number; total_predictions: number;
-  } | null;
-
-  if (existing) {
-    const col = hit ? 'alpha' : 'beta';
-    // Incremental Bayes factor: evidence for theory being correct vs coin flip.
-    // Hit = evidence FOR the theory (+log(2)), miss = evidence AGAINST (-log(2)).
-    // This is the SPRT for p>0.5 vs p=0.5 — each observation contributes
-    // a fixed log-likelihood ratio regardless of the current posterior.
-    const logBFDelta = hit ? Math.log(2) : -Math.log(2);
-    const newLogBF = existing.log_bayes_factor + logBFDelta;
-    const newTotal = existing.total_predictions + 1;
-    // Lifecycle classification (Kass & Raftery 1995 thresholds)
-    const newStatus = newLogBF >= Math.log(10) ? 'established'
-      : (newLogBF <= -Math.log(10) && newTotal >= 3) ? 'retired'
-      : 'active';
-    db.prepare(`
-      UPDATE tb_theory_confidence
-      SET ${col} = ${col} + 1
-         ,total_predictions = total_predictions + 1
-         ,log_bayes_factor = ?
-         ,status = ?
-         ,last_prediction_id = ?
-         ,dttm_modified_utc = ?
-         ,modified_by = 'system'
-      WHERE theory_key = ?
-    `).run(newLogBF, newStatus, predictionId, nowStr(), theoryKey);
-  } else {
-    db.prepare(`
-      INSERT INTO tb_theory_confidence (theory_key, description, alpha, beta, total_predictions, log_bayes_factor, status, last_prediction_id)
-      VALUES (?, ?, ?, ?, 1, 0.0, 'active', ?)
-    `).run(theoryKey, description, hit ? 2.0 : 1.0, hit ? 1.0 : 2.0, predictionId);
-  }
+  // archived
 }
 
 export function getAllTheoryConfidences(): Array<{
@@ -2347,54 +1946,28 @@ export function getAllTheoryConfidences(): Array<{
   totalPredictions: number; posteriorMean: number;
   logBayesFactor: number; status: string;
 }> {
-  const rows = db.prepare(`
-    SELECT theory_key as theoryKey, description, alpha, beta,
-           total_predictions as totalPredictions,
-           log_bayes_factor as logBayesFactor, status
-    FROM tb_theory_confidence
-    ORDER BY total_predictions DESC
-  `).all() as Array<{
-    theoryKey: string; description: string; alpha: number; beta: number;
-    totalPredictions: number; logBayesFactor: number; status: string;
-  }>;
-  return rows.map(r => ({ ...r, posteriorMean: r.alpha / (r.alpha + r.beta) }));
+  return []; // archived
 }
 
 // ----------------------------------------------------------------------------
-// INTERVENTION INTENT (on questions)
+// INTERVENTION INTENT + QUESTION CANDIDATES — ARCHIVED 2026-04-16
+// Stubbed; data preserved under zz_archive_intervention_intent_20260416 and
+// zz_archive_question_candidates_20260416.
 // ----------------------------------------------------------------------------
 
 export function updateQuestionIntent(
-  questionId: number,
-  intentCode: string,
-  rationale: string,
+  _questionId: number,
+  _intentCode: string,
+  _rationale: string,
 ): void {
-  const intentRow = db.prepare(
-    `SELECT intervention_intent_id FROM te_intervention_intent WHERE enum_code = ?`
-  ).get(intentCode) as { intervention_intent_id: number } | null;
-  if (!intentRow) return;
-  db.prepare(`
-    UPDATE tb_questions
-    SET intervention_intent_id = ?, intervention_rationale = ?,
-        dttm_modified_utc = ?, modified_by = 'system'
-    WHERE question_id = ?
-  `).run(intentRow.intervention_intent_id, rationale, nowStr(), questionId);
+  // archived
 }
 
-export function getQuestionIntent(questionId: number): {
+export function getQuestionIntent(_questionId: number): {
   intentCode: string; rationale: string | null;
 } | null {
-  return db.prepare(`
-    SELECT i.enum_code as intentCode, q.intervention_rationale as rationale
-    FROM tb_questions q
-    JOIN te_intervention_intent i ON q.intervention_intent_id = i.intervention_intent_id
-    WHERE q.question_id = ?
-  `).get(questionId) as { intentCode: string; rationale: string | null } | null;
+  return null; // archived
 }
-
-// ----------------------------------------------------------------------------
-// QUESTION CANDIDATES (Harrison et al. 2017)
-// ----------------------------------------------------------------------------
 
 export interface QuestionCandidate {
   candidateRank: number;
@@ -2404,32 +1977,12 @@ export interface QuestionCandidate {
   themeTags: string | null;
 }
 
-export function saveQuestionCandidates(questionId: number, candidates: QuestionCandidate[]): void {
-  const stmt = db.prepare(`
-    INSERT INTO tb_question_candidates (
-      question_id, candidate_rank, candidate_text,
-      selection_rationale, uncertainty_dimension, theme_tags
-    ) VALUES (?, ?, ?, ?, ?, ?)
-  `);
-  const insertAll = db.transaction((entries: QuestionCandidate[]) => {
-    for (const c of entries) {
-      stmt.run(questionId, c.candidateRank, c.candidateText,
-        c.selectionRationale, c.uncertaintyDimension, c.themeTags);
-    }
-  });
-  insertAll(candidates);
+export function saveQuestionCandidates(_questionId: number, _candidates: QuestionCandidate[]): void {
+  // archived
 }
 
-export function getQuestionCandidates(questionId: number): QuestionCandidate[] {
-  return db.prepare(`
-    SELECT candidate_rank as candidateRank, candidate_text as candidateText,
-           selection_rationale as selectionRationale,
-           uncertainty_dimension as uncertaintyDimension,
-           theme_tags as themeTags
-    FROM tb_question_candidates
-    WHERE question_id = ?
-    ORDER BY candidate_rank ASC
-  `).all(questionId) as QuestionCandidate[];
+export function getQuestionCandidates(_questionId: number): QuestionCandidate[] {
+  return []; // archived
 }
 
 // ----------------------------------------------------------------------------
@@ -2745,56 +2298,26 @@ export function getEntryStateByResponseId(responseId: number): (EntryStateRow & 
   }) | null;
 }
 
-export function getObservationForQuestion(questionId: number): {
+export function getObservationForQuestion(_questionId: number): {
   ai_observation_id: number; observation_text: string; observation_date: string;
 } | null {
-  return db.prepare(`
-    SELECT ai_observation_id, observation_text, observation_date
-    FROM tb_ai_observations
-    WHERE question_id = ?
-  `).get(questionId) as {
-    ai_observation_id: number; observation_text: string; observation_date: string;
-  } | null;
+  return null; // archived
 }
 
-export function getSuppressedQuestionForQuestion(questionId: number): {
+export function getSuppressedQuestionForQuestion(_questionId: number): {
   suppressed_text: string; suppressed_date: string;
 } | null {
-  return db.prepare(`
-    SELECT suppressed_text, suppressed_date
-    FROM tb_ai_suppressed_questions
-    WHERE question_id = ?
-  `).get(questionId) as {
-    suppressed_text: string; suppressed_date: string;
-  } | null;
+  return null; // archived
 }
 
-export function getPredictionsForQuestion(questionId: number): Array<{
+export function getPredictionsForQuestion(_questionId: number): Array<{
   predictionId: number; hypothesis: string; favoredFrame: string | null;
   expectedSignature: string; falsificationCriteria: string;
   statusCode: string; gradeRationale: string | null;
   targetTopic: string | null;
   dttmCreatedUtc: string; dttmGradedUtc: string | null;
 }> {
-  return db.prepare(`
-    SELECT p.prediction_id as predictionId, p.hypothesis,
-           p.favored_frame as favoredFrame,
-           p.expected_signature as expectedSignature,
-           p.falsification_criteria as falsificationCriteria,
-           s.enum_code as statusCode, p.grade_rationale as gradeRationale,
-           p.target_topic as targetTopic,
-           p.dttm_created_utc as dttmCreatedUtc, p.dttm_graded_utc as dttmGradedUtc
-    FROM tb_predictions p
-    JOIN te_prediction_status s ON p.prediction_status_id = s.prediction_status_id
-    WHERE p.question_id = ?
-    ORDER BY p.dttm_created_utc ASC
-  `).all(questionId) as Array<{
-    predictionId: number; hypothesis: string; favoredFrame: string | null;
-    expectedSignature: string; falsificationCriteria: string;
-    statusCode: string; gradeRationale: string | null;
-    targetTopic: string | null;
-    dttmCreatedUtc: string; dttmGradedUtc: string | null;
-  }>;
+  return []; // archived
 }
 
 export default db;

@@ -31,12 +31,9 @@ export const GET: APIRoute = async () => {
       ORDER BY dimension
     `).all(entryCount);
 
-    const theories = simDb.prepare(`
-      SELECT theory_key, description, alpha, beta, total_predictions,
-             log_bayes_factor, status
-      FROM tb_theory_confidence
-      ORDER BY ABS(log_bayes_factor) DESC
-    `).all();
+    // Theory confidence archived 2026-04-16; data under
+    // zz_archive_theory_confidence_20260416.
+    const theories: any[] = [];
 
     return new Response(JSON.stringify({
       entryCount,

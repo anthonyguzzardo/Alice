@@ -122,7 +122,6 @@ const {
   setDateOverride,
 } = await import('../lib/db.ts');
 const { computeLinguisticDensities } = await import('../lib/linguistic.ts');
-const { runObservation } = await import('../lib/observe.ts');
 const { runGeneration } = await import('../lib/generate.ts');
 const { runReflection } = await import('../lib/reflect.ts');
 const { JORDAN_ENTRIES, buildSessionSummary } = await import('./simulation-data.ts');
@@ -355,19 +354,19 @@ for (let i = START_DAY - 1; i < TOTAL_DAYS; i++) {
   }
 
   // 5. Run AI pipeline (unless dry run)
+  // 2026-04-16: runObservation removed with interpretive-layer archive.
+  // runReflection now produces a deterministic structured receipt (no LLM).
   let expectReflection = false;
   if (!DRY_RUN) {
     try {
-      await runObservation({ model: MODEL, onApiCall });
-
       // Generation: test on last 2 days if we have enough responses
       await runGeneration({ model: MODEL, seedDaysOverride: TOTAL_DAYS - 2, onApiCall });
 
       const responseCount = getResponseCount();
       if (responseCount >= 5 && responseCount % 7 === 0) {
         expectReflection = true;
-        console.log('   Running reflection...');
-        await runReflection({ primaryModel: MODEL, auditModel: AUDIT_MODEL, onApiCall });
+        console.log('   Running reflection (structured receipt)...');
+        await runReflection();
         console.log('   Reflection complete');
       }
     } catch (err: any) {
@@ -375,12 +374,6 @@ for (let i = START_DAY - 1; i < TOTAL_DAYS; i++) {
       if (err.message?.includes('rate_limit') || err.message?.includes('overloaded')) {
         console.log('   Waiting 30s for rate limit...');
         await new Promise(r => setTimeout(r, 30000));
-        try {
-          await runObservation({ model: MODEL, onApiCall });
-          console.log('   Observation complete (retry)');
-        } catch (retryErr: any) {
-          console.error(`   Retry failed: ${retryErr.message}`);
-        }
       }
     }
   }

@@ -109,23 +109,10 @@ export const GET: APIRoute = async () => {
       ORDER BY correlation DESC
     `).all(entryCount) as any[];
 
-    const theories = simDb.prepare(`
-      SELECT theory_key, description, alpha, beta, total_predictions,
-             log_bayes_factor, status
-      FROM tb_theory_confidence
-      ORDER BY ABS(log_bayes_factor) DESC
-    `).all() as any[];
-
-    const gradedPredictions = simDb.prepare(`
-      SELECT p.hypothesis, s.enum_code as status,
-             p.dttm_graded_utc, p.grade_rationale,
-             q.scheduled_for as origin_date
-      FROM tb_predictions p
-      JOIN te_prediction_status s ON p.prediction_status_id = s.prediction_status_id
-      JOIN tb_questions q ON p.question_id = q.question_id
-      WHERE p.prediction_status_id IN (2, 3)
-      ORDER BY p.dttm_graded_utc DESC
-    `).all() as any[];
+    // Theories + graded predictions archived 2026-04-16; synthesis no longer
+    // references them. Data preserved under zz_archive_*_20260416.
+    const theories: any[] = [];
+    const gradedPredictions: any[] = [];
 
     // ---- 1. RIGHT NOW: what's unusual about the latest entry ----
     const rightNow: Insight[] = [];

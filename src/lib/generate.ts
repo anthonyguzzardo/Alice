@@ -8,8 +8,6 @@ import 'dotenv/config';
 import Anthropic from '@anthropic-ai/sdk';
 import {
   getRecentResponses,
-  getRecentObservations,
-  getRecentSuppressedQuestions,
   getRecentFeedback,
   getSessionSummariesForQuestions,
   getAllSessionSummaries,
@@ -18,11 +16,6 @@ import {
   hasQuestionForDate,
   getResponseCount,
   savePromptTrace,
-  getPredictionStats,
-  getAllTheoryConfidences,
-  getRecentGradedPredictions,
-  updateQuestionIntent,
-  saveQuestionCandidates,
   getRecentCalibrationContext,
   getRecentSessionDeltas,
 } from './db.ts';
@@ -30,7 +23,6 @@ import { localDateStr } from './date.ts';
 import { retrieveSimilarMulti, retrieveContrarian } from './rag.ts';
 import {
   formatCompactSignals, formatDynamicsContext,
-  formatPredictionTrackRecord,
 } from './signals.ts';
 import { computeEntryStates } from './alice-negative/state-engine.ts';
 import { computeDynamics } from './alice-negative/dynamics.ts';
@@ -113,8 +105,7 @@ export async function runGeneration(options?: GenerationOptions): Promise<void> 
     : [];
 
   // --- SCOPED CONTEXT ---
-  const recentObservations = getRecentObservations(RECENT_WINDOW);
-  const recentSuppressed = getRecentSuppressedQuestions(RECENT_WINDOW);
+  // Observations + suppressed questions archived 2026-04-16 — no longer included.
   const recentFeedback = getRecentFeedback(10);
   const recentQuestionIds = recentResponses.map(r => r.question_id);
   const recentSummaries = getSessionSummariesForQuestions(recentQuestionIds);
@@ -148,14 +139,6 @@ export async function runGeneration(options?: GenerationOptions): Promise<void> 
     reflectionsSection = 'No reflections yet.';
   }
 
-  const observationsSection = recentObservations.length > 0
-    ? recentObservations.map(o => `[${o.date}]\n${o.observation}`).join('\n\n---\n\n')
-    : 'No observations yet.';
-
-  const suppressedSection = recentSuppressed.length > 0
-    ? recentSuppressed.map(q => `[${q.date}] ${q.question}`).join('\n')
-    : 'No suppressed questions yet.';
-
   // Enriched behavioral signals (research-backed formatting)
   const allSummaries = getAllSessionSummaries();
   const behavioralSection = recentSummaries.length > 0
@@ -180,12 +163,6 @@ export async function runGeneration(options?: GenerationOptions): Promise<void> 
   const deltaTrendSection = recentDeltas.length > 0
     ? formatCompactDelta(recentDeltas)
     : '';
-
-  // Prediction track record
-  const predStats = getPredictionStats();
-  const theories = getAllTheoryConfidences();
-  const recentGraded = getRecentGradedPredictions(5);
-  const predictionSection = formatPredictionTrackRecord(predStats, theories, recentGraded);
 
   const feedbackSection = recentFeedback.length > 0
     ? `Question feedback ("did it land?"):\n${recentFeedback.map(f => `[${f.date}] ${f.landed ? 'YES' : 'NO'}`).join('\n')}\n\nUse this to calibrate question quality. "NO" means recalibrate — that line of questioning missed. "YES" is weaker signal — could mean insightful, uncomfortable, or just emotionally loaded.`
@@ -266,8 +243,6 @@ SOURCE OF TRUTH — Their actual words:
 HYPOTHESIS LAYER — Your interpretations (may contain errors):
 4. Recent reflections (your last few weekly pattern analyses)
 5. Resurfaced older reflections (relevant again via semantic retrieval)
-6. Recent observations (your nightly three-frame analyses)
-7. Suppressed questions (things you've been wanting to ask)
 
 If a reflection contradicts what you read in the raw entries, trust the entries.
 Pay special attention to the contrarian entries — they represent threads you may be neglecting.
@@ -282,7 +257,6 @@ Pay special attention to the contrarian entries — they represent threads you m
 - Calibration-relative deviations are more meaningful than raw percentiles.
 - Life context tags (from calibration sessions) tell you what's happening in the person's life — 7 research-backed dimensions: sleep, physical state, emotional events, social quality, stress, exercise, routine. Use this to TIME questions appropriately. If life context shows disruption (poor sleep, high stress, pain), a concrete low-friction question may land better than an abstract one. If context shows stability, you have room for deeper challenge.
 - A "no" on "did it land?" means that line of questioning missed.
-- Prediction track record: theory confidence scores tell you which interpretations are reliable. Frame disambiguation questions historically produce more trajectory shifts.
 ${difficultyGuidance}
 
 === OUTPUT FORMAT ===
@@ -327,24 +301,11 @@ ${contrarianSection}
 
 ${reflectionsSection}
 
----
-
-RECENT OBSERVATIONS (your nightly three-frame analyses, last ${RECENT_WINDOW}):
-
-${observationsSection}
-
----
-
-SUPPRESSED QUESTIONS (things you've been wanting to ask, last ${RECENT_WINDOW}):
-${suppressedSection}
-
 === SIGNAL DATA ===
 
 BEHAVIORAL DATA (enriched with research-backed metrics, for recent entries):
 ${behavioralSection}
 ${dynamicsSection ? `\n${dynamicsSection}` : ''}
-
-${predictionSection}
 
 ${feedbackSection}
 ${lifeContextSection ? `\n${lifeContextSection}\n` : ''}
@@ -400,50 +361,11 @@ Generate 3 candidate questions with your selection, theme tags, uncertainty dime
 
   scheduleQuestion(questionText, tomorrowStr, 'generated');
 
-  // Get the question ID we just scheduled
-  const { default: db } = await import('./db.ts');
-  const scheduledQ = db
-    .prepare('SELECT question_id FROM tb_questions WHERE scheduled_for = ?')
-    .get(tomorrowStr) as { question_id: number } | null;
-
-  if (scheduledQ) {
-    // Tag the question with intervention intent
-    if (intentMatch) {
-      const intentCode = intentMatch[1].toLowerCase();
-      const rationale = intentMatch[2].trim();
-      updateQuestionIntent(scheduledQ.question_id, intentCode, rationale);
-    }
-
-    // Save question candidates (Harrison et al. 2017)
-    const candidates = [
-      {
-        candidateRank: 1,
-        candidateText: questionText,
-        selectionRationale: intentMatch ? intentMatch[2].trim() : null,
-        uncertaintyDimension: uncertaintyMatch ? uncertaintyMatch[1].trim() : null,
-        themeTags: themeMatch ? themeMatch[1].trim() : null,
-      },
-    ];
-    if (runner1Match) {
-      candidates.push({
-        candidateRank: 2,
-        candidateText: runner1Match[1].trim(),
-        selectionRationale: null,
-        uncertaintyDimension: null,
-        themeTags: runner1ThemeMatch ? runner1ThemeMatch[1].trim() : null,
-      });
-    }
-    if (runner2Match) {
-      candidates.push({
-        candidateRank: 3,
-        candidateText: runner2Match[1].trim(),
-        selectionRationale: null,
-        uncertaintyDimension: null,
-        themeTags: runner2ThemeMatch ? runner2ThemeMatch[1].trim() : null,
-      });
-    }
-    saveQuestionCandidates(scheduledQ.question_id, candidates);
-  }
+  // Intervention intent tagging and question-candidate storage archived
+  // 2026-04-16. Theme/uncertainty parsing retained in rawOutput for future
+  // audit via tb_prompt_traces if needed.
+  void themeMatch; void uncertaintyMatch; void intentMatch;
+  void runner1Match; void runner1ThemeMatch; void runner2Match; void runner2ThemeMatch;
 
   // Log what went into this prompt for future auditability
   savePromptTrace({
@@ -455,7 +377,7 @@ Generate 3 candidate questions with your selection, theme tags, uncertainty dime
       ...recentReflections.map(r => r.reflection_id),
       ...ragReflections.map(r => r.sourceRecordId),
     ],
-    observationIds: recentObservations.map(o => o.ai_observation_id),
+    observationIds: [],
     tokenEstimate: message.usage?.input_tokens,
   });
 }

@@ -78,68 +78,14 @@ export const GET: APIRoute = async ({ params }) => {
       WHERE question_id = ?
     `).get(entryState.question_id) as any;
 
-    // Observation
-    const observation = simDb.prepare(`
-      SELECT ai_observation_id, observation_text, observation_date
-      FROM tb_ai_observations
-      WHERE question_id = ?
-    `).get(entryState.question_id) as any;
-
-    // Predictions
-    const predictions = simDb.prepare(`
-      SELECT p.prediction_id as predictionId, p.hypothesis,
-             p.favored_frame as favoredFrame,
-             p.expected_signature as expectedSignature,
-             p.falsification_criteria as falsificationCriteria,
-             s.enum_code as statusCode, p.grade_rationale as gradeRationale,
-             p.target_topic as targetTopic,
-             p.dttm_created_utc as dttmCreatedUtc, p.dttm_graded_utc as dttmGradedUtc
-      FROM tb_predictions p
-      JOIN te_prediction_status s ON p.prediction_status_id = s.prediction_status_id
-      WHERE p.question_id = ?
-      ORDER BY p.dttm_created_utc ASC
-    `).all(entryState.question_id) as any[];
-
-    // Suppressed question
-    const suppressedQuestion = simDb.prepare(`
-      SELECT suppressed_text, suppressed_date
-      FROM tb_ai_suppressed_questions
-      WHERE question_id = ?
-    `).get(entryState.question_id) as any;
-
-    // Predictions RESOLVED by this entry's observation (the other side of the loop)
-    const resolvedByThis = observation ? simDb.prepare(`
-      SELECT p.prediction_id as predictionId, p.hypothesis,
-             p.favored_frame as favoredFrame,
-             p.target_topic as targetTopic,
-             s.enum_code as statusCode,
-             p.grade_rationale as gradeRationale,
-             q_origin.scheduled_for as originDate
-      FROM tb_predictions p
-      JOIN te_prediction_status s ON p.prediction_status_id = s.prediction_status_id
-      JOIN tb_questions q_origin ON p.question_id = q_origin.question_id
-      WHERE p.graded_by_observation_id = ?
-      ORDER BY p.dttm_graded_utc ASC
-    `).all(observation.ai_observation_id) as any[] : [];
-
-    // Theory impact: which theories were updated by this entry's graded predictions
+    // Observation / predictions / suppressed question / theory impact
+    // archived 2026-04-16 (interpretive-layer restructure). Data preserved
+    // under zz_archive_*_20260416 tables; not surfaced by the current app.
+    const observation = null;
+    const predictions: any[] = [];
+    const suppressedQuestion = null;
+    const resolvedByThis: any[] = [];
     const theoryImpact: any[] = [];
-    if (resolvedByThis.length > 0) {
-      for (const rp of resolvedByThis) {
-        const frame = rp.favoredFrame || 'general';
-        const topic = rp.targetTopic || 'untagged';
-        const theoryKey = `${frame}:${topic}`;
-        const theory = simDb.prepare(`
-          SELECT theory_key, description, alpha, beta, total_predictions,
-                 log_bayes_factor, status
-          FROM tb_theory_confidence
-          WHERE theory_key = ?
-        `).get(theoryKey) as any;
-        if (theory && !theoryImpact.find(t => t.theory_key === theory.theory_key)) {
-          theoryImpact.push(theory);
-        }
-      }
-    }
 
     // Navigation: prev/next
     const prev = simDb.prepare(`

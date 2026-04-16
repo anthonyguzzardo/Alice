@@ -85,12 +85,11 @@ export const GET: APIRoute = () => {
 
   let lastSessionStatus: LastSessionStatus | null = null;
   if (lastSession) {
+    // Observation + suppressed-question coverage checks removed 2026-04-16.
     const coverage = db.prepare(`
       SELECT
         (SELECT 1 FROM tb_embeddings WHERE source_record_id = ? AND embedding_source_id = 1) AS embedded,
         (SELECT 1 FROM tb_entry_states WHERE response_id = ?) AS entry_state,
-        (SELECT 1 FROM tb_ai_observations WHERE question_id = ?) AS observed,
-        (SELECT 1 FROM tb_ai_suppressed_questions WHERE question_id = ?) AS suppressed_q,
         (SELECT 1 FROM tb_trait_dynamics WHERE entry_count = (
            SELECT COUNT(*) FROM tb_session_summaries ss
            JOIN tb_questions q ON ss.question_id = q.question_id
@@ -99,22 +98,18 @@ export const GET: APIRoute = () => {
     `).get(
       lastSession.response_id,
       lastSession.response_id,
-      lastSession.question_id,
-      lastSession.question_id,
-    ) as { embedded: number | null; entry_state: number | null; observed: number | null; suppressed_q: number | null; witness_rendered: number | null };
+    ) as { embedded: number | null; entry_state: number | null; witness_rendered: number | null };
 
     const pipeline: PipelineCoverage = {
       embedded: !!coverage.embedded,
       entryState: !!coverage.entry_state,
-      observed: !!coverage.observed,
-      suppressedQuestion: !!coverage.suppressed_q,
+      observed: true,           // archived — not checked
+      suppressedQuestion: true, // archived — not checked
       witnessRendered: !!coverage.witness_rendered,
     };
     const missing: string[] = [];
     if (!pipeline.embedded) missing.push('embedding');
     if (!pipeline.entryState) missing.push('entry_state');
-    if (!pipeline.observed) missing.push('observation');
-    if (!pipeline.suppressedQuestion) missing.push('suppressed_question');
     if (!pipeline.witnessRendered) missing.push('witness');
 
     lastSessionStatus = {
