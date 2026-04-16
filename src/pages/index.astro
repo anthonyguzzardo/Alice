@@ -18,8 +18,10 @@
 
       :root {
         --bg: #f5f2ed;
+        --bg-pre: #e9e5de;
         --bg-input: #ebe7e1;
         --text: #1a1a1a;
+        --text-pre: #a8a39d;
         --text-muted: #6b6560;
         --text-faint: #9a9590;
         --border: #ccc5bc;
@@ -34,9 +36,11 @@
       }
 
       [data-theme="dark"] {
-        --bg: #0a0a0a;
+        --bg: #141210;
+        --bg-pre: #050505;
         --bg-input: #161514;
         --text: #ffffff;
+        --text-pre: #3a3530;
         --text-muted: #7a7570;
         --text-faint: #4a4540;
         --border: #333;
@@ -68,111 +72,126 @@
         align-items: center;
         justify-content: center;
         padding: 2rem;
+        background-color: var(--bg);
+        transition: background-color 2.5s ease;
+      }
+
+      /* Pre-arrival — the room is dim until presence is detected. */
+      body.pre-arrival {
+        background-color: var(--bg-pre);
       }
 
       .container {
-        max-width: 700px;
+        max-width: 680px;
         width: 100%;
       }
 
       .date {
-        font-size: 1.15rem;
-        color: var(--text-muted);
-        letter-spacing: 0.08em;
+        font-size: 11px;
+        color: var(--text-faint);
+        letter-spacing: 0.22em;
         text-transform: uppercase;
-        margin-bottom: 2.5rem;
+        margin-bottom: 5rem;
+        transition: opacity 2s ease;
       }
+
+      body.pre-arrival .date { opacity: 0.5; }
+      body.deepening-3 .date { opacity: 0.3; }
 
       .question {
         font-family: 'Cormorant Garamond', Georgia, serif;
-        font-size: 2.6rem;
+        font-size: 1.95rem;
         font-weight: 300;
-        line-height: 1.6;
-        letter-spacing: 0.03em;
+        line-height: 1.7;
+        letter-spacing: 0.015em;
         color: var(--text);
-        margin-bottom: 3rem;
+        margin-bottom: 1.4rem;
         font-style: italic;
-        transition: opacity 8s ease;
+        transition: color 2.5s ease, opacity 3s ease;
       }
 
-      .question.fading {
-        opacity: 0.3;
-      }
+      body.pre-arrival .question { color: var(--text-pre); }
+      body.deepening-1 .question { opacity: 0.55; }
+      body.deepening-2 .question { opacity: 0.3; }
+      body.deepening-3 .question { opacity: 0.12; }
 
+      /* Writing surface — the page itself. No box, no border, no affordance
+         except a cursor. Response flows directly from the prompt, same column,
+         same measure, same line-height. Serif roman under serif italic reads
+         as one continuous piece of writing, not a form. */
       .response-area {
         width: 100%;
-        min-height: 400px;
-        background-color: var(--bg-input);
-        border: 1px solid var(--border);
-        border-radius: 4px;
+        min-height: 200px;
+        background: transparent;
+        border: none;
+        border-radius: 0;
         color: var(--text);
         font-family: 'EB Garamond', Georgia, serif;
-        font-size: 1.45rem;
-        line-height: 1.8;
-        padding: 1.5rem;
+        font-size: 1.55rem;
+        line-height: 1.7;
+        letter-spacing: 0.005em;
+        padding: 0;
         resize: none;
         outline: none;
         -webkit-appearance: none;
         appearance: none;
-        transition: border-color 0.3s ease, opacity 0.6s ease;
-      }
-
-      .response-area.waiting {
-        opacity: 0.3;
-        cursor: default;
+        caret-color: var(--text);
+        transition: caret-color 2s ease, color 2.5s ease;
       }
 
       .response-area:focus {
-        border-color: var(--border-focus);
         outline: none;
       }
 
-      .response-area::placeholder {
-        color: var(--text-muted);
-        font-style: italic;
+      /* Caret faint in pre-arrival — enough to signal "this is where your
+         words go" without demanding. Any presence signal (mouse/scroll/touch/
+         keystroke) warms the room and sharpens the caret. */
+      body.pre-arrival .response-area {
+        caret-color: var(--text-faint);
+        color: var(--text-pre);
       }
 
       .submit-row {
-        margin-top: 1.5rem;
+        margin-top: 3.5rem;
       }
 
       .submit-btn {
-        background: var(--btn-bg);
-        border: 1px solid var(--border);
-        border-radius: 4px;
-        color: var(--btn-text);
-        font-family: 'EB Garamond', Georgia, serif;
-        font-size: 1.3rem;
-        padding: 0.8rem 2.2rem;
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-size: 1.15rem;
+        font-style: italic;
+        font-weight: 300;
+        letter-spacing: 0.04em;
+        padding: 0.3rem 0;
         cursor: pointer;
-        letter-spacing: 0.05em;
-        transition: all 0.3s ease;
+        transition: color 0.4s ease, opacity 0.4s ease;
       }
 
       .submit-btn:hover:not(:disabled) {
-        background: var(--btn-hover);
-        border-color: var(--border-focus);
+        color: var(--text);
       }
 
       .submit-btn:active:not(:disabled) {
-        opacity: 0.8;
+        opacity: 0.7;
       }
 
       .submit-btn:disabled {
-        opacity: 0.4;
+        opacity: 0.3;
         cursor: default;
       }
 
       .submit-row.hidden {
         opacity: 0;
         pointer-events: none;
-        transition: opacity 1.5s ease;
+        transition: opacity 2s ease;
       }
 
       .submit-row.visible {
         opacity: 1;
         pointer-events: auto;
-        transition: opacity 1.5s ease;
+        transition: opacity 2s ease;
       }
 
       .done-message {
@@ -250,14 +269,19 @@
 
       .calibration-prompt {
         font-family: 'Cormorant Garamond', Georgia, serif;
-        font-size: 1.8rem;
+        font-size: 1.95rem;
         font-weight: 300;
-        line-height: 1.8;
-        letter-spacing: 0.03em;
-        color: var(--done-text);
-        margin-bottom: 2rem;
+        line-height: 1.7;
+        letter-spacing: 0.015em;
+        color: var(--text);
+        margin-bottom: 1.4rem;
         font-style: italic;
+        transition: opacity 3s ease;
       }
+
+      body.deepening-1 .calibration-prompt { opacity: 0.55; }
+      body.deepening-2 .calibration-prompt { opacity: 0.3; }
+      body.deepening-3 .calibration-prompt { opacity: 0.12; }
       .top-controls {
         position: fixed;
         top: 2rem;
@@ -509,6 +533,49 @@
         themeBtn.textContent = next === 'dark' ? '☀' : '☾';
       });
 
+      // Presence — the room is dim until you arrive. Pre-arrival is purely
+      // a visual state: nothing is blocked, the caret is faintly visible.
+      // Any signal of arrival — mouse, scroll, touch, or typing — warms the
+      // room. The brightening happens *around* your typing rather than
+      // *before* it; still honest, still responsive to you.
+      document.body.classList.add('pre-arrival');
+      {
+        const presenceEvents: Array<keyof WindowEventMap> = ['mousemove', 'scroll', 'touchstart', 'pointerdown', 'keydown'];
+        function onPresence() {
+          document.body.classList.remove('pre-arrival');
+          presenceEvents.forEach((e) => window.removeEventListener(e, onPresence as any));
+        }
+        presenceEvents.forEach((e) => window.addEventListener(e, onPresence, { passive: true } as any));
+      }
+
+      // Keep the writing surface focused — if you click empty space (closing
+      // a menu, dismissing a panel, missing the textarea), focus snaps back
+      // to your words instead of vanishing into the void.
+      document.addEventListener('click', (e) => {
+        const t = e.target as HTMLElement | null;
+        if (!t) return;
+        if (t.closest('button, a, input, textarea, .nav-dropdown, .health-panel')) return;
+        const ta = document.getElementById('response') as HTMLTextAreaElement | null;
+        if (ta) ta.focus();
+      });
+
+      // Time-based prompt fade — the scaffolding recedes because you've
+      // been with it long enough, not because you've produced enough.
+      // Char-count fading creates output pressure; sentence-break fading
+      // becomes a tic. Time says: presence, not performance.
+      let fadeScheduled = false;
+      function scheduleFade() {
+        if (fadeScheduled) return;
+        fadeScheduled = true;
+        setTimeout(() => document.body.classList.add('deepening-1'), 30000);
+        setTimeout(() => document.body.classList.add('deepening-2'), 75000);
+        setTimeout(() => document.body.classList.add('deepening-3'), 150000);
+      }
+      function resetFade() {
+        fadeScheduled = false;
+        document.body.classList.remove('deepening-1', 'deepening-2', 'deepening-3');
+      }
+
       // Pipeline health — pre-session visibility.
       // IMPORTANT: the endpoint returns no content (no question/response text,
       // no signal values). The panel renders counts + booleans only.
@@ -649,16 +716,15 @@
 
           inputArea.innerHTML = `
             <textarea
-              class="response-area waiting"
+              class="response-area"
               id="response"
               autocomplete="off"
               autocorrect="off"
               autocapitalize="off"
               spellcheck="false"
-              disabled
             ></textarea>
             <div class="submit-row hidden" id="submit-row">
-              <button class="submit-btn" id="submit" disabled>Submit</button>
+              <button class="submit-btn" id="submit" disabled>close</button>
             </div>
           `;
 
@@ -667,20 +733,26 @@
 
           const submitRow = document.getElementById('submit-row')!;
 
-          // Reflection pause — Hallnäs & Redström (2001, KTH): slow technology
-          // amplifies time for reflection. 4-second pause before writing opens.
-          setTimeout(() => {
-            textarea.disabled = false;
-            textarea.classList.remove('waiting');
-            textarea.focus();
-          }, 4000);
+          // Writing is open from the moment the surface renders. The room
+          // may still be dim until presence lands, but nothing is blocked.
+          textarea.focus();
+          const writingOpenedAt = Date.now();
 
-          // Submit button delay — hidden until 90s after writing opens.
-          // Removes implicit "finish" pressure (Hallnäs & Redström 2001).
-          setTimeout(() => {
-            submitRow.classList.remove('hidden');
-            submitRow.classList.add('visible');
-          }, 94000); // 4s reflection pause + 90s writing
+          // Submit visibility: both gates must pass (time + content).
+          // 90s from writing-open removes implicit "finish" pressure
+          // (Hallnäs & Redström 2001); 20-char threshold prevents the
+          // button appearing before there's anything to close.
+          setTimeout(maybeShowSubmit, 90000);
+
+          function maybeShowSubmit() {
+            const timeOk = Date.now() - writingOpenedAt >= 90000;
+            const contentOk = textarea.value.trim().length >= 20;
+            if (timeOk && contentOk) {
+              submitRow.classList.remove('hidden');
+              submitRow.classList.add('visible');
+            }
+          }
+
 
           // Behavioral tracking state
           let firstKeystrokeSent = false;
@@ -825,10 +897,12 @@
             }
             eventLog.push([now - pageOpenTime, textarea.value]);
 
-            // Question fading — Czerwinski et al. (2004, Microsoft Research):
-            // faded prompts produce more associative, less literal responses
+            // Time-based prompt fade starts on first keystroke — the prompt
+            // dims because you've been with it long enough, not because
+            // you've produced enough. (Czerwinski et al. 2004: faded prompts
+            // produce more associative, less literal responses.)
             if (!firstKeystrokeSent && delta > 0) {
-              questionEl.classList.add('fading');
+              scheduleFade();
             }
 
             if (delta > 0) {
@@ -873,6 +947,7 @@
 
             lastTextLength = currentLength;
             submitBtn.disabled = !textarea.value.trim();
+            maybeShowSubmit();
 
             if (!firstKeystrokeSent) {
               firstKeystrokeTime = Date.now();
@@ -1105,7 +1180,7 @@
               questionEl.textContent = '';
               showDoneState(resData.askFeedback ? questionId : null);
             } else {
-              submitBtn.textContent = 'Submit';
+              submitBtn.textContent = 'close';
               submitBtn.disabled = false;
             }
           });
@@ -1144,6 +1219,10 @@
 
       function showDoneState(feedbackQuestionId: number | null = null) {
         showNav();
+        // Reset stage — the done state is fully visible; the prompt is gone
+        // anyway, so no scaffolding needs to stay receded.
+        document.body.classList.remove('pre-arrival');
+        resetFade();
         let feedbackHtml = '';
         if (feedbackQuestionId) {
           feedbackHtml = `
@@ -1184,6 +1263,10 @@
         const prompt = data.prompt;
 
         hideNav();
+        // Calibration is a deliberate click — presence is already established.
+        // Reset any lingering stage classes so the surface starts lit.
+        document.body.classList.remove('pre-arrival');
+        resetFade();
         questionEl.textContent = '';
         inputArea.innerHTML = '';
 
@@ -1220,8 +1303,8 @@
             autocapitalize="off"
             spellcheck="false"
           ></textarea>
-          <div class="submit-row">
-            <button class="submit-btn" id="submit" disabled>Submit</button>
+          <div class="submit-row visible">
+            <button class="submit-btn" id="submit" disabled>close</button>
           </div>
         `;
         inputArea.appendChild(formHtml);
@@ -1402,6 +1485,7 @@
           if (!firstKeystrokeSent) {
             firstKeystrokeTime = Date.now();
             firstKeystrokeSent = true;
+            scheduleFade();
           }
 
           if (isPaused) {
@@ -1571,7 +1655,7 @@
             `;
             document.getElementById('another-btn')!.addEventListener('click', startFreeWrite);
           } else {
-            submitBtn.textContent = 'Submit';
+            submitBtn.textContent = 'close';
             submitBtn.disabled = false;
           }
         });

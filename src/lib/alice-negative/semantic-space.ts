@@ -103,13 +103,27 @@ interface SemanticRaw {
   nrcAnticipationDensity: number;
 }
 
+/**
+ * Question density — questions per sentence — is not persisted as a column
+ * on tb_session_summaries (only avg_sentence_length and the NRC + Pennebaker
+ * densities are). Compute it on-the-fly from the response text, matching
+ * what the legacy 8D state-engine did with `computeShape(text)`.
+ */
+function questionDensityFromText(text: string): number {
+  if (!text) return 0;
+  const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
+  if (sentences.length === 0) return 0;
+  const questionCount = (text.match(/\?/g) || []).length;
+  return questionCount / sentences.length;
+}
+
 export function loadSemanticSessions(): SemanticRaw[] {
   const rows = db.prepare(`
     SELECT
        r.response_id
       ,q.scheduled_for as date
+      ,r.text as response_text
       ,ss.avg_sentence_length
-      ,ss.question_density
       ,ss.first_person_density
       ,ss.hedging_density
       ,ss.cognitive_density
@@ -122,6 +136,7 @@ export function loadSemanticSessions(): SemanticRaw[] {
     FROM tb_session_summaries ss
     JOIN tb_responses r ON ss.question_id = r.question_id
     JOIN tb_questions q ON r.question_id = q.question_id
+    WHERE q.question_source_id != 3
     ORDER BY ss.session_summary_id ASC
   `).all() as any[];
 
@@ -129,7 +144,7 @@ export function loadSemanticSessions(): SemanticRaw[] {
     responseId: row.response_id,
     date: row.date || '',
     avgSentenceLength: row.avg_sentence_length ?? 0,
-    questionDensity: row.question_density ?? 0,
+    questionDensity: questionDensityFromText(row.response_text || ''),
     firstPersonDensity: row.first_person_density ?? 0,
     hedgingDensity: row.hedging_density ?? 0,
     cognitiveDensity: row.cognitive_density ?? 0,

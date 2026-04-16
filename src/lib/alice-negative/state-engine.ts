@@ -111,6 +111,7 @@ export function loadSessions(): SessionRaw[] {
     FROM tb_session_summaries ss
     JOIN tb_responses r ON ss.question_id = r.question_id
     JOIN tb_questions q ON r.question_id = q.question_id
+    WHERE q.question_source_id != 3
     ORDER BY ss.session_summary_id ASC
   `).all() as any[];
 
