@@ -1,12 +1,12 @@
 
-# The Demographic Confound in Keystroke-Based Cognitive Biomarkers: Why Current Effect Sizes Are Likely Attenuated
+# A Demographic Confound in Keystroke-Based Cognitive Biomarkers: Implications for Interpreting Current Effect Sizes
 
 **Anthony Guzzardo**
 April 15, 2026
 
 ## Abstract
 
-Keystroke dynamics have emerged as a promising modality for passive cognitive assessment, with recent studies reporting AUC values exceeding 0.9 for community-based Alzheimer's screening. However, every keystroke-cognition study targeting neurodegeneration identified in this review has drawn its participants from a population that largely did not achieve the typing automaticity required for keystroke timing to reflect cognitive processes rather than motor execution. This paper argues that the effect sizes reported in the current literature are plausibly attenuated by a generational confound—artifacts of population-level motor noise rather than evidence of a weak method. The confound is self-resolving: by 2035 to 2055, the population at risk for age-related cognitive decline will consist of lifelong fluent typists, and the motor noise floor will drop substantially. The relationship between motor and cognitive signal in keystroke timing is not cleanly separable—motor slowing in neurodegeneration has cognitive origins—but the removal of motor *inexperience* as a noise source should nonetheless sharpen the cognitive signal that keystroke dynamics capture. More importantly, this demographic shift does not merely improve existing cross-sectional methods. It enables an entirely new research paradigm: intra-individual longitudinal baselines where deviation from oneself, not deviation from a population norm, becomes the unit of analysis. The metrics for this paradigm do not yet exist because the data required to develop them has never been available. This paper identifies the timeline, the opportunity, and the instrument gap that must be closed before the first eligible cohort arrives.
+Keystroke dynamics have emerged as a promising modality for passive cognitive assessment, yet every keystroke-cognition study targeting neurodegeneration identified in this review has drawn its participants from a population that largely did not achieve the typing automaticity required for keystroke timing to reflect cognitive processes rather than motor execution. This paper identifies a generational confound that may distort—and plausibly attenuate—reported effect sizes. The confound is self-resolving: by 2035 to 2055, the population at risk for age-related cognitive decline will consist of lifelong fluent typists. More importantly, this demographic shift enables an entirely new research paradigm: intra-individual longitudinal baselines where deviation from oneself, not deviation from a population norm, becomes the unit of analysis. This paradigm sidesteps several persistent problems in cross-sectional cognitive assessment, including demographic matching, cognitive reserve confounds, and the insensitivity of one-time screening to early trajectory shifts. The metrics and instruments for this paradigm do not yet exist. This paper identifies the timeline, the opportunity, the statistical challenges, and the instrument gap that must be addressed before the first eligible cohort arrives.
 
 ---
 
@@ -14,16 +14,18 @@ Keystroke dynamics have emerged as a promising modality for passive cognitive as
 
 Keystroke dynamics have emerged as one of the most promising modalities for digital cognitive biomarkers. Recent studies report encouraging results: writing process biomarkers reach AUC = 0.918 for community-based Alzheimer's screening, outperforming both the Montreal Cognitive Assessment (MoCA) and the Mini-Mental State Examination (MMSE) (Li et al. 2025), and smartphone keystroke timing shows discriminative power for mild cognitive impairment (Kim et al. 2024), though with methodological limitations that warrant cautious interpretation. The appeal is clear: a passive, repeatable, low-cost measure of cognitive function captured during natural computer use, with no clinician required.
 
-But there is a problem that no published study has named directly. Every keystroke-cognition study targeting neurodegeneration has drawn its participants from a population born between roughly 1939 and 1966, people who encountered computers between the ages of 30 and 55, many of whom never achieved the typing automaticity required for keystroke timing to reflect cognitive processes rather than motor execution. The total number of participants across all published keystroke-cognition studies for neurodegeneration is fewer than 500. The sample sizes are small in part because researchers cannot recruit enough elderly participants who type fluently enough for the signal to mean anything. Ntracha et al. (2020) reported that requiring 12 months of smartphone experience resulted in a difficult recruitment process, ultimately yielding only 23 participants.
+But there is a problem that no published study has named directly. Every keystroke-cognition study targeting neurodegeneration has drawn its participants from a population born between roughly 1939 and 1966, people who encountered computers between the ages of 30 and 55, many of whom never achieved the typing automaticity required for keystroke timing to reflect cognitive processes rather than motor execution. The total number of participants across all published keystroke-cognition studies for neurodegeneration identified in this review is fewer than 500, a figure derived from aggregating sample sizes across the studies cited in this paper and adjacent literature (Kim et al. 2024, n = 99; Li et al. 2025, n = 135; Ntracha et al. 2020, n = 23; and comparable studies with samples ranging from 20 to 80 participants). The sample sizes are small in part because researchers cannot recruit enough elderly participants who type fluently enough for the signal to mean anything. Ntracha et al. (2020) reported that requiring 12 months of smartphone experience resulted in a difficult recruitment process, ultimately yielding only 23 participants.
 
 This is not a limitation to acknowledge in a methods section. It is a structural confound that changes how the field should interpret its own results.
 
 This paper argues four things:
 
-1. The effect sizes reported in the current literature are plausibly attenuated by a generational confound, making them likely underestimates of the technique's diagnostic power rather than evidence of a weak method.
-2. This confound is self-resolving on a known timeline. By 2035 to 2055, the 60-to-80 age demographic will consist of people who have typed daily for 20 to 40 or more years, and the motor noise floor will drop dramatically.
-3. The resolution of this confound does not merely improve existing methods. It enables a fundamentally new research paradigm: intra-individual longitudinal baselines that require dense, daily, fluent data from the same person over years.
-4. Any cognitive assessment modality tied to a specific input technology has a finite validity window, a claim already demonstrated by the ongoing obsolescence of the clock-drawing test as analog clock literacy declines. Only modality-aware approaches to cognitive assessment will survive successive generational technology shifts.
+1. The effect sizes reported in the current literature are plausibly distorted—and likely attenuated—by a generational confound, making them unreliable estimates of the technique's diagnostic power.
+2. This confound is self-resolving on a known timeline. By 2035 to 2055, the 60-to-80 age demographic will consist of people who have typed daily for 20 to 40 or more years, and the motor noise floor will drop substantially.
+3. The resolution of this confound enables a fundamentally new research paradigm: intra-individual longitudinal baselines where deviation from oneself replaces deviation from a population norm as the unit of analysis. This paradigm shift, rather than the confound itself, is the paper's central contribution.
+4. Any cognitive assessment modality tied to a specific input technology has a finite validity window, a claim illustrated by the ongoing obsolescence of the clock-drawing test as analog clock literacy declines. Only modality-aware approaches to cognitive assessment will survive successive generational technology shifts.
+
+*Disclosure: The author is developing a journaling system (Alice) that implements several of the design constraints discussed in Sections 7 and 8. This stake is disclosed here rather than later so that readers can evaluate those sections with appropriate context. The theoretical arguments in this paper stand independent of any particular implementation.*
 
 ---
 
@@ -39,13 +41,15 @@ Yamaguchi and Logan (2014) demonstrated this experimentally by disrupting the ch
 
 The practical implication is that there exists a threshold of typing fluency below which keystroke dynamics measure motor skill, not cognition. The exact threshold is difficult to specify as a single number because Pinet et al. (2022) explicitly argue against a sharp novice/expert boundary, demonstrating instead a continuous distribution. The estimate offered here—that typists below roughly 40 words per minute are unlikely to have achieved full automaticity, while those above 50 words per minute have a largely transparent motor layer—is an inference drawn from the Pinet et al. proficiency distribution and the Yamaguchi and Logan disruption data, not a validated clinical cutoff. Large-scale typing data (Dhakal et al. 2018, with 168,000 participants) confirms that the bottom decile types below 26 WPM and the top decile above 78 WPM, but no study has directly mapped typing speed to the automaticity threshold required for cognitive transparency in a clinical population. The 40-to-50 WPM range should be treated as an approximate boundary pending empirical validation.
 
-This distinction is the foundation of the demographic confound. If a participant types at 25 words per minute, variation in their flight time tells you about their hunt-and-peck strategy, not about their cognitive state. Any study using that participant's keystroke data as a cognitive biomarker is measuring the wrong thing.
+This distinction is the foundation of the demographic confound. If a participant types at 25 words per minute, variation in their flight time is dominated by motor search and planning rather than cognitive state. The cognitive signal is not absent, but it is substantially less identifiable—buried under motor variance that has nothing to do with neurodegeneration.
 
 ---
 
 ## 3. The Demographic Confound
 
 The population currently available for keystroke-cognition studies of neurodegeneration consists almost entirely of people who did not grow up typing. The relevant age demographic for studying age-related cognitive decline is roughly 60 to 80 years old. In 2024, this corresponds to birth years between 1944 and 1964.
+
+*Table 1: Heuristic model of generational typing proficiency. See note below for sourcing and limitations.*
 
 | Birth Year | Generation | Age at First Regular Computer Use | Current Age (2025) | Typing Proficiency (estimated) |
 |---|---|---|---|---|
@@ -61,7 +65,7 @@ The people currently old enough to be at risk for age-related cognitive decline 
 
 This creates three compounding problems in the existing literature.
 
-**Signal validity.** When a participant with low typing fluency shows elevated flight time, it is impossible to determine whether this reflects cognitive slowing or motor inefficiency. The signal and the noise occupy the same channel. Studies that report differences in keystroke dynamics between MCI and healthy control groups are measuring a real effect, but that effect is attenuated by motor noise in both groups. The true cognitive signal is buried under a motor floor that varies by participant.
+**Signal validity.** When a participant with low typing fluency shows elevated flight time, it is difficult to determine how much reflects cognitive slowing versus motor inefficiency. Motor inexperience and cognitive difficulty both manifest as slower, more variable keystroke timing, making them hard to disentangle in the same data stream. Studies that report differences in keystroke dynamics between MCI and healthy control groups are measuring a real effect, but that effect is likely distorted by motor variance in both groups. The cognitive signal is harder to isolate under a motor floor that varies by participant.
 
 **Selection bias.** Researchers who require typing proficiency as an inclusion criterion (explicitly or implicitly through task design) end up with unrepresentative samples. The elderly participants who can type fluently enough to generate usable data are, by definition, more technologically engaged and likely more cognitively healthy than the general elderly population. The direction of this bias is not straightforwardly toward underestimation. A healthier, more cognitively reserved sample could produce either larger or smaller case-control effect sizes depending on how proficiency, education, cognitive reserve, and disease severity interact in a given study. The net effect is that current results are difficult to generalize, not that they are uniformly suppressed.
 
@@ -79,6 +83,8 @@ The demographic confound is not permanent. It is a transitional artifact of the 
 
 By 2035, the youngest Baby Boomers will be 71 and the oldest Millennials will be 55. By 2045, Millennials will be 50 to 65 and Gen X will occupy the 65 to 80 range. By 2055, the 60 to 80 age demographic will consist almost entirely of people who have typed daily since childhood or adolescence.
 
+*Table 2: Heuristic model of expected motor noise reduction. These projections assume continued keyboard-based text production and are subject to the modality shift caveats discussed in Section 9.*
+
 | Year | Ages 60-80 Birth Cohort | Typing History | Expected Motor Noise |
 |---|---|---|---|
 | 2025 | 1945-1965 | Late adopters, 10-30 years | High |
@@ -86,9 +92,9 @@ By 2035, the youngest Baby Boomers will be 71 and the oldest Millennials will be
 | 2045 | 1965-1985 | Early adopters to natives, 25-40+ years | Low |
 | 2055 | 1975-1995 | Digital natives, 30-45+ years | Minimal |
 
-The motor noise floor drops with each decade. By 2045, researchers studying cognitive decline through keystroke dynamics will be working with participants who have typed for longer than the entire history of personal computing that preceded them. The automaticity threshold will be met by default rather than by exclusion criterion.
+Under this model, the motor noise floor drops with each decade. By 2045, researchers studying cognitive decline through keystroke dynamics will be working with participants who have typed for longer than the entire history of personal computing that preceded them. The automaticity threshold will be met by default rather than by exclusion criterion.
 
-If the demographic confound attenuates current results as argued here, then the technique is being evaluated in something close to its worst-case scenario. As the population turns over, the same methods applied to the same clinical questions should produce larger effect sizes, higher AUCs, and cleaner separation between diagnostic groups, without any methodological improvement—provided that new sources of signal contamination (discussed in Section 9) do not replace the motor noise that is being removed.
+If the demographic confound distorts current results as argued here, then the technique is being evaluated under conditions that are poorly suited to its strengths. As the population turns over, the same methods applied to the same clinical questions should produce larger effect sizes, higher AUCs, and cleaner separation between diagnostic groups, without any methodological improvement—provided that new sources of signal contamination (discussed in Section 9) do not replace the motor noise that is being removed.
 
 ---
 
@@ -130,9 +136,11 @@ This represents a paradigm change across multiple dimensions:
 
 **From diagnosis to early detection.** Cross-sectional screening answers "do you have MCI right now." Longitudinal self-referential tracking can potentially answer "your behavioral trajectory started shifting six months ago in a pattern that, in other cases, preceded clinical MCI by two years." The difference between these two answers is the difference between intervention and damage control.
 
-The metrics for this paradigm do not yet exist. This is not a gap in the literature. It is a consequence of the data never having been available. You cannot develop intra-individual longitudinal baselines from a 45-minute lab session with 23 participants who hunt and peck on a touchscreen. You need dense, daily, fluent data from the same person over years. The population that can produce that data at the age where cognitive decline becomes clinically relevant does not yet exist.
+The metrics for this paradigm do not yet exist. This is not a gap in the literature. It is a consequence of the data never having been available. You cannot develop intra-individual longitudinal baselines from a 45-minute lab session with 23 participants who hunt and peck on a touchscreen. You need dense, daily, fluent data from the same person over years. The population that can produce that data at the age where cognitive decline becomes clinically relevant does not yet exist. But it will, on the timeline this paper identifies.
 
-But it will, on the timeline this paper identifies.
+This paradigm is not without its own statistical challenges, and these should be named rather than deferred. **Regression to the mean** will produce apparent trajectory shifts in any rolling-baseline system, particularly after extreme sessions, and must be distinguished from genuine cognitive change. **Life event confounding**—retirement, bereavement, medication changes, illness, relocation—will produce real behavioral shifts unrelated to neurodegeneration, and the system must either account for or be robust to these. **Seasonal and circadian variation** in writing behavior could mimic or mask slow cognitive trends if not modeled. **Base rate problems** are inherent in detecting rare transitions (the onset of MCI) in noisy time series from a large population of healthy individuals; the false positive rate of any deviation-detection system will be a critical parameter. And **compliance decay** over years of daily journaling is a practical challenge that no current study has addressed at the timescales this paradigm requires.
+
+These are solvable problems, but they are not trivial ones. The longitudinal paradigm proposed here is a research program, not a ready-made solution. Its advantages over cross-sectional screening are structural, but realizing those advantages requires methodological work that has not yet been done.
 
 ---
 
@@ -140,7 +148,7 @@ But it will, on the timeline this paper identifies.
 
 The shift from population-normed cross-sectional assessment to self-referential longitudinal tracking has implications for which signals are worth capturing and which are not.
 
-Several NLP-derived features appear frequently in the dementia-language literature and were evaluated for this framework. Each was rejected on evidence grounds.
+Several NLP-derived features appear frequently in the dementia-language literature and were evaluated for suitability within a longitudinal, self-referential, short-text framework. Each was set aside for this specific use case, though their value in other contexts—particularly large-feature-set cross-sectional classifiers—is not disputed.
 
 **Honore's Statistic** measures vocabulary productivity by counting words used only once in a text (hapax legomena). It appears in nearly every large-feature-set NLP-dementia paper, including the landmark 370-feature model of Fraser, Meltzer, and Rudzicz (2016) at the University of Toronto. However, its standalone discriminant power is negligible (AUC approximately 0.55 to 0.65 for AD versus healthy controls when isolated). Its theoretical advantage over type-token ratio, length independence, is achieved more reliably by the Moving-Average Type-Token Ratio (MATTR, Covington and McFall 2010). No study has demonstrated statistically significant incremental discriminant power of Honore's H beyond MATTR. Furthermore, the formula is mathematically unstable on short texts: when most words are hapax, as is common in journal entries under 300 tokens, the denominator approaches zero and the statistic becomes unreliable (Tweedie and Baayen 1998). Despite its historical prominence and ease of computation, Honore's Statistic has not demonstrated independent discriminant value beyond what MATTR already provides.
 
@@ -192,8 +200,6 @@ No commercial or academic tool currently satisfies all of these constraints. Win
 
 The instrument gap is not a software engineering problem. It is a design philosophy problem. The tool must be built for depth rather than throughput, for sustained daily use rather than clinical efficiency, and for individual trajectories rather than population screening. It must be built now, while the first cohort of lifelong fluent typists is still a decade away from the age of peak cognitive decline risk, so that longitudinal baselines are already established when those baselines become clinically relevant.
 
-*Disclosure: The author is developing a journaling system (Alice) that implements several of the design constraints described above. The specificity of this section reflects direct engagement with the engineering and design tradeoffs involved, not a disinterested survey of the field. The theoretical arguments in this paper stand independent of any particular implementation.*
-
 ---
 
 ## 9. Discussion
@@ -216,6 +222,8 @@ The clean separation between "motor noise" and "cognitive signal" used throughou
 
 If LLM-assisted drafting, autocomplete, and predictive text become the dominant mode of text production by 2035 to 2055, the keystroke signal would be contaminated in a fundamentally different way than it is today—not by motor inexperience but by the human no longer being the sole cognitive source of the text being typed. The temporal microstructure of accepting a suggestion is not the same as the temporal microstructure of retrieving a word from memory. Keystroke cognitive biomarkers calibrated on unassisted writing would be measuring a different cognitive process entirely: visual scanning and decision-making rather than lexical retrieval and sentence planning. This is not merely a noise problem; it is a construct validity threat.
 
+Beyond contamination, there is an availability problem. Voice interfaces, multimodal input, and LLM-mediated composition may reduce the total volume of keyboard typing per person, undermining the "dense daily data" premise of the longitudinal paradigm. The threat is not only that future typing will be AI-contaminated but that there may be substantially less of it.
+
 An instrument designed for this future must either control for AI assistance (by requiring unassisted writing conditions), detect and filter AI-assisted segments from keystroke streams, or develop new signal models that account for hybrid human-AI text production. No published study has addressed this problem. It represents an open research gap that could determine whether keystroke-based cognitive biomarkers remain viable beyond the window this paper identifies.
 
 **Motor stereotypes.** A second complication for the self-resolving timeline is that lifelong typing may create its own form of signal opacity. For a person who has typed for 40 years, the motor patterns for high-frequency sequences ("the," "and," "tion") may become so deeply automated that they resist cognitive slowing even as decline progresses. These over-learned motor sequences could create blind spots where cognitive changes fail to surface in keystroke timing. If the most common words and bigrams are typed with near-mechanical consistency regardless of cognitive state, the signal may concentrate in lower-frequency words and novel constructions—which would require instruments sensitive enough to detect deviation in the sparse tail of the typing distribution rather than in aggregate statistics.
@@ -226,11 +234,11 @@ These limitations do not invalidate the central argument, but they constrain it.
 
 ## 10. Conclusion
 
-The keystroke-cognition literature may be stronger than it appears. If the demographic confound described here attenuates current results as argued, then the effect sizes currently reported are not the ceiling of what the technique can achieve. That studies still produce AUCs above 0.9 under these conditions is noteworthy, though the methodological limitations of some individual studies (particularly small samples without held-out validation) mean the field's evidence base remains preliminary.
+The demographic confound identified in this paper is real, its resolution is demographically inevitable, and its implications extend beyond the interpretation of existing results. If the confound distorts current effect sizes as argued, the keystroke-cognition literature may be stronger than it appears—though the field's evidence base remains preliminary, limited by small samples and methodological inconsistencies across studies.
 
-Within the next two decades, the population at risk for age-related cognitive decline will, for the first time, consist largely of people who have typed fluently for their entire adult lives. The motor inexperience noise that contaminates current results will diminish. The recruitment barriers that limit current sample sizes will ease. The confound between technological literacy and cognitive reserve will attenuate as typing proficiency becomes widespread rather than selective—though new confounds from AI-assisted writing may emerge to complicate the picture.
+But the more important conclusion is not about existing studies. It is about what becomes possible when the confound resolves. Within the next two decades, the population at risk for age-related cognitive decline will, for the first time, consist largely of people who have typed fluently for their entire adult lives. This creates the preconditions for a fundamentally different approach to cognitive assessment: longitudinal, self-referential, ecologically valid, and passive. A paradigm where the question is not "does this person look impaired compared to healthy people" but "does this person look different from themselves."
 
-The larger opportunity is not better-powered replications of existing studies but a new kind of study entirely: longitudinal, self-referential, ecologically valid, and passive. A paradigm where the question is not "does this person look impaired compared to healthy people" but "does this person look different from themselves." The metrics for that paradigm remain to be developed. The instruments to collect the data remain to be built and validated. The cohort that will generate the data is approaching but has not yet arrived. Preparing for that cohort—building the instruments, establishing the baselines, and resolving the methodological questions this paper raises—is the work that must begin now.
+Realizing that paradigm requires solving nontrivial problems: statistical methods for detecting rare transitions in noisy individual time series, strategies for handling life-event confounds, instruments that combine process and content capture, and approaches to the AI-assisted writing threat that could contaminate or reduce the keystroke signal before the window fully opens. New confounds from AI-assisted writing may emerge as the motor noise confound recedes. The metrics remain to be developed. The instruments remain to be built and validated. The cohort is approaching but has not yet arrived. Preparing for that cohort—building the instruments, establishing the baselines, and resolving the methodological questions this paper raises—is the work that must begin now.
 
 ---
 
