@@ -1,20 +1,19 @@
 /**
  * Signal formatting module for Alice's AI interpretation layer.
  *
- * Converts raw session summaries + trajectory data into research-backed
- * verbalized formats optimized for LLM consumption.
+ * Converts raw session summaries into research-backed verbalized formats
+ * optimized for LLM consumption.
  *
  * Research basis:
  *   Verbalization    — Netflix "From Logs to Language" (2026): 92.9% improvement
  *   Percentiles      — Numeracy research (2026): most intuitive for LLMs
  *   Anchoring        — Anchoring bias studies (2024): baseline first, then current
- *   Signal hierarchy — "Lost in the Middle" (TACL 2024): primary first, trajectory last
+ *   Signal hierarchy — "Lost in the Middle" (TACL 2024): primary first, dynamics last
  *   Structure        — Prompt formatting (2024): labeled sections > flat lists
  */
 
 import type { SessionSummaryInput, CalibrationBaseline } from './db.ts';
 import { getCalibrationSessionsWithText, getBurstSequence } from './db.ts';
-import type { TrajectoryAnalysis } from './alice-negative/trajectory.ts';
 import type { DynamicsAnalysis } from './alice-negative/dynamics.ts';
 import { avg, stddev, percentileRank, computeMATTR, COGNITIVE_WORDS } from './alice-negative/helpers.ts';
 
@@ -135,7 +134,7 @@ function revisionTimingLabel(firstHalf: number | null, secondHalf: number | null
  * Signal hierarchy (primacy/recency research):
  *   FIRST: Primary signals — deletion character, P-bursts, commitment
  *   MIDDLE: Supporting context — duration, pauses, tab-aways, device
- *   LAST: Trajectory context — phase, convergence, dimensions
+ *   LAST: Dynamics context — phase, dimensions, deviations
  */
 export function formatObserveSignals(
   session: SessionSummaryInput,
@@ -448,71 +447,6 @@ export function formatCompactSignals(
       return `[${s.date}] device=${s.deviceType || '?'} hour=${s.hourOfDay ?? '?'} duration=${dur} commitment=${s.commitmentRatio?.toFixed(2) ?? '?'} deletions=${s.deletionCount}(largest=${s.largestDeletion}) pauses=${s.pauseCount} tabs=${s.tabAwayCount} words=${s.wordCount} [pre-V3]`;
     }
   }).join('\n');
-}
-
-/**
- * Trajectory context block.
- *
- * Placed LAST in the signal hierarchy (recency effect — "Lost in the Middle").
- * Provides the cross-session meta-signal that makes individual sessions meaningful.
- *
- * @param mode 'observe' for full verbalized block, 'compact' for 2-line summary
- */
-export function formatTrajectoryContext(
-  analysis: TrajectoryAnalysis,
-  mode: 'observe' | 'compact',
-): string {
-  if (analysis.points.length === 0) return '';
-
-  const latest = analysis.points[analysis.points.length - 1];
-
-  const phaseDesc = {
-    'insufficient': 'Insufficient data for phase detection.',
-    'stable': 'Stable — writing behavior is consistent across recent sessions. Patterns are reliable.',
-    'shifting': 'Shifting — a consistent trend is emerging in at least one behavioral dimension. Something is changing.',
-    'disrupted': 'Disrupted — sharp behavioral spike after a period of stability. Something real just happened.',
-  }[analysis.phase];
-
-  const convergenceDesc =
-    latest.convergenceLevel === 'high'
-      ? 'Multiple dimensions moved together — this is a coherent behavioral shift, not noise.'
-      : latest.convergenceLevel === 'moderate'
-      ? 'Some dimensions moved together. Possible signal, possible coincidence.'
-      : 'Dimensions moved independently — likely noise, not a meaningful shift.';
-
-  const velocityDesc =
-    analysis.velocity > 0.6 ? 'volatile — behavioral fingerprint changing rapidly between sessions'
-    : analysis.velocity > 0.3 ? 'moderate — some session-to-session variation'
-    : 'stable — behavior consistent across recent sessions';
-
-  if (mode === 'observe') {
-    const lines: string[] = [];
-    lines.push('');
-    lines.push('=== TRAJECTORY CONTEXT (4D behavioral fingerprint across all sessions) ===');
-    lines.push('');
-    lines.push(`Phase: ${phaseDesc}`);
-    lines.push(`Latest convergence: ${latest.convergenceLevel} (${latest.convergence.toFixed(2)}) — ${convergenceDesc}`);
-    lines.push(`Dimensions: fluency=${latest.fluency.toFixed(2)} deliberation=${latest.deliberation.toFixed(2)} revision=${latest.revision.toFixed(2)} expression=${latest.expression.toFixed(2)}`);
-
-    // Call out dimensions that moved >1 std from center (z-score > 1)
-    const spikes: string[] = [];
-    if (Math.abs(latest.fluency) > 1) spikes.push(`fluency ${latest.fluency > 0 ? 'high' : 'low'} (z=${latest.fluency.toFixed(1)})`);
-    if (Math.abs(latest.deliberation) > 1) spikes.push(`deliberation ${latest.deliberation > 0 ? 'high' : 'low'} (z=${latest.deliberation.toFixed(1)})`);
-    if (Math.abs(latest.revision) > 1) spikes.push(`revision ${latest.revision > 0 ? 'high' : 'low'} (z=${latest.revision.toFixed(1)})`);
-    if (Math.abs(latest.expression) > 1) spikes.push(`expression ${latest.expression > 0 ? 'high' : 'low'} (z=${latest.expression.toFixed(1)})`);
-    if (spikes.length > 0) {
-      lines.push(`Notable deviations: ${spikes.join(', ')}`);
-    }
-
-    lines.push(`Velocity: ${analysis.velocity.toFixed(2)} — ${velocityDesc}`);
-    return lines.join('\n');
-  }
-
-  // Compact mode for generate/reflect
-  const arrow = (dim: number) => Math.abs(dim) > 1 ? (dim > 0 ? '+' : '-') : '=';
-  return [
-    `Trajectory: phase=${analysis.phase} velocity=${analysis.velocity.toFixed(2)} convergence=${latest.convergenceLevel}(${latest.convergence.toFixed(2)}) | flu=${latest.fluency.toFixed(1)} del=${latest.deliberation.toFixed(1)} rev=${latest.revision.toFixed(1)} exp=${latest.expression.toFixed(1)} [${arrow(latest.fluency)}${arrow(latest.deliberation)}${arrow(latest.revision)}${arrow(latest.expression)}]`,
-  ].join('\n');
 }
 
 /**
@@ -938,18 +872,3 @@ export function formatCalibrationDeviation(
   return lines.join('\n');
 }
 
-/**
- * Format leading indicator findings for trajectory context.
- */
-export function formatLeadingIndicators(
-  indicators: Array<{ leader: string; follower: string; lagSessions: number; correlation: number }>,
-): string {
-  if (indicators.length === 0) return '';
-
-  const lines: string[] = [];
-  lines.push('Leading indicators (which dimensions predict others for this person):');
-  for (const ind of indicators) {
-    lines.push(`  ${ind.leader} leads ${ind.follower} by ${ind.lagSessions} session${ind.lagSessions !== 1 ? 's' : ''} (r=${ind.correlation.toFixed(2)})`);
-  }
-  return lines.join('\n');
-}

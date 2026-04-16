@@ -55,7 +55,11 @@ html, body {
 }
 
 .frame {
-  max-width: 1180px;
+  /* Observatory is designer-facing data density, not prose — it wants room.
+     1500px gives each 2-col panel enough width for the widest semantic
+     dim names (syntactic_complexity, cognitive_processing) without
+     wrapping, while still leaving a margin on ultrawide monitors. */
+  max-width: 1500px;
   margin: 2.5rem auto 5rem;
   padding: 0 2rem;
 }
@@ -134,6 +138,12 @@ nav a.active {
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
 }
+/* Grid items default to min-width: auto, which refuses to shrink below
+   intrinsic content width — a single long token like `syntactic_complexity`
+   will push the cell (and the whole panel) wider than its 1fr share.
+   Forcing min-width: 0 lets the cell shrink to its grid share; long tokens
+   break inside the cell instead of bursting out of the frame. */
+.grid-two > * { min-width: 0; }
 @media (max-width: 820px) {
   .grid-two { grid-template-columns: 1fr; }
 }
@@ -196,6 +206,7 @@ tbody td {
   border-bottom: 1px solid var(--border);
   font-size: 12px;
   color: var(--text);
+  overflow-wrap: anywhere; /* let long tokens like syntactic_complexity break */
 }
 tbody tr:last-child td { border-bottom: none; }
 tbody tr { transition: background 0.15s ease; }

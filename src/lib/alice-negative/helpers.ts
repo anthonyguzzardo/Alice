@@ -1,6 +1,6 @@
 /**
  * Shared math utilities for behavioral signal computation.
- * Used by alice-negative.ts (signal pipeline), trajectory.ts, and signals.ts (formatting).
+ * Used by alice-negative.ts (signal pipeline) and signals.ts (formatting).
  *
  * Research basis:
  *   MATTR — McCarthy & Jarvis (2010), validated for short texts
@@ -69,74 +69,6 @@ export const HEDGING_WORDS = new Set([
 ]);
 
 export const FIRST_PERSON = new Set(['i', 'me', 'my', 'mine', 'myself']);
-
-// ─── Cross-correlation with lag (for leading indicator discovery) ──
-
-/**
- * Compute Pearson correlation between two series at a given lag.
- * Positive lag means series A leads series B by `lag` steps.
- */
-function pearson(a: number[], b: number[]): number {
-  if (a.length < 3 || a.length !== b.length) return 0;
-  const n = a.length;
-  const ma = avg(a);
-  const mb = avg(b);
-  let num = 0, da = 0, db = 0;
-  for (let i = 0; i < n; i++) {
-    const ai = a[i] - ma;
-    const bi = b[i] - mb;
-    num += ai * bi;
-    da += ai * ai;
-    db += bi * bi;
-  }
-  const denom = Math.sqrt(da * db);
-  return denom < 1e-10 ? 0 : num / denom;
-}
-
-export interface LeadLagResult {
-  leader: string;
-  follower: string;
-  lagSessions: number;
-  correlation: number;
-}
-
-/**
- * Find which of two named time series leads the other.
- * Tests lags from -maxLag to +maxLag and returns the best.
- * Requires at least (2 * maxLag + 3) data points to be meaningful.
- */
-export function crossCorrelation(
-  nameA: string, seriesA: number[],
-  nameB: string, seriesB: number[],
-  maxLag = 3,
-): LeadLagResult | null {
-  const n = Math.min(seriesA.length, seriesB.length);
-  if (n < maxLag * 2 + 3) return null;
-
-  let bestCorr = 0;
-  let bestLag = 0;
-
-  for (let lag = -maxLag; lag <= maxLag; lag++) {
-    const start = Math.max(0, lag);
-    const end = Math.min(n, n + lag);
-    const a = seriesA.slice(start, end);
-    const b = seriesB.slice(start - lag, end - lag);
-    const r = Math.abs(pearson(a, b));
-    if (r > bestCorr) {
-      bestCorr = r;
-      bestLag = lag;
-    }
-  }
-
-  if (bestCorr < 0.3) return null; // too weak to report
-
-  return {
-    leader: bestLag > 0 ? nameA : bestLag < 0 ? nameB : nameA,
-    follower: bestLag > 0 ? nameB : bestLag < 0 ? nameA : nameB,
-    lagSessions: Math.abs(bestLag),
-    correlation: bestCorr,
-  };
-}
 
 // ─── Cognitive mechanism words (Pennebaker LIWC) ──────────────────
 

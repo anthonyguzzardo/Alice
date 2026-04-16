@@ -483,7 +483,6 @@
           <a href="/about">About</a>
           <div class="nav-divider"></div>
           <a href="/alice-negative">Alice Negative</a>
-          <a href="/trajectory">Trajectory</a>
           <a href="/observatory">Observatory</a>
           <div class="nav-divider"></div>
           <a href="/dev/signals">Signal Sandbox</a>
@@ -672,7 +671,7 @@
       }
       loadHealth();
 
-      // Nav visibility — hide Alice Negative/trajectory buttons when writing
+      // Nav visibility — hide nav buttons when writing
       function hideNav() {
         document.querySelectorAll('.nav-btn').forEach(el => el.classList.add('hidden'));
       }
@@ -730,7 +729,7 @@
               spellcheck="false"
             ></textarea>
             <div class="submit-row hidden" id="submit-row">
-              <button class="submit-btn" id="submit" disabled>close</button>
+              <button class="submit-btn" id="submit" disabled>done</button>
             </div>
           `;
 
@@ -1294,7 +1293,7 @@
             spellcheck="false"
           ></textarea>
           <div class="submit-row visible">
-            <button class="submit-btn" id="submit" disabled>close</button>
+            <button class="submit-btn" id="submit" disabled>done</button>
           </div>
         `;
         inputArea.appendChild(formHtml);
