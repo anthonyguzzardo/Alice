@@ -295,6 +295,89 @@
         transition: opacity 0.3s ease;
       }
 
+      /* ── pipeline health indicator ─────────────────────────────────────── */
+      .health-wrap { position: relative; }
+      .health-dot {
+        width: 36px; height: 36px;
+        border: 1px solid var(--border);
+        border-radius: 50%;
+        background: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s ease;
+        padding: 0;
+      }
+      .health-dot:hover { border-color: var(--border-focus); }
+      .health-dot .pip {
+        width: 10px; height: 10px;
+        border-radius: 50%;
+        background: var(--loading);
+        transition: background 0.4s ease;
+      }
+      .health-dot[data-status="green"]  .pip { background: #6b8e6b; }
+      .health-dot[data-status="yellow"] .pip { background: #c9a55e; }
+      .health-dot[data-status="red"]    .pip { background: #b5603f; }
+
+      .health-panel {
+        position: absolute;
+        top: calc(100% + 0.6rem);
+        right: 0;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 1rem 1.2rem;
+        width: 280px;
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(-4px);
+        transition: opacity 0.2s ease, transform 0.2s ease;
+        z-index: 100;
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-size: 0.95rem;
+        color: var(--text-muted);
+        line-height: 1.55;
+      }
+      .health-panel.open {
+        opacity: 1;
+        pointer-events: auto;
+        transform: translateY(0);
+      }
+      .health-panel .section {
+        font-size: 0.72rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--text-faint);
+        margin: 0.6rem 0 0.25rem;
+      }
+      .health-panel .section:first-child { margin-top: 0; }
+      .health-panel .row {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0.12rem 0;
+      }
+      .health-panel .row .val { color: var(--text); }
+      .health-panel .row.warn .val { color: #c9a55e; }
+      .health-panel .row.bad  .val { color: #b5603f; }
+      .health-panel .stage-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        margin-top: 0.2rem;
+      }
+      .health-panel .stage {
+        font-size: 0.78rem;
+        padding: 0.1rem 0.5rem;
+        border-radius: 3px;
+        border: 1px solid var(--border);
+        color: var(--text-muted);
+      }
+      .health-panel .stage.ok  { color: #6b8e6b; border-color: #6b8e6b55; }
+      .health-panel .stage.bad { color: #b5603f; border-color: #b5603f55; }
+      .health-panel .empty { font-style: italic; color: var(--text-faint); font-size: 0.85rem; }
+
       .nav-menu {
         position: relative;
       }
@@ -382,6 +465,12 @@
           <a href="/dev/signals">Signal Sandbox</a>
         </div>
       </div>
+      <div class="health-wrap">
+        <button class="health-dot" id="health-dot" aria-label="Pipeline health" title="Pipeline health">
+          <span class="pip"></span>
+        </button>
+        <div class="health-panel" id="health-panel" role="dialog" aria-label="Pipeline status"></div>
+      </div>
       <button class="top-btn" id="theme-toggle" aria-label="Toggle theme"></button>
     </div>
     <div class="container">
@@ -419,6 +508,96 @@
         localStorage.setItem('alice-theme', next);
         themeBtn.textContent = next === 'dark' ? '☀' : '☾';
       });
+
+      // Pipeline health — pre-session visibility.
+      // IMPORTANT: the endpoint returns no content (no question/response text,
+      // no signal values). The panel renders counts + booleans only.
+      const healthDot = document.getElementById('health-dot')!;
+      const healthPanel = document.getElementById('health-panel')!;
+
+      healthDot.addEventListener('click', (e) => {
+        e.stopPropagation();
+        healthPanel.classList.toggle('open');
+      });
+      document.addEventListener('click', () => healthPanel.classList.remove('open'));
+      healthPanel.addEventListener('click', (e) => e.stopPropagation());
+
+      function renderHealth(h: any) {
+        healthDot.setAttribute('data-status', h.overall);
+        const row = (label: string, val: string, cls = '') =>
+          `<div class="row ${cls}"><span>${label}</span><span class="val">${val}</span></div>`;
+
+        let html = '';
+
+        // TODAY
+        html += '<div class="section">Today</div>';
+        html += row('Question ready', h.today.questionReady ? 'yes' : 'no',
+          h.today.questionReady ? '' : 'bad');
+        html += row('Session submitted', h.today.sessionSubmittedToday ? 'yes' : 'not yet');
+
+        // LAST SESSION PIPELINE
+        html += '<div class="section">Last session</div>';
+        if (!h.lastSession) {
+          html += '<div class="empty">none yet</div>';
+        } else {
+          html += row('Date', h.lastSession.date);
+          html += row('Fully processed',
+            h.lastSession.fullyProcessed ? 'yes' : `${h.lastSession.missing.length} missing`,
+            h.lastSession.fullyProcessed ? '' : 'bad');
+          const p = h.lastSession.pipeline;
+          const stage = (name: string, key: string) =>
+            `<span class="stage ${p[key] ? 'ok' : 'bad'}">${name}</span>`;
+          html += '<div class="stage-list">' +
+            stage('embed', 'embedded') +
+            stage('state', 'entryState') +
+            stage('observe', 'observed') +
+            stage('suppress', 'suppressedQuestion') +
+            stage('witness', 'witnessRendered') +
+            '</div>';
+        }
+
+        // SESSIONS
+        html += '<div class="section">Sessions</div>';
+        html += row('Completed', String(h.sessions.count));
+        html += row('Tomorrow ready', h.tomorrow.questionReady ? 'yes' : 'no',
+          h.tomorrow.questionReady ? '' : 'warn');
+
+        // ANOMALIES
+        const a = h.anomalies;
+        const anomalyCount = a.duplicateScheduledQuestions + a.sessionsMissingSummary + a.recentErrorCount;
+        html += '<div class="section">Anomalies</div>';
+        if (anomalyCount === 0) {
+          html += '<div class="empty">none</div>';
+        } else {
+          if (a.recentErrorCount > 0) {
+            html += row('Recent errors', String(a.recentErrorCount), 'bad');
+            if (a.recentErrorJobs.length > 0) {
+              html += '<div class="stage-list">' +
+                a.recentErrorJobs.map((j: string) => `<span class="stage bad">${j}</span>`).join('') +
+                '</div>';
+            }
+          }
+          if (a.duplicateScheduledQuestions > 0) {
+            html += row('Duplicate questions', String(a.duplicateScheduledQuestions), 'warn');
+          }
+          if (a.sessionsMissingSummary > 0) {
+            html += row('Sessions missing summary', String(a.sessionsMissingSummary), 'warn');
+          }
+        }
+
+        healthPanel.innerHTML = html;
+      }
+
+      async function loadHealth() {
+        try {
+          const res = await fetch('/api/health');
+          if (!res.ok) { healthDot.setAttribute('data-status', 'red'); return; }
+          renderHealth(await res.json());
+        } catch {
+          healthDot.setAttribute('data-status', 'red');
+        }
+      }
+      loadHealth();
 
       // Nav visibility — hide Alice Negative/trajectory buttons when writing
       function hideNav() {
