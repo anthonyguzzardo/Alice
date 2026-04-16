@@ -143,15 +143,14 @@ Toffoli S, Abbate C, Lunardini F, et al. "Handwriting in Mild Cognitive Impairme
 
 ### Studies That Complicate the Thesis
 
-**Kim et al. 2024 — High MCI Accuracy in Elderly Population**
-Published in *JMIR* 26(1):e59247, October 30, 2024.
+**Kim et al. 2024 — Methodologically Unreliable MCI Accuracy in Elderly Population**
+Published in *JMIR* 26(1):e59247, October 30, 2024. A subsequent correction notice was published.
 
-- N=111 (64 controls, 47 MCI), 3,530 typing sessions via Neurokeys smartphone app
-- Flight time: sensitivity 97.9%, specificity 94.7%, Youden Index 0.947
-- Hold time: Youden Index 0.847
-- Both outperformed MoCA-K (Youden Index 0.469)
+- N=111 (64 controls, 47 MCI enrolled, 35 MCI after exclusions), 3,530 typing sessions via Neurokeys smartphone app
+- Reported: Flight time sensitivity 97.9%, specificity 94.7%, Youden Index 0.947
+- **Critical flaw:** ROC computed on the full dataset without held-out test set or cross-validation. The AUC of 0.997 is almost certainly an inflated estimate — this is textbook optimistic bias from evaluating on training data.
 
-**Challenge to theory-6:** If sensitivity of 97.9% is achievable in an elderly population that theory-6 argues should produce attenuated signal, the demographic choke point may be less severe than theorized — at least for smartphone typing. Possible explanations: (a) smartphone typing may have different automaticity dynamics than keyboard typing (thumb-typing on a familiar device vs. 10-finger keyboard), (b) Korean elderly may have different smartphone adoption patterns, (c) the Neurokeys app may capture features less dependent on typing fluency. This deserves direct address.
+**Revised assessment:** This study no longer challenges theory-6. The reported performance figures are methodologically unreliable and should not be cited as evidence for or against the demographic confound thesis. The hold time / flight time decomposition technique remains a sound contribution; the specific discriminative performance claims do not.
 
 **Zadok et al. 2026 — LLM Blind Spots in Dementia Detection**
 Zadok M, Peled-Cohen L, et al. "Human and large language model judgments of cognitive impairment from language." *Alzheimer's & Dementia: Diagnosis, Assessment & Disease Monitoring* 18(1):e70248. 2026.
@@ -375,7 +374,7 @@ The 2022 Meulemans et al. study from Antwerp (n=30) is the only published work t
 
 ### Complicates
 
-1. **Kim et al. 2024 achieved 97.9% sensitivity in elderly.** The choke point may be less severe for smartphone typing than for keyboard typing. Theory-6 should address whether smartphone vs. keyboard automaticity dynamics differ.
+1. **Kim et al. 2024 reported 97.9% sensitivity in elderly, but this is methodologically unreliable** (no held-out validation, n=99, ROC on training data). This no longer complicates theory-6. The question of whether smartphone vs. keyboard automaticity dynamics differ remains open but is not answered by this study.
 
 2. **The reimbursement graveyard.** Mindstrong ($160M), Pear ($1.6B→$6M), Akili ($59.5M loss), Proteus (hundreds of millions). The CMS ACCESS model has no cognitive track. Any timeline that assumes "build it and the payment will follow" is contradicted by $1.8B+ in destroyed value.
 

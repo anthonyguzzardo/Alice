@@ -107,7 +107,7 @@ Likens, Allen & McNamara (2017) demonstrated this directly: keystroke dynamics p
 
 The clinical evidence is even more striking. Zadok et al. (2026) found that humans and LLMs both miss 60-70% of dementia cases when working from text content alone, because **"LLMs equate fluency with cognitive health."** A person with early-stage dementia can produce grammatically correct, semantically coherent text while their underlying production process has degraded. The content is the last thing to go. The process is the first.
 
-Kim et al. (2024): flight time — a pure process metric — achieved 97.9% sensitivity and 94.7% specificity for MCI detection. This outperformed MoCA-K (Youden Index 0.947 vs. 0.469). BiAffect (Ajilore et al. 2025): typing entropy correlated with executive function at Cohen's d=-1.28 and with planning task performance at r=0.59. Toffoli et al. (2025): handwriting *process* indicators (time, fluency, force) achieved classification accuracies of 0.80-0.93 for MCI, using the same writing tasks where the *product* was identical across groups.
+Kim et al. (2024) demonstrated that flight time — a pure process metric — shows discriminative power for MCI detection, though their specific performance figures (97.9% sensitivity, AUC 0.997) are methodologically unreliable due to evaluation on training data without holdout validation (n=99). BiAffect (Ajilore et al. 2025): typing entropy correlated with executive function at Cohen's d=-1.28 and with planning task performance at r=0.59. Toffoli et al. (2025): handwriting *process* indicators (time, fluency, force) achieved classification accuracies of 0.80-0.93 for MCI, using the same writing tasks where the *product* was identical across groups.
 
 ### What Process Data Adds to Reconstruction
 

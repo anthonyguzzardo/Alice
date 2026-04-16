@@ -94,7 +94,7 @@ Multiple independent research lines converge on process signals outperforming co
 
 **Keystroke process dynamics:**
 - BiAffect (Ajilore et al. 2025): Typing entropy (process irregularity) correlated with executive function at Cohen's d = -1.28 (p=.005) and with planning task performance at r=0.59 (p=.006). The process metric — not content — captured cognitive function.
-- Kim et al. (2024): Flight time (the interval between releasing one key and pressing the next — a pure process metric) achieved sensitivity 97.9%, specificity 94.7% for MCI detection. Outperformed MoCA-K (Youden Index 0.947 vs. 0.469).
+- Kim et al. (2024): Flight time (the interval between releasing one key and pressing the next — a pure process metric) showed discriminative power for MCI detection. *However, the reported AUC of 0.997 and 97.9% sensitivity were computed on the full dataset (n=99, 35 MCI) without held-out validation, making these figures methodologically unreliable. The decomposition technique (separating hold time from flight time) remains sound; the specific performance numbers should not be treated as reliable estimates.*
 - Meulemans et al. (2022): Alzheimer's patients spent 123.8 seconds longer on writing tasks, typed 108 fewer characters per minute, and showed higher proportions of pause time. Pauses >2 seconds reflect higher-order cognitive processes (planning, revision). The process signature was diagnostically discriminative even in a small sample (n=30).
 
 **Handwriting process dynamics:**

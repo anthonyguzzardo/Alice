@@ -54,7 +54,7 @@
 
 ### Study
 - [ ] Read Zadok et al. 2026 (Alzheimer's & Dementia) — LLMs miss 60-70% of dementia. This is the core evidence for process-over-product. Understand the methodology.
-- [ ] Read Kim et al. 2024 (JMIR) — flight time sensitivity 97.9% for MCI. Understand how hold time vs flight time decomposition works and how your capture compares.
+- [ ] Read Kim et al. 2024 (JMIR) — hold time vs flight time decomposition technique. Understand the decomposition and how your capture compares. *Note: the reported 97.9% sensitivity and AUC 0.997 are methodologically unreliable (no holdout, n=99). Focus on the technique, not the performance claims.*
 - [ ] Skim Ajilore et al. 2025 (BiAffect) — keystroke entropy + executive function. Understand their entropy computation and compare to yours.
 
 ---
@@ -131,7 +131,7 @@ These are the papers you need to know cold — not skim, but understand well eno
 2. **Li et al. 2025** — Writing process biomarkers AUC=0.918. Frontiers in Computational Neuroscience.
 3. **Chenoweth & Hayes 2001** — P-burst theory. Your fluency dimension is built on this.
 4. **Faigley & Witte 1981** — Deletion taxonomy. Your revision/thermal dimensions depend on this.
-5. **Kim et al. 2024** — Hold time vs flight time for MCI. JMIR 26(1):e59247.
+5. **Kim et al. 2024** — Hold time vs flight time decomposition technique. JMIR 26(1):e59247. *(Performance claims unreliable; technique is sound.)*
 
 ### Tier 2: Understand the Argument
 6. **Zadok et al. 2026** — LLMs miss 60-70% of dementia from content. Alzheimer's & Dementia: DADM 18(1):e70248.
