@@ -30,6 +30,7 @@ import {
 import { localDateStr } from './date.ts';
 import { retrieveSimilarMulti, retrieveContrarian } from './rag.ts';
 import { embedReflection } from './embeddings.ts';
+import { logError } from './error-log.ts';
 import {
   formatCompactSignals, formatDynamicsContext, formatEnrichedCalibration,
   formatPredictionTrackRecord,
@@ -355,7 +356,7 @@ Be concise and direct. This audit is appended to the reflection for future refer
 
   // Embed the reflection for future RAG retrieval
   embedReflection(reflectionId, fullReflection, localDateStr()).catch(err =>
-    console.warn(`[reflect] Embedding skipped: ${err.message ?? err}`)
+    logError('reflect.embed', err, { reflectionId })
   );
 
   // Log what went into this prompt for future auditability

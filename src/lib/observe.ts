@@ -40,6 +40,7 @@ import {
 import { localDateStr } from './date.ts';
 import { retrieveSimilar } from './rag.ts';
 import { embedObservation } from './embeddings.ts';
+import { logError } from './error-log.ts';
 import {
   formatObserveSignals, formatDynamicsContext, formatEnrichedCalibration,
   formatOpenPredictions, computeKnowledgeTransformScore,
@@ -281,7 +282,7 @@ Write tonight's observation and suppressed question.`;
   if (observationText) {
     obsId = saveAiObservation(question.question_id, observationText, today);
     embedObservation(obsId, observationText, today).catch(err =>
-      console.warn(`[observe] Embedding skipped: ${err.message ?? err}`)
+      logError('observe.embed', err, { obsId, questionId: question.question_id })
     );
 
     savePromptTrace({

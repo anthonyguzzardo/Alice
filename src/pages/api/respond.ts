@@ -4,6 +4,7 @@ import { runObservation } from '../../lib/observe.ts';
 import { runGeneration } from '../../lib/generate.ts';
 import { runReflection } from '../../lib/reflect.ts';
 import { embedResponse } from '../../lib/embeddings.ts';
+import { logError } from '../../lib/error-log.ts';
 import { localDateStr } from '../../lib/date.ts';
 import { computeLinguisticDensities } from '../../lib/linguistic.ts';
 import { computeMATTR } from '../../lib/alice-negative/helpers.ts';
@@ -40,7 +41,7 @@ export const POST: APIRoute = async ({ request }) => {
 
   // Fire-and-forget: embed the new response for RAG retrieval
   embedResponse(responseId, question.text, text.trim(), localDateStr())
-    .catch(err => console.error('[respond] Embedding error:', err));
+    .catch(err => logError('respond.embed', err, { responseId, questionId }));
 
   // Compute linguistic densities server-side from response text
   const densities = computeLinguisticDensities(text.trim());
@@ -112,18 +113,25 @@ export const POST: APIRoute = async ({ request }) => {
   // Determine if we should ask "did it land?" (every 5th daily response)
   const askFeedback = responseCount % 5 === 0;
 
-  Promise.resolve()
-    .then(() => runObservation())
-    .then(() => runGeneration())
-    .then(() => {
-      if (responseCount >= 5 && responseCount % 7 === 0) {
-        return runReflection();
-      }
-    })
-    .then(() => renderWitnessState())
-    .catch((err) => {
-      console.error('Background job error:', err);
-    });
+  // Background pipeline — each stage runs independently so one failure
+  // cannot silently skip the others. Each error lands in data/errors.log
+  // tagged with its stage so you can see exactly what broke.
+  (async () => {
+    const ctx = { questionId, responseId, responseCount };
+    try { await runObservation(); }
+    catch (err) { logError('respond.observation', err, ctx); }
+
+    try { await runGeneration(); }
+    catch (err) { logError('respond.generation', err, ctx); }
+
+    if (responseCount >= 5 && responseCount % 7 === 0) {
+      try { await runReflection(); }
+      catch (err) { logError('respond.reflection', err, ctx); }
+    }
+
+    try { await renderWitnessState(); }
+    catch (err) { logError('respond.witness', err, ctx); }
+  })();
 
   return new Response(JSON.stringify({ ok: true, askFeedback, questionId }), {
     headers: { 'Content-Type': 'application/json' },

@@ -46,10 +46,20 @@ db.exec(`
   -- --------------------------------------------------------------------------
   -- te_question_source
   -- --------------------------------------------------------------------------
-  -- PURPOSE: Define how a question originated
-  -- USE CASE: "Was this question hand-curated or AI-generated?"
+  -- PURPOSE: Define how a question originated AND what pipeline it triggers
+  -- USE CASE: "Is this a real session or a baseline calibration probe?"
   -- MUTABILITY: Static
-  -- VALUES: seed (1), generated (2), calibration (3)
+  -- VALUES:
+  --   seed (1)        — curated question. COUNTS AS SESSION. Triggers full
+  --                     pipeline: embed → observe → suppressed_q → witness.
+  --   generated (2)   — AI-generated question. COUNTS AS SESSION. Same
+  --                     pipeline as seed.
+  --   calibration (3) — baseline probe (neutral prompt, no reflective intent).
+  --                     DOES NOT COUNT AS SESSION. observe/suppress/reflect
+  --                     skip these (see observe.ts:85). Only keystroke
+  --                     signals + embeddings are captured, to feed baselines.
+  -- SESSION FILTER: to count "real sessions", always exclude source_id=3:
+  --   JOIN tb_questions q ON ... WHERE q.question_source_id != 3
   -- REFERENCED BY: tb_questions.question_source_id
   -- FOOTER: None
   -- --------------------------------------------------------------------------
@@ -89,8 +99,13 @@ db.exec(`
   -- --------------------------------------------------------------------------
   -- tb_questions
   -- --------------------------------------------------------------------------
-  -- PURPOSE: Store all questions (seed and generated) scheduled by date
+  -- PURPOSE: Store all questions — seed, generated, AND calibration — scheduled
+  --          by date. Calibration rows are baseline probes, not reflective
+  --          sessions (see te_question_source for pipeline impact).
   -- USE CASE: "What question is the user seeing today?"
+  -- SCOPE: Mixed. question_source_id distinguishes session (1,2) vs
+  --        calibration (3). Any query that counts "sessions" MUST filter
+  --        WHERE question_source_id != 3.
   -- MUTABILITY: Mutable
   -- REFERENCED BY: tb_responses.question_id (logical)
   -- FOOTER: Full
@@ -110,8 +125,11 @@ db.exec(`
   -- --------------------------------------------------------------------------
   -- tb_responses
   -- --------------------------------------------------------------------------
-  -- PURPOSE: Store user responses to daily questions
+  -- PURPOSE: Store user responses to daily questions (sessions + calibrations).
   -- USE CASE: "What did the user write today?"
+  -- SCOPE: All submissions. Includes calibration responses. To filter to
+  --        reflective sessions only, JOIN tb_questions and exclude
+  --        question_source_id = 3.
   -- MUTABILITY: Mutable
   -- LOGICAL FK: question_id → tb_questions.question_id
   -- FOOTER: Full
@@ -308,7 +326,10 @@ db.exec(`
   -- --------------------------------------------------------------------------
   -- PURPOSE: Store the AI's nightly silent observations about the user
   -- USE CASE: "What did the AI notice today that it couldn't say?"
-  -- MUTABILITY: Mutable (append-only, one row per day)
+  -- SCOPE: Sessions only. Calibration responses are skipped by observe.ts
+  --        (see the isCalibrationQuestion() early return). Expected row count
+  --        equals count of tb_responses WHERE question_source_id != 3.
+  -- MUTABILITY: Mutable (append-only, one row per session question)
   -- LOGICAL FK: question_id → tb_questions.question_id
   -- FOOTER: Minimal (append-only)
   -- --------------------------------------------------------------------------
@@ -328,7 +349,9 @@ db.exec(`
   -- PURPOSE: Store questions the AI wanted to ask but couldn't (seed phase)
   --          or chose not to (generated phase — the runner-up)
   -- USE CASE: "What has the AI been building toward asking?"
-  -- MUTABILITY: Mutable (append-only, one row per day)
+  -- SCOPE: Sessions only. Generated during observe.ts — calibration responses
+  --        are skipped. Expected row count equals the session count.
+  -- MUTABILITY: Mutable (append-only, one row per session question)
   -- LOGICAL FK: question_id → tb_questions.question_id (the question that
   --             WAS asked that day, not this suppressed one)
   -- FOOTER: Minimal (append-only)
