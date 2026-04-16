@@ -99,7 +99,7 @@ Multiple independent research lines converge on process signals outperforming co
 
 **Handwriting process dynamics:**
 - Toffoli et al. (2025): 106 handwriting *process* indicators (time, fluency, force, pen inclination) achieved classification accuracies of 0.80-0.93 for MCI detection. The product (what was written) was identical across groups — the process (how it was written) carried the diagnostic signal.
-- Li et al. (2025): Writing process biomarkers achieved AUC=0.918 for community-based AD screening, outperforming MoCA (0.859) and MMSE (0.783). The process of producing text on a touchscreen discriminated better than standardized cognitive tests.
+- Li et al. (2025): Fingertip touchscreen handwriting of a single Chinese character (米) by 72 participants, with a 3-feature stepwise-selected model reporting in-sample AUC=0.918 against MoCA 0.859 and MMSE 0.783 on the same sample. No external validation, no cross-validation. Directionally supportive for pause-and-speed features in handwriting; methodologically insufficient to support a claim that process signals beat MoCA/MMSE as a general matter. See theory-6-appendix for the full audit.
 
 **The automaticity mechanism:**
 - Salthouse (1984): Experienced older typists compensate for slower reaction times by looking further ahead in text — they use anticipation to maintain speed. This is a *process* adaptation invisible in the output product. Two typists can produce the same text at the same speed while using fundamentally different cognitive strategies. Only process measurement reveals the difference.

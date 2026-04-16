@@ -33,7 +33,7 @@
 
 ### Study
 - [ ] Read Meulemans et al. 2022 (Antwerp) in full — this is the closest published study to what you're building. Know it cold. PMC9311409.
-- [ ] Read Li et al. 2025 (Frontiers in Computational Neuroscience) — writing process biomarkers AUC=0.918. Understand their feature set and how yours differs.
+- [ ] Read Li et al. 2025 (Frontiers in Computational Neuroscience) — touchscreen fingertip handwriting of a single Chinese character, not keyboard typing. Reported AUC=0.918 is in-sample after stepwise selection of 3 features from 20 on n=72 with no external validation; MMSE/MoCA comparison is structurally asymmetric (pre-specified tests vs. fitted model). Read for the pause/speed feature taxonomy; do not cite the AUC as evidence for keyboard-based biomarker performance.
 
 ---
 
@@ -128,7 +128,7 @@ These are the papers you need to know cold — not skim, but understand well eno
 
 ### Tier 1: Know These Inside Out
 1. **Meulemans et al. 2022** — Writing process in AD. PMC9311409. The closest study to your instrument.
-2. **Li et al. 2025** — Writing process biomarkers AUC=0.918. Frontiers in Computational Neuroscience.
+2. **Li et al. 2025** — Touchscreen fingertip handwriting of a Chinese character, n=72, AUC=0.918 in-sample after stepwise feature selection. Frontiers in Computational Neuroscience. *(Not keystroke; AUC optimistically biased; the feature taxonomy is useful but the performance claim should not be cited.)*
 3. **Chenoweth & Hayes 2001** — P-burst theory. Your fluency dimension is built on this.
 4. **Faigley & Witte 1981** — Deletion taxonomy. Your revision/thermal dimensions depend on this.
 5. **Kim et al. 2024** — Hold time vs flight time decomposition technique. JMIR 26(1):e59247. *(Performance claims unreliable; technique is sound.)*

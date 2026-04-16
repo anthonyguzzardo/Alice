@@ -152,6 +152,21 @@ Published in *JMIR* 26(1):e59247, October 30, 2024. A subsequent correction noti
 
 **Revised assessment:** This study no longer challenges theory-6. The reported performance figures are methodologically unreliable and should not be cited as evidence for or against the demographic confound thesis. The hold time / flight time decomposition technique remains a sound contribution; the specific discriminative performance claims do not.
 
+**Li et al. 2025 — Not a Keystroke Study, and the Reported AUC Is Optimistically Biased**
+Published in *Frontiers in Computational Neuroscience*, 2025. DOI: 10.3389/fncom.2025.1564932.
+
+- N=72 (34 HC, 38 MCI due to AD), recruited at the General Hospital of the Chinese People's Liberation Army
+- Task: write the Chinese character "米" ten times with the fingertip on a 17.3-inch touchscreen, 3-minute time limit. Subjects unable to complete in 3 min were excluded. This is repeated copying of a single over-learned ideograph, not free-form writing.
+- Hardware: touchscreen, fingertip contact. Not keyboard typing. Not stylus. No pen pressure captured.
+- 20 features extracted (10 information-processing-speed, 10 executive-function), all timing- and speed-based
+- Stepwise binary logistic regression (SPSS 26.0) reduced to 3 retained features: average process pause time, number of pauses, variability in writing speed
+- Reported: combined AUC 0.918 (CI 0.854–0.982), vs. MoCA 0.859 and MMSE 0.783 applied to the same sample
+- **Critical flaws:** (1) AUC computed on the same 72 subjects used to fit the stepwise regression — in-sample optimism after feature selection on a small sample. No train/test split, no k-fold cross-validation, no LOOCV, no bootstrap, no external cohort. The authors explicitly cite overfitting risk as motivation for stepwise selection, but stepwise does not prevent in-sample optimism; it is a feature-selection procedure, not a validation procedure. (2) Comparison to MMSE/MoCA is structurally asymmetric: those instruments were applied as pre-specified tests while the digital-biomarker model was fitted to this specific sample. (3) The task is fingertip handwriting of a single Chinese character, not keyboard typing of free-form text — which makes this study, whatever its performance, not direct evidence for keyboard-based keystroke biomarker instruments.
+
+**Revised assessment:** Li et al. 2025 cannot be cited as "writing process biomarkers beat MoCA/MMSE for MCI screening" in the sense that phrase implies to a reader of keystroke-biomarker literature. It is a touchscreen-handwriting study with an in-sample AUC and no external validation. It is directionally supportive of "pause-and-speed features carry cognitive signal during handwriting production" — a modest claim — and nothing stronger. Earlier strategy-document framing of this paper as the anchor result for keyboard-based writing biomarkers was a misreading that should be corrected wherever it appears.
+
+The closest study in the actual keyboard-typing modality remains Meulemans, Van Waes, and Leijten (2022), n=30, cross-sectional, with large effect sizes (108 fewer chars/min, 20.6% more pause time in AD). The field's evidence base in the keyboard-typing modality is thinner than the strategic documents previously represented.
+
 **Zadok et al. 2026 — LLM Blind Spots in Dementia Detection**
 Zadok M, Peled-Cohen L, et al. "Human and large language model judgments of cognitive impairment from language." *Alzheimer's & Dementia: Diagnosis, Assessment & Disease Monitoring* 18(1):e70248. 2026.
 
@@ -375,6 +390,8 @@ The 2022 Meulemans et al. study from Antwerp (n=30) is the only published work t
 ### Complicates
 
 1. **Kim et al. 2024 reported 97.9% sensitivity in elderly, but this is methodologically unreliable** (no held-out validation, n=99, ROC on training data). This no longer complicates theory-6. The question of whether smartphone vs. keyboard automaticity dynamics differ remains open but is not answered by this study.
+
+1a. **Li et al. 2025 reported AUC 0.918 beating MMSE/MoCA, but the study is touchscreen fingertip handwriting of a single Chinese character, not keyboard typing, and the AUC is in-sample after stepwise feature selection on n=72.** The result does not complicate theory-6 — the demographic-confound argument does not depend on any specific AUC — but the strategic documents' earlier framing of Li as "writing process signals beat gold-standard cognitive tests" overstates what the paper shows. Revised framing: Li is a directionally supportive result for pause-and-speed features in a handwriting task, not a validated anchor for keyboard-based writing biomarkers. Meulemans et al. 2022 (n=30, Inputlog keystroke logging, free-form writing in AD) remains the closest published study in the correct modality.
 
 2. **The reimbursement graveyard.** Mindstrong ($160M), Pear ($1.6B→$6M), Akili ($59.5M loss), Proteus (hundreds of millions). The CMS ACCESS model has no cognitive track. Any timeline that assumes "build it and the payment will follow" is contradicted by $1.8B+ in destroyed value.
 
