@@ -1,0 +1,235 @@
+---
+/**
+ * Read-only playback page.
+ *
+ * Re-renders the keystroke timeline of a past session at original tempo.
+ * Designer-only — surfaces behavior (the temporal record of writing), not
+ * interpretation. The user is watching a recording of themselves writing.
+ *
+ * Controls: play / pause / scrub / speed (0.5x, 1x, 2x, 4x, 8x).
+ * The textarea is read-only and grows with the snapshot text.
+ */
+const { questionId } = Astro.params;
+const qId = parseInt(questionId ?? '', 10);
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Replay · session {qId}</title>
+    <style>
+      :root {
+        --bg: #fafaf8;
+        --fg: #1a1a1a;
+        --dim: #6e6e6e;
+        --accent: #3a6ea5;
+        --rule: #d8d4cc;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+        background: var(--bg);
+        color: var(--fg);
+      }
+      .frame { max-width: 800px; margin: 40px auto; padding: 0 24px; }
+      h1 {
+        font-size: 14px; font-weight: 500; letter-spacing: 0.04em;
+        text-transform: uppercase; color: var(--dim); margin: 0 0 4px;
+      }
+      .question {
+        font-size: 22px; line-height: 1.4; font-weight: 300;
+        color: var(--fg); margin: 0 0 24px;
+      }
+      .meta {
+        font-family: 'SF Mono', monospace; font-size: 11px;
+        color: var(--dim); margin-bottom: 16px;
+      }
+      .surface {
+        position: relative;
+        min-height: 320px;
+        padding: 24px;
+        border: 1px solid var(--rule);
+        border-radius: 4px;
+        background: white;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        font-size: 17px; line-height: 1.55;
+        white-space: pre-wrap; word-wrap: break-word;
+        color: var(--fg);
+      }
+      .controls {
+        margin-top: 16px;
+        display: flex; align-items: center; gap: 12px;
+        font-family: 'SF Mono', monospace; font-size: 12px;
+      }
+      .btn {
+        padding: 6px 14px; border: 1px solid var(--rule);
+        background: white; color: var(--fg); cursor: pointer;
+        font-family: inherit; font-size: 12px;
+      }
+      .btn:hover { background: #f0ede4; }
+      .btn.primary { background: var(--accent); color: white; border-color: var(--accent); }
+      .btn.primary:hover { background: #2c5680; }
+      .scrubber {
+        flex: 1; -webkit-appearance: none; appearance: none;
+        height: 4px; background: var(--rule); border-radius: 2px;
+      }
+      .scrubber::-webkit-slider-thumb {
+        -webkit-appearance: none; appearance: none;
+        width: 12px; height: 12px; border-radius: 50%;
+        background: var(--accent); cursor: pointer;
+      }
+      .timecode { color: var(--dim); min-width: 80px; }
+      .speed-pick { display: flex; gap: 4px; }
+      .speed-pick button {
+        padding: 4px 8px; border: 1px solid var(--rule);
+        background: white; cursor: pointer; font-family: inherit; font-size: 11px;
+      }
+      .speed-pick button.on { background: var(--accent); color: white; border-color: var(--accent); }
+      .nav {
+        display: flex; gap: 16px; margin: 24px 0;
+        font-family: 'SF Mono', monospace; font-size: 12px;
+      }
+      .nav a { color: var(--dim); text-decoration: none; }
+      .nav a:hover { color: var(--accent); }
+      .empty {
+        padding: 48px 24px; text-align: center;
+        color: var(--dim); font-family: 'SF Mono', monospace; font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="frame">
+      <div class="nav">
+        <a href={`/observatory/entry/${qId}`}>← back to entry</a>
+      </div>
+      <h1>Replay</h1>
+      <div class="question" id="question">loading…</div>
+      <div class="meta" id="meta"></div>
+      <div class="surface" id="surface"></div>
+      <div class="controls">
+        <button class="btn primary" id="play">play</button>
+        <span class="timecode" id="timecode">0:00 / 0:00</span>
+        <input type="range" class="scrubber" id="scrubber" min="0" max="100" value="0" />
+        <div class="speed-pick" id="speed">
+          <button data-speed="0.5">0.5×</button>
+          <button data-speed="1" class="on">1×</button>
+          <button data-speed="2">2×</button>
+          <button data-speed="4">4×</button>
+          <button data-speed="8">8×</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" define:vars={{ qId }}>
+      const surface = document.getElementById('surface');
+      const playBtn = document.getElementById('play');
+      const scrubber = document.getElementById('scrubber');
+      const timecode = document.getElementById('timecode');
+      const speedPick = document.getElementById('speed');
+      const questionEl = document.getElementById('question');
+      const metaEl = document.getElementById('meta');
+
+      let events = [];
+      let durationMs = 0;
+      let currentTimeMs = 0;
+      let playing = false;
+      let speed = 1;
+      let lastFrameTs = 0;
+      let rafHandle = 0;
+
+      function fmt(ms) {
+        const total = Math.max(0, Math.floor(ms / 1000));
+        const m = Math.floor(total / 60);
+        const s = total % 60;
+        return m + ':' + String(s).padStart(2, '0');
+      }
+
+      function findEventIndex(ms) {
+        // Find the latest event whose timestamp is <= ms
+        let lo = 0, hi = events.length - 1, best = -1;
+        while (lo <= hi) {
+          const mid = (lo + hi) >> 1;
+          if (events[mid][0] <= ms) { best = mid; lo = mid + 1; }
+          else hi = mid - 1;
+        }
+        return best;
+      }
+
+      function render() {
+        const idx = findEventIndex(currentTimeMs);
+        surface.textContent = idx >= 0 ? events[idx][1] : '';
+        scrubber.value = durationMs > 0 ? String((currentTimeMs / durationMs) * 100) : '0';
+        timecode.textContent = fmt(currentTimeMs) + ' / ' + fmt(durationMs);
+      }
+
+      function tick(ts) {
+        if (!playing) return;
+        if (lastFrameTs === 0) lastFrameTs = ts;
+        const dt = (ts - lastFrameTs) * speed;
+        lastFrameTs = ts;
+        currentTimeMs = Math.min(durationMs, currentTimeMs + dt);
+        render();
+        if (currentTimeMs >= durationMs) {
+          stop();
+          return;
+        }
+        rafHandle = requestAnimationFrame(tick);
+      }
+
+      function play() {
+        if (currentTimeMs >= durationMs) currentTimeMs = 0;
+        playing = true;
+        lastFrameTs = 0;
+        playBtn.textContent = 'pause';
+        rafHandle = requestAnimationFrame(tick);
+      }
+
+      function stop() {
+        playing = false;
+        playBtn.textContent = 'play';
+        cancelAnimationFrame(rafHandle);
+      }
+
+      playBtn.addEventListener('click', () => {
+        playing ? stop() : play();
+      });
+
+      scrubber.addEventListener('input', () => {
+        const pct = parseFloat(scrubber.value) / 100;
+        currentTimeMs = pct * durationMs;
+        render();
+      });
+
+      speedPick.querySelectorAll('button').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          speed = parseFloat(btn.dataset.speed || '1');
+          speedPick.querySelectorAll('button').forEach((b) => b.classList.remove('on'));
+          btn.classList.add('on');
+        });
+      });
+
+      // Load entry meta + events
+      Promise.all([
+        fetch(`/api/observatory/entry/${qId}`).then(r => r.json()).catch(() => null),
+        fetch(`/api/observatory/playback/${qId}`).then(r => r.json()),
+      ]).then(([entry, payload]) => {
+        if (payload.error) {
+          surface.innerHTML = '<div class="empty">no playback available for this session</div>';
+          return;
+        }
+        events = payload.events;
+        durationMs = payload.durationMs;
+        if (entry?.entryState) {
+          questionEl.textContent = entry.entryState.question_text || '(question text unavailable)';
+          const date = entry.entryState.date || '';
+          metaEl.textContent = `${date} · ${payload.totalEvents} events · ${fmt(durationMs)} duration`;
+        }
+        render();
+      }).catch((err) => {
+        surface.innerHTML = '<div class="empty">failed to load: ' + (err?.message ?? err) + '</div>';
+      });
+    </script>
+  </body>
+</html>

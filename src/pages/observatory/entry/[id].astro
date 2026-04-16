@@ -1,664 +1,346 @@
 ---
 /**
- * Observatory — Entry Drill-Down
+ * Observatory · Entry Detail
  *
- * Question Alice asked → Bob's three-frame observation →
- * predictions → suppressed question → collapsible behavioral detail.
- * Narrative first, math second.
+ * Drill-down for one journal entry. Surfaces:
+ *   - The question + scheduled date
+ *   - Behavioral 7D radar
+ *   - Semantic 11D radar
+ *   - Session summary metrics
+ *   - Slice-3 metadata (deletion curve, burst shape, hour typicality, etc.)
+ *   - Replay link if event log was captured
+ *
+ * No interpretation. No three-frame, no predictions, no suppressed questions.
+ * Designer-facing only.
  */
+const { id } = Astro.params;
+const responseId = parseInt(id ?? '', 10);
 ---
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Observatory — Entry</title>
-  <script is:inline>
-    (function() {
-      var t = localStorage.getItem('alice-theme') || 'light';
-      document.documentElement.setAttribute('data-theme', t);
-    })();
-  </script>
-  <style>
-    :root {
-      --en-bg: #f5f2ed; --en-bg-card: #ebe7e1; --en-bg-card-alt: #e2ded8;
-      --en-text: #1a1a1a; --en-text-muted: #6b6560; --en-text-faint: #9a9590; --en-text-dim: #b5b0aa;
-      --en-border: #ccc5bc; --en-border-subtle: #ddd8d2;
-      --en-frame-a: #3a6ea5; --en-frame-b: #aa8833; --en-frame-c: #4a7a4a;
-      --en-confirmed: #2a7a2a; --en-falsified: #9a3a3a;
-      --en-spark-line: #3a6ea5; --en-spark-dot: #2a5a8a;
-      --en-radar-ref: #ddd8d2; --en-radar-zero: #ccc5bc;
-    }
-    [data-theme="dark"] {
-      --en-bg: #0a0a0a; --en-bg-card: #0c0c0c; --en-bg-card-alt: #111;
-      --en-text: #cccccc; --en-text-muted: #666; --en-text-faint: #555; --en-text-dim: #333;
-      --en-border: #1a1a1a; --en-border-subtle: #151515;
-      --en-frame-a: #3a6ea5; --en-frame-b: #aa8833; --en-frame-c: #5a7a5a;
-      --en-confirmed: #5a8a5a; --en-falsified: #8a5a5a;
-      --en-spark-line: #3a6ea5; --en-spark-dot: #5a9ed6;
-      --en-radar-ref: #151515; --en-radar-zero: #2a2a2a;
-    }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      background: var(--en-bg);
-      color: var(--en-text-muted);
-      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-      font-size: 11px;
-    }
-    .nav {
-      position: sticky;
-      top: 0;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 12px 24px;
-      border-bottom: 1px solid var(--en-border);
-      background: var(--en-bg);
-      z-index: 50;
-    }
-    .nav a, .nav-btn, .theme-btn {
-      color: var(--en-text-faint);
-      text-decoration: none;
-      font-size: 11px;
-      letter-spacing: 0.05em;
-      cursor: pointer;
-      background: none;
-      border: none;
-      font-family: inherit;
-    }
-    .nav a:hover, .nav-btn:hover, .theme-btn:hover { color: var(--en-text-muted); }
-    .nav-btn:disabled { color: var(--en-border-subtle); cursor: default; }
-    .nav-center {
-      color: var(--en-text-faint);
-      font-size: 11px;
-      letter-spacing: 0.05em;
-    }
-    .nav-arrows {
-      display: flex;
-      gap: 16px;
-      align-items: center;
-    }
-    .content {
-      max-width: 900px;
-      margin: 0 auto;
-      padding: 24px;
-    }
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Entry · Observatory · Alice</title>
+    <style>
+      :root {
+        --bg: #fafaf8; --fg: #1a1a1a; --dim: #6e6e6e; --faint: #9b9b9b;
+        --rule: #d8d4cc; --accent: #3a6ea5; --semantic: #7a5a7a;
+        --positive: #4d7a4d; --negative: #a04545;
+        --panel: #ffffff;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+        background: var(--bg); color: var(--fg);
+      }
+      .frame { max-width: 1100px; margin: 32px auto; padding: 0 24px; }
+      header {
+        display: flex; justify-content: space-between; align-items: baseline;
+        border-bottom: 1px solid var(--rule); padding-bottom: 16px; margin-bottom: 24px;
+      }
+      h1 { font-size: 18px; font-weight: 500; margin: 0; }
+      nav { display: flex; gap: 16px; font-family: 'SF Mono', monospace; font-size: 12px; }
+      nav a { color: var(--dim); text-decoration: none; }
+      nav a:hover { color: var(--accent); }
 
-    /* --- Question (the lead) --- */
-    .question-text {
-      color: var(--en-text-muted);
-      font-size: 14px;
-      font-style: italic;
-      padding: 20px 0 28px;
-      border-bottom: 1px solid var(--en-border);
-      margin-bottom: 28px;
-      line-height: 1.7;
-    }
+      .question-box {
+        background: var(--panel); border: 1px solid var(--rule); border-radius: 4px;
+        padding: 24px; margin-bottom: 20px;
+      }
+      .question-meta {
+        font-family: 'SF Mono', monospace; font-size: 11px; color: var(--dim);
+        margin-bottom: 8px;
+      }
+      .question-text {
+        font-size: 22px; line-height: 1.4; font-weight: 300; margin: 0;
+      }
+      .panel {
+        background: var(--panel); border: 1px solid var(--rule);
+        border-radius: 4px; padding: 20px; margin-bottom: 20px;
+      }
+      .panel h2 {
+        font-size: 11px; font-weight: 500; letter-spacing: 0.06em;
+        text-transform: uppercase; color: var(--dim); margin: 0 0 14px;
+      }
 
-    .section { margin-bottom: 36px; }
-    .section-title {
-      color: var(--en-text-dim);
-      font-size: 10px;
-      letter-spacing: 0.15em;
-      text-transform: uppercase;
-      margin-bottom: 12px;
-      padding-bottom: 6px;
-      border-bottom: 1px solid var(--en-border);
-    }
+      .grid-two { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+      @media (max-width: 720px) { .grid-two { grid-template-columns: 1fr; } }
 
-    /* --- Three frames --- */
-    .frame-card {
-      background: var(--en-bg-card);
-      border: 1px solid var(--en-border-subtle);
-      padding: 16px 20px;
-      margin-bottom: 8px;
-      line-height: 1.7;
-      color: var(--en-text-muted);
-    }
-    .frame-card-a { border-left: 3px solid var(--en-frame-a); }
-    .frame-card-b { border-left: 3px solid var(--en-frame-b); }
-    .frame-card-c { border-left: 3px solid var(--en-frame-c); }
-    .frame-label {
-      font-size: 9px;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      margin-bottom: 8px;
-      font-weight: normal;
-    }
-    .frame-label-a { color: var(--en-frame-a); }
-    .frame-label-b { color: var(--en-frame-b); }
-    .frame-label-c { color: var(--en-frame-c); }
+      canvas { display: block; margin: 0 auto; }
 
-    /* --- Predictions --- */
-    .prediction-card {
-      background: var(--en-bg-card);
-      border: 1px solid var(--en-border-subtle);
-      padding: 12px 16px;
-      margin-bottom: 8px;
-    }
-    .prediction-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 6px;
-    }
-    .prediction-hypothesis {
-      color: var(--en-text-muted);
-      line-height: 1.6;
-      font-size: 11px;
-    }
-    .status-badge {
-      font-size: 9px;
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
-      padding: 2px 8px;
-      border-radius: 2px;
-      flex-shrink: 0;
-      margin-left: 12px;
-    }
-    .status-open { background: var(--en-border-subtle); color: var(--en-text-faint); }
-    .status-confirmed { background: rgba(42,122,42,0.1); color: var(--en-confirmed); }
-    .status-falsified { background: rgba(154,58,58,0.1); color: var(--en-falsified); }
-    .status-expired { background: var(--en-border-subtle); color: var(--en-text-dim); }
-    .status-indeterminate { background: var(--en-border-subtle); color: var(--en-text-dim); }
-    [data-theme="dark"] .status-confirmed { background: rgba(90,138,90,0.15); }
-    [data-theme="dark"] .status-falsified { background: rgba(138,90,90,0.15); }
-    .prediction-meta {
-      color: var(--en-text-dim);
-      font-size: 9px;
-      margin-top: 6px;
-    }
-    .prediction-rationale {
-      color: var(--en-text-faint);
-      font-size: 10px;
-      margin-top: 8px;
-      padding-top: 6px;
-      border-top: 1px solid var(--en-border-subtle);
-      line-height: 1.5;
-    }
+      .stat-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 12px 24px;
+        font-size: 13px;
+      }
+      .stat-grid .k { color: var(--dim); font-family: 'SF Mono', monospace; font-size: 11px; }
+      .stat-grid .v { font-family: 'SF Mono', monospace; font-size: 14px; }
 
-    /* --- Suppressed question --- */
-    .suppressed-block {
-      background: var(--en-bg-card);
-      border-left: 3px solid var(--en-border);
-      padding: 16px 20px;
-      color: var(--en-text-faint);
-      font-style: italic;
-      line-height: 1.6;
-    }
-    .suppressed-label {
-      font-style: normal;
-      color: var(--en-text-dim);
-      font-size: 9px;
-      letter-spacing: 0.15em;
-      text-transform: uppercase;
-      margin-bottom: 8px;
-    }
+      .pill {
+        display: inline-block; padding: 2px 8px; border-radius: 10px;
+        font-family: 'SF Mono', monospace; font-size: 10px;
+        background: #e8e4d8; color: var(--dim);
+      }
+      .pill.early { background: #f0d8d8; color: #6a3030; }
+      .pill.late  { background: #d8e0f0; color: #2c4d6a; }
+      .pill.bimodal, .pill.terminal { background: #f0e8d8; color: #6a5510; }
+      .pill.uniform { background: #e8e4d8; color: var(--dim); }
 
-    /* --- Collapsible detail section --- */
-    .detail-toggle {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      cursor: pointer;
-      padding: 12px 0;
-      border-bottom: 1px solid var(--en-border);
-      margin-bottom: 16px;
-      user-select: none;
-    }
-    .detail-toggle:hover .section-title { color: var(--en-text-muted); }
-    .detail-toggle .section-title {
-      margin-bottom: 0;
-      padding-bottom: 0;
-      border-bottom: none;
-    }
-    .detail-toggle-arrow {
-      color: var(--en-text-dim);
-      font-size: 10px;
-      transition: transform 0.2s;
-    }
-    .detail-toggle-arrow.open {
-      transform: rotate(90deg);
-    }
-    .detail-content { display: none; }
-    .detail-content.open { display: block; }
+      .nav-row {
+        display: flex; gap: 16px; margin: 24px 0;
+        font-family: 'SF Mono', monospace; font-size: 12px;
+      }
+      .nav-row a { color: var(--accent); text-decoration: none; }
+      .nav-row a:hover { text-decoration: underline; }
 
-    /* --- Radar + metrics --- */
-    .radar-container {
-      display: flex;
-      justify-content: center;
-      margin-bottom: 8px;
-    }
-    .metrics-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 8px;
-    }
-    .metric-card {
-      background: var(--en-bg-card-alt);
-      padding: 8px 12px;
-      border: 1px solid var(--en-border-subtle);
-    }
-    .metric-name {
-      color: var(--en-text-dim);
-      font-size: 8px;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      margin-bottom: 4px;
-    }
-    .metric-value {
-      color: var(--en-text-muted);
-      font-size: 13px;
-    }
-    .metric-group-title {
-      grid-column: 1 / -1;
-      color: var(--en-text-dim);
-      font-size: 9px;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      padding: 8px 0 4px;
-    }
+      .empty {
+        padding: 24px; text-align: center; color: var(--dim);
+        font-family: 'SF Mono', monospace; font-size: 12px;
+      }
 
-    .loading {
-      color: var(--en-text-dim);
-      text-align: center;
-      padding: 80px 0;
-      letter-spacing: 0.1em;
-    }
-  </style>
-</head>
-<body>
-  <div class="nav">
-    <a href="/observatory">&larr; observatory</a>
-    <span class="nav-center" id="nav-date">--</span>
-    <div class="nav-arrows">
-      <button class="nav-btn" id="btn-prev" disabled>&larr; prev</button>
-      <button class="nav-btn" id="btn-next" disabled>next &rarr;</button>
-      <button class="theme-btn" id="theme-toggle"></button>
-    </div>
-  </div>
+      .replay-cta {
+        display: inline-block; padding: 8px 16px;
+        background: var(--accent); color: white; text-decoration: none;
+        border-radius: 4px; font-size: 13px;
+      }
+      .replay-cta:hover { background: #2c5680; }
+    </style>
+  </head>
+  <body>
+    <div class="frame">
+      <header>
+        <h1>Entry · response {responseId}</h1>
+        <nav>
+          <a href="/observatory">overview</a>
+          <a href="/observatory/coupling">coupling</a>
+          <a href="/">→ alice</a>
+        </nav>
+      </header>
 
-  <div class="content">
-    <!-- The question Alice asked -->
-    <div class="question-text" id="question-text"></div>
-
-    <!-- Bob's observation (three frames) — the main content -->
-    <div class="section" id="observation-section" style="display:none">
-      <div class="section-title">observation</div>
-      <div id="frames-container"></div>
-    </div>
-
-    <!-- Predictions generated from this entry -->
-    <div class="section" id="predictions-section" style="display:none">
-      <div class="section-title">predictions</div>
-      <div id="predictions-container"></div>
-    </div>
-
-    <!-- What Alice wanted to ask but didn't -->
-    <div class="section" id="suppressed-section" style="display:none">
-      <div class="section-title">suppressed question</div>
-      <div id="suppressed-container"></div>
-    </div>
-
-    <!-- Behavioral detail (collapsed by default) -->
-    <div class="section">
-      <div class="detail-toggle" id="detail-toggle">
-        <span class="detail-toggle-arrow" id="detail-arrow">&#9654;</span>
-        <span class="section-title">behavioral detail</span>
-      </div>
-      <div class="detail-content" id="detail-content">
-        <div class="radar-container">
-          <canvas id="radar-canvas" width="400" height="400"></canvas>
-        </div>
-        <div class="metrics-grid" id="metrics-grid"></div>
+      <div id="entry-content">
+        <div class="empty">loading…</div>
       </div>
     </div>
 
-    <div class="loading" id="loading">loading...</div>
-  </div>
+    <script type="module" define:vars={{ responseId }}>
+      const BEHAVIORAL_DIMS = ['fluency','deliberation','revision','commitment','volatility','thermal','presence'];
+      const SEMANTIC_DIMS = [
+        'syntactic_complexity','interrogation','self_focus','uncertainty',
+        'cognitive_processing',
+        'nrc_anger','nrc_fear','nrc_joy','nrc_sadness','nrc_trust','nrc_anticipation',
+      ];
 
-  <script>
-    // Theme toggle
-    const themeBtn = document.getElementById('theme-toggle')!;
-    const savedTheme = localStorage.getItem('alice-theme') || 'light';
-    themeBtn.textContent = savedTheme === 'dark' ? '\u2600' : '\u263E';
-    themeBtn.addEventListener('click', () => {
-      const cur = document.documentElement.getAttribute('data-theme');
-      const next = cur === 'dark' ? 'light' : 'dark';
-      document.documentElement.setAttribute('data-theme', next);
-      localStorage.setItem('alice-theme', next);
-      themeBtn.textContent = next === 'dark' ? '\u2600' : '\u263E';
-    });
+      function fmtZ(v) {
+        if (v == null) return '—';
+        const sign = v >= 0 ? '+' : '';
+        return sign + Number(v).toFixed(2);
+      }
+      function fmtMs(v) {
+        if (v == null) return '—';
+        if (v < 1000) return Math.round(v) + 'ms';
+        return (v / 1000).toFixed(1) + 's';
+      }
+      function fmtMin(v) {
+        if (v == null) return '—';
+        return (v / 60000).toFixed(1) + 'min';
+      }
 
-    function cssVar(name: string): string {
-      return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-    }
+      function drawRadar(canvas, dims, values, color) {
+        const dpr = window.devicePixelRatio || 1;
+        const size = 300;
+        canvas.width = size * dpr;
+        canvas.height = size * dpr;
+        canvas.style.width = size + 'px';
+        canvas.style.height = size + 'px';
+        const ctx = canvas.getContext('2d');
+        ctx.scale(dpr, dpr);
 
-    const DIMS = ['fluency', 'deliberation', 'revision', 'expression', 'commitment', 'volatility', 'thermal', 'presence'];
+        const cx = size / 2, cy = size / 2, maxR = 110;
+        const n = dims.length;
+        const angle = (2 * Math.PI) / n;
+        const maxZ = 3;
+        const r = (z) => ((Math.max(-maxZ, Math.min(maxZ, z)) + maxZ) / (2 * maxZ)) * maxR;
 
-    function drawRadar(entryState: any) {
-      const canvas = document.getElementById('radar-canvas') as HTMLCanvasElement;
-      const dpr = window.devicePixelRatio || 1;
-      const size = 400;
-      canvas.width = size * dpr;
-      canvas.height = size * dpr;
-      canvas.style.width = size + 'px';
-      canvas.style.height = size + 'px';
-      const ctx = canvas.getContext('2d')!;
-      ctx.scale(dpr, dpr);
+        // Reference rings
+        for (const ring of [-2, -1, 0, 1, 2]) {
+          ctx.strokeStyle = ring === 0 ? '#888' : '#ddd';
+          ctx.lineWidth = ring === 0 ? 1 : 0.5;
+          ctx.beginPath();
+          for (let i = 0; i <= n; i++) {
+            const a = -Math.PI / 2 + i * angle;
+            const rr = r(ring);
+            const x = cx + Math.cos(a) * rr;
+            const y = cy + Math.sin(a) * rr;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
+          ctx.stroke();
+        }
 
-      const cx = size / 2;
-      const cy = size / 2;
-      const maxRadius = 160;
-      const n = DIMS.length;
-      const angleStep = (2 * Math.PI) / n;
-      const maxZ = 3;
-      const toRadiusSigned = (z: number) => ((z + maxZ) / (2 * maxZ)) * maxRadius;
+        // Axes + labels
+        for (let i = 0; i < n; i++) {
+          const a = -Math.PI / 2 + i * angle;
+          ctx.strokeStyle = '#ddd';
+          ctx.lineWidth = 0.5;
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(cx + Math.cos(a) * maxR, cy + Math.sin(a) * maxR);
+          ctx.stroke();
+          ctx.fillStyle = '#999';
+          ctx.font = '9px SF Mono, monospace';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          const lx = cx + Math.cos(a) * (maxR + 16);
+          const ly = cy + Math.sin(a) * (maxR + 16);
+          ctx.fillText(dims[i].slice(0, 7), lx, ly);
+        }
 
-      // Reference rings
-      for (const ring of [-2, -1, 0, 1, 2]) {
-        const r = toRadiusSigned(ring);
-        ctx.strokeStyle = ring === 0 ? cssVar('--en-radar-zero') : cssVar('--en-radar-ref');
-        ctx.lineWidth = ring === 0 ? 1.5 : 0.5;
+        // Polygon
+        ctx.fillStyle = color + '20';
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
         ctx.beginPath();
-        for (let i = 0; i <= n; i++) {
-          const angle = -Math.PI / 2 + i * angleStep;
-          const x = cx + Math.cos(angle) * r;
-          const y = cy + Math.sin(angle) * r;
+        for (let i = 0; i < n; i++) {
+          const a = -Math.PI / 2 + i * angle;
+          const v = values[i] ?? 0;
+          const rr = r(v);
+          const x = cx + Math.cos(a) * rr;
+          const y = cy + Math.sin(a) * rr;
           if (i === 0) ctx.moveTo(x, y);
           else ctx.lineTo(x, y);
         }
-        ctx.stroke();
-
-        if (ring !== 0) {
-          ctx.fillStyle = cssVar('--en-text-dim');
-          ctx.font = '8px SF Mono, monospace';
-          ctx.textAlign = 'center';
-          ctx.fillText(`${ring > 0 ? '+' : ''}${ring}\u03c3`, cx + 14, cy - r + 3);
-        }
-      }
-
-      // Axes + labels
-      for (let i = 0; i < n; i++) {
-        const angle = -Math.PI / 2 + i * angleStep;
-        const ax = cx + Math.cos(angle) * maxRadius;
-        const ay = cy + Math.sin(angle) * maxRadius;
-
-        ctx.strokeStyle = cssVar('--en-radar-ref');
-        ctx.lineWidth = 0.5;
-        ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        ctx.lineTo(ax, ay);
-        ctx.stroke();
-
-        const lx = cx + Math.cos(angle) * (maxRadius + 18);
-        const ly = cy + Math.sin(angle) * (maxRadius + 18);
-        ctx.fillStyle = cssVar('--en-text-faint');
-        ctx.font = '9px SF Mono, monospace';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(DIMS[i], lx, ly);
-      }
-
-      // Data polygon
-      const values = DIMS.map(d => entryState[d] as number);
-      ctx.fillStyle = 'rgba(58, 110, 165, 0.12)';
-      ctx.strokeStyle = cssVar('--en-spark-line');
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      for (let i = 0; i < n; i++) {
-        const angle = -Math.PI / 2 + i * angleStep;
-        const r = toRadiusSigned(Math.max(-maxZ, Math.min(maxZ, values[i])));
-        const x = cx + Math.cos(angle) * r;
-        const y = cy + Math.sin(angle) * r;
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      }
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-
-      // Dots
-      for (let i = 0; i < n; i++) {
-        const angle = -Math.PI / 2 + i * angleStep;
-        const r = toRadiusSigned(Math.max(-maxZ, Math.min(maxZ, values[i])));
-        const x = cx + Math.cos(angle) * r;
-        const y = cy + Math.sin(angle) * r;
-        ctx.fillStyle = cssVar('--en-spark-dot');
-        ctx.beginPath();
-        ctx.arc(x, y, 3, 0, Math.PI * 2);
+        ctx.closePath();
         ctx.fill();
+        ctx.stroke();
       }
-    }
 
-    function formatMs(ms: number | null): string {
-      if (ms == null) return '--';
-      if (ms < 1000) return ms + 'ms';
-      return (ms / 1000).toFixed(1) + 's';
-    }
-    function formatPct(v: number | null): string {
-      if (v == null) return '--';
-      return (v * 100).toFixed(1) + '%';
-    }
-    function formatNum(v: number | null): string {
-      if (v == null) return '--';
-      return String(Math.round(v));
-    }
-    function formatFloat(v: number | null, dec = 1): string {
-      if (v == null) return '--';
-      return v.toFixed(dec);
-    }
-
-    function renderMetrics(s: any) {
-      if (!s) return;
-      const grid = document.getElementById('metrics-grid')!;
-
-      const groups = [
-        { title: 'Timing', metrics: [
-          { name: 'first keystroke', value: formatMs(s.firstKeystrokeMs) },
-          { name: 'total duration', value: formatMs(s.totalDurationMs) },
-          { name: 'active typing', value: formatMs(s.activeTypingMs) },
-        ]},
-        { title: 'Production', metrics: [
-          { name: 'chars typed', value: formatNum(s.totalCharsTyped) },
-          { name: 'final chars', value: formatNum(s.finalCharCount) },
-          { name: 'commitment', value: formatPct(s.commitmentRatio) },
-          { name: 'chars/min', value: formatNum(s.charsPerMinute) },
-          { name: 'words', value: formatNum(s.wordCount) },
-          { name: 'sentences', value: formatNum(s.sentenceCount) },
-        ]},
-        { title: 'Revision', metrics: [
-          { name: 'small deletions', value: formatNum(s.smallDeletionCount) },
-          { name: 'large deletions', value: formatNum(s.largeDeletionCount) },
-          { name: 'large del chars', value: formatNum(s.largeDeletionChars) },
-        ]},
-        { title: 'Engagement', metrics: [
-          { name: 'pause count', value: formatNum(s.pauseCount) },
-          { name: 'total pause', value: formatMs(s.totalPauseMs) },
-          { name: 'tab-away count', value: formatNum(s.tabAwayCount) },
-          { name: 'tab-away time', value: formatMs(s.totalTabAwayMs) },
-        ]},
-        { title: 'Fluency', metrics: [
-          { name: 'P-burst count', value: formatNum(s.pBurstCount) },
-          { name: 'avg P-burst len', value: formatFloat(s.avgPBurstLength) },
-          { name: 'IKI mean', value: formatMs(s.interKeyIntervalMean) },
-          { name: 'IKI std', value: formatMs(s.interKeyIntervalStd) },
-        ]},
-        { title: 'Emotion (NRC)', metrics: [
-          { name: 'anger', value: formatPct(s.nrcAngerDensity) },
-          { name: 'fear', value: formatPct(s.nrcFearDensity) },
-          { name: 'joy', value: formatPct(s.nrcJoyDensity) },
-          { name: 'sadness', value: formatPct(s.nrcSadnessDensity) },
-          { name: 'trust', value: formatPct(s.nrcTrustDensity) },
-          { name: 'anticipation', value: formatPct(s.nrcAnticipationDensity) },
-        ]},
-        { title: 'Linguistic', metrics: [
-          { name: 'cognitive', value: formatPct(s.cognitiveDensity) },
-          { name: 'hedging', value: formatPct(s.hedgingDensity) },
-          { name: 'first person', value: formatPct(s.firstPersonDensity) },
-        ]},
-      ];
-
-      grid.innerHTML = groups.map(g =>
-        `<div class="metric-group-title">${g.title}</div>` +
-        g.metrics.map(m =>
-          `<div class="metric-card"><div class="metric-name">${m.name}</div><div class="metric-value">${m.value}</div></div>`
-        ).join('')
-      ).join('');
-    }
-
-    function parseFrames(text: string): Array<{ label: string; cls: string; labelCls: string; body: string }> {
-      const frames: Array<{ label: string; cls: string; labelCls: string; body: string }> = [];
-      const framePatterns = [
-        { marker: '**FRAME A', label: 'Frame A — Charitable', cls: 'frame-card-a', labelCls: 'frame-label-a' },
-        { marker: '**FRAME B', label: 'Frame B — Avoidance', cls: 'frame-card-b', labelCls: 'frame-label-b' },
-        { marker: '**FRAME C', label: 'Frame C — Mundane', cls: 'frame-card-c', labelCls: 'frame-label-c' },
-      ];
-
-      for (let i = 0; i < framePatterns.length; i++) {
-        const pat = framePatterns[i];
-        const idx = text.indexOf(pat.marker);
-        if (idx === -1) continue;
-
-        let endIdx = text.length;
-        for (let j = i + 1; j < framePatterns.length; j++) {
-          const nextIdx = text.indexOf(framePatterns[j].marker);
-          if (nextIdx !== -1) { endIdx = nextIdx; break; }
+      fetch(`/api/observatory/entry/${responseId}`).then(r => r.json()).then(data => {
+        if (data.error) {
+          document.getElementById('entry-content').innerHTML = `<div class="empty">${data.error}</div>`;
+          return;
         }
+        const { entryState, semanticState, sessionSummary, metadata, replay, navigation } = data;
 
-        let body = text.slice(idx, endIdx).trim();
-        const colonIdx = body.indexOf(':');
-        if (colonIdx !== -1) {
-          body = body.slice(colonIdx + 1).trim();
-          body = body.replace(/^\*\*\s*/, '');
-        }
-
-        frames.push({ label: pat.label, cls: pat.cls, labelCls: pat.labelCls, body });
-      }
-
-      if (frames.length === 0) {
-        frames.push({ label: 'Observation', cls: '', labelCls: '', body: text });
-      }
-
-      return frames;
-    }
-
-    function renderObservation(obs: any) {
-      if (!obs) return;
-      const section = document.getElementById('observation-section')!;
-      section.style.display = '';
-      const container = document.getElementById('frames-container')!;
-      const frames = parseFrames(obs.observation_text);
-      container.innerHTML = frames.map(f =>
-        `<div class="frame-card ${f.cls}">
-          <div class="frame-label ${f.labelCls}">${f.label}</div>
-          ${f.body}
-        </div>`
-      ).join('');
-    }
-
-    function renderPredictions(predictions: any[]) {
-      if (!predictions || predictions.length === 0) return;
-      const section = document.getElementById('predictions-section')!;
-      section.style.display = '';
-      const container = document.getElementById('predictions-container')!;
-      container.innerHTML = predictions.map(p => {
-        const statusClass = `status-${p.statusCode}`;
-        return `<div class="prediction-card">
-          <div class="prediction-header">
-            <span class="prediction-hypothesis">${p.hypothesis}</span>
-            <span class="status-badge ${statusClass}">${p.statusCode}</span>
+        const navRow = `
+          <div class="nav-row">
+            ${navigation.prev ? `<a href="/observatory/entry/${navigation.prev}">← prev</a>` : ''}
+            ${navigation.next ? `<a href="/observatory/entry/${navigation.next}">next →</a>` : ''}
+            ${replay?.available ? `<a href="/observatory/replay/${entryState.question_id}" class="replay-cta">▶ replay this session</a>` : ''}
           </div>
-          ${p.favoredFrame ? `<div class="prediction-meta">Frame ${p.favoredFrame}${p.targetTopic ? ' \u00b7 ' + p.targetTopic : ''}</div>` : ''}
-          ${p.gradeRationale ? `<div class="prediction-rationale">${p.gradeRationale}</div>` : ''}
-        </div>`;
-      }).join('');
-    }
+        `;
 
-    function renderSuppressed(sq: any) {
-      if (!sq) return;
-      const section = document.getElementById('suppressed-section')!;
-      section.style.display = '';
-      const container = document.getElementById('suppressed-container')!;
-      container.innerHTML = `<div class="suppressed-block">
-        <div class="suppressed-label">what alice wanted to ask but didn't</div>
-        ${sq.suppressed_text}
-      </div>`;
-    }
+        const questionBox = `
+          <div class="question-box">
+            <div class="question-meta">${entryState.date} · question ${entryState.question_id} · response ${entryState.response_id}</div>
+            <p class="question-text">${entryState.question_text}</p>
+          </div>
+        `;
 
-    async function load() {
-      const pathParts = window.location.pathname.split('/');
-      const id = pathParts[pathParts.length - 1];
+        const behVals = BEHAVIORAL_DIMS.map(d => entryState[d]);
+        const semVals = semanticState ? SEMANTIC_DIMS.map(d => semanticState[d]) : null;
 
-      const res = await fetch(`/api/observatory/entry/${id}`);
-      if (!res.ok) {
-        document.getElementById('loading')!.textContent = 'entry not found';
-        return;
-      }
+        const radars = `
+          <div class="grid-two">
+            <section class="panel">
+              <h2>Behavioral 7D · z-score from baseline</h2>
+              <canvas id="radar-beh"></canvas>
+              <div class="stat-grid" style="margin-top:16px;">
+                ${BEHAVIORAL_DIMS.map(d => `<div><div class="k">${d}</div><div class="v">${fmtZ(entryState[d])}</div></div>`).join('')}
+                <div><div class="k">convergence</div><div class="v">${Number(entryState.convergence ?? 0).toFixed(2)}</div></div>
+              </div>
+            </section>
+            <section class="panel">
+              <h2>Semantic 11D · z-score from baseline</h2>
+              ${semanticState ? '<canvas id="radar-sem"></canvas>' : '<div class="empty">no semantic state for this entry</div>'}
+              ${semanticState ? `
+                <div class="stat-grid" style="margin-top:16px;">
+                  ${SEMANTIC_DIMS.map(d => `<div><div class="k">${d.replace(/_/g, ' ')}</div><div class="v">${fmtZ(semanticState[d])}</div></div>`).join('')}
+                  <div><div class="k">semantic convergence</div><div class="v">${Number(semanticState.semantic_convergence ?? 0).toFixed(2)}</div></div>
+                </div>
+              ` : ''}
+            </section>
+          </div>
+        `;
 
-      const data = await res.json();
-      document.getElementById('loading')!.style.display = 'none';
+        const metaPills = [];
+        if (metadata?.deletion_curve_type && metadata.deletion_curve_type !== 'none') {
+          metaPills.push(`<span class="pill ${metadata.deletion_curve_type}">deletion: ${metadata.deletion_curve_type}</span>`);
+        }
+        if (metadata?.burst_trajectory_shape && metadata.burst_trajectory_shape !== 'none') {
+          metaPills.push(`<span class="pill">burst: ${metadata.burst_trajectory_shape.replace(/_/g, ' ')}</span>`);
+        }
+        if (metadata?.hour_typicality != null) {
+          const label = metadata.hour_typicality > 1 ? 'typical hour' : metadata.hour_typicality < -1 ? 'unusual hour' : 'avg hour';
+          metaPills.push(`<span class="pill">${label} · z=${metadata.hour_typicality.toFixed(2)}</span>`);
+        }
+        if (metadata?.deletion_during_burst_count != null && metadata?.deletion_between_burst_count != null) {
+          const total = (metadata.deletion_during_burst_count ?? 0) + (metadata.deletion_between_burst_count ?? 0);
+          if (total > 0) {
+            const pct = Math.round((metadata.deletion_during_burst_count / total) * 100);
+            metaPills.push(`<span class="pill">${pct}% deletions inside bursts</span>`);
+          }
+        }
 
-      // Nav
-      const navDate = document.getElementById('nav-date')!;
-      navDate.textContent = `Entry ${data.entryState.response_id} \u00b7 ${data.entryState.date}`;
+        const metadataPanel = `
+          <section class="panel">
+            <h2>Slice-3 metadata · deterministic per-session signals</h2>
+            ${metaPills.length > 0
+              ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">${metaPills.join('')}</div>`
+              : '<div class="empty">no metadata for this entry yet</div>'}
+            ${metadata?.inter_burst_interval_mean_ms != null ? `
+              <div class="stat-grid">
+                <div><div class="k">inter-burst interval mean</div><div class="v">${fmtMs(metadata.inter_burst_interval_mean_ms)}</div></div>
+                <div><div class="k">inter-burst interval std</div><div class="v">${fmtMs(metadata.inter_burst_interval_std_ms)}</div></div>
+              </div>
+            ` : ''}
+          </section>
+        `;
 
-      const btnPrev = document.getElementById('btn-prev') as HTMLButtonElement;
-      const btnNext = document.getElementById('btn-next') as HTMLButtonElement;
-      if (data.navigation.prev) {
-        btnPrev.disabled = false;
-        btnPrev.addEventListener('click', () => {
-          window.location.href = `/observatory/entry/${data.navigation.prev}`;
-        });
-      }
-      if (data.navigation.next) {
-        btnNext.disabled = false;
-        btnNext.addEventListener('click', () => {
-          window.location.href = `/observatory/entry/${data.navigation.next}`;
-        });
-      }
+        const summary = sessionSummary;
+        const summaryPanel = summary ? `
+          <section class="panel">
+            <h2>Session summary · keystroke + linguistic substrate</h2>
+            <div class="stat-grid">
+              <div><div class="k">duration</div><div class="v">${fmtMin(summary.totalDurationMs)}</div></div>
+              <div><div class="k">active typing</div><div class="v">${fmtMin(summary.activeTypingMs)}</div></div>
+              <div><div class="k">first keystroke</div><div class="v">${fmtMs(summary.firstKeystrokeMs)}</div></div>
+              <div><div class="k">words / sentences</div><div class="v">${summary.wordCount ?? '—'} / ${summary.sentenceCount ?? '—'}</div></div>
+              <div><div class="k">commitment ratio</div><div class="v">${summary.commitmentRatio != null ? (summary.commitmentRatio * 100).toFixed(0) + '%' : '—'}</div></div>
+              <div><div class="k">chars/min</div><div class="v">${summary.charsPerMinute != null ? Math.round(summary.charsPerMinute) : '—'}</div></div>
+              <div><div class="k">P-burst count / avg</div><div class="v">${summary.pBurstCount ?? '—'} / ${summary.avgPBurstLength != null ? Math.round(summary.avgPBurstLength) : '—'} chars</div></div>
+              <div><div class="k">small / large deletions</div><div class="v">${summary.smallDeletionCount ?? '—'} / ${summary.largeDeletionCount ?? '—'}</div></div>
+              <div><div class="k">deletion timing (1st / 2nd half)</div><div class="v">${summary.firstHalfDeletionChars ?? '—'} / ${summary.secondHalfDeletionChars ?? '—'} chars</div></div>
+              <div><div class="k">pauses ≥30s</div><div class="v">${summary.pauseCount ?? '—'} (${fmtMin(summary.totalPauseMs)})</div></div>
+              <div><div class="k">tab-aways</div><div class="v">${summary.tabAwayCount ?? '—'} (${fmtMin(summary.totalTabAwayMs)})</div></div>
+              <div><div class="k">scroll-back / re-read</div><div class="v">${summary.scrollBackCount ?? '—'} / ${summary.questionRereadCount ?? '—'}</div></div>
+              <div><div class="k">IKI mean / std</div><div class="v">${fmtMs(summary.interKeyIntervalMean)} / ${fmtMs(summary.interKeyIntervalStd)}</div></div>
+              <div><div class="k">hold time mean / std</div><div class="v">${fmtMs(summary.holdTimeMean)} / ${fmtMs(summary.holdTimeStd)}</div></div>
+              <div><div class="k">flight time mean / std</div><div class="v">${fmtMs(summary.flightTimeMean)} / ${fmtMs(summary.flightTimeStd)}</div></div>
+              <div><div class="k">keystroke entropy</div><div class="v">${summary.keystrokeEntropy != null ? summary.keystrokeEntropy.toFixed(2) + ' bits' : '—'}</div></div>
+              <div><div class="k">MATTR</div><div class="v">${summary.mattr != null ? summary.mattr.toFixed(3) : '—'}</div></div>
+              <div><div class="k">avg sentence length</div><div class="v">${summary.avgSentenceLength != null ? summary.avgSentenceLength.toFixed(1) + ' words' : '—'}</div></div>
+              <div><div class="k">revision chains</div><div class="v">${summary.revisionChainCount ?? '—'} × ${summary.revisionChainAvgLength != null ? summary.revisionChainAvgLength.toFixed(1) : '—'}</div></div>
+              <div><div class="k">device / hour / day</div><div class="v">${summary.deviceType ?? '?'} / ${summary.hourOfDay ?? '?'}h / d${summary.dayOfWeek ?? '?'}</div></div>
+            </div>
+          </section>
+        ` : '';
 
-      // Question (the lead)
-      document.getElementById('question-text')!.textContent = data.entryState.question_text;
+        document.getElementById('entry-content').innerHTML =
+          questionBox + navRow + radars + metadataPanel + summaryPanel;
 
-      // Observation — immediately after question
-      renderObservation(data.observation);
-
-      // Predictions
-      renderPredictions(data.predictions);
-
-      // Suppressed question
-      renderSuppressed(data.suppressedQuestion);
-
-      // Behavioral detail (collapsed)
-      drawRadar(data.entryState);
-      renderMetrics(data.sessionSummary);
-    }
-
-    // Defer drawing until layout is stable
-    if (document.readyState === 'complete') {
-      requestAnimationFrame(() => requestAnimationFrame(load));
-    } else {
-      window.addEventListener('load', () => requestAnimationFrame(load));
-    }
-
-    // Collapsible detail section
-    document.getElementById('detail-toggle')!.addEventListener('click', () => {
-      const content = document.getElementById('detail-content')!;
-      const arrow = document.getElementById('detail-arrow')!;
-      content.classList.toggle('open');
-      arrow.classList.toggle('open');
-    });
-
-    // Keyboard navigation
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'ArrowLeft') {
-        const btn = document.getElementById('btn-prev') as HTMLButtonElement;
-        if (!btn.disabled) btn.click();
-      } else if (e.key === 'ArrowRight') {
-        const btn = document.getElementById('btn-next') as HTMLButtonElement;
-        if (!btn.disabled) btn.click();
-      }
-    });
-  </script>
-</body>
+        // Draw radars after DOM is in place
+        const behCanvas = document.getElementById('radar-beh');
+        if (behCanvas) drawRadar(behCanvas, BEHAVIORAL_DIMS, behVals, '#3a6ea5');
+        if (semanticState) {
+          const semCanvas = document.getElementById('radar-sem');
+          if (semCanvas) drawRadar(semCanvas, SEMANTIC_DIMS, semVals, '#7a5a7a');
+        }
+      }).catch(err => {
+        document.getElementById('entry-content').innerHTML = `<div class="empty">failed to load: ${err?.message ?? err}</div>`;
+      });
+    </script>
+  </body>
 </html>

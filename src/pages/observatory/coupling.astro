@@ -1,803 +1,214 @@
 ---
 /**
- * Observatory — Coupling View
+ * Observatory · Coupling
  *
- * Leads with plain-English behavioral discoveries.
- * 8x8 heatmap, emotion-behavior table, dynamics, and theory status
- * serve as supporting evidence below.
+ * Behavioral 7D + semantic 11D dynamics + couplings, plus the cross-domain
+ * emotion → behavior coupling layer. Designer-facing only.
  */
 ---
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Observatory — Coupling</title>
-  <script is:inline>
-    (function() {
-      var t = localStorage.getItem('alice-theme') || 'light';
-      document.documentElement.setAttribute('data-theme', t);
-    })();
-  </script>
-  <style>
-    :root {
-      --cp-bg: #f5f2ed; --cp-bg-card: #ebe7e1; --cp-text: #1a1a1a;
-      --cp-text-muted: #6b6560; --cp-text-faint: #9a9590; --cp-text-dim: #b5b0aa;
-      --cp-border: #ccc5bc; --cp-border-subtle: #ddd8d2;
-      --cp-pos: rgba(40, 100, 160, 0.7); --cp-neg: rgba(160, 60, 60, 0.7);
-      --cp-cell-empty: #e8e4de; --cp-confirmed: #2a7a2a; --cp-falsified: #9a3a3a;
-      --cp-attractor-rigid: #9a3a3a; --cp-attractor-mod: #8a8a3a; --cp-attractor-mal: #3a7a3a;
-    }
-    [data-theme="dark"] {
-      --cp-bg: #0a0a0a; --cp-bg-card: #0f0f0f; --cp-text: #cccccc;
-      --cp-text-muted: #666; --cp-text-faint: #555; --cp-text-dim: #333;
-      --cp-border: #1a1a1a; --cp-border-subtle: #151515;
-      --cp-pos: rgba(70, 130, 180, 0.7); --cp-neg: rgba(180, 70, 70, 0.7);
-      --cp-cell-empty: #0f0f0f; --cp-confirmed: #5a8a5a; --cp-falsified: #8a5a5a;
-      --cp-attractor-rigid: #aa5a5a; --cp-attractor-mod: #8a8a5a; --cp-attractor-mal: #5a8a5a;
-    }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      background: var(--cp-bg);
-      color: var(--cp-text-muted);
-      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-      font-size: 11px;
-    }
-    .nav {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 16px 24px;
-      border-bottom: 1px solid var(--cp-border);
-    }
-    .nav a, .theme-btn {
-      color: var(--cp-text-faint);
-      text-decoration: none;
-      font-size: 11px;
-      letter-spacing: 0.05em;
-      background: none; border: none; font-family: inherit; cursor: pointer;
-    }
-    .nav a:hover, .theme-btn:hover { color: var(--cp-text-muted); }
-    .nav-title {
-      color: var(--cp-text-faint);
-      font-size: 12px;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-    }
-    .nav-right { display: flex; align-items: center; gap: 16px; }
-    .content {
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 24px;
-    }
-    .section-title {
-      color: var(--cp-text-dim);
-      font-size: 10px;
-      letter-spacing: 0.15em;
-      text-transform: uppercase;
-      margin-bottom: 12px;
-      padding-bottom: 6px;
-      border-bottom: 1px solid var(--cp-border);
-    }
-    .section { margin-bottom: 40px; }
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Coupling · Observatory · Alice</title>
+    <style>
+      :root {
+        --bg: #fafaf8;
+        --fg: #1a1a1a;
+        --dim: #6e6e6e;
+        --faint: #9b9b9b;
+        --rule: #d8d4cc;
+        --accent: #3a6ea5;
+        --semantic: #7a5a7a;
+        --emotion: #8a5a44;
+        --positive: #4d7a4d;
+        --negative: #a04545;
+        --panel: #ffffff;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+        background: var(--bg); color: var(--fg);
+      }
+      .frame { max-width: 1100px; margin: 32px auto; padding: 0 24px; }
+      header {
+        display: flex; justify-content: space-between; align-items: baseline;
+        border-bottom: 1px solid var(--rule); padding-bottom: 16px; margin-bottom: 24px;
+      }
+      h1 { font-size: 18px; font-weight: 500; margin: 0; }
+      nav { display: flex; gap: 16px; font-family: 'SF Mono', monospace; font-size: 12px; }
+      nav a { color: var(--dim); text-decoration: none; }
+      nav a:hover, nav a.active { color: var(--accent); }
+      .meta-row {
+        display: flex; gap: 24px; margin-bottom: 32px;
+        font-family: 'SF Mono', monospace; font-size: 12px; color: var(--dim);
+      }
+      .panel {
+        background: var(--panel); border: 1px solid var(--rule);
+        border-radius: 4px; padding: 20px; margin-bottom: 20px;
+      }
+      .panel h2 {
+        font-size: 11px; font-weight: 500; letter-spacing: 0.06em;
+        text-transform: uppercase; color: var(--dim); margin: 0 0 14px;
+      }
+      table { width: 100%; border-collapse: collapse; font-size: 13px; }
+      th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--rule); }
+      th { font-weight: 500; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.04em; }
+      td.num { font-family: 'SF Mono', monospace; text-align: right; }
+      .sign-pos { color: var(--positive); }
+      .sign-neg { color: var(--negative); }
+      .grid-two { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+      @media (max-width: 720px) { .grid-two { grid-template-columns: 1fr; } }
+      .empty {
+        padding: 40px 20px; text-align: center; color: var(--dim);
+        font-family: 'SF Mono', monospace; font-size: 12px;
+      }
+      .badge {
+        display: inline-block; padding: 2px 6px; border-radius: 3px;
+        font-family: 'SF Mono', monospace; font-size: 10px;
+        background: #e8e4d8; color: var(--dim); text-transform: uppercase; letter-spacing: 0.04em;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="frame">
+      <header>
+        <h1>Observatory · Coupling</h1>
+        <nav>
+          <a href="/observatory">overview</a>
+          <a href="/observatory/coupling" class="active">coupling</a>
+          <a href="/">→ alice</a>
+        </nav>
+      </header>
 
-    /* --- Discoveries --- */
-    .discoveries {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-    .discovery {
-      background: var(--cp-bg-card);
-      border-left: 3px solid var(--cp-border);
-      padding: 14px 18px;
-      line-height: 1.7;
-    }
-    .discovery-finding {
-      color: var(--cp-text-muted);
-      font-size: 11px;
-    }
-    .discovery-evidence {
-      color: var(--cp-text-dim);
-      font-size: 9px;
-      margin-top: 6px;
-      letter-spacing: 0.02em;
-    }
-    .discovery-strong { border-left-color: #3a5a7a; }
-    .discovery-moderate { border-left-color: #6a6a4a; }
-
-    /* --- Theories --- */
-    .theory-card {
-      background: var(--cp-bg-card);
-      border: 1px solid var(--cp-border-subtle);
-      padding: 12px 16px;
-      margin-bottom: 8px;
-    }
-    .theory-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 4px;
-    }
-    .theory-name {
-      color: var(--cp-text-muted);
-      font-size: 10px;
-    }
-    .theory-status {
-      font-size: 9px;
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
-      padding: 2px 8px;
-      border-radius: 2px;
-    }
-    .theory-active { background: var(--cp-border-subtle); color: var(--cp-text-muted); }
-    .theory-established { background: rgba(42,122,42,0.1); color: var(--cp-confirmed); }
-    .theory-retired { background: rgba(154,58,58,0.1); color: var(--cp-falsified); }
-    .theory-meta {
-      color: var(--cp-text-dim);
-      font-size: 9px;
-      margin-top: 4px;
-    }
-    .theory-desc {
-      color: var(--cp-text-faint);
-      font-size: 10px;
-      margin-top: 6px;
-      line-height: 1.5;
-    }
-    .theory-bar-container {
-      margin-top: 6px;
-      height: 4px;
-      background: var(--cp-border-subtle);
-      border-radius: 2px;
-      overflow: hidden;
-    }
-    .theory-bar {
-      height: 100%;
-      border-radius: 2px;
-      transition: width 0.3s;
-    }
-
-    /* --- Heatmap --- */
-    .heatmap-container {
-      display: flex;
-      justify-content: center;
-      margin-bottom: 32px;
-    }
-    #heatmap-canvas { cursor: crosshair; }
-
-    /* --- Table --- */
-    table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-    th {
-      text-align: left;
-      color: var(--cp-text-dim);
-      font-size: 9px;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      padding: 6px 12px;
-      border-bottom: 1px solid var(--cp-border);
-      font-weight: normal;
-    }
-    td {
-      padding: 6px 12px;
-      border-bottom: 1px solid var(--cp-border-subtle);
-      color: var(--cp-text-muted);
-    }
-    .corr-positive { color: #3a7aaa; }
-    .corr-negative { color: #aa4a4a; }
-
-    /* --- Dynamics --- */
-    .dynamics-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      gap: 12px;
-    }
-    .dynamics-card {
-      background: var(--cp-bg-card);
-      border: 1px solid var(--cp-border-subtle);
-      padding: 12px 16px;
-    }
-    .dynamics-card-title {
-      color: var(--cp-text-faint);
-      font-size: 10px;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      margin-bottom: 8px;
-    }
-    .dynamics-row {
-      display: flex;
-      justify-content: space-between;
-      padding: 2px 0;
-      font-size: 10px;
-    }
-    .dynamics-row .label { color: var(--cp-text-dim); }
-    .dynamics-row .value { color: var(--cp-text-muted); }
-    .attractor-rigid { color: var(--cp-attractor-rigid); }
-    .attractor-moderate { color: var(--cp-attractor-mod); }
-    .attractor-malleable { color: var(--cp-attractor-mal); }
-
-    /* --- Tooltip --- */
-    .tooltip {
-      display: none;
-      position: fixed;
-      background: var(--cp-bg-card);
-      border: 1px solid var(--cp-border);
-      padding: 8px 12px;
-      font-size: 10px;
-      color: var(--cp-text-muted);
-      pointer-events: none;
-      z-index: 100;
-      line-height: 1.6;
-      max-width: 300px;
-    }
-
-    /* --- Overlay --- */
-    .overlay {
-      display: none;
-      position: fixed;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0,0,0,0.85);
-      z-index: 200;
-      justify-content: center;
-      align-items: center;
-      flex-direction: column;
-    }
-    .overlay.active { display: flex; }
-    .overlay-title {
-      color: var(--cp-text-muted);
-      font-size: 12px;
-      margin-bottom: 12px;
-      letter-spacing: 0.05em;
-    }
-    .overlay-close {
-      color: var(--cp-text-dim);
-      font-size: 10px;
-      margin-top: 12px;
-      cursor: pointer;
-    }
-    .overlay-close:hover { color: var(--cp-text-muted); }
-  </style>
-</head>
-<body>
-  <div class="nav">
-    <a href="/observatory">&larr; observatory</a>
-    <span class="nav-title">coupling</span>
-    <div class="nav-right">
-      <button class="theme-btn" id="theme-toggle"></button>
-    </div>
-  </div>
-  <script is:inline>
-    (function() {
-      var btn = document.getElementById('theme-toggle');
-      var t = localStorage.getItem('alice-theme') || 'light';
-      btn.textContent = t === 'dark' ? '\u2600' : '\u263E';
-      btn.addEventListener('click', function() {
-        var cur = document.documentElement.getAttribute('data-theme');
-        var next = cur === 'dark' ? 'light' : 'dark';
-        document.documentElement.setAttribute('data-theme', next);
-        localStorage.setItem('alice-theme', next);
-        btn.textContent = next === 'dark' ? '\u2600' : '\u263E';
-      });
-    })();
-  </script>
-
-  <div class="content">
-    <!-- Discoveries: plain-English findings -->
-    <div class="section">
-      <div class="section-title">what the patterns say</div>
-      <div class="discoveries" id="discoveries"></div>
-    </div>
-
-    <!-- Theory status -->
-    <div class="section">
-      <div class="section-title">theories</div>
-      <div id="theories-container"></div>
-    </div>
-
-    <!-- Heatmap (supporting evidence) -->
-    <div class="section">
-      <div class="section-title">behavioral coupling matrix</div>
-      <div class="heatmap-container">
-        <canvas id="heatmap-canvas" width="490" height="500"></canvas>
+      <div class="meta-row">
+        <span id="counts">loading…</span>
       </div>
+
+      <div class="grid-two">
+        <section class="panel">
+          <h2>Behavioral dynamics (7D PersDyn) · latest</h2>
+          <div id="beh-dyn"></div>
+        </section>
+        <section class="panel">
+          <h2>Semantic dynamics (11D PersDyn) · latest</h2>
+          <div id="sem-dyn"></div>
+        </section>
+      </div>
+
+      <div class="grid-two">
+        <section class="panel">
+          <h2>Behavioral coupling · 7D pairs</h2>
+          <div id="beh-coupling"></div>
+        </section>
+        <section class="panel">
+          <h2>Semantic coupling · 11D pairs</h2>
+          <div id="sem-coupling"></div>
+        </section>
+      </div>
+
+      <section class="panel">
+        <h2>Emotion → behavior · cross-domain coupling</h2>
+        <div id="emo-coupling"></div>
+      </section>
     </div>
 
-    <!-- Emotion table -->
-    <div class="section">
-      <div class="section-title">emotion &rarr; behavior coupling</div>
-      <table id="emotion-table">
-        <thead>
+    <script type="module">
+      function fmtZ(v) {
+        if (v == null) return '—';
+        const sign = v >= 0 ? '+' : '';
+        return sign + Number(v).toFixed(2);
+      }
+
+      function attractorBadge(v) {
+        if (v == null) return '';
+        if (v >= 0.7) return '<span class="badge">rigid</span>';
+        if (v >= 0.4) return '<span class="badge">moderate</span>';
+        return '<span class="badge">malleable</span>';
+      }
+
+      function renderDynamicsTable(dynamics, container) {
+        if (!dynamics || dynamics.length === 0) {
+          container.innerHTML = '<div class="empty">no dynamics yet (need ≥5 entries)</div>';
+          return;
+        }
+        const rows = dynamics.map(d => `
           <tr>
-            <th>emotion</th>
-            <th>behavior</th>
-            <th>lag</th>
-            <th>correlation</th>
-            <th>direction</th>
+            <td>${d.dimension}</td>
+            <td class="num">${fmtZ(d.baseline)}</td>
+            <td class="num">${Number(d.variability).toFixed(2)}</td>
+            <td class="num">${Number(d.attractor_force).toFixed(2)} ${attractorBadge(d.attractor_force)}</td>
+            <td class="num">${fmtZ(d.current_state)}</td>
+            <td class="num">${fmtZ(d.deviation)}σ</td>
           </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
+        `).join('');
+        container.innerHTML = `<table>
+          <tr><th>dim</th><th>baseline</th><th>variab</th><th>attractor</th><th>current</th><th>dev</th></tr>
+          ${rows}
+        </table>`;
+      }
 
-    <!-- Dynamics -->
-    <div class="section">
-      <div class="section-title">dynamics per dimension</div>
-      <div class="dynamics-grid" id="dynamics-grid"></div>
-    </div>
-  </div>
-
-  <div class="tooltip" id="tooltip"></div>
-
-  <div class="overlay" id="overlay">
-    <div class="overlay-title" id="overlay-title"></div>
-    <canvas id="overlay-canvas" width="600" height="300"></canvas>
-    <div class="overlay-close" id="overlay-close">ESC to close</div>
-  </div>
-
-  <script>
-    const DIMS = ['fluency', 'deliberation', 'revision', 'expression', 'commitment', 'volatility', 'thermal', 'presence'];
-    const COLORS: Record<string, string> = {
-      fluency: '#3a6ea5', deliberation: '#8a5a44', revision: '#5a7a5a', expression: '#7a5a7a',
-      commitment: '#5a8a8a', volatility: '#8a7a3a', thermal: '#8a3a3a', presence: '#4a6a4a',
-    };
-
-    // Human-readable dimension descriptions
-    const DIM_MEANING: Record<string, string> = {
-      fluency: 'sustained writing flow',
-      deliberation: 'cognitive load and hesitation',
-      revision: 'how much they delete and rewrite',
-      expression: 'deviation from their normal style',
-      commitment: 'how much they keep vs. discard',
-      volatility: 'behavioral instability between entries',
-      thermal: 'correction intensity',
-      presence: 'focus and attention',
-    };
-
-    const EMOTION_MEANING: Record<string, string> = {
-      anger: 'anger words',
-      fear: 'fear words',
-      joy: 'joy words',
-      sadness: 'sadness words',
-      trust: 'trust words',
-      anticipation: 'anticipation words',
-      cognitive: 'reasoning language',
-      hedging: 'hedging language',
-      firstPerson: 'first-person pronouns',
-    };
-
-    interface CouplingRow {
-      leader: string; follower: string; lag_sessions: number; correlation: number; direction: number;
-    }
-    interface EmotionCouplingRow {
-      emotion_dim: string; behavior_dim: string; lag_sessions: number; correlation: number; direction: number;
-    }
-    interface DynamicRow {
-      dimension: string; baseline: number; variability: number; attractor_force: number;
-      current_state: number; deviation: number; window_size: number;
-    }
-    interface TheoryRow {
-      theory_key: string; description: string; alpha: number; beta: number;
-      total_predictions: number; log_bayes_factor: number; status: string;
-    }
-
-    let couplingData: CouplingRow[] = [];
-    let statesData: any[] | null = null;
-
-    /**
-     * Generate plain-English discoveries from coupling + emotion + dynamics data.
-     */
-    function generateDiscoveries(
-      couplings: CouplingRow[],
-      emotionCouplings: EmotionCouplingRow[],
-      dynamics: DynamicRow[]
-    ): Array<{ finding: string; evidence: string; strength: 'strong' | 'moderate' }> {
-      const discoveries: Array<{ finding: string; evidence: string; strength: 'strong' | 'moderate' }> = [];
-
-      // Sort by absolute correlation
-      const sorted = [...couplings].sort((a, b) => Math.abs(b.correlation) - Math.abs(a.correlation));
-
-      // Top behavioral couplings → discoveries
-      for (const c of sorted.slice(0, 5)) {
-        const absR = Math.abs(c.correlation);
-        if (absR < 0.3) continue;
-
-        const leader = DIM_MEANING[c.leader] || c.leader;
-        const follower = DIM_MEANING[c.follower] || c.follower;
-        const lagLabel = c.lag_sessions === 0 ? 'at the same time' : `${c.lag_sessions} session${c.lag_sessions > 1 ? 's' : ''} later`;
-        const sign = c.direction > 0 ? 'increases' : 'decreases';
-
-        let finding: string;
-        if (absR >= 0.8) {
-          // Very strong — state it as a behavioral pattern
-          if (c.direction < 0) {
-            finding = `When ${c.leader} goes up, ${c.follower} drops — almost perfectly. ${capitalize(leader)} and ${follower} move in opposite directions ${lagLabel}.`;
-          } else {
-            finding = `${capitalize(leader)} and ${follower} move together ${lagLabel}. When one rises, so does the other.`;
-          }
-        } else if (absR >= 0.5) {
-          finding = `When ${leader} increases, ${follower} ${sign} ${lagLabel}.`;
-        } else {
-          finding = `There's a moderate link between ${leader} and ${follower} ${lagLabel}.`;
+      function renderCouplingTable(couplings, container) {
+        if (!couplings || couplings.length === 0) {
+          container.innerHTML = '<div class="empty">no couplings yet (need ≥10 entries)</div>';
+          return;
         }
-
-        const evidence = `${c.leader} \u2192 ${c.follower}: r=${c.direction > 0 ? '+' : '-'}${absR.toFixed(3)} (${c.lag_sessions === 0 ? 'concurrent' : 'lag-' + c.lag_sessions})`;
-        discoveries.push({
-          finding,
-          evidence,
-          strength: absR >= 0.5 ? 'strong' : 'moderate',
-        });
+        const rows = couplings.map(c => {
+          const r = Number(c.correlation);
+          const sign = c.direction > 0 ? '+' : '−';
+          const cls = c.direction > 0 ? 'sign-pos' : 'sign-neg';
+          const lag = c.lag_sessions === 0 ? 'concurrent' : `lag ${c.lag_sessions}`;
+          return `<tr>
+            <td>${c.leader}</td>
+            <td>→</td>
+            <td>${c.follower}</td>
+            <td class="num ${cls}">${sign}${r.toFixed(2)}</td>
+            <td>${lag}</td>
+          </tr>`;
+        }).join('');
+        container.innerHTML = `<table>
+          <tr><th>leader</th><th></th><th>follower</th><th>r</th><th>lag</th></tr>
+          ${rows}
+        </table>`;
       }
 
-      // Top emotion coupling
-      const sortedEmotion = [...emotionCouplings].sort((a, b) => Math.abs(b.correlation) - Math.abs(a.correlation));
-      for (const c of sortedEmotion.slice(0, 2)) {
-        const absR = Math.abs(c.correlation);
-        if (absR < 0.3) continue;
-
-        const emotion = EMOTION_MEANING[c.emotion_dim] || c.emotion_dim;
-        const behavior = DIM_MEANING[c.behavior_dim] || c.behavior_dim;
-        const lagLabel = c.lag_sessions === 0 ? 'in the same session' : `${c.lag_sessions} session${c.lag_sessions > 1 ? 's' : ''} later`;
-        const effect = c.direction > 0 ? 'increases' : 'decreases';
-
-        const finding = `When ${emotion} increase in their writing, ${behavior} ${effect} ${lagLabel}.`;
-        const evidence = `${c.emotion_dim} \u2192 ${c.behavior_dim}: r=${c.direction > 0 ? '+' : '-'}${absR.toFixed(3)} (${c.lag_sessions === 0 ? 'concurrent' : 'lag-' + c.lag_sessions})`;
-        discoveries.push({ finding, evidence, strength: absR >= 0.5 ? 'strong' : 'moderate' });
-      }
-
-      // Dynamics — find most/least malleable
-      const sortedDyn = [...dynamics].sort((a, b) => a.attractor_force - b.attractor_force);
-      if (sortedDyn.length >= 2) {
-        const malleable = sortedDyn[0];
-        const rigid = sortedDyn[sortedDyn.length - 1];
-
-        const mLabel = malleable.attractor_force < 0.4 ? 'malleable' : 'moderate';
-        const rLabel = rigid.attractor_force >= 0.7 ? 'rigid' : 'moderate';
-
-        if (malleable.attractor_force < 0.5 && rigid.attractor_force > 0.55) {
-          const finding = `${capitalize(malleable.dimension)} is the most changeable dimension (attractor: ${malleable.attractor_force.toFixed(2)}) — when it shifts, it stays shifted. ${capitalize(rigid.dimension)} snaps back to baseline faster (attractor: ${rigid.attractor_force.toFixed(2)}).`;
-          discoveries.push({
-            finding,
-            evidence: `${malleable.dimension} attractor=${malleable.attractor_force.toFixed(3)} (${mLabel}), ${rigid.dimension} attractor=${rigid.attractor_force.toFixed(3)} (${rLabel})`,
-            strength: 'moderate',
-          });
+      function renderEmotionCoupling(rows, container) {
+        if (!rows || rows.length === 0) {
+          container.innerHTML = '<div class="empty">no emotion → behavior couplings yet (need ≥10 entries)</div>';
+          return;
         }
+        const tableRows = rows.map(c => {
+          const r = Number(c.correlation);
+          const sign = c.direction > 0 ? '+' : '−';
+          const cls = c.direction > 0 ? 'sign-pos' : 'sign-neg';
+          const lag = c.lag_sessions === 0 ? 'concurrent' : `lag ${c.lag_sessions}`;
+          return `<tr>
+            <td>${c.emotion_dim}</td>
+            <td>→</td>
+            <td>${c.behavior_dim}</td>
+            <td class="num ${cls}">${sign}${r.toFixed(2)}</td>
+            <td>${lag}</td>
+          </tr>`;
+        }).join('');
+        container.innerHTML = `<table>
+          <tr><th>emotion</th><th></th><th>behavior dim</th><th>r</th><th>lag</th></tr>
+          ${tableRows}
+        </table>`;
       }
 
-      return discoveries;
-    }
-
-    function capitalize(s: string): string {
-      return s.charAt(0).toUpperCase() + s.slice(1);
-    }
-
-    function renderDiscoveries(
-      couplings: CouplingRow[],
-      emotionCouplings: EmotionCouplingRow[],
-      dynamics: DynamicRow[]
-    ) {
-      const container = document.getElementById('discoveries')!;
-      const discoveries = generateDiscoveries(couplings, emotionCouplings, dynamics);
-
-      container.innerHTML = discoveries.map(d =>
-        `<div class="discovery ${d.strength === 'strong' ? 'discovery-strong' : 'discovery-moderate'}">
-          <div class="discovery-finding">${d.finding}</div>
-          <div class="discovery-evidence">${d.evidence}</div>
-        </div>`
-      ).join('');
-    }
-
-    function renderTheories(theories: TheoryRow[]) {
-      const container = document.getElementById('theories-container')!;
-      if (!theories || theories.length === 0) {
-        container.innerHTML = '<div style="color: #333; font-size: 10px;">No theories yet.</div>';
-        return;
-      }
-
-      container.innerHTML = theories.map(t => {
-        const statusClass = `theory-${t.status}`;
-        const posteriorMean = t.alpha / (t.alpha + t.beta);
-        const barWidth = Math.round(posteriorMean * 100);
-        const barColor = t.status === 'retired' ? '#5a3a3a' : t.status === 'established' ? '#3a5a3a' : '#3a3a5a';
-
-        // Parse theory key: "A:topic" → "topic (frame A)"
-        const parts = t.theory_key.split(':');
-        const displayName = parts.length === 2
-          ? parts[1].replace(/_/g, ' ')
-          : t.theory_key.replace(/_/g, ' ');
-        const frame = parts.length === 2 ? parts[0] : '';
-
-        return `<div class="theory-card">
-          <div class="theory-header">
-            <span class="theory-name">${displayName}${frame ? ` <span style="color:#444">(frame ${frame})</span>` : ''}</span>
-            <span class="theory-status ${statusClass}">${t.status}</span>
-          </div>
-          <div class="theory-desc">${t.description}</div>
-          <div class="theory-bar-container">
-            <div class="theory-bar" style="width: ${barWidth}%; background: ${barColor};"></div>
-          </div>
-          <div class="theory-meta">
-            ${t.total_predictions} predictions &middot; posterior: ${(posteriorMean * 100).toFixed(0)}% &middot; log BF: ${t.log_bayes_factor.toFixed(2)}
-          </div>
-        </div>`;
-      }).join('');
-    }
-
-    function drawHeatmap(couplings: CouplingRow[]) {
-      const canvas = document.getElementById('heatmap-canvas') as HTMLCanvasElement;
-      const dpr = window.devicePixelRatio || 1;
-      const labelLeft = 90;
-      const labelTop = 100;
-      const gridSize = 400;
-      const size = labelLeft + gridSize;
-      const totalH = labelTop + gridSize;
-      canvas.width = size * dpr;
-      canvas.height = totalH * dpr;
-      canvas.style.width = size + 'px';
-      canvas.style.height = totalH + 'px';
-      const ctx = canvas.getContext('2d')!;
-      ctx.scale(dpr, dpr);
-      const cellSize = gridSize / DIMS.length;
-
-      const lookup = new Map<string, CouplingRow>();
-      for (const c of couplings) {
-        lookup.set(`${c.leader}:${c.follower}`, c);
-        lookup.set(`${c.follower}:${c.leader}`, { ...c, leader: c.follower, follower: c.leader });
-      }
-
-      ctx.fillStyle = '#444';
-      ctx.font = '9px SF Mono, Fira Code, monospace';
-      ctx.textAlign = 'right';
-      for (let i = 0; i < DIMS.length; i++) {
-        const y = labelTop + i * cellSize + cellSize / 2 + 3;
-        ctx.fillText(DIMS[i], labelLeft - 8, y);
-      }
-      ctx.textAlign = 'center';
-      for (let j = 0; j < DIMS.length; j++) {
-        ctx.save();
-        const x = labelLeft + j * cellSize + cellSize / 2;
-        ctx.translate(x, labelTop - 40);
-        ctx.rotate(-Math.PI / 4);
-        ctx.fillText(DIMS[j], 0, 0);
-        ctx.restore();
-      }
-
-      for (let i = 0; i < DIMS.length; i++) {
-        for (let j = 0; j < DIMS.length; j++) {
-          const x = labelLeft + j * cellSize;
-          const y = labelTop + i * cellSize;
-
-          if (i === j) {
-            ctx.fillStyle = '#0f0f0f';
-            ctx.fillRect(x, y, cellSize, cellSize);
-            continue;
-          }
-
-          const key = `${DIMS[i]}:${DIMS[j]}`;
-          const coupling = lookup.get(key);
-
-          if (coupling) {
-            const absCorr = Math.abs(coupling.correlation);
-            const alpha = Math.min(0.9, absCorr * 1.2);
-            if (coupling.direction > 0) {
-              ctx.fillStyle = `rgba(70, 130, 180, ${alpha})`;
-            } else {
-              ctx.fillStyle = `rgba(180, 70, 70, ${alpha})`;
-            }
-          } else {
-            ctx.fillStyle = '#0f0f0f';
-          }
-          ctx.fillRect(x, y, cellSize, cellSize);
-
-          ctx.strokeStyle = '#151515';
-          ctx.lineWidth = 0.5;
-          ctx.strokeRect(x, y, cellSize, cellSize);
-
-          if (coupling && Math.abs(coupling.correlation) >= 0.4) {
-            ctx.fillStyle = '#999';
-            ctx.font = '8px SF Mono, monospace';
-            ctx.textAlign = 'center';
-            const sign = coupling.direction > 0 ? '+' : '-';
-            ctx.fillText(sign + coupling.correlation.toFixed(2), x + cellSize / 2, y + cellSize / 2 + 3);
-          }
-        }
-      }
-
-      canvas.addEventListener('mousemove', (e) => {
-        const rect = canvas.getBoundingClientRect();
-        const mx = e.clientX - rect.left;
-        const my = e.clientY - rect.top;
-        const j = Math.floor((mx - labelLeft) / cellSize);
-        const i = Math.floor((my - labelTop) / cellSize);
-
-        if (i >= 0 && i < DIMS.length && j >= 0 && j < DIMS.length && i !== j) {
-          const key = `${DIMS[i]}:${DIMS[j]}`;
-          const coupling = lookup.get(key);
-          const tooltip = document.getElementById('tooltip')!;
-          if (coupling) {
-            const sign = coupling.direction > 0 ? '+' : '-';
-            const lagLabel = coupling.lag_sessions === 0 ? 'concurrent' : `lag-${coupling.lag_sessions}`;
-            tooltip.innerHTML = `${coupling.leader} &rarr; ${coupling.follower}<br>r = ${sign}${coupling.correlation.toFixed(3)}<br>${lagLabel}`;
-          } else {
-            tooltip.innerHTML = `${DIMS[i]} &rarr; ${DIMS[j]}<br>no significant coupling`;
-          }
-          tooltip.style.display = 'block';
-          tooltip.style.left = (e.clientX + 12) + 'px';
-          tooltip.style.top = (e.clientY - 10) + 'px';
-        } else {
-          document.getElementById('tooltip')!.style.display = 'none';
-        }
+      fetch('/api/observatory/coupling').then(r => r.json()).then(data => {
+        document.getElementById('counts').textContent =
+          `${data.behavioralCount} behavioral · ${data.semanticCount} semantic`;
+        renderDynamicsTable(data.behavioralDynamics, document.getElementById('beh-dyn'));
+        renderDynamicsTable(data.semanticDynamics, document.getElementById('sem-dyn'));
+        renderCouplingTable(data.behavioralCouplings, document.getElementById('beh-coupling'));
+        renderCouplingTable(data.semanticCouplings, document.getElementById('sem-coupling'));
+        renderEmotionCoupling(data.emotionCouplings, document.getElementById('emo-coupling'));
+      }).catch(err => {
+        document.querySelector('.frame').innerHTML += `<div class="panel" style="border-color:#a04545;color:#a04545;">load failed: ${err?.message ?? err}</div>`;
       });
-
-      canvas.addEventListener('mouseleave', () => {
-        document.getElementById('tooltip')!.style.display = 'none';
-      });
-
-      canvas.addEventListener('click', async (e) => {
-        const rect = canvas.getBoundingClientRect();
-        const mx = e.clientX - rect.left;
-        const my = e.clientY - rect.top;
-        const j = Math.floor((mx - labelLeft) / cellSize);
-        const i = Math.floor((my - labelTop) / cellSize);
-
-        if (i >= 0 && i < DIMS.length && j >= 0 && j < DIMS.length && i !== j) {
-          const key = `${DIMS[i]}:${DIMS[j]}`;
-          const coupling = lookup.get(key);
-          if (coupling && Math.abs(coupling.correlation) >= 0.3) {
-            await showOverlay(coupling);
-          }
-        }
-      });
-    }
-
-    async function showOverlay(coupling: CouplingRow) {
-      if (!statesData) {
-        const res = await fetch('/api/observatory/states');
-        const data = await res.json();
-        statesData = data.states;
-      }
-      const states = statesData!;
-
-      const overlay = document.getElementById('overlay')!;
-      const title = document.getElementById('overlay-title')!;
-      const sign = coupling.direction > 0 ? '+' : '-';
-      const lagLabel = coupling.lag_sessions === 0 ? 'concurrent' : `lag-${coupling.lag_sessions}`;
-      title.textContent = `${coupling.leader} \u2192 ${coupling.follower}  r=${sign}${coupling.correlation.toFixed(3)}  (${lagLabel})`;
-
-      const canvas = document.getElementById('overlay-canvas') as HTMLCanvasElement;
-      const dpr = window.devicePixelRatio || 1;
-      const w = 600, h = 300;
-      canvas.width = w * dpr;
-      canvas.height = h * dpr;
-      canvas.style.width = w + 'px';
-      canvas.style.height = h + 'px';
-      const ctx = canvas.getContext('2d')!;
-      ctx.scale(dpr, dpr);
-
-      ctx.fillStyle = '#0a0a0a';
-      ctx.fillRect(0, 0, w, h);
-
-      const pad = { left: 40, right: 20, top: 20, bottom: 30 };
-      const plotW = w - pad.left - pad.right;
-      const plotH = h - pad.top - pad.bottom;
-
-      const leaderVals = states.map((s: any) => s[coupling.leader] as number);
-      const followerVals = states.map((s: any) => s[coupling.follower] as number);
-      const allVals = [...leaderVals, ...followerVals];
-      const maxAbs = Math.max(3, ...allVals.map(Math.abs));
-
-      const n = states.length;
-      const xStep = n > 1 ? plotW / (n - 1) : plotW;
-      const toX = (i: number) => pad.left + i * xStep;
-      const toY = (v: number) => pad.top + plotH / 2 - (v / maxAbs) * (plotH / 2);
-
-      ctx.strokeStyle = '#222';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(pad.left, toY(0));
-      ctx.lineTo(w - pad.right, toY(0));
-      ctx.stroke();
-
-      ctx.strokeStyle = COLORS[coupling.leader] || '#666';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      for (let i = 0; i < n; i++) {
-        const x = toX(i);
-        const y = toY(leaderVals[i]);
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      }
-      ctx.stroke();
-
-      ctx.strokeStyle = COLORS[coupling.follower] || '#888';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([4, 3]);
-      ctx.beginPath();
-      const lag = coupling.lag_sessions;
-      for (let i = 0; i < n; i++) {
-        const x = toX(i + lag);
-        if (x > w - pad.right) break;
-        const y = toY(followerVals[i]);
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      }
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      ctx.font = '10px SF Mono, monospace';
-      ctx.fillStyle = COLORS[coupling.leader] || '#666';
-      ctx.fillText(coupling.leader, pad.left, h - 8);
-      ctx.fillStyle = COLORS[coupling.follower] || '#888';
-      ctx.fillText(`${coupling.follower} (shifted +${lag})`, pad.left + 120, h - 8);
-
-      overlay.classList.add('active');
-    }
-
-    function renderEmotionTable(emotionCouplings: EmotionCouplingRow[]) {
-      const tbody = document.querySelector('#emotion-table tbody')!;
-      const top15 = emotionCouplings
-        .sort((a, b) => Math.abs(b.correlation) - Math.abs(a.correlation))
-        .slice(0, 15);
-
-      tbody.innerHTML = top15.map(c => {
-        const sign = c.direction > 0 ? '+' : '-';
-        const corrClass = c.direction > 0 ? 'corr-positive' : 'corr-negative';
-        const lagLabel = c.lag_sessions === 0 ? 'concurrent' : `lag-${c.lag_sessions}`;
-        return `<tr>
-          <td>${c.emotion_dim}</td>
-          <td>${c.behavior_dim}</td>
-          <td>${lagLabel}</td>
-          <td class="${corrClass}">${sign}${c.correlation.toFixed(3)}</td>
-          <td>${c.direction > 0 ? 'same' : 'opposite'}</td>
-        </tr>`;
-      }).join('');
-    }
-
-    function renderDynamics(dynamics: DynamicRow[]) {
-      const grid = document.getElementById('dynamics-grid')!;
-      grid.innerHTML = dynamics.map(d => {
-        const attractorLabel = d.attractor_force >= 0.7 ? 'rigid' : d.attractor_force >= 0.4 ? 'moderate' : 'malleable';
-        const attractorClass = d.attractor_force >= 0.7 ? 'attractor-rigid' : d.attractor_force >= 0.4 ? 'attractor-moderate' : 'attractor-malleable';
-        return `<div class="dynamics-card">
-          <div class="dynamics-card-title">${d.dimension}</div>
-          <div class="dynamics-row"><span class="label">baseline</span><span class="value">${d.baseline >= 0 ? '+' : ''}${d.baseline.toFixed(3)}</span></div>
-          <div class="dynamics-row"><span class="label">variability</span><span class="value">${d.variability.toFixed(3)}</span></div>
-          <div class="dynamics-row"><span class="label">attractor</span><span class="value ${attractorClass}">${d.attractor_force.toFixed(3)} (${attractorLabel})</span></div>
-          <div class="dynamics-row"><span class="label">current</span><span class="value">${d.current_state >= 0 ? '+' : ''}${d.current_state.toFixed(3)}</span></div>
-          <div class="dynamics-row"><span class="label">deviation</span><span class="value">${d.deviation >= 0 ? '+' : ''}${d.deviation.toFixed(2)}\u03c3</span></div>
-        </div>`;
-      }).join('');
-    }
-
-    async function load() {
-      const res = await fetch('/api/observatory/coupling');
-      const data = await res.json();
-      couplingData = data.couplings;
-      renderDiscoveries(data.couplings, data.emotionCouplings, data.dynamics);
-      renderTheories(data.theories);
-      drawHeatmap(data.couplings);
-      renderEmotionTable(data.emotionCouplings);
-      renderDynamics(data.dynamics);
-    }
-
-    // Defer drawing until layout is stable
-    if (document.readyState === 'complete') {
-      requestAnimationFrame(() => requestAnimationFrame(load));
-    } else {
-      window.addEventListener('load', () => requestAnimationFrame(load));
-    }
-
-    // Overlay close
-    document.getElementById('overlay')!.addEventListener('click', (e) => {
-      if (e.target === document.getElementById('overlay') || e.target === document.getElementById('overlay-close')) {
-        document.getElementById('overlay')!.classList.remove('active');
-      }
-    });
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        document.getElementById('overlay')!.classList.remove('active');
-      }
-    });
-  </script>
-</body>
+    </script>
+  </body>
 </html>

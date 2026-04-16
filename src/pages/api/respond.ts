@@ -1,5 +1,9 @@
 import type { APIRoute } from 'astro';
-import { saveResponse, getTodaysQuestion, getTodaysResponse, saveSessionSummary, saveBurstSequence, getResponseCount } from '../../lib/db.ts';
+import {
+  saveResponse, getTodaysQuestion, getTodaysResponse,
+  saveSessionSummary, saveBurstSequence, getResponseCount,
+  updateDeletionEvents, saveSessionEvents, saveSessionMetadata, getBurstSequence,
+} from '../../lib/db.ts';
 import { runGeneration } from '../../lib/generate.ts';
 import { embedResponse } from '../../lib/embeddings.ts';
 import { logError } from '../../lib/error-log.ts';
@@ -7,6 +11,7 @@ import { localDateStr } from '../../lib/date.ts';
 import { computeLinguisticDensities } from '../../lib/linguistic.ts';
 import { computeMATTR } from '../../lib/alice-negative/helpers.ts';
 import { renderWitnessState } from '../../lib/alice-negative/render-witness.ts';
+import { computeSessionMetadata } from '../../lib/session-metadata.ts';
 
 // Note: runObservation (three-frame + prediction + suppressed question) and
 // runReflection (weekly narrative) removed 2026-04-16 in interpretive-layer
@@ -64,6 +69,34 @@ export const POST: APIRoute = async ({ request }) => {
     if (Array.isArray(sessionSummary.burstSequence) && sessionSummary.burstSequence.length > 0) {
       saveBurstSequence(questionId, sessionSummary.burstSequence);
     }
+
+    // Persist deletion event timing log (compact JSON) for slice-3 metadata
+    if (Array.isArray(sessionSummary.deletionEvents)) {
+      try {
+        const compact = sessionSummary.deletionEvents.map((d: any) => ({
+          c: Math.max(1, d.chars ?? d.c ?? 1),
+          t: Math.max(0, d.time ?? d.t ?? 0),
+        }));
+        updateDeletionEvents(questionId, JSON.stringify(compact));
+      } catch (err) {
+        logError('respond.deletionEvents', err, { questionId });
+      }
+    }
+
+    // Persist per-keystroke event log for read-only playback
+    if (Array.isArray(sessionSummary.eventLog) && sessionSummary.eventLog.length > 0) {
+      try {
+        saveSessionEvents({
+          question_id: questionId,
+          event_log_json: JSON.stringify(sessionSummary.eventLog),
+          total_events: sessionSummary.eventLog.length,
+          session_duration_ms: sessionSummary.totalDurationMs ?? 0,
+        });
+      } catch (err) {
+        logError('respond.sessionEvents', err, { questionId });
+      }
+    }
+
     saveSessionSummary({
       questionId: sessionSummary.questionId,
       firstKeystrokeMs: sessionSummary.firstKeystrokeMs ?? null,
@@ -109,6 +142,29 @@ export const POST: APIRoute = async ({ request }) => {
       hourOfDay: sessionSummary.hourOfDay ?? null,
       dayOfWeek: sessionSummary.dayOfWeek ?? null,
     });
+
+    // Compute and persist slice-3 session metadata (hour-typicality,
+    // deletion-density curve, burst trajectory shape, inter-burst interval,
+    // burst-deletion proximity). Pure deterministic, designer-facing only.
+    try {
+      const burstsForMeta = getBurstSequence(questionId);
+      const deletionEvents = Array.isArray(sessionSummary.deletionEvents)
+        ? sessionSummary.deletionEvents.map((d: any) => ({
+            c: Math.max(1, d.chars ?? d.c ?? 1),
+            t: Math.max(0, d.time ?? d.t ?? 0),
+          }))
+        : [];
+      const meta = computeSessionMetadata({
+        questionId,
+        hourOfDay: sessionSummary.hourOfDay ?? null,
+        totalDurationMs: sessionSummary.totalDurationMs ?? 0,
+        deletionEvents,
+        bursts: burstsForMeta,
+      });
+      saveSessionMetadata(meta);
+    } catch (err) {
+      logError('respond.sessionMetadata', err, { questionId });
+    }
   }
 
   const responseCount = getResponseCount();

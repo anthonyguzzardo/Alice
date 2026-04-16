@@ -1,8 +1,13 @@
 /**
- * Observatory Entry API — hardcoded to simulation DB.
+ * Observatory Entry API
+ *
+ * Returns full per-entry detail: behavioral 7D state + semantic 11D state
+ * + session summary + session metadata + replay availability + nav.
+ *
+ * Pulls from the live alice.db.
  */
 import type { APIRoute } from 'astro';
-import simDb from '../../../../lib/sim-db.ts';
+import db from '../../../../lib/db.ts';
 
 export const GET: APIRoute = async ({ params }) => {
   try {
@@ -14,8 +19,8 @@ export const GET: APIRoute = async ({ params }) => {
       });
     }
 
-    // Entry state + question context
-    const entryState = simDb.prepare(`
+    // Behavioral state + question context
+    const entryState = db.prepare(`
       SELECT es.*, q.scheduled_for as date, q.question_id, q.text as question_text
       FROM tb_entry_states es
       JOIN tb_responses r ON es.response_id = r.response_id
@@ -30,8 +35,20 @@ export const GET: APIRoute = async ({ params }) => {
       });
     }
 
+    // Semantic state
+    const semanticState = db.prepare(`
+      SELECT
+         syntactic_complexity, interrogation, self_focus, uncertainty
+        ,cognitive_processing
+        ,nrc_anger, nrc_fear, nrc_joy, nrc_sadness, nrc_trust, nrc_anticipation
+        ,sentiment, abstraction, agency_framing, temporal_orientation
+        ,convergence as semantic_convergence
+      FROM tb_semantic_states
+      WHERE response_id = ?
+    `).get(responseId) as any;
+
     // Session summary
-    const sessionSummary = simDb.prepare(`
+    const sessionSummary = db.prepare(`
       SELECT
         question_id as questionId,
         first_keystroke_ms as firstKeystrokeMs,
@@ -48,12 +65,16 @@ export const GET: APIRoute = async ({ params }) => {
         small_deletion_count as smallDeletionCount,
         large_deletion_count as largeDeletionCount,
         large_deletion_chars as largeDeletionChars,
+        first_half_deletion_chars as firstHalfDeletionChars,
+        second_half_deletion_chars as secondHalfDeletionChars,
         tab_away_count as tabAwayCount,
         total_tab_away_ms as totalTabAwayMs,
         p_burst_count as pBurstCount,
         avg_p_burst_length as avgPBurstLength,
         inter_key_interval_mean as interKeyIntervalMean,
         inter_key_interval_std as interKeyIntervalStd,
+        revision_chain_count as revisionChainCount,
+        revision_chain_avg_length as revisionChainAvgLength,
         hold_time_mean as holdTimeMean,
         hold_time_std as holdTimeStd,
         flight_time_mean as flightTimeMean,
@@ -62,6 +83,8 @@ export const GET: APIRoute = async ({ params }) => {
         mattr,
         avg_sentence_length as avgSentenceLength,
         sentence_length_variance as sentenceLengthVariance,
+        scroll_back_count as scrollBackCount,
+        question_reread_count as questionRereadCount,
         nrc_anger_density as nrcAngerDensity,
         nrc_fear_density as nrcFearDensity,
         nrc_joy_density as nrcJoyDensity,
@@ -78,23 +101,38 @@ export const GET: APIRoute = async ({ params }) => {
       WHERE question_id = ?
     `).get(entryState.question_id) as any;
 
-    // Observation / predictions / suppressed question / theory impact
-    // archived 2026-04-16 (interpretive-layer restructure). Data preserved
-    // under zz_archive_*_20260416 tables; not surfaced by the current app.
-    const observation = null;
-    const predictions: any[] = [];
-    const suppressedQuestion = null;
-    const resolvedByThis: any[] = [];
-    const theoryImpact: any[] = [];
+    // Session metadata (slice-3 follow-ups)
+    const metadata = db.prepare(`
+      SELECT hour_typicality, deletion_curve_type, burst_trajectory_shape,
+             inter_burst_interval_mean_ms, inter_burst_interval_std_ms,
+             deletion_during_burst_count, deletion_between_burst_count
+      FROM tb_session_metadata
+      WHERE question_id = ?
+      ORDER BY session_metadata_id DESC LIMIT 1
+    `).get(entryState.question_id) as any;
 
-    // Navigation: prev/next
-    const prev = simDb.prepare(`
+    // Burst sequence (for replay timeline scrubber)
+    const burstSequence = db.prepare(`
+      SELECT burst_index, burst_char_count, burst_duration_ms, burst_start_offset_ms
+      FROM tb_burst_sequences
+      WHERE question_id = ?
+      ORDER BY burst_index ASC
+    `).all(entryState.question_id) as any[];
+
+    // Replay availability
+    const replayRow = db.prepare(`
+      SELECT total_events, session_duration_ms FROM tb_session_events
+      WHERE question_id = ? ORDER BY session_event_id DESC LIMIT 1
+    `).get(entryState.question_id) as any;
+
+    // Navigation
+    const prev = db.prepare(`
       SELECT response_id FROM tb_entry_states
       WHERE entry_state_id < (SELECT entry_state_id FROM tb_entry_states WHERE response_id = ?)
       ORDER BY entry_state_id DESC LIMIT 1
     `).get(responseId) as any;
 
-    const next = simDb.prepare(`
+    const next = db.prepare(`
       SELECT response_id FROM tb_entry_states
       WHERE entry_state_id > (SELECT entry_state_id FROM tb_entry_states WHERE response_id = ?)
       ORDER BY entry_state_id ASC LIMIT 1
@@ -102,12 +140,15 @@ export const GET: APIRoute = async ({ params }) => {
 
     return new Response(JSON.stringify({
       entryState,
+      semanticState,
       sessionSummary,
-      observation,
-      predictions,
-      resolvedByThis,
-      theoryImpact,
-      suppressedQuestion,
+      metadata,
+      burstSequence,
+      replay: replayRow ? {
+        available: true,
+        totalEvents: replayRow.total_events,
+        durationMs: replayRow.session_duration_ms,
+      } : { available: false },
       navigation: {
         prev: prev?.response_id ?? null,
         next: next?.response_id ?? null,
@@ -115,8 +156,9 @@ export const GET: APIRoute = async ({ params }) => {
     }, null, 2), {
       headers: { 'Content-Type': 'application/json' },
     });
-  } catch (err) {
-    return new Response(JSON.stringify({ error: 'Failed to load entry' }), {
+  } catch (err: any) {
+    console.error('Observatory entry error:', err?.message || err);
+    return new Response(JSON.stringify({ error: 'Failed to load entry', detail: err?.message }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });

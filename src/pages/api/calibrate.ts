@@ -4,6 +4,8 @@ import { CALIBRATION_PROMPTS } from '../../lib/calibration-prompts.ts';
 import { computeLinguisticDensities } from '../../lib/linguistic.ts';
 import { computeMATTR } from '../../lib/alice-negative/helpers.ts';
 import { runCalibrationExtraction } from '../../lib/calibration-extract.ts';
+import { snapshotCalibrationBaselinesAfterSubmit } from '../../lib/calibration-drift.ts';
+import { logError } from '../../lib/error-log.ts';
 
 export const GET: APIRoute = () => {
   const used = new Set(getUsedCalibrationPrompts());
@@ -88,6 +90,14 @@ export const POST: APIRoute = async ({ request }) => {
   // Fire-and-forget: extract life-context tags from calibration response text.
   // Non-blocking — extraction failure never prevents calibration from succeeding.
   runCalibrationExtraction(questionId, text.trim(), prompt);
+
+  // Snapshot calibration baselines after this submission so drift can be
+  // tracked over time. Pure deterministic, fire-and-forget.
+  try {
+    snapshotCalibrationBaselinesAfterSubmit(sessionSummary.deviceType ?? null);
+  } catch (err) {
+    logError('calibrate.driftSnapshot', err, { questionId });
+  }
 
   return new Response(JSON.stringify({ ok: true }), {
     headers: { 'Content-Type': 'application/json' },

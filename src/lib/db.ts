@@ -311,6 +311,9 @@ db.exec(`
     -- SESSION METADATA (Czerwinski et al. 2004)
     ,scroll_back_count          INTEGER          -- times user scrolled back in textarea
     ,question_reread_count      INTEGER          -- times user scrolled to re-read question
+    -- DELETION EVENT LOG (slice 3 follow-up — for deletion-density curve classification)
+    -- JSON array: [{c: chars, t: ms_offset_from_session_start}, ...]
+    ,deletion_events_json       TEXT             -- per-deletion timing log
     -- CONTEXT
     ,device_type                TEXT             -- 'mobile' or 'desktop'
     ,user_agent                 TEXT             -- raw user agent string
@@ -476,6 +479,103 @@ db.exec(`
     -- FOOTER
     ,dttm_created_utc     TEXT    NOT NULL DEFAULT (datetime('now'))
     ,created_by           TEXT    NOT NULL DEFAULT 'client'
+  );
+
+  -- --------------------------------------------------------------------------
+  -- tb_session_metadata
+  -- --------------------------------------------------------------------------
+  -- PURPOSE: Per-session derived metadata signals from slice-3 follow-up work.
+  --          These signals do not perturb the 7D behavioral z-score discipline
+  --          or the semantic 11D vector — they live as session metadata that
+  --          will feed the joint embedding when distance-function work lands.
+  -- USE CASE: "Was today an unusual hour for the writer? What shape did the
+  --            burst sequence take? Where did deletions cluster?"
+  -- MUTABILITY: Append-only (one row per journal entry, computed at submit)
+  -- LOGICAL FK: question_id → tb_questions.question_id
+  -- FOOTER: dttm_created_utc, created_by
+  -- --------------------------------------------------------------------------
+  CREATE TABLE IF NOT EXISTS tb_session_metadata (
+     session_metadata_id           INTEGER PRIMARY KEY AUTOINCREMENT
+    ,question_id                   INTEGER NOT NULL
+    -- Time-of-day typicality: how typical is this hour for the writer?
+    -- Computed from circular kernel density on personal hour distribution.
+    ,hour_typicality               REAL    -- z-scored: 0 = typical, negative = unusual hour
+    -- Deletion-density curve classification (early-loaded / late-loaded /
+    -- uniform / bimodal / terminal-burst / none) computed from deletion_events_json
+    ,deletion_curve_type           TEXT
+    -- Burst trajectory shape from tb_burst_sequences:
+    --   monotonic_up / monotonic_down / u_shaped / inverted_u / flat / none
+    ,burst_trajectory_shape        TEXT
+    -- Burst rhythm: inter-burst interval distribution (ms between burst ends)
+    ,inter_burst_interval_mean_ms  REAL
+    ,inter_burst_interval_std_ms   REAL
+    -- Burst-deletion proximity: deletions inside bursts vs between bursts
+    ,deletion_during_burst_count   INTEGER
+    ,deletion_between_burst_count  INTEGER
+    -- FOOTER
+    ,dttm_created_utc              TEXT    DEFAULT (datetime('now'))
+    ,created_by                    TEXT    DEFAULT 'system'
+  );
+
+  -- --------------------------------------------------------------------------
+  -- tb_calibration_baselines_history
+  -- --------------------------------------------------------------------------
+  -- PURPOSE: Append-only snapshot of calibration baselines after each
+  --          calibration submission. Drift in the reference frame itself is
+  --          signal — if calibration is supposed to be stable, baseline
+  --          drift over time is its own designer-facing health metric.
+  -- USE CASE: "Did the writer's neutral-writing baseline drift this month?"
+  -- MUTABILITY: Append-only
+  -- FOOTER: dttm_created_utc, created_by
+  -- --------------------------------------------------------------------------
+  CREATE TABLE IF NOT EXISTS tb_calibration_baselines_history (
+     calibration_history_id        INTEGER PRIMARY KEY AUTOINCREMENT
+    ,calibration_session_count     INTEGER NOT NULL
+    ,device_type                   TEXT
+    -- snapshot of baselines at this calibration count
+    ,avg_first_keystroke_ms        REAL
+    ,avg_commitment_ratio          REAL
+    ,avg_duration_ms               REAL
+    ,avg_pause_count               REAL
+    ,avg_deletion_count            REAL
+    ,avg_chars_per_minute          REAL
+    ,avg_p_burst_length            REAL
+    ,avg_small_deletion_count      REAL
+    ,avg_large_deletion_count      REAL
+    ,avg_iki_mean                  REAL
+    ,avg_hold_time_mean            REAL
+    ,avg_flight_time_mean          REAL
+    -- L2 distance from previous snapshot (z-scored per dimension before sum)
+    ,drift_magnitude               REAL
+    -- FOOTER
+    ,dttm_created_utc              TEXT    DEFAULT (datetime('now'))
+    ,created_by                    TEXT    DEFAULT 'system'
+  );
+
+  -- --------------------------------------------------------------------------
+  -- tb_session_events
+  -- --------------------------------------------------------------------------
+  -- PURPOSE: Per-keystroke event log enabling read-only playback of the
+  --          original writing session at original tempo. Stored as a compact
+  --          JSON array of event tuples to keep insert/scan cheap.
+  -- USE CASE: "Re-watch the keystroke timeline of session N at real tempo."
+  -- EVENT FORMAT: [t_offset_ms, event_type, payload]
+  --   event_type: 'kd' (keydown), 'ku' (keyup), 'tx' (text-snapshot)
+  --   payload:    key string for kd/ku, full text for tx (sparse — only on
+  --               state transitions worth replaying)
+  -- MUTABILITY: Append-only (one row per session, one big JSON blob)
+  -- LOGICAL FK: question_id → tb_questions.question_id
+  -- FOOTER: dttm_created_utc, created_by
+  -- --------------------------------------------------------------------------
+  CREATE TABLE IF NOT EXISTS tb_session_events (
+     session_event_id      INTEGER PRIMARY KEY AUTOINCREMENT
+    ,question_id           INTEGER NOT NULL
+    ,event_log_json        TEXT    NOT NULL
+    ,total_events          INTEGER NOT NULL
+    ,session_duration_ms   INTEGER NOT NULL
+    -- FOOTER
+    ,dttm_created_utc      TEXT    DEFAULT (datetime('now'))
+    ,created_by            TEXT    DEFAULT 'client'
   );
 
   CREATE TABLE IF NOT EXISTS tb_witness_states (
@@ -945,6 +1045,18 @@ try {
 }
 
 // --------------------------------------------------------------------------
+// MIGRATION: Add deletion_events_json for slice-3 deletion-density curve
+// --------------------------------------------------------------------------
+try {
+  const cols4 = db.prepare(`PRAGMA table_info(tb_session_summaries)`).all() as Array<{ name: string }>;
+  if (!cols4.some(c => c.name === 'deletion_events_json')) {
+    db.exec(`ALTER TABLE tb_session_summaries ADD COLUMN deletion_events_json TEXT`);
+  }
+} catch {
+  // safe to ignore
+}
+
+// --------------------------------------------------------------------------
 // MIGRATION: Add hold time + flight time delta columns to tb_session_delta
 // --------------------------------------------------------------------------
 try {
@@ -1191,6 +1303,150 @@ export function getBurstSequence(questionId: number): Array<BurstEntry & { burst
     WHERE question_id = ?
     ORDER BY burst_index ASC
   `).all(questionId) as Array<BurstEntry & { burstIndex: number }>;
+}
+
+// ----------------------------------------------------------------------------
+// SESSION METADATA (slice-3 follow-up signals)
+// ----------------------------------------------------------------------------
+
+export interface SessionMetadataRow {
+  session_metadata_id: number;
+  question_id: number;
+  hour_typicality: number | null;
+  deletion_curve_type: string | null;
+  burst_trajectory_shape: string | null;
+  inter_burst_interval_mean_ms: number | null;
+  inter_burst_interval_std_ms: number | null;
+  deletion_during_burst_count: number | null;
+  deletion_between_burst_count: number | null;
+}
+
+export function saveSessionMetadata(row: Omit<SessionMetadataRow, 'session_metadata_id'>): number {
+  const result = db.prepare(`
+    INSERT INTO tb_session_metadata (
+       question_id, hour_typicality, deletion_curve_type, burst_trajectory_shape,
+       inter_burst_interval_mean_ms, inter_burst_interval_std_ms,
+       deletion_during_burst_count, deletion_between_burst_count
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    row.question_id, row.hour_typicality, row.deletion_curve_type, row.burst_trajectory_shape,
+    row.inter_burst_interval_mean_ms, row.inter_burst_interval_std_ms,
+    row.deletion_during_burst_count, row.deletion_between_burst_count,
+  );
+  return Number(result.lastInsertRowid);
+}
+
+export function getSessionMetadata(questionId: number): SessionMetadataRow | null {
+  return db.prepare(
+    `SELECT * FROM tb_session_metadata WHERE question_id = ? ORDER BY session_metadata_id DESC LIMIT 1`
+  ).get(questionId) as SessionMetadataRow | null;
+}
+
+export function getAllSessionMetadata(): SessionMetadataRow[] {
+  return db.prepare(
+    `SELECT * FROM tb_session_metadata ORDER BY session_metadata_id ASC`
+  ).all() as SessionMetadataRow[];
+}
+
+export function getMetadataQuestionIdsAlreadyComputed(): Set<number> {
+  const rows = db.prepare(`SELECT DISTINCT question_id FROM tb_session_metadata`).all() as Array<{ question_id: number }>;
+  return new Set(rows.map(r => r.question_id));
+}
+
+// ----------------------------------------------------------------------------
+// CALIBRATION BASELINES HISTORY (drift substrate)
+// ----------------------------------------------------------------------------
+
+export interface CalibrationHistoryRow {
+  calibration_history_id: number;
+  calibration_session_count: number;
+  device_type: string | null;
+  avg_first_keystroke_ms: number | null;
+  avg_commitment_ratio: number | null;
+  avg_duration_ms: number | null;
+  avg_pause_count: number | null;
+  avg_deletion_count: number | null;
+  avg_chars_per_minute: number | null;
+  avg_p_burst_length: number | null;
+  avg_small_deletion_count: number | null;
+  avg_large_deletion_count: number | null;
+  avg_iki_mean: number | null;
+  avg_hold_time_mean: number | null;
+  avg_flight_time_mean: number | null;
+  drift_magnitude: number | null;
+}
+
+export function saveCalibrationBaselineSnapshot(row: Omit<CalibrationHistoryRow, 'calibration_history_id'>): number {
+  const result = db.prepare(`
+    INSERT INTO tb_calibration_baselines_history (
+       calibration_session_count, device_type,
+       avg_first_keystroke_ms, avg_commitment_ratio, avg_duration_ms,
+       avg_pause_count, avg_deletion_count, avg_chars_per_minute,
+       avg_p_burst_length, avg_small_deletion_count, avg_large_deletion_count,
+       avg_iki_mean, avg_hold_time_mean, avg_flight_time_mean,
+       drift_magnitude
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    row.calibration_session_count, row.device_type,
+    row.avg_first_keystroke_ms, row.avg_commitment_ratio, row.avg_duration_ms,
+    row.avg_pause_count, row.avg_deletion_count, row.avg_chars_per_minute,
+    row.avg_p_burst_length, row.avg_small_deletion_count, row.avg_large_deletion_count,
+    row.avg_iki_mean, row.avg_hold_time_mean, row.avg_flight_time_mean,
+    row.drift_magnitude,
+  );
+  return Number(result.lastInsertRowid);
+}
+
+export function getCalibrationHistory(): CalibrationHistoryRow[] {
+  return db.prepare(
+    `SELECT * FROM tb_calibration_baselines_history ORDER BY calibration_history_id ASC`
+  ).all() as CalibrationHistoryRow[];
+}
+
+export function getLatestCalibrationSnapshot(deviceType?: string | null): CalibrationHistoryRow | null {
+  if (deviceType) {
+    return db.prepare(
+      `SELECT * FROM tb_calibration_baselines_history WHERE device_type = ?
+       ORDER BY calibration_history_id DESC LIMIT 1`
+    ).get(deviceType) as CalibrationHistoryRow | null;
+  }
+  return db.prepare(
+    `SELECT * FROM tb_calibration_baselines_history WHERE device_type IS NULL
+     ORDER BY calibration_history_id DESC LIMIT 1`
+  ).get() as CalibrationHistoryRow | null;
+}
+
+// ----------------------------------------------------------------------------
+// SESSION EVENTS (per-keystroke event log for playback)
+// ----------------------------------------------------------------------------
+
+export interface SessionEventsRow {
+  session_event_id: number;
+  question_id: number;
+  event_log_json: string;
+  total_events: number;
+  session_duration_ms: number;
+}
+
+export function saveSessionEvents(row: Omit<SessionEventsRow, 'session_event_id'>): number {
+  const result = db.prepare(`
+    INSERT INTO tb_session_events (question_id, event_log_json, total_events, session_duration_ms)
+    VALUES (?, ?, ?, ?)
+  `).run(row.question_id, row.event_log_json, row.total_events, row.session_duration_ms);
+  return Number(result.lastInsertRowid);
+}
+
+export function getSessionEvents(questionId: number): SessionEventsRow | null {
+  return db.prepare(
+    `SELECT * FROM tb_session_events WHERE question_id = ? ORDER BY session_event_id DESC LIMIT 1`
+  ).get(questionId) as SessionEventsRow | null;
+}
+
+// Save deletion events JSON onto the session summary row
+export function updateDeletionEvents(questionId: number, deletionEventsJson: string): void {
+  db.prepare(
+    `UPDATE tb_session_summaries SET deletion_events_json = ? WHERE question_id = ?`
+  ).run(deletionEventsJson, questionId);
 }
 
 const SESSION_SUMMARY_COLS = `
