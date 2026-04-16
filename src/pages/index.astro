@@ -1185,7 +1185,7 @@
               questionEl.textContent = '';
               showDoneState(resData.askFeedback ? questionId : null);
             } else {
-              submitBtn.textContent = 'close';
+              submitBtn.textContent = 'done';
               submitBtn.disabled = false;
             }
           });
@@ -1609,7 +1609,7 @@
             `;
             document.getElementById('another-btn')!.addEventListener('click', startFreeWrite);
           } else {
-            submitBtn.textContent = 'close';
+            submitBtn.textContent = 'done';
             submitBtn.disabled = false;
           }
         });
