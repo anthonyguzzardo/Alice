@@ -9,6 +9,7 @@
  * Controls: play / pause / scrub / speed (0.5x, 1x, 2x, 4x, 8x).
  * The textarea is read-only and grows with the snapshot text.
  */
+import '../../../styles/observatory.css';
 const { questionId } = Astro.params;
 const qId = parseInt(questionId ?? '', 10);
 ---
@@ -18,95 +19,24 @@ const qId = parseInt(questionId ?? '', 10);
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Replay · session {qId}</title>
-    <style>
-      :root {
-        --bg: #fafaf8;
-        --fg: #1a1a1a;
-        --dim: #6e6e6e;
-        --accent: #3a6ea5;
-        --rule: #d8d4cc;
-      }
-      * { box-sizing: border-box; }
-      body {
-        margin: 0;
-        font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
-        background: var(--bg);
-        color: var(--fg);
-      }
-      .frame { max-width: 800px; margin: 40px auto; padding: 0 24px; }
-      h1 {
-        font-size: 14px; font-weight: 500; letter-spacing: 0.04em;
-        text-transform: uppercase; color: var(--dim); margin: 0 0 4px;
-      }
-      .question {
-        font-size: 22px; line-height: 1.4; font-weight: 300;
-        color: var(--fg); margin: 0 0 24px;
-      }
-      .meta {
-        font-family: 'SF Mono', monospace; font-size: 11px;
-        color: var(--dim); margin-bottom: 16px;
-      }
-      .surface {
-        position: relative;
-        min-height: 320px;
-        padding: 24px;
-        border: 1px solid var(--rule);
-        border-radius: 4px;
-        background: white;
-        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-        font-size: 17px; line-height: 1.55;
-        white-space: pre-wrap; word-wrap: break-word;
-        color: var(--fg);
-      }
-      .controls {
-        margin-top: 16px;
-        display: flex; align-items: center; gap: 12px;
-        font-family: 'SF Mono', monospace; font-size: 12px;
-      }
-      .btn {
-        padding: 6px 14px; border: 1px solid var(--rule);
-        background: white; color: var(--fg); cursor: pointer;
-        font-family: inherit; font-size: 12px;
-      }
-      .btn:hover { background: #f0ede4; }
-      .btn.primary { background: var(--accent); color: white; border-color: var(--accent); }
-      .btn.primary:hover { background: #2c5680; }
-      .scrubber {
-        flex: 1; -webkit-appearance: none; appearance: none;
-        height: 4px; background: var(--rule); border-radius: 2px;
-      }
-      .scrubber::-webkit-slider-thumb {
-        -webkit-appearance: none; appearance: none;
-        width: 12px; height: 12px; border-radius: 50%;
-        background: var(--accent); cursor: pointer;
-      }
-      .timecode { color: var(--dim); min-width: 80px; }
-      .speed-pick { display: flex; gap: 4px; }
-      .speed-pick button {
-        padding: 4px 8px; border: 1px solid var(--rule);
-        background: white; cursor: pointer; font-family: inherit; font-size: 11px;
-      }
-      .speed-pick button.on { background: var(--accent); color: white; border-color: var(--accent); }
-      .nav {
-        display: flex; gap: 16px; margin: 24px 0;
-        font-family: 'SF Mono', monospace; font-size: 12px;
-      }
-      .nav a { color: var(--dim); text-decoration: none; }
-      .nav a:hover { color: var(--accent); }
-      .empty {
-        padding: 48px 24px; text-align: center;
-        color: var(--dim); font-family: 'SF Mono', monospace; font-size: 12px;
-      }
+    <script is:inline>
+      (function () {
+        var t = localStorage.getItem('alice-theme') || 'light';
+        document.documentElement.setAttribute('data-theme', t);
+      })();
+    </script>
+    <style is:global>
+      .replay-frame { max-width: 820px; }
     </style>
   </head>
   <body>
-    <div class="frame">
-      <div class="nav">
+    <div class="frame replay-frame">
+      <div class="nav-row">
         <a href={`/observatory/entry/${qId}`}>← back to entry</a>
       </div>
-      <h1>Replay</h1>
-      <div class="question" id="question">loading…</div>
-      <div class="meta" id="meta"></div>
+      <p class="replay-label">Replay</p>
+      <div class="replay-question" id="question">loading…</div>
+      <div class="replay-label" id="meta" style="margin-bottom:1rem;"></div>
       <div class="surface" id="surface"></div>
       <div class="controls">
         <button class="btn primary" id="play">play</button>

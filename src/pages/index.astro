@@ -552,8 +552,7 @@
       // nav) steal focus when clicked; this snaps it back. Deferred to the
       // next tick so the clicked element can run its own handler first
       // (including DOM replacements like free-write → calibration surface).
-      // Exclusions: form controls (don't steal from checkbox/slider in the
-      // calibration target UI), panel content (let you interact with open
+      // Exclusions: form controls, panel content (let you interact with open
       // popovers), and links (they navigate away).
       document.addEventListener('click', (e) => {
         const t = e.target as HTMLElement | null;
@@ -1284,24 +1283,8 @@
 
         const pageOpenTime = Date.now();
 
-        // Calibration length slider (slice-3 follow-up).
-        // Optional research-flexibility surface: target a specific length so
-        // calibration stays comparable across sessions for whoever opts in.
-        // Default OFF — toggling ON reveals a slider with a progress dot.
-        // Stored target in localStorage so the user's preference persists.
-        const savedTarget = parseInt(localStorage.getItem('alice-cal-target-words') || '0', 10);
-        const targetEnabled = savedTarget > 0;
         const formHtml = document.createElement('div');
         formHtml.innerHTML = `
-          <div class="cal-target-row" style="display:flex;align-items:center;gap:12px;font-family:'SF Mono',monospace;font-size:11px;color:#9b9b9b;margin-bottom:12px;">
-            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-              <input type="checkbox" id="cal-target-toggle" ${targetEnabled ? 'checked' : ''} />
-              target length
-            </label>
-            <input type="range" id="cal-target-slider" min="50" max="500" step="25" value="${targetEnabled ? savedTarget : 150}" style="flex:1;max-width:200px;display:${targetEnabled ? 'inline-block' : 'none'};" />
-            <span id="cal-target-display" style="display:${targetEnabled ? 'inline-block' : 'none'};">aim for ~<span id="cal-target-words">${targetEnabled ? savedTarget : 150}</span> words</span>
-            <span id="cal-target-progress" style="display:${targetEnabled ? 'inline-block' : 'none'};color:#3a6ea5;"></span>
-          </div>
           <textarea
             class="response-area"
             id="response"
@@ -1315,35 +1298,6 @@
           </div>
         `;
         inputArea.appendChild(formHtml);
-
-        // Wire the target-length slider behavior
-        const calTargetToggle = document.getElementById('cal-target-toggle') as HTMLInputElement;
-        const calTargetSlider = document.getElementById('cal-target-slider') as HTMLInputElement;
-        const calTargetDisplay = document.getElementById('cal-target-display') as HTMLSpanElement;
-        const calTargetWords = document.getElementById('cal-target-words') as HTMLSpanElement;
-        const calTargetProgress = document.getElementById('cal-target-progress') as HTMLSpanElement;
-        let calTargetWordsVal = parseInt(calTargetSlider?.value || '150', 10);
-        function renderCalProgress(currentWords: number) {
-          if (!calTargetToggle?.checked) return;
-          const pct = Math.min(100, Math.round((currentWords / calTargetWordsVal) * 100));
-          calTargetProgress.textContent = `${currentWords}/${calTargetWordsVal} (${pct}%)`;
-        }
-        calTargetToggle?.addEventListener('change', () => {
-          const on = calTargetToggle.checked;
-          calTargetSlider.style.display = on ? 'inline-block' : 'none';
-          calTargetDisplay.style.display = on ? 'inline-block' : 'none';
-          calTargetProgress.style.display = on ? 'inline-block' : 'none';
-          localStorage.setItem('alice-cal-target-words', on ? String(calTargetWordsVal) : '0');
-          if (on) renderCalProgress(((document.getElementById('response') as HTMLTextAreaElement).value.trim().split(/\s+/).filter(Boolean).length) || 0);
-        });
-        calTargetSlider?.addEventListener('input', () => {
-          calTargetWordsVal = parseInt(calTargetSlider.value, 10);
-          calTargetWords.textContent = String(calTargetWordsVal);
-          if (calTargetToggle.checked) {
-            localStorage.setItem('alice-cal-target-words', String(calTargetWordsVal));
-            renderCalProgress(((document.getElementById('response') as HTMLTextAreaElement).value.trim().split(/\s+/).filter(Boolean).length) || 0);
-          }
-        });
 
         const textarea = document.getElementById('response') as HTMLTextAreaElement;
         const submitBtn = document.getElementById('submit') as HTMLButtonElement;
@@ -1453,12 +1407,6 @@
           const now = Date.now();
           const currentLength = textarea.value.length;
           const delta = currentLength - lastTextLength;
-
-          // Calibration target-length progress (slider opt-in)
-          if (calTargetToggle?.checked) {
-            const wc = textarea.value.trim().split(/\s+/).filter(Boolean).length;
-            renderCalProgress(wc);
-          }
 
           if (delta > 0) {
             totalCharsTyped += delta;

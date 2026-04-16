@@ -9,6 +9,7 @@
  *
  * No user surfaces. The /observatory/* tree is for the designer only.
  */
+import '../../styles/observatory.css';
 ---
 <!doctype html>
 <html lang="en">
@@ -16,92 +17,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Observatory · Alice</title>
-    <style>
-      :root {
-        --bg: #fafaf8;
-        --fg: #1a1a1a;
-        --dim: #6e6e6e;
-        --faint: #9b9b9b;
-        --rule: #d8d4cc;
-        --accent: #3a6ea5;
-        --semantic: #7a5a7a;
-        --emotion: #8a5a44;
-        --positive: #4d7a4d;
-        --negative: #a04545;
-        --panel: #ffffff;
-      }
-      * { box-sizing: border-box; }
-      body {
-        margin: 0;
-        font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
-        background: var(--bg);
-        color: var(--fg);
-      }
-      .frame { max-width: 1100px; margin: 32px auto; padding: 0 24px; }
-      header {
-        display: flex; justify-content: space-between; align-items: baseline;
-        border-bottom: 1px solid var(--rule); padding-bottom: 16px; margin-bottom: 24px;
-      }
-      h1 { font-size: 18px; font-weight: 500; margin: 0; }
-      nav { display: flex; gap: 16px; font-family: 'SF Mono', monospace; font-size: 12px; }
-      nav a { color: var(--dim); text-decoration: none; }
-      nav a:hover, nav a.active { color: var(--accent); }
-      .meta-row {
-        display: flex; gap: 24px; margin-bottom: 32px;
-        font-family: 'SF Mono', monospace; font-size: 12px; color: var(--dim);
-      }
-
-      .panel {
-        background: var(--panel); border: 1px solid var(--rule);
-        border-radius: 4px; padding: 20px; margin-bottom: 20px;
-      }
-      .panel h2 {
-        font-size: 11px; font-weight: 500; letter-spacing: 0.06em;
-        text-transform: uppercase; color: var(--dim); margin: 0 0 14px;
-      }
-      .insights p { margin: 0 0 8px; line-height: 1.5; }
-      .insights .src {
-        display: inline-block; font-family: 'SF Mono', monospace; font-size: 10px;
-        color: var(--faint); margin-right: 6px; vertical-align: middle;
-      }
-
-      .grid-two { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-      @media (max-width: 720px) { .grid-two { grid-template-columns: 1fr; } }
-
-      .arc, .discovery {
-        padding: 10px 0; border-bottom: 1px solid var(--rule); font-size: 14px;
-      }
-      .arc:last-child, .discovery:last-child { border-bottom: none; }
-      .discovery .ev {
-        font-family: 'SF Mono', monospace; font-size: 11px; color: var(--dim);
-      }
-
-      table { width: 100%; border-collapse: collapse; font-size: 13px; }
-      th, td {
-        padding: 8px 10px; text-align: left;
-        border-bottom: 1px solid var(--rule);
-      }
-      th { font-weight: 500; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.04em; }
-      td.num { font-family: 'SF Mono', monospace; text-align: right; }
-      td a { color: var(--accent); text-decoration: none; font-family: 'SF Mono', monospace; font-size: 12px; }
-      td a:hover { text-decoration: underline; }
-
-      .pill {
-        display: inline-block; padding: 2px 8px; border-radius: 10px;
-        font-family: 'SF Mono', monospace; font-size: 10px;
-      }
-      .pill.high { background: #f0e8d8; color: #6a5510; }
-      .pill.mod  { background: #e8e4d8; color: var(--dim); }
-
-      .spark {
-        display: inline-block; height: 24px; width: 80px;
-      }
-
-      .empty {
-        padding: 40px 20px; text-align: center; color: var(--dim);
-        font-family: 'SF Mono', monospace; font-size: 12px;
-      }
-    </style>
+    <script is:inline>
+      (function () {
+        var t = localStorage.getItem('alice-theme') || 'light';
+        document.documentElement.setAttribute('data-theme', t);
+      })();
+    </script>
   </head>
   <body>
     <div class="frame">
@@ -157,8 +78,8 @@
       function dotColor(z) {
         if (z == null) return '#ddd';
         if (Math.abs(z) < 1) return '#555';
-        if (z > 0) return '#4d7a4d';
-        return '#a04545';
+        if (z > 0) return '#6b8e6b';
+        return '#b5603f';
       }
 
       function renderInsights(insights, container) {
@@ -175,7 +96,7 @@
         }
         container.innerHTML = arcs.map(a => `
           <div class="arc">
-            <span class="src" style="font-family:'SF Mono',monospace;font-size:10px;color:var(--faint);margin-right:6px;">[${a.space}]</span>
+            <span class="src">[${a.space}]</span>
             ${a.text}
           </div>
         `).join('');
@@ -194,7 +115,7 @@
         `).join('');
       }
 
-      function sparkline(values, color = '#3a6ea5') {
+      function sparkline(values, color = '#7a5a44') {
         const n = values.length;
         if (n < 2) return '<span class="spark"></span>';
         const min = Math.min(...values);
@@ -216,7 +137,7 @@
         }
 
         const cols = ['date', 'flu', 'del', 'rev', 'com', 'vol', 'thm', 'prs', 'sem-conv', 'meta', 'replay'];
-        const head = `<tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr>`;
+        const head = `<thead><tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr></thead>`;
         const rows = states.map(s => {
           const beh = BEHAVIORAL_DIMS.map(d => `<td class="num" style="color:${dotColor(s[d])}">${fmtZ(s[d])}</td>`).join('');
           const semConv = s.semantic ? fmtZ(s.semantic.semantic_convergence) : '—';
@@ -229,18 +150,18 @@
             metaParts.push(`hr:${s.metadata.hour_typicality > 0 ? 'typical' : 'unusual'}`);
           const meta = metaParts.length ? metaParts.join(' · ') : '—';
           const replay = s.replayAvailable
-            ? `<a href="/observatory/replay/${s.question_id}">replay</a>`
-            : '<span style="color:var(--faint);font-size:11px;">—</span>';
+            ? `<a class="action-btn" href="/observatory/replay/${s.question_id}">▶ replay</a>`
+            : '<span class="action-btn-muted">—</span>';
           return `<tr>
             <td><a href="/observatory/entry/${s.response_id}">${s.date}</a></td>
             ${beh}
             <td class="num">${semConv}</td>
-            <td style="font-family:'SF Mono',monospace;font-size:11px;color:var(--dim);">${meta}</td>
+            <td class="meta">${meta}</td>
             <td>${replay}</td>
           </tr>`;
         }).join('');
 
-        container.innerHTML = `<table>${head}${rows}</table>`;
+        container.innerHTML = `<table>${head}<tbody>${rows}</tbody></table>`;
       }
 
       function renderCalDrift(payload, container) {
@@ -254,17 +175,17 @@
         const avg = drifts.length ? (drifts.reduce((a,b)=>a+b,0) / drifts.length).toFixed(3) : '—';
         const latestDrift = latest.drift_magnitude != null ? latest.drift_magnitude.toFixed(3) : '—';
         container.innerHTML = `
-          <div style="display:flex;align-items:center;gap:24px;">
-            <div>
-              <div style="font-family:'SF Mono',monospace;font-size:11px;color:var(--dim);">latest drift (z-norm L2)</div>
-              <div style="font-family:'SF Mono',monospace;font-size:18px;">${latestDrift}</div>
+          <div class="kpi-row">
+            <div class="kpi">
+              <div class="k">latest drift (z-norm L2)</div>
+              <div class="v">${latestDrift}</div>
             </div>
-            <div>
-              <div style="font-family:'SF Mono',monospace;font-size:11px;color:var(--dim);">mean drift across ${drifts.length} snapshots</div>
-              <div style="font-family:'SF Mono',monospace;font-size:18px;">${avg}</div>
+            <div class="kpi">
+              <div class="k">mean drift across ${drifts.length} snapshots</div>
+              <div class="v">${avg}</div>
             </div>
-            <div style="flex:1;">
-              <div style="font-family:'SF Mono',monospace;font-size:11px;color:var(--dim);margin-bottom:4px;">drift trajectory</div>
+            <div class="kpi flex1">
+              <div class="k">drift trajectory</div>
               ${sparkline(drifts, '#8a5a44')}
             </div>
           </div>
@@ -284,7 +205,7 @@
         renderCalDrift(cd, document.getElementById('cal-drift'));
         renderEntries(st.states ?? [], document.getElementById('entries-table'));
       }).catch(err => {
-        document.querySelector('.frame').innerHTML += `<div class="panel" style="border-color:#a04545;color:#a04545;">load failed: ${err?.message ?? err}</div>`;
+        document.querySelector('.frame').innerHTML += `<div class="panel" style="border-color:var(--negative);color:var(--negative);">load failed: ${err?.message ?? err}</div>`;
       });
     </script>
   </body>
