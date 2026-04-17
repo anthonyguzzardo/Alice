@@ -1,7 +1,7 @@
-# Theory 8: The Second Use Case — Why the Same Data Architecture That Monitors Cognition Can Reconstruct It
+# The Second Use Case — Why the Same Data Architecture That Monitors Cognition Can Reconstruct It
 
-**Date:** 2026-04-14
-**Predecessor:** Theory 7 (The Three Survival Constraints). Theories 6-7 established the instrument's timing (demographic tailwind), shape (modality-agnostic, process-first, payment-ready), and competitive position. This theory introduces a second use case that shares the same data architecture — one that changes the retention economics from difficult to inevitable.
+**Date:** 2026-04-14 | **Updated:** 2026-04-17
+**Predecessor:** 03-survival.md. The preceding documents established the instrument's timing, shape, and competitive position. This document introduces a second use case that shares the same data architecture — one that changes the retention economics from difficult to inevitable.
 
 ---
 

@@ -1,7 +1,7 @@
-# Theory 4: The Boston Process Approach Applied to Writing
+# The Boston Process Approach Applied to Writing
 
 **Date:** 2026-04-14
-**Predecessor:** Theory 3 (multi-lens assessment). This document supersedes Theory 3's strategic recommendations.
+**Note:** The prediction engine, narrative reflection layer, and Bayesian grading system referenced in earlier theories were removed on 2026-04-16. The behavioral state engine is now purely deterministic (7D behavioral + 11D semantic), the LLM role is bounded to three jobs (question generation, calibration extraction, witness rendering), and reflections are structured data digests, not narrative prose. The competitive landscape, market analysis, and strategic positioning remain current.
 
 ---
 
@@ -58,7 +58,7 @@ Not all cognitive tasks produce equal signal. The hierarchy, ordered by cognitiv
 | Passive typing | Minimal (motor only) | Keystroke timing | Continuous | Motor signatures only |
 | Speech | Moderate (real-time production) | Acoustic, temporal, linguistic | Minutes | 500+ features |
 | Gait/balance | Low (automatic motor) | Kinematic, postural | Minutes | Motion features |
-| **Reflective writing** | **High (sustained cognition)** | **Motor + cognitive + linguistic + emotional + revision** | **15-30 minutes** | **70+ signals across 5 layers** |
+| **Reflective writing** | **High (sustained cognition)** | **Motor + cognitive + linguistic + emotional + revision** | **15-30 minutes** | **60+ signals across 5 layers** |
 
 Writing is the richest modality because it's the only one where:
 
@@ -103,8 +103,7 @@ neuroQWERTY and Alice share an input channel (the keyboard) but target different
 | **Input** | Passive typing across all apps | Structured reflective writing task |
 | **Text content** | Discarded (privacy) | Analyzed (linguistic features) |
 | **Revision behavior** | Not captured | Full topology (deletion decomposition, commitment ratio) |
-| **Personal baselines** | Population norms | Within-person z-scoring across 8 dimensions |
-| **Predictions** | None | Falsifiable, deterministically graded |
+| **Personal baselines** | Population norms | Within-person z-scoring across 7 behavioral + 11 semantic dimensions |
 | **Clinical target** | Parkinson's (motor) | Cognitive-behavioral patterns |
 
 The asymmetry that matters: **Alice already captures everything neuroQWERTY captures.** The inter-key intervals that neuroQWERTY uses for Parkinson's detection are sitting inside Alice's existing data stream. Alice could run a motor-signature detection model as a byproduct, without collecting a single additional data point.
@@ -159,7 +158,7 @@ Writing is the richest modality in the hierarchy. It's the one that is simultane
 
 Approach Linus Health directly. Not as a vendor. Not as a pitch. As a research conversation.
 
-The message: "You've built a multimodal process-over-output platform across drawing, gait, and speech. Writing is the missing modality — the richest one, the one with the longest predictive window (Nun Study), and the one that's simultaneously therapeutic (Pennebaker). I've built a working implementation: 70+ deterministic signals from the writing process, 8D behavioral state with PersDyn dynamics, falsifiable predictions with code-based grading, longitudinal personal baselines. Here's a whitepaper. Is this a conversation worth having?"
+The message: "You've built a multimodal process-over-output platform across drawing, gait, and speech. Writing is the missing modality — the richest one, the one with the longest predictive window (Nun Study), and the one that's simultaneously therapeutic (Pennebaker). I've built a working implementation: 60+ deterministic signals from the writing process, 7D behavioral + 11D semantic state with PersDyn dynamics, deterministic behavioral state computation, longitudinal personal baselines. Here's a whitepaper. Is this a conversation worth having?"
 
 Their acquisition pattern (DCT → Kinesis → Aural Analytics → Together) suggests they'd recognize this as filling their gap. Whether that's a partnership, a licensing deal, or an acquisition depends on validation state.
 
@@ -169,9 +168,9 @@ Their acquisition pattern (DCT → Kinesis → Aural Analytics → Together) sug
 
 Follow their exact trajectory independently:
 
-1. **Academic publication** (now → 12 months). Publish the signal pipeline, the 8D behavioral model, and the prediction framework. Target *Frontiers in Digital Health* (where DCTclock's primary validation was published), *JMIR* (where neuroQWERTY was published), or *Behavior Research Methods*. Open-source the signal computation layer. Build citations.
+1. **Academic publication** (now → 12 months). Publish the signal pipeline, the 7D behavioral + 11D semantic model. Target *Frontiers in Digital Health* (where DCTclock's primary validation was published), *JMIR* (where neuroQWERTY was published), or *Behavior Research Methods*. Open-source the signal computation layer. Build citations.
 
-2. **Validation study** (6-18 months). Partner with a clinical psychology or cognitive science lab. 50-100 participants, 12 weeks, correlate the 8D dimensions against established instruments (MoCA, PHQ-9, ADAS-Cog). One paper proving the signals correlate with gold-standard assessments transforms the project from "interesting tool" to "validated instrument."
+2. **Validation study** (6-18 months). Partner with a clinical psychology or cognitive science lab. 50-100 participants, 12 weeks, correlate the 7D behavioral + 11D semantic dimensions against established instruments (MoCA, PHQ-9, ADAS-Cog). One paper proving the signals correlate with gold-standard assessments transforms the project from "interesting tool" to "validated instrument."
 
 3. **FDA registration** (12-24 months). neuroQWERTY's FDA Breakthrough Device Designation proves keystroke-derived signals are an acceptable biomarker pathway. DCTclock's Class II registration (possibly 510(k)-exempt) provides the regulatory template. A writing-based cognitive assessment tool would likely follow the same classification path.
 
@@ -183,7 +182,7 @@ Follow their exact trajectory independently:
 
 Skip the company for now. This is a PhD.
 
-The intersection of computational writing process research, digital phenotyping, and Bayesian single-case experimental design is an underexplored academic niche. The dissertation: "Process-Level Writing Analysis as a Passive Cognitive Performance Measure: A Longitudinal Within-Person Validation Study."
+The intersection of computational writing process research, digital phenotyping is an underexplored academic niche. The dissertation: "Process-Level Writing Analysis as a Passive Cognitive Performance Measure: A Longitudinal Within-Person Validation Study."
 
 Natural advisors:
 - **Luuk Van Waes / Marielle Leijten** (University of Antwerp) — built Inputlog, the standard research tool for writing process capture. You've built a computational implementation of their measurement framework.

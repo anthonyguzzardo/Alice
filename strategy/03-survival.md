@@ -1,7 +1,7 @@
-# Theory 7: The Three Survival Constraints — Why the Instrument Must Be Modality-Agnostic, Process-First, and Payment-Ready
+# The Three Survival Constraints — Why the Instrument Must Be Modality-Agnostic, Process-First, and Payment-Ready
 
-**Date:** 2026-04-14
-**Predecessor:** Theory 6 (The Demographic Choke Point) and its Appendix (Internet Landscape Scan). Theory-6 established *when* — the demographic tailwind and the transition window. This theory establishes *what shape the instrument must take* to survive the structural forces that have already killed >$1.8B in digital health value.
+**Date:** 2026-04-14 | **Updated:** 2026-04-17
+**Predecessor:** The demographic choke point paper (see `papers/whitepaper.md`). That document established *when* — the demographic tailwind and the transition window. This document establishes *what shape the instrument must take* to survive the structural forces that have already killed >$1.8B in digital health value.
 
 ---
 

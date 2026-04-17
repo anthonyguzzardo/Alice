@@ -1,7 +1,7 @@
-# Theory 9: The Full Arc — Why Cognitive Formation and Degradation Are the Same Signal
+# The Full Arc — Why Cognitive Formation and Degradation Are the Same Signal
 
-**Date:** 2026-04-15
-**Predecessor:** Theory 8 (The Second Use Case). Theory 8 introduced the dual-use architecture: the same data that monitors cognition can reconstruct it. It assumed an adult user (~45) building a 20-year corpus. This theory argues that assumption is artificially limiting — and that the most powerful version of the instrument starts not at 45 but as early as a person can produce externalized thought.
+**Date:** 2026-04-15 | **Updated:** 2026-04-17
+**Predecessor:** 04-reconstruction.md. That document introduced the dual-use architecture: the same data that monitors cognition can reconstruct it. This document extends to the full human arc — arguing the most powerful version of the instrument starts not at 45 but as early as a person can produce externalized thought.
 
 ---
 

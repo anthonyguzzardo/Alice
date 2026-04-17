@@ -1,7 +1,7 @@
-# Theory 5: Three Build Types — Viability Assessment Against the Real Landscape
+# Three Build Types — Viability Assessment Against the Real Landscape
 
-**Date:** 2026-04-14
-**Predecessor:** Theory 4 (Boston Process Approach). This document extends Theory 4 with exhaustive market research across instrument, product, and company build types.
+**Date:** 2026-04-14 | **Updated:** 2026-04-17
+**Predecessor:** 01-landscape.md. Architecture references updated for post-Apr-16 restructure; market analysis and competitive landscape remain current.
 
 ---
 
@@ -102,12 +102,12 @@ Other tools are either dormant (Scriptlog, Translog), specialized for handwritin
 
 A web-based, cross-platform writing process capture tool that:
 1. Runs in any modern browser (no installation, no Windows dependency)
-2. Captures 70+ signals across keystroke dynamics, linguistic content, revision topology, and emotional texture
+2. Captures 60+ signals across keystroke dynamics, linguistic content, revision topology, and emotional texture
 3. Tracks the same writer longitudinally with within-person z-scoring
 4. Provides calibration baselines via neutral writing tasks (Pennebaker within-person design)
 5. Computes same-day session deltas for controlled comparisons
 6. Includes embedding-based RAG for thematic analysis across sessions
-7. Produces 8D behavioral state vectors with PersDyn dynamics (baseline, variability, attractor force)
+7. Produces 7D behavioral + 11D semantic state vectors (purely deterministic) with PersDyn dynamics (baseline, variability, attractor force)
 
 This is a generational upgrade to the research community's primary tool. Not incrementally better — categorically different.
 
@@ -187,7 +187,7 @@ The AI journaling market is crowded and homogeneous:
 
 **What every one of them does:** Analyzes the CONTENT of what you write — sentiment, themes, mood, topics. Uses AI to generate prompts or respond conversationally. Offers engagement mechanics — streaks, badges, weekly summaries, AI personas. Treats the journal entry as a finished artifact to analyze.
 
-**What none of them do:** Analyze HOW you write. Track cognitive process longitudinally. Make predictions. Operate on anti-engagement principles. Refuse to surface raw metrics. Deliberately limit interaction.
+**What none of them do:** Analyze HOW you write. Track cognitive process longitudinally. Operate on anti-engagement principles. Refuse to surface raw metrics. Deliberately limit interaction.
 
 Alice occupies a product position with **zero competitors.** Not "few" — zero.
 
@@ -589,7 +589,7 @@ At that point: SBIR Phase I ($323K), formal clinical validation study (N=50-100)
 "You've spent 20 years building the standard tool for writing process research. I've built its successor — web-based, cross-platform, longitudinal, with integrated linguistic content analysis and PersDyn behavioral dynamics. Your group already showed writing process signals differentiate cognitively impaired writers (Meulemans et al. 2022). Here's 90 days of longitudinal data from a living implementation. Is this a collaboration worth exploring?"
 
 **Email 2: Linus Health**
-"You've assembled process-over-output cognitive tools across drawing, gait, speech, and intervention. Writing is the missing modality — the richest one, the only one that's simultaneously measurement and intervention, the one with the longest predictive window in the literature (Nun Study, 60 years). I've built a working implementation with 70+ deterministic signals, 8D behavioral dynamics, and falsifiable predictions with code-based grading. Here's the whitepaper. Here's the validation data. Is this a conversation worth having?"
+"You've assembled process-over-output cognitive tools across drawing, gait, speech, and intervention. Writing is the missing modality — the richest one, the only one that's simultaneously measurement and intervention, the one with the longest predictive window in the literature (Nun Study, 60 years). I've built a working implementation with 60+ deterministic signals, 7D behavioral + 11D semantic dynamics, and deterministic behavioral state computation. Here's the whitepaper. Here's the validation data. Is this a conversation worth having?"
 
 **Email 3: ADDF Diagnostics Accelerator**
 "You funded SpeechDx — a standardized speech dataset for AD biomarker development, now licensed by Siemens Healthineers. Writing is the complementary modality that doesn't exist yet. The only published keyboard-typing study of cognitive impairment in an AD population (Meulemans, Van Waes, and Leijten 2022, n=30, cross-sectional) reports effect sizes large enough to warrant scale-up, and the Nun Study lineage establishes that written-language features predict Alzheimer's decades in advance. But no longitudinal, keyboard-based, free-form writing cohort exists. I have the capture infrastructure. Could a WritingDx dataset fill the same gap for written language that SpeechDx fills for spoken?"
@@ -642,7 +642,6 @@ The instrument path validates the science, the product path tests the market, an
 ### AI Alignment & Methodology
 - Shumailov, I., et al. (2024). Model collapse. *Nature*.
 - Kass, R. E., & Raftery, A. E. (1995). Bayes factors. *JASA*, 90(430), 773-795.
-- Agrawal, S., & Goyal, N. (2012). Thompson sampling. *COLT*.
 
 ### Failed Companies (Cautionary)
 - Mindstrong Health shutdown. *STAT News*, February 2023.
