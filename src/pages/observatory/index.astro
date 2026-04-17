@@ -92,9 +92,13 @@ import '../../styles/observatory.css';
         }).join('');
       }
 
-      function renderArcs(arcs, container) {
+      function renderArcs(arcs, container, lowNNotice) {
+        if (lowNNotice) {
+          container.innerHTML = `<div class="empty">${lowNNotice}</div>`;
+          return;
+        }
         if (!arcs.length) {
-          container.innerHTML = '<div class="empty">no sustained trends yet (need ≥4 entries with consistent direction)</div>';
+          container.innerHTML = '<div class="empty">no sustained trends detected in recent sessions</div>';
           return;
         }
         container.innerHTML = arcs.map(a => `
@@ -204,7 +208,7 @@ import '../../styles/observatory.css';
         document.getElementById('counts').textContent =
           `${syn.behavioralCount} behavioral · ${syn.semanticCount} semantic · ${cd.totalSnapshots ?? 0} calibration snapshots${syn.latestDate ? ' · latest ' + syn.latestDate : ''}`;
         renderInsights(syn.rightNow ?? [], document.getElementById('right-now'));
-        renderArcs(syn.arcs ?? [], document.getElementById('arcs'));
+        renderArcs(syn.arcs ?? [], document.getElementById('arcs'), syn.arcsLowN);
         renderDiscoveries(syn.discoveries ?? [], document.getElementById('discoveries'));
         renderCalDrift(cd, document.getElementById('cal-drift'));
         renderEntries(st.states ?? [], document.getElementById('entries-table'));
