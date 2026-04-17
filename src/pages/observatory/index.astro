@@ -142,7 +142,6 @@ import '../../styles/observatory.css';
         const cols = ['date', 'flu', 'del', 'rev', 'com', 'vol', 'thm', 'prs', 'sem-conv', 'meta', 'replay'];
         const head = `<thead><tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr></thead>`;
         const rows = states.map(s => {
-          const beh = BEHAVIORAL_DIMS.map(d => `<td class="num" style="color:${dotColor(s[d])}">${fmtZ(s[d])}</td>`).join('');
           const semConv = s.semantic ? fmtZ(s.semantic.semantic_convergence) : '—';
           const metaParts = [];
           if (s.metadata?.deletion_curve_type && s.metadata.deletion_curve_type !== 'none')
@@ -155,11 +154,13 @@ import '../../styles/observatory.css';
           const replay = s.replayAvailable
             ? `<a class="action-btn" href="/observatory/replay/${s.question_id}">▶ replay</a>`
             : '<span class="action-btn-muted">—</span>';
+          const link = (content) => `<a href="/observatory/entry/${s.response_id}">${content}</a>`;
+          const behLinked = BEHAVIORAL_DIMS.map(d => `<td class="num" style="color:${dotColor(s[d])}">${link(fmtZ(s[d]))}</td>`).join('');
           return `<tr>
-            <td><a href="/observatory/entry/${s.response_id}">${s.date}</a></td>
-            ${beh}
-            <td class="num">${semConv}</td>
-            <td class="meta">${meta}</td>
+            <td>${link(s.date)}</td>
+            ${behLinked}
+            <td class="num">${link(semConv)}</td>
+            <td class="meta">${link(meta)}</td>
             <td>${replay}</td>
           </tr>`;
         }).join('');

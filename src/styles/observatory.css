@@ -398,12 +398,14 @@ canvas { display: block; margin: 0 auto; }
   text-transform: uppercase;
   text-decoration: none !important;
   border: 1px solid var(--border);
-  border-radius: 2px;
+  border-bottom: none;
+  border-radius: 2px 2px 0 0;
   transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
   margin-left: auto;
 }
 .replay-cta:hover {
   border-color: var(--accent);
+  border-bottom: 1px solid var(--accent);
   color: var(--text) !important;
   background: var(--bg-panel-hover);
 }

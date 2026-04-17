@@ -31,8 +31,8 @@ const qId = parseInt(questionId ?? '', 10);
   </head>
   <body>
     <div class="frame replay-frame">
-      <div class="nav-row">
-        <a href={`/observatory/entry/${qId}`}>← back to entry</a>
+      <div class="nav-row" id="back-nav">
+        <a href="/observatory">← back to observatory</a>
       </div>
       <p class="replay-label">Replay</p>
       <div class="replay-question" id="question">loading…</div>
@@ -140,23 +140,35 @@ const qId = parseInt(questionId ?? '', 10);
         });
       });
 
-      // Load entry meta + events
-      Promise.all([
-        fetch(`/api/observatory/entry/${qId}`).then(r => r.json()).catch(() => null),
-        fetch(`/api/observatory/playback/${qId}`).then(r => r.json()),
-      ]).then(([entry, payload]) => {
+      // Load playback events, then entry meta using the resolved responseId
+      fetch(`/api/observatory/playback/${qId}`).then(r => r.json()).then(payload => {
         if (payload.error) {
           surface.innerHTML = '<div class="empty">no playback available for this session</div>';
           return;
         }
         events = payload.events;
         durationMs = payload.durationMs;
-        if (entry?.entryState) {
-          questionEl.textContent = entry.entryState.question_text || '(question text unavailable)';
-          const date = entry.entryState.date || '';
-          metaEl.textContent = `${date} · ${payload.totalEvents} events · ${fmt(durationMs)} duration`;
+
+        // Update back link with correct response_id
+        if (payload.responseId) {
+          const nav = document.getElementById('back-nav');
+          nav.innerHTML = `<a href="/observatory/entry/${payload.responseId}">← back to entry</a>`;
         }
-        render();
+
+        // Fetch entry meta using response_id (not question_id)
+        const entryId = payload.responseId;
+        const entryFetch = entryId
+          ? fetch(`/api/observatory/entry/${entryId}`).then(r => r.json()).catch(() => null)
+          : Promise.resolve(null);
+
+        return entryFetch.then(entry => {
+          if (entry?.entryState) {
+            questionEl.textContent = entry.entryState.question_text || '(question text unavailable)';
+            const date = entry.entryState.date || '';
+            metaEl.textContent = `${date} · ${payload.totalEvents} events · ${fmt(durationMs)} duration`;
+          }
+          render();
+        });
       }).catch((err) => {
         surface.innerHTML = '<div class="empty">failed to load: ' + (err?.message ?? err) + '</div>';
       });
