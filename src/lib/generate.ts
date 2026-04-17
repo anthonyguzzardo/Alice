@@ -250,7 +250,7 @@ Pay special attention to the contrarian entries — they represent threads you m
 === SIGNAL WEIGHTING ===
 
 - Journal text is primary signal. What they said matters most.
-- Behavioral data is secondary: deletion decomposition, P-burst metrics, keystroke dynamics, percentile context, 8D behavioral dynamics.
+- Behavioral data is secondary: deletion decomposition, P-burst metrics, keystroke dynamics, percentile context, 7D behavioral + semantic dynamics.
 - Dynamics phase: "disrupted" = pattern broke, probe what changed. "shifting" = something evolving, follow the thread.
 - Attractor force tells you which dimensions are rigid (snap back fast) vs malleable (shifts persist). Target malleable dimensions — they're where real change happens.
 - Dimension coupling shows which behavioral dimensions influence each other. If a leader dimension is currently deviated, the follower will respond at the discovered lag.
@@ -273,11 +273,7 @@ RUNNER_UP_1: [question text]
 THEME: [theme tag]
 
 RUNNER_UP_2: [question text]
-THEME: [theme tag]
-
-INTENT: [TAG] — [brief rationale for selecting #1 over runners-up]
-
-Tags: SUPPRESSED_PROMOTION | THEME_TARGETING | CONTRARIAN_BREAK | FRAME_DISAMBIGUATION | TRAJECTORY_PROBE | DEPTH_TEST`;
+THEME: [theme tag]`;
 
   const userContent = `=== WHAT THEY SAID (SOURCE OF TRUTH) ===
 
@@ -317,7 +313,7 @@ ${recentQuestionTexts}
 
 ---
 
-Generate 3 candidate questions with your selection, theme tags, uncertainty dimension, and intervention intent.`;
+Generate 3 candidate questions with your selection, theme tags, and uncertainty dimension.`;
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY2 });
   const generateModel = options?.model ?? 'claude-sonnet-4-20250514';
@@ -344,28 +340,13 @@ Generate 3 candidate questions with your selection, theme tags, uncertainty dime
 
   const rawOutput = (message.content[0] as { type: 'text'; text: string }).text.trim();
 
-  // Parse the structured output
-  const selectedMatch = rawOutput.match(/SELECTED\s*:\s*(.+)/i);
-  const themeMatch = rawOutput.match(/THEME\s*:\s*(.+)/i);
-  const uncertaintyMatch = rawOutput.match(/UNCERTAINTY\s*:\s*(.+)/i);
-  const runner1Match = rawOutput.match(/RUNNER_UP_1\s*:\s*(.+)/i);
-  const runner1ThemeMatch = rawOutput.match(/RUNNER_UP_1\s*:.*\nTHEME\s*:\s*(.+)/i);
-  const runner2Match = rawOutput.match(/RUNNER_UP_2\s*:\s*(.+)/i);
-  const runner2ThemeMatch = rawOutput.match(/RUNNER_UP_2\s*:.*\nTHEME\s*:\s*(.+)/i);
-  const intentMatch = rawOutput.match(/INTENT\s*:\s*(SUPPRESSED_PROMOTION|THEME_TARGETING|CONTRARIAN_BREAK|FRAME_DISAMBIGUATION|TRAJECTORY_PROBE|DEPTH_TEST)\s*[—\-]\s*(.*)/i);
-
   // Extract question text — prefer structured SELECTED: format, fall back to old format
+  const selectedMatch = rawOutput.match(/SELECTED\s*:\s*(.+)/i);
   const questionText = selectedMatch
     ? selectedMatch[1].trim()
-    : rawOutput.replace(/\n*(THEME|UNCERTAINTY|RUNNER_UP_\d|INTENT)\s*:.*/gis, '').trim();
+    : rawOutput.replace(/\n*(THEME|UNCERTAINTY|RUNNER_UP_\d)\s*:.*/gis, '').trim();
 
   scheduleQuestion(questionText, tomorrowStr, 'generated');
-
-  // Intervention intent tagging and question-candidate storage archived
-  // 2026-04-16. Theme/uncertainty parsing retained in rawOutput for future
-  // audit via tb_prompt_traces if needed.
-  void themeMatch; void uncertaintyMatch; void intentMatch;
-  void runner1Match; void runner1ThemeMatch; void runner2Match; void runner2ThemeMatch;
 
   // Log what went into this prompt for future auditability
   savePromptTrace({

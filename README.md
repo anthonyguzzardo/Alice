@@ -10,15 +10,15 @@ There is no feed, no streak counter, no summary of your progress. Your responses
 
 ## Why This Architecture
 
-The 2026-04-16 restructure removed every layer of the system that interpreted the writer back to itself in narrative form: three-frame analysis, suppressed questions, falsifiable predictions, theory confidence scores, multi-model weekly reflection audits. All of it. The reasoning is epistemic, not aesthetic.
-
-**Predict-and-grade on N=1 self-built data has a three-loop circularity.** The designer is the subject and the stimulus source. Deterministic grading reduces but does not break the loop, because the predictions, the questions, and the data-collection rules all originate from the same author. Bayesian confidence over a self-confirming system produces calibrated-looking numbers from a non-falsifiable premise.
+The system measures, the system retrieves, the system juxtaposes. The system does not narrate.
 
 **Text-only narrative interpretation is commoditizable.** Anything a frontier model can say after reading the same chat transcript will be reproduced by every future frontier model. Investing the system's depth there means rebuilding it on every model release.
 
-**The behavioral signal substrate is the moat.** Keystroke dynamics (P-bursts, hold/flight time, entropy), revision topology, calibration deltas, parallel behavioral and semantic dynamics, per-session metadata signals (deletion-density curves, burst-trajectory shapes, inter-burst rhythm, hour typicality) — these survive arbitrarily capable future models because the substrate is the writer's body, not their text. A future GPT-N reading the transcript cannot see what the keystroke pipeline measured.
+**The behavioral signal substrate is the moat.** Keystroke dynamics (P-bursts, hold/flight time, entropy), revision topology, calibration deltas, parallel behavioral and semantic dynamics, per-session metadata (deletion-density curves, burst-trajectory shapes, inter-burst rhythm, hour typicality) — these survive arbitrarily capable future models because the substrate is the writer's body, not their text. A future GPT-N reading the transcript cannot see what the keystroke pipeline measured.
 
-So Alice now does fewer things. Capture signals. Compute deterministic dynamics on parallel orthogonal spaces. Generate tomorrow's question from a bounded context. Persist a structured receipt of recent sessions. Render a designer-facing Observatory. The interpretive surface is intentionally absent.
+So Alice does few things. Capture signals. Compute deterministic dynamics on parallel orthogonal spaces. Generate tomorrow's question from a bounded context. Render a designer-facing Observatory. Let the writer interpret their own behavior by watching it back, not by reading the system's opinion of it.
+
+The interpretive surface is intentionally absent. Historical context on what used to be here — and why it was removed — lives in `notes/architectural-pivot-postmortem.md`.
 
 ## Scientific Foundation
 
@@ -140,7 +140,7 @@ The interface is the instrument. Every design decision is informed by HCI resear
 
 ### Data Collection
 
-Alice captures four layers of data per session, all invisible to the user.
+Alice captures five layers of data per session, all invisible to the user.
 
 #### Layer 1: Response Text
 
@@ -227,7 +227,7 @@ Click it, get a neutral prompt — "Describe what you did this morning" or "What
 
 You can do as many free writes as you want. Three in one sitting, or none for a week. Calibration baselines are **context-matched**: deep-question sessions are compared against calibration sessions from the same device type and similar time of day. Baseline confidence is a spectrum — none, low, moderate, strong.
 
-On every calibration submission, Claude Sonnet extracts structured life-context tags from the response text across 7 research-backed dimensions: sleep, physical state, emotional events, social quality, stress, exercise, routine (Roth, AAAI 2017 — incidental supervision). Tags stored in `tb_calibration_context` with extraction confidence scores and fed into question generation as context. No three-frame interpretation, no psychological inference. Observable facts only.
+On every calibration submission, Claude Sonnet extracts structured life-context tags from the response text across 7 research-backed dimensions: sleep, physical state, emotional events, social quality, stress, exercise, routine (Roth, AAAI 2017 — incidental supervision). Tags stored in `tb_calibration_context` with extraction confidence scores and fed into question generation as context. Observable facts only — no psychological inference.
 
 On days with both a calibration and a journal session, the system computes a **same-day session delta** — the behavioral difference between neutral and reflective writing, controlling for daily confounds. This implements Pennebaker's expressive writing paradigm as a within-subjects daily experiment. The delta tracks 10 dimensions: first-person density, cognitive density, hedging density, typing speed, commitment ratio, large deletions, keystroke interval, P-burst length, hold time (motor), flight time (cognitive). After 15+ days the system contextualizes whether today's delta is within or outside personal range.
 
@@ -243,11 +243,11 @@ Drift trajectory becomes a designer-facing chart in the Observatory. Rising drif
 
 Pure deterministic, no LLM. Never shown to the user during a session.
 
-### Weekly Structured Receipt
+### Structured Receipt (Deterministic Digest)
 
-Every 7 sessions a `tb_reflections` row is written. Until 2026-04-16 this row was a 2-3K-token narrative reflection generated by Opus with a Sonnet audit. That whole layer was removed.
+`src/lib/reflect.ts` produces a deterministic structured digest — compact behavioral signals across the last 7 sessions, dynamics summary (behavioral + semantic), calibration baseline confidence, recent session-delta trend. No LLM call. Same data the designer sees in the database, formatted for legibility. When written, the row is embedded so RAG at generation time can resurface receipts whose themes are relevant to the current moment.
 
-The reflection is now a deterministic structured receipt with no LLM call: compact behavioral signals across the 7 sessions, dynamics summary (behavioral + semantic), calibration baseline confidence, recent session-delta trend. The same data the designer has access to in the database, formatted for legibility. It still gets embedded so that semantic retrieval at generation time can resurface receipts whose themes are relevant to the current moment — but the payload is structured data, not prose.
+Currently the function is not auto-invoked; it runs on demand until a designer-facing viewer is built.
 
 ### Designer-Facing Observatory
 
@@ -276,14 +276,19 @@ Everything fires on a single event: the user hitting submit.
 
 #### On Submission (Daily Question)
 
-1. **Response + session summary + context metadata saved.** Text, derived behavioral metrics, device/time context, deletion-event timing log, per-keystroke event log.
-2. **Background pipeline runs** (non-blocking — the user gets their done message instantly):
-   - **Embedding** — entry vectorized via Voyage AI, stored in sqlite-vec for future semantic retrieval. Failures degrade to recency-only retrieval.
-   - **Question generation** — during seeds (days 1-30), no-op. After day 30, assembles a bounded context window via semantic retrieval and generates tomorrow's question.
-   - **Witness state rendering** — runs the deterministic pipeline (behavioral 7D states → semantic ND states → dynamics on each → emotion→behavior coupling) and produces a new Alice Negative rendering. Behavioral and semantic spaces persist separately into their own dynamics and coupling tables.
-   - **Per-session metadata** — computes hour typicality, deletion-density curve, burst trajectory shape, inter-burst rhythm, burst-deletion proximity. Persisted to `tb_session_metadata`.
+Synchronous (before the done message returns):
+1. **Response saved.** Raw text into `tb_responses`.
+2. **Server-side text analysis.** NRC + LIWC linguistic densities, MATTR, sentence metrics.
+3. **Session summary saved.** Full ~50-field row of client-computed behavioral metrics + server-computed densities into `tb_session_summaries`.
+4. **Burst sequence and per-keystroke event log persisted** to `tb_burst_sequences` and `tb_session_events`. Deletion-event timing log attached to the session row.
+5. **Per-session metadata computed** — hour typicality, deletion-density curve, burst trajectory shape, inter-burst rhythm, burst-deletion proximity. Persisted to `tb_session_metadata`.
+6. **Embedding fires-and-forgets** — entry vectorized via Voyage AI, stored in sqlite-vec. Failures degrade future retrieval to recency-only.
 
-There is no three-frame analysis, no suppressed-question generation, no falsifiable-prediction call, no theory-confidence update. Those layers were removed.
+Async background (the user already has their done message):
+- **Question generation** — during seeds (days 1-30), no-op. After day 30, assembles a bounded context window via semantic retrieval and generates tomorrow's question.
+- **Witness state rendering** — runs the deterministic pipeline (behavioral 7D states → semantic ND states → dynamics on each → emotion→behavior coupling) and finally renders 26 visual traits for the Alice Negative witness-form via one LLM call. Behavioral and semantic spaces persist separately into their own dynamics and coupling tables.
+
+Each background stage runs independently; one failure cannot silently skip the others, and every error lands in `data/errors.log` tagged with its stage.
 
 #### On Submission (Free Write)
 
@@ -298,8 +303,9 @@ There are no cron jobs, no scheduled tasks, no server dependencies. The system i
 
 - **Astro** (SSR, Node adapter)
 - **SQLite** via better-sqlite3 + **sqlite-vec** (vector search in the same database)
-- **Claude API** (`@anthropic-ai/sdk`) — Claude Sonnet for question generation and calibration content extraction
+- **Claude API** (`@anthropic-ai/sdk`) — Claude Sonnet for question generation, calibration content extraction, and witness-trait rendering
 - **Voyage AI** (`voyageai`) — voyage-3-lite embeddings for semantic retrieval
+- **Three.js** — 3D rendering of the Alice Negative witness-form
 - **TypeScript** (strict)
 
 ## Architecture
@@ -320,9 +326,10 @@ There are no cron jobs, no scheduled tasks, no server dependencies. The system i
 - Per-session metadata signals (hour typicality, deletion-density curve, burst trajectory shape, inter-burst rhythm, burst-deletion proximity)
 - Calibration drift as a designer-facing health metric on the reference frame itself
 - Per-keystroke event log for read-only playback
-- Weekly reflection as deterministic structured receipt (no LLM call, no narrative)
+- Structured receipt code path (deterministic, no LLM, no narrative) present but not auto-invoked — waiting on designer-facing viewer
 - "Did it land?" feedback every 5th submission
 - Designer-facing Observatory (`/observatory/*`) — never user-facing
+- Alice Negative witness-form (`/alice-negative`) — 26-trait 3D rendering driven by validated behavioral dynamics, re-rendered each submission via one LLM call whose input is deterministic math
 - Graceful degradation — if Voyage AI is unavailable, falls back to recency-only retrieval
 - All analysis triggered on submit — no cron, no scheduler
 
@@ -331,11 +338,11 @@ There are no cron jobs, no scheduled tasks, no server dependencies. The system i
 - **State engines** — `src/lib/alice-negative/state-engine.ts` (behavioral 7D), `src/lib/alice-negative/semantic-space.ts` (semantic 11D, schema-ready for 4 LLM-extracted dimensions). Both load from `tb_session_summaries` filtered to journal sessions only; both produce z-scored vectors with a convergence scalar.
 - **Generic dynamics engine** — `src/lib/alice-negative/dynamics.ts`. Takes a dimension list as parameter; defaults to `STATE_DIMENSIONS` (7D behavioral). Reused over `SEMANTIC_DIMENSIONS` for the parallel space.
 - **Emotion profile** — `src/lib/alice-negative/emotion-profile.ts`. Cross-domain coupling between linguistic densities and behavioral state, persisted to `tb_emotion_behavior_coupling`.
-- **Witness rendering** — `src/lib/alice-negative/render-witness.ts`. The single entry point that runs both state engines, both dynamics passes, the emotion coupling, and the per-session-metadata writes. The visual trait renderer still runs but is being repurposed toward designer-only coupling-graph visualization.
-- **Session metadata** — `src/lib/session-metadata.ts`. Computes the slice-3 follow-up signals (hour typicality, deletion curve, burst shape, inter-burst rhythm, burst-deletion proximity).
+- **Witness rendering** — `src/lib/alice-negative/render-witness.ts`. The single entry point that runs both state engines, both dynamics passes, and the emotion coupling. It then calls `interpreter.ts`, which makes one LLM call to translate the validated dynamics into 26 visual traits for the Alice Negative witness-form (`/alice-negative`). The LLM does not interpret raw signal — the interpretation is done deterministically; the LLM only renders art from validated math.
+- **Session metadata** — `src/lib/session-metadata.ts`. Computes the slice-3 follow-up signals (hour typicality, deletion curve, burst shape, inter-burst rhythm, burst-deletion proximity). Called synchronously from `respond.ts`.
 - **Calibration drift** — `src/lib/calibration-drift.ts`. Snapshots baselines on every calibration submit; computes drift magnitude as z-norm L2 distance against per-dimension journal-session dispersion.
 - **Signal formatting** — `src/lib/signals.ts`. Research-backed verbalization of behavioral data + dynamics for question-generation prompts. Informed by Netflix "From Logs to Language" (2026), anchoring bias research, "Lost in the Middle" (TACL 2024).
-- **Signal registry** — `src/lib/signal-registry.ts`. Canonical vocabulary of ~100 deterministic signals. Used to be the prediction-criteria vocabulary; retained as documentation of what the substrate captures.
+- **Signal registry** — `src/lib/signal-registry.ts`. Canonical vocabulary of ~100 deterministic signals. Serves as documentation of what the substrate captures.
 - **Question generation** — `src/lib/generate.ts`. Phase-2-only; assembles bounded context and produces tomorrow's question.
 - **Linguistic density pipeline** — `src/lib/linguistic.ts`. Server-side computation of NRC + LIWC densities on every submission.
 - **Per-burst sequence capture** — client-side P-burst tracking, persisted to `tb_burst_sequences`.
@@ -344,24 +351,9 @@ There are no cron jobs, no scheduled tasks, no server dependencies. The system i
 - **Session-delta engine** — `src/lib/session-delta.ts`. Same-day journal-vs-calibration behavioral shift across 10 dimensions.
 - **Observatory APIs** — `src/pages/api/observatory/*`. `states`, `synthesis`, `coupling`, `entry/[id]`, `calibration-drift`, `playback/[questionId]`. All read from live `alice.db`. No simulation hardcoding.
 
-### What's Archived (Not Dropped)
+### Historical Data
 
-The 2026-04-16 restructure preserved everything it removed under `zz_archive_*` tables. All data is intact.
-
-**Slice-1+2 interpretive-layer restructure** (`zz_archive_*_20260416`):
-- `tb_predictions` — falsifiable predictions and their grades.
-- `tb_theory_confidence` — Bayesian theory posteriors.
-- `tb_ai_observations` — three-frame analysis output.
-- `tb_ai_suppressed_questions` — disambiguating suppressed questions.
-- `tb_question_candidates` — generation candidates with intervention intent.
-- `te_prediction_status`, `te_prediction_type`, `te_grade_method`, `te_intervention_intent` — supporting enums.
-
-**Slice-3 PersDyn restructure** (`zz_archive_*_8d_20260416`):
-- `tb_entry_states` (8D) — behavioral state vectors prior to slice 3.
-- `tb_trait_dynamics` (8D) — dynamics computed over the 8D set.
-- `tb_coupling_matrix` (8D) — coupling discovered over the 8D set.
-
-The top-of-file ARCHIVE INDEX in `src/lib/db.ts` lists every archived table with its source-of-archival reason and migration script.
+Prior schema state (pre-2026-04-16 interpretive layer, pre-slice-3 8D behavioral vectors) is preserved under `zz_archive_*` tables. Data is intact for later methodology work. The ARCHIVE INDEX at the top of `src/lib/db.ts` enumerates every archived table with its source-of-archival reason and migration script. The post-mortem at `notes/architectural-pivot-postmortem.md` explains the reasoning.
 
 ## Commands
 
@@ -383,8 +375,8 @@ Every technical decision serves depth over speed. If it optimizes for engagement
 
 Every design decision is grounded in peer-reviewed research — not because science legitimizes the work, but because the questions Alice asks about human cognition have been studied for decades, and ignoring that work would mean rebuilding answers that already exist.
 
-The 2026-04-16 restructure was the strongest test of that principle so far. Removing the entire LLM-narrated interpretive layer — three-frame analysis, suppressed questions, falsifiable predictions, Bayesian theory confidence, multi-model audit — meant deleting the most visible work in the system. The decision was not a retreat from ambition. It was a recognition that the substrate that survives arbitrarily capable future models is the keystroke pipeline, the calibration baseline, and the parallel behavioral + semantic dynamics — not any text that a frontier model could generate after reading the same transcript. The interpretive layer can always be rebuilt. The substrate is the work.
+The substrate that survives arbitrarily capable future models is the keystroke pipeline, the calibration baseline, and the parallel behavioral + semantic dynamics — not any text a frontier model could generate from the same transcript. The substrate is the work.
 
-What replaced the deleted layer is, deliberately, less. Capture. Compute. Juxtapose. Surface to the designer through an Observatory the user never sees. Let the writer interpret their own behavior by watching it back, not by reading the system's opinion of it. The system measures, the system retrieves, the system juxtaposes. The system does not narrate.
+Capture. Compute. Juxtapose. Surface to the designer through an Observatory the user never sees. Let the writer interpret their own behavior by watching it back, not by reading the system's opinion of it. The system measures. The system retrieves. The system juxtaposes. The system does not narrate.
 
-Where the research validates what we built, we cite it. Where it challenges what we assumed, we change. Where it has gaps, we experiment — but we name the gap, so we know what's hypothesis and what's evidence.
+Where the research validates what we built, we cite it. Where it challenges what we assumed, we change. Where it has gaps, we experiment — and we name the gap, so we know what's hypothesis and what's evidence.
