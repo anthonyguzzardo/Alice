@@ -123,7 +123,6 @@ const {
 } = await import('../lib/db.ts');
 const { computeLinguisticDensities } = await import('../lib/linguistic.ts');
 const { runGeneration } = await import('../lib/generate.ts');
-const { runReflection } = await import('../lib/reflect.ts');
 const { JORDAN_ENTRIES, buildSessionSummary } = await import('./simulation-data.ts');
 
 // Import state engines (7D behavioral + parallel semantic), dynamics, coupling
@@ -195,7 +194,7 @@ interface ValidationFailure {
 
 const failures: ValidationFailure[] = [];
 
-function validateDay(dayNum: number, questionId: number, dateStr: string, hasReflection: boolean): void {
+function validateDay(dayNum: number, questionId: number, dateStr: string): void {
   // Check response exists
   const response = db.prepare('SELECT response_id FROM tb_responses WHERE question_id = ?').get(questionId);
   if (!response) {
@@ -251,13 +250,6 @@ function validateDay(dayNum: number, questionId: number, dateStr: string, hasRef
     }
   }
 
-  // Check reflection if expected
-  if (hasReflection) {
-    const reflCount = db.prepare('SELECT COUNT(*) as c FROM tb_reflections').get() as any;
-    if (!reflCount || reflCount.c === 0) {
-      failures.push({ day: dayNum, check: 'reflection', detail: `Expected reflection but none found` });
-    }
-  }
 }
 
 // ── Resume cleanup ──────────────────────────────────────────────────────────
@@ -360,20 +352,10 @@ for (let i = START_DAY - 1; i < TOTAL_DAYS; i++) {
 
   // 5. Run AI pipeline (unless dry run)
   // 2026-04-16: runObservation removed with interpretive-layer archive.
-  // runReflection now produces a deterministic structured receipt (no LLM).
-  let expectReflection = false;
   if (!DRY_RUN) {
     try {
       // Generation: test on last 2 days if we have enough responses
       await runGeneration({ model: MODEL, seedDaysOverride: TOTAL_DAYS - 2, onApiCall });
-
-      const responseCount = getResponseCount();
-      if (responseCount >= 5 && responseCount % 7 === 0) {
-        expectReflection = true;
-        console.log('   Running reflection (structured receipt)...');
-        await runReflection();
-        console.log('   Reflection complete');
-      }
     } catch (err: any) {
       console.error(`   Pipeline error: ${err.message}`);
       if (err.message?.includes('rate_limit') || err.message?.includes('overloaded')) {
@@ -507,7 +489,7 @@ for (let i = START_DAY - 1; i < TOTAL_DAYS; i++) {
   }
 
   // 7. Validate
-  validateDay(dayNum, questionId, dateStr, expectReflection);
+  validateDay(dayNum, questionId, dateStr);
 
   console.log('');
 }
