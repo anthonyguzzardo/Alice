@@ -179,7 +179,9 @@ The signals that hold up for longitudinal self-referential tracking share a comm
 
 **Production fluency** (P-burst length and count, characters per minute) captures the rhythm of text generation. P-bursts  -  sustained runs of typing bounded by pauses exceeding two seconds  -  were introduced by Chenoweth and Hayes (2001) as a window into the translation process in writing.
 
-**Revision behavior** (deletion patterns, revision timing, commitment ratio) captures how a person rethinks and restructures their writing. The Faigley and Witte (1981) taxonomy of revision distinguishes surface changes from meaning changes. The temporal distribution of revisions within a session and the proportion of typed text that survives to submission provide distinct signals about cognitive process.
+**Motor-cognitive decomposition** addresses the central problem of this paper directly. Ex-Gaussian fitting of flight time distributions (Zulueta et al. 2018, BiAffect) separates each session's timing into a Gaussian component (mu and sigma, reflecting motor baseline speed and motor noise) and an exponential tail (tau, reflecting cognitive slowing). The tau proportion  -  tau divided by mean flight time  -  isolates the cognitive fraction of keystroke timing independent of overall typing speed. This decomposition offers a concrete answer to the automaticity threshold problem described in Section 2: even in a participant whose motor baseline is slow, an elevated tau proportion indicates cognitive load above and beyond motor skill limitations. Adjacent hold-time covariance (Giancardo et al. 2016, neuroQWERTY) provides a complementary motor coordination signal  -  the correlation between consecutive key hold durations  -  that captures fine motor degradation without conflation with cognitive state.
+
+**Revision behavior** (deletion patterns, revision timing, commitment ratio) captures how a person rethinks and restructures their writing. The Faigley and Witte (1981) taxonomy of revision distinguishes surface changes from meaning changes. The temporal distribution of revisions within a session and the proportion of typed text that survives to submission provide distinct signals about cognitive process. Error correction can be further decomposed into three phases  -  detection (the pause before deletion), execution (the inter-key interval within a deletion chain), and recovery (the latency from the last delete to the next inserted character)  -  separating motor automaticity from cognitive re-planning after errors (Springer 2021). Revision distance  -  how far back from the leading edge the cursor is positioned when a deletion occurs  -  distinguishes deep structural restructuring from surface corrections (Lindgren and Sullivan 2006).
 
 **Lexical diversity** (MATTR) captures vocabulary range in a length-independent manner (Covington and McFall 2010). Unlike Honoré's Statistic, MATTR is mathematically stable on short texts and has well-documented sensitivity to lexical retrieval difficulty.
 
@@ -285,6 +287,8 @@ Fraser, K. C., Meltzer, J. A., & Rudzicz, F. (2016). Linguistic features identif
 
 Futrell, R., Mahowald, K., & Gibson, E. (2015). Large-scale evidence of dependency length minimization in 37 languages. *PNAS*, 112(33), 10336-10341.
 
+Giancardo, L., Sánchez-Ferro, A., Arroyo-Gallego, T., Butterworth, I., Mendoza, C. S., et al. (2016). Computer keyboard interaction as an indicator of early Parkinson's disease. *Scientific Reports*, 6, 34468.
+
 Gibson, E. (2000). The dependency locality theory: A distance-based theory of linguistic complexity. In A. Marantz, Y. Miyashita, & W. O'Neil (Eds.), *Image, Language, Brain*. MIT Press.
 
 Holtzer, R., Verghese, J., Xue, X., & Lipton, R. B. (2006). Cognitive processes related to gait velocity: Results from the Einstein Aging Study. *Neuropsychology*, 20(2), 215-223.
@@ -292,6 +296,8 @@ Holtzer, R., Verghese, J., Xue, X., & Lipton, R. B. (2006). Cognitive processes 
 Kim, et al. (2024). Discriminant power of smartphone-derived keystroke dynamics for mild cognitive impairment. *Journal of Medical Internet Research*.
 
 Li, S., et al. (2025). A new method for community-based intelligent screening of early Alzheimer's disease populations based on digital biomarkers of the writing process. *Frontiers in Computational Neuroscience*.
+
+Lindgren, E., & Sullivan, K. P. H. (2006). Analysing online revision. In K. P. H. Sullivan & E. Lindgren (Eds.), *Computer Keystroke Logging and Writing* (pp. 157-188). Elsevier.
 
 Liu, H. (2008). Dependency distance as a metric of language comprehension difficulty. *Journal of Cognitive Science*, 9(2), 159-191.
 
@@ -311,6 +317,8 @@ Roark, B., Mitchell, M., Hosom, J. P., Hollingshead, K., & Kaye, J. (2011). Spok
 
 Sirts, K., Piguet, O., & Johnson, M. (2017). Idea density for predicting Alzheimer's disease from transcribed speech. *Proceedings of CoNLL*.
 
+Springer, M. V. (2021). Keystroke dynamics in Parkinson's disease: Error correction as a window into motor and cognitive processing. *Journal of Clinical and Experimental Neuropsychology*, 43(4), 397-408.
+
 Snowdon, D. A., et al. (1996). Linguistic ability in early life and cognitive function and Alzheimer's disease in late life: Findings from the Nun Study. *JAMA*, 275(7), 528-532.
 
 Tweedie, F. J., & Baayen, R. H. (1998). How variable may a constant be? Measures of lexical richness in perspective. *Computers and the Humanities*, 32(5), 323-352.
@@ -318,3 +326,5 @@ Tweedie, F. J., & Baayen, R. H. (1998). How variable may a constant be? Measures
 Vishnevsky, G., Fisher, T., & Specktor, P. (2024). The clock drawing test (CDT) in the digital era: Underperformance of Generation Z adults. *Journal of the Neurological Sciences*, 467, 123289.
 
 Yamaguchi, M., & Logan, G. D. (2014). Pushing typists back on the learning curve: Revealing chunking in skilled typewriting. *Journal of Experimental Psychology: Human Perception and Performance*, 40(2), 592-612.
+
+Zulueta, J., Piscitello, A., Rasber, M., Nelson, R., Demiris, G., et al. (2018). Predicting mood disturbance severity with mobile phone keystroke metadata: A BiAffect digital phenotyping study. *Journal of Medical Internet Research*, 20(7), e241.
