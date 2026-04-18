@@ -1500,7 +1500,7 @@ export function saveSessionSummary(s: SessionSummaryInput): void {
        iki_skewness, iki_kurtosis,
        error_detection_latency_mean, terminal_velocity,
        device_type, user_agent, hour_of_day, day_of_week
-    ) VALUES (${Array(70).fill('?').join(', ')})
+    ) VALUES (${Array(69).fill('?').join(', ')})
   `).run(
     s.questionId, s.firstKeystrokeMs, s.totalDurationMs,
     s.totalCharsTyped, s.finalCharCount, s.commitmentRatio,

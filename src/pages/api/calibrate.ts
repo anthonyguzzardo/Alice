@@ -5,6 +5,7 @@ import { computeLinguisticDensities } from '../../lib/linguistic.ts';
 import { computeMATTR } from '../../lib/alice-negative/helpers.ts';
 import { runCalibrationExtraction } from '../../lib/calibration-extract.ts';
 import { snapshotCalibrationBaselinesAfterSubmit } from '../../lib/calibration-drift.ts';
+import { computeAndPersistDerivedSignals } from '../../lib/signal-pipeline.ts';
 import { logError } from '../../lib/error-log.ts';
 
 export const GET: APIRoute = () => {
@@ -81,6 +82,24 @@ export const POST: APIRoute = async ({ request }) => {
     sentenceLengthVariance: sentLenVar,
     scrollBackCount: sessionSummary.scrollBackCount ?? null,
     questionRereadCount: sessionSummary.questionRereadCount ?? null,
+    confirmationLatencyMs: sessionSummary.confirmationLatencyMs ?? null,
+    pasteCount: sessionSummary.pasteCount ?? null,
+    pasteCharsTotal: sessionSummary.pasteCharsTotal ?? null,
+    readBackCount: sessionSummary.readBackCount ?? null,
+    leadingEdgeRatio: sessionSummary.leadingEdgeRatio ?? null,
+    contextualRevisionCount: sessionSummary.contextualRevisionCount ?? null,
+    preContextualRevisionCount: sessionSummary.preContextualRevisionCount ?? null,
+    consideredAndKeptCount: sessionSummary.consideredAndKeptCount ?? null,
+    holdTimeMeanLeft: sessionSummary.holdTimeMeanLeft ?? null,
+    holdTimeMeanRight: sessionSummary.holdTimeMeanRight ?? null,
+    holdTimeStdLeft: sessionSummary.holdTimeStdLeft ?? null,
+    holdTimeStdRight: sessionSummary.holdTimeStdRight ?? null,
+    holdTimeCV: sessionSummary.holdTimeCV ?? null,
+    negativeFlightTimeCount: sessionSummary.negativeFlightTimeCount ?? null,
+    ikiSkewness: sessionSummary.ikiSkewness ?? null,
+    ikiKurtosis: sessionSummary.ikiKurtosis ?? null,
+    errorDetectionLatencyMean: sessionSummary.errorDetectionLatencyMean ?? null,
+    terminalVelocity: sessionSummary.terminalVelocity ?? null,
     deviceType: sessionSummary.deviceType ?? null,
     userAgent: sessionSummary.userAgent ?? null,
     hourOfDay: sessionSummary.hourOfDay ?? null,
@@ -103,6 +122,10 @@ export const POST: APIRoute = async ({ request }) => {
   // Fire-and-forget: extract life-context tags from calibration response text.
   // Non-blocking — extraction failure never prevents calibration from succeeding.
   runCalibrationExtraction(questionId, text.trim(), prompt);
+
+  // Fire-and-forget: compute derived signals (motor, semantic, process, cross-session)
+  try { computeAndPersistDerivedSignals(questionId); }
+  catch (err) { logError('calibrate.derived-signals', err, { questionId }); }
 
   // Snapshot calibration baselines after this submission so drift can be
   // tracked over time. Pure deterministic, fire-and-forget.

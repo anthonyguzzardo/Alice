@@ -689,6 +689,15 @@
       const dayOfWeek = new Date().getDay();
       const rawUserAgent = navigator.userAgent;
 
+      // QWERTY left-hand key mapping (shared by journal + calibration capture)
+      const LEFT_HAND_CODES = new Set([
+        'Backquote','Digit1','Digit2','Digit3','Digit4','Digit5',
+        'KeyQ','KeyW','KeyE','KeyR','KeyT',
+        'KeyA','KeyS','KeyD','KeyF','KeyG',
+        'KeyZ','KeyX','KeyC','KeyV','KeyB',
+        'Tab','CapsLock','ShiftLeft','ControlLeft','AltLeft','MetaLeft',
+      ]);
+
       const dateEl = document.getElementById('date')!;
       const questionEl = document.getElementById('question')!;
       const inputArea = document.getElementById('input-area')!;
@@ -842,13 +851,6 @@
           // Hand-lateralized hold times (QWERTY mapping, Kim et al. 2024)
           const holdTimesLeft: number[] = [];
           const holdTimesRight: number[] = [];
-          const LEFT_HAND_CODES = new Set([
-            'Backquote','Digit1','Digit2','Digit3','Digit4','Digit5',
-            'KeyQ','KeyW','KeyE','KeyR','KeyT',
-            'KeyA','KeyS','KeyD','KeyF','KeyG',
-            'KeyZ','KeyX','KeyC','KeyV','KeyB',
-            'Tab','CapsLock','ShiftLeft','ControlLeft','AltLeft','MetaLeft',
-          ]);
 
           // Negative flight time (rollover rate, Teh et al. 2013)
           let negativeFlightTimeCount = 0;
@@ -1550,11 +1552,46 @@
         let calScrollBackCount = 0;
         let calLastScrollTop = 0;
 
+        // Phase 1 expansion: cursor behavior + writing process tracking
+        let calLeadingEdgeInputCount = 0;
+        let calTotalInputActionCount = 0;
+        let calContextualRevisionCount = 0;
+        let calPreContextualRevisionCount = 0;
+        let calReadBackCount = 0;
+        let calReadBackPending = false;
+        let calReadBackTimer: ReturnType<typeof setTimeout> | null = null;
+        let calConsideredAndKeptCount = 0;
+        let calLastSelectionWasRange = false;
+        let calPasteCount = 0;
+        let calPasteCharsTotal = 0;
+        const calHoldTimesLeft: number[] = [];
+        const calHoldTimesRight: number[] = [];
+        let calNegativeFlightTimeCount = 0;
+        const calErrorDetectionLatencies: number[] = [];
+        let calLastNonDeleteKeystrokeTime: number | null = null;
+
         textarea.addEventListener('scroll', () => {
           if (textarea.scrollTop < calLastScrollTop && calLastScrollTop > 0) {
             calScrollBackCount++;
           }
           calLastScrollTop = textarea.scrollTop;
+        });
+
+        document.addEventListener('selectionchange', () => {
+          if (document.activeElement !== textarea) return;
+          if (calReadBackTimer) clearTimeout(calReadBackTimer);
+          calReadBackPending = true;
+          calReadBackTimer = setTimeout(() => {
+            if (calReadBackPending) { calReadBackCount++; calReadBackPending = false; }
+          }, 500);
+          const hasRange = textarea.selectionStart !== textarea.selectionEnd;
+          if (calLastSelectionWasRange && !hasRange) calConsideredAndKeptCount++;
+          calLastSelectionWasRange = hasRange;
+        });
+
+        textarea.addEventListener('paste', (e: ClipboardEvent) => {
+          calPasteCount++;
+          calPasteCharsTotal += e.clipboardData?.getData('text/plain')?.length ?? 0;
         });
 
         textarea.addEventListener('keydown', (e: KeyboardEvent) => {
@@ -1574,8 +1611,22 @@
             // Flight time: keyup[n-1] → keydown[n]
             if (calLastKeyupTime !== null) {
               const ft = now - calLastKeyupTime;
-              if (ft > 0 && ft < 5000) calFlightTimes.push(ft);
+              if (ft > 0 && ft < 5000) {
+                calFlightTimes.push(ft);
+              } else if (ft < 0) {
+                calNegativeFlightTimeCount++;
+              }
             }
+          }
+
+          calTotalInputActionCount++;
+          if (textarea.selectionStart >= textarea.value.length) {
+            calLeadingEdgeInputCount++;
+          }
+
+          if (calReadBackPending) {
+            calReadBackPending = false;
+            if (calReadBackTimer) clearTimeout(calReadBackTimer);
           }
 
           if (e.key === 'Backspace' || e.key === 'Delete') {
@@ -1586,11 +1637,23 @@
               calCurrentRevChainLength = 1;
             }
             calLastDeletionTime = now;
+
+            if (calLastNonDeleteKeystrokeTime !== null) {
+              const edl = now - calLastNonDeleteKeystrokeTime;
+              if (edl > 0 && edl < 5000) calErrorDetectionLatencies.push(edl);
+            }
+
+            if (textarea.selectionStart < textarea.value.length - 1) {
+              calContextualRevisionCount++;
+            } else {
+              calPreContextualRevisionCount++;
+            }
           } else {
             if (calCurrentRevChainLength > 0) {
               calRevisionChains.push(calCurrentRevChainLength);
               calCurrentRevChainLength = 0;
             }
+            calLastNonDeleteKeystrokeTime = now;
           }
         });
 
@@ -1608,6 +1671,11 @@
                 d: downTime - pageOpenTime,
                 u: now - pageOpenTime,
               });
+              if (LEFT_HAND_CODES.has(e.code)) {
+                calHoldTimesLeft.push(ht);
+              } else {
+                calHoldTimesRight.push(ht);
+              }
             }
             calKeydownTimes.delete(e.code);
           }
@@ -1769,6 +1837,50 @@
           const calRevChainAvgLen = calRevChainCount > 0
             ? calRevisionChains.reduce((a, b) => a + b, 0) / calRevChainCount : null;
 
+          // Phase 1 derived metrics (calibration)
+          const calConfirmationLatencyMs = lastInputTime ? submitTime - lastInputTime : null;
+          const calLeadingEdgeRatio = calTotalInputActionCount > 0
+            ? calLeadingEdgeInputCount / calTotalInputActionCount : null;
+
+          const calHtLeftCount = calHoldTimesLeft.length;
+          const calHoldTimeMeanLeft = calHtLeftCount > 0
+            ? calHoldTimesLeft.reduce((a, b) => a + b, 0) / calHtLeftCount : null;
+          const calHoldTimeStdLeft = calHtLeftCount > 1
+            ? Math.sqrt(calHoldTimesLeft.reduce((s, v) => s + (v - calHoldTimeMeanLeft!) ** 2, 0) / (calHtLeftCount - 1)) : null;
+          const calHtRightCount = calHoldTimesRight.length;
+          const calHoldTimeMeanRight = calHtRightCount > 0
+            ? calHoldTimesRight.reduce((a, b) => a + b, 0) / calHtRightCount : null;
+          const calHoldTimeStdRight = calHtRightCount > 1
+            ? Math.sqrt(calHoldTimesRight.reduce((s, v) => s + (v - calHoldTimeMeanRight!) ** 2, 0) / (calHtRightCount - 1)) : null;
+
+          const calHoldTimeCV = (calHoldTimeMean != null && calHoldTimeMean > 0 && calHoldTimeStd != null)
+            ? calHoldTimeStd / calHoldTimeMean : null;
+
+          let calIkiSkewness: number | null = null;
+          let calIkiKurtosis: number | null = null;
+          if (calIkiCount >= 10 && calIkiMean != null && calIkiStd != null && calIkiStd > 0) {
+            let m3 = 0, m4 = 0;
+            for (const iki of calInterKeyIntervals) {
+              const d = (iki - calIkiMean) / calIkiStd;
+              m3 += d * d * d;
+              m4 += d * d * d * d;
+            }
+            calIkiSkewness = m3 / calIkiCount;
+            calIkiKurtosis = (m4 / calIkiCount) - 3;
+          }
+
+          const calEdlCount = calErrorDetectionLatencies.length;
+          const calErrorDetectionLatencyMean = calEdlCount > 0
+            ? calErrorDetectionLatencies.reduce((a, b) => a + b, 0) / calEdlCount : null;
+
+          let calTerminalVelocity: number | null = null;
+          if (calIkiCount >= 20 && calIkiMean != null && calIkiMean > 0) {
+            const tail = Math.max(2, Math.floor(calIkiCount * 0.1));
+            const tailSlice = calInterKeyIntervals.slice(-tail);
+            const tailMean = tailSlice.reduce((a, b) => a + b, 0) / tailSlice.length;
+            calTerminalVelocity = tailMean / calIkiMean;
+          }
+
           const sessionSummary = {
             firstKeystrokeMs,
             totalDurationMs,
@@ -1806,7 +1918,26 @@
             // Keystroke entropy (Ajilore et al. 2025, BiAffect)
             keystrokeEntropy: calKeystrokeEntropy,
             scrollBackCount: calScrollBackCount,
-            questionRereadCount: 0, // not tracked in calibration — no persistent question to re-read
+            questionRereadCount: 0,
+            // Phase 1 expansion
+            confirmationLatencyMs: calConfirmationLatencyMs,
+            pasteCount: calPasteCount,
+            pasteCharsTotal: calPasteCharsTotal,
+            readBackCount: calReadBackCount,
+            leadingEdgeRatio: calLeadingEdgeRatio,
+            contextualRevisionCount: calContextualRevisionCount,
+            preContextualRevisionCount: calPreContextualRevisionCount,
+            consideredAndKeptCount: calConsideredAndKeptCount,
+            holdTimeMeanLeft: calHoldTimeMeanLeft,
+            holdTimeMeanRight: calHoldTimeMeanRight,
+            holdTimeStdLeft: calHoldTimeStdLeft,
+            holdTimeStdRight: calHoldTimeStdRight,
+            holdTimeCV: calHoldTimeCV,
+            negativeFlightTimeCount: calNegativeFlightTimeCount,
+            ikiSkewness: calIkiSkewness,
+            ikiKurtosis: calIkiKurtosis,
+            errorDetectionLatencyMean: calErrorDetectionLatencyMean,
+            terminalVelocity: calTerminalVelocity,
             // Read-only playback substrate (text snapshots over time)
             eventLog: calEventLog,
             // Raw keystroke stream for dynamical signal analysis
