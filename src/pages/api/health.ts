@@ -12,7 +12,7 @@
  * surfaces only the count of recent errors and which jobs produced them.
  */
 import type { APIRoute } from 'astro';
-import db from '../../lib/db.ts';
+import sql from '../../lib/db.ts';
 import { localDateStr } from '../../lib/date.ts';
 import { readRecentErrors } from '../../lib/error-log.ts';
 
@@ -56,49 +56,51 @@ interface HealthResponse {
   overall: 'green' | 'yellow' | 'red';
 }
 
-export const GET: APIRoute = () => {
+export const GET: APIRoute = async () => {
   const today = localDateStr();
   const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
   // --- TODAY ---------------------------------------------------------------
-  const todayQuestion = db.prepare(`
+  const todayQuestionRows = await sql`
     SELECT question_id, question_source_id
-    FROM tb_questions WHERE scheduled_for = ?
-  `).get(today) as { question_id: number; question_source_id: number } | undefined;
+    FROM tb_questions WHERE scheduled_for = ${today}
+  `;
+  const todayQuestion = todayQuestionRows[0] as { question_id: number; question_source_id: number } | undefined;
 
-  const sessionSubmittedToday = todayQuestion
-    ? !!db.prepare(`
-        SELECT 1 FROM tb_responses r
-        JOIN tb_questions q ON r.question_id = q.question_id
-        WHERE q.scheduled_for = ? AND q.question_source_id != 3
-      `).get(today)
-    : false;
+  let sessionSubmittedToday = false;
+  if (todayQuestion) {
+    const submittedRows = await sql`
+      SELECT 1 FROM tb_responses r
+      JOIN tb_questions q ON r.question_id = q.question_id
+      WHERE q.scheduled_for = ${today} AND q.question_source_id != 3
+    `;
+    sessionSubmittedToday = submittedRows.length > 0;
+  }
 
   // --- LAST SESSION --------------------------------------------------------
-  const lastSession = db.prepare(`
+  const lastSessionRows = await sql`
     SELECT r.response_id, r.question_id, DATE(r.dttm_created_utc) AS day
     FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
     WHERE q.question_source_id != 3
     ORDER BY r.response_id DESC LIMIT 1
-  `).get() as { response_id: number; question_id: number; day: string } | undefined;
+  `;
+  const lastSession = lastSessionRows[0] as { response_id: number; question_id: number; day: string } | undefined;
 
   let lastSessionStatus: LastSessionStatus | null = null;
   if (lastSession) {
     // Observation + suppressed-question coverage checks removed 2026-04-16.
-    const coverage = db.prepare(`
+    const coverageRows = await sql`
       SELECT
-        (SELECT 1 FROM tb_embeddings WHERE source_record_id = ? AND embedding_source_id = 1) AS embedded,
-        (SELECT 1 FROM tb_entry_states WHERE response_id = ?) AS entry_state,
+        (SELECT 1 FROM tb_embeddings WHERE source_record_id = ${lastSession.response_id} AND embedding_source_id = 1 LIMIT 1) AS embedded,
+        (SELECT 1 FROM tb_entry_states WHERE response_id = ${lastSession.response_id} LIMIT 1) AS entry_state,
         (SELECT 1 FROM tb_trait_dynamics WHERE entry_count = (
-           SELECT COUNT(*) FROM tb_session_summaries ss
+           SELECT COUNT(*)::int FROM tb_session_summaries ss
            JOIN tb_questions q ON ss.question_id = q.question_id
            WHERE q.question_source_id != 3
-         )) AS witness_rendered
-    `).get(
-      lastSession.response_id,
-      lastSession.response_id,
-    ) as { embedded: number | null; entry_state: number | null; witness_rendered: number | null };
+         ) LIMIT 1) AS witness_rendered
+    `;
+    const coverage = coverageRows[0] as { embedded: number | null; entry_state: number | null; witness_rendered: number | null };
 
     const pipeline: PipelineCoverage = {
       embedded: !!coverage.embedded,
@@ -123,19 +125,21 @@ export const GET: APIRoute = () => {
   }
 
   // --- SESSIONS COUNT + REFLECTION CADENCE --------------------------------
-  const sessionCount = (db.prepare(`
-    SELECT COUNT(*) AS c FROM tb_responses r
+  const [sessionCountRow] = await sql`
+    SELECT COUNT(*)::int AS c FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
     WHERE q.question_source_id != 3
-  `).get() as { c: number }).c;
+  `;
+  const sessionCount = (sessionCountRow as { c: number }).c;
 
   // Reflection cadence: fires when responseCount >= 5 && responseCount % 7 === 0
   // responseCount in respond.ts is total responses (see getResponseCount), not
   // sessions-only. We surface the next fire count as informational; if the
   // cadence is session-scoped instead, this number just reads differently.
-  const totalResponses = (db.prepare(
-    `SELECT COUNT(*) AS c FROM tb_responses`
-  ).get() as { c: number }).c;
+  const [totalResponsesRow] = await sql`
+    SELECT COUNT(*)::int AS c FROM tb_responses
+  `;
+  const totalResponses = (totalResponsesRow as { c: number }).c;
   let nextReflectionAt: number | null = null;
   if (totalResponses < 5) {
     nextReflectionAt = 7;
@@ -144,26 +148,29 @@ export const GET: APIRoute = () => {
   }
 
   // --- TOMORROW -----------------------------------------------------------
-  const tomorrowQuestion = db.prepare(`
-    SELECT 1 FROM tb_questions WHERE scheduled_for = ?
-  `).get(tomorrow);
+  const tomorrowQuestionRows = await sql`
+    SELECT 1 FROM tb_questions WHERE scheduled_for = ${tomorrow}
+  `;
+  const tomorrowQuestion = tomorrowQuestionRows[0];
 
   // --- ANOMALIES -----------------------------------------------------------
-  const duplicateScheduledQuestions = (db.prepare(`
-    SELECT COUNT(*) AS c FROM (
+  const [dupRow] = await sql`
+    SELECT COUNT(*)::int AS c FROM (
       SELECT text FROM tb_questions
-      WHERE scheduled_for >= ?
+      WHERE scheduled_for >= ${today}
       GROUP BY text HAVING COUNT(*) > 1
-    )
-  `).get(today) as { c: number }).c;
+    ) sub
+  `;
+  const duplicateScheduledQuestions = (dupRow as { c: number }).c;
 
-  const sessionsMissingSummary = (db.prepare(`
-    SELECT COUNT(*) AS c
+  const [missingRow] = await sql`
+    SELECT COUNT(*)::int AS c
     FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
     LEFT JOIN tb_session_summaries ss ON ss.question_id = r.question_id
     WHERE q.question_source_id != 3 AND ss.question_id IS NULL
-  `).get() as { c: number }).c;
+  `;
+  const sessionsMissingSummary = (missingRow as { c: number }).c;
 
   const recentErrors = readRecentErrors(20);
   const recentErrorJobs: string[] = [];

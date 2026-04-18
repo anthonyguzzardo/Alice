@@ -17,7 +17,7 @@ import { computeDynamics } from '../../lib/alice-negative/dynamics.ts';
 
 export const GET: APIRoute = async () => {
   try {
-    const states = computeEntryStates();
+    const states = await computeEntryStates();
     const dynamics = computeDynamics(states);
 
     return new Response(JSON.stringify({

@@ -10,7 +10,7 @@ import { getCalibrationHistory } from '../../../lib/db.ts';
 
 export const GET: APIRoute = async () => {
   try {
-    const history = getCalibrationHistory();
+    const history = await getCalibrationHistory();
 
     // Split into global and per-device tracks
     const globalTrack = history.filter(h => h.device_type == null);

@@ -9,7 +9,7 @@
  *   Lexical diversity   — McCarthy & Jarvis (2010) MATTR
  */
 import type { APIRoute } from 'astro';
-import db from '../../lib/db.ts';
+import sql from '../../lib/db.ts';
 import type { AliceNegativeSignal, AliceNegativeSignalRaw } from '../../lib/alice-negative/types.ts';
 import {
   avg, variance, stddev, clamp, percentileRank,
@@ -224,10 +224,10 @@ function computeOutlierFreq(all: SessionDerived[]): number {
 export const GET: APIRoute = async () => {
   try {
     // ── Load all session rows ─────────────────────────────────────
-    const allRows = db.prepare(`
+    const allRows = await sql`
       SELECT * FROM tb_session_summaries
       ORDER BY session_summary_id ASC
-    `).all() as any[];
+    ` as any[];
 
     const allSessions = allRows.map(deriveSession);
     const sc = allSessions.length;
@@ -348,10 +348,10 @@ export const GET: APIRoute = async () => {
     const daySpread = clamp(uniqueDays / 7);
 
     // Consistency: regularity of gaps
-    const entryDates = db.prepare(`
+    const entryDates = await sql`
       SELECT dttm_created_utc FROM tb_session_summaries
       ORDER BY session_summary_id ASC
-    `).all() as any[];
+    ` as any[];
 
     let consistency = 0.5;
     if (entryDates.length >= 3) {
@@ -373,12 +373,12 @@ export const GET: APIRoute = async () => {
     }
 
     // ── Patterns ──────────────────────────────────────────────────
-    const recentTexts = db.prepare(`
+    const recentTexts = await sql`
       SELECT r.text FROM tb_responses r
       JOIN tb_questions q ON r.question_id = q.question_id
       WHERE q.question_source_id != 3
       ORDER BY q.scheduled_for DESC LIMIT 7
-    `).all() as Array<{ text: string }>;
+    ` as Array<{ text: string }>;
 
     let thematicDensity = 0.5;
     if (recentTexts.length >= 2) {
@@ -389,18 +389,18 @@ export const GET: APIRoute = async () => {
         ? 1 - (uniqueWords.size / allWords.length) : 0.5;
     }
 
-    const feedback = db.prepare(`
+    const [feedback] = await sql`
       SELECT COUNT(*) as total, SUM(landed) as landed
       FROM tb_question_feedback
-    `).get() as any;
+    ` as any[];
 
     // ── Shape ─────────────────────────────────────────────────────
-    const shapeTexts = db.prepare(`
+    const shapeTexts = await sql`
       SELECT r.text FROM tb_responses r
       JOIN tb_questions q ON r.question_id = q.question_id
       WHERE q.question_source_id != 3
       ORDER BY r.response_id DESC LIMIT ${RECENT_WINDOW}
-    `).all() as Array<{ text: string }>;
+    ` as Array<{ text: string }>;
 
     const shape = computeShapeMetrics(shapeTexts.map(r => r.text));
 

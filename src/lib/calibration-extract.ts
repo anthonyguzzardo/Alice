@@ -190,7 +190,7 @@ export async function runCalibrationExtraction(
   try {
     const tags = await extractCalibrationContext(responseText, promptText);
     if (tags.length > 0) {
-      saveCalibrationContext(questionId, tags);
+      await saveCalibrationContext(questionId, tags);
       console.log(`[calibration-extract] Extracted ${tags.length} context tags for question ${questionId}`);
     } else {
       console.log(`[calibration-extract] No context tags found for question ${questionId}`);

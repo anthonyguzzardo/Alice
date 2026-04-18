@@ -5,7 +5,7 @@
  * page can render the writing timeline at original tempo.
  */
 import type { APIRoute } from 'astro';
-import db, { getSessionEvents } from '../../../../lib/db.ts';
+import sql, { getSessionEvents } from '../../../../lib/db.ts';
 
 export const GET: APIRoute = async ({ params }) => {
   try {
@@ -17,7 +17,7 @@ export const GET: APIRoute = async ({ params }) => {
       });
     }
 
-    const row = getSessionEvents(questionId);
+    const row = await getSessionEvents(questionId);
     if (!row) {
       return new Response(JSON.stringify({ error: 'No event log for this session' }), {
         status: 404,
@@ -49,9 +49,10 @@ export const GET: APIRoute = async ({ params }) => {
     }
 
     // Resolve response_id so replay can link back to the correct entry
-    const responseRow = db.prepare(
-      `SELECT response_id FROM tb_responses WHERE question_id = ? ORDER BY response_id DESC LIMIT 1`
-    ).get(questionId) as { response_id: number } | undefined;
+    const responseRows = await sql`
+      SELECT response_id FROM tb_responses WHERE question_id = ${questionId} ORDER BY response_id DESC LIMIT 1
+    `;
+    const responseRow = responseRows[0] as { response_id: number } | undefined;
 
     return new Response(JSON.stringify({
       questionId,

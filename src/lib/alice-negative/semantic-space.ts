@@ -29,7 +29,7 @@
  *   shift (multiple densities deviated together).
  */
 
-import db from '../db.ts';
+import sql from '../db.ts';
 import { avg, stddev } from './helpers.ts';
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -117,8 +117,8 @@ function questionDensityFromText(text: string): number {
   return questionCount / sentences.length;
 }
 
-export function loadSemanticSessions(): SemanticRaw[] {
-  const rows = db.prepare(`
+export async function loadSemanticSessions(): Promise<SemanticRaw[]> {
+  const rows = await sql`
     SELECT
        r.response_id
       ,q.scheduled_for as date
@@ -138,7 +138,7 @@ export function loadSemanticSessions(): SemanticRaw[] {
     JOIN tb_questions q ON r.question_id = q.question_id
     WHERE q.question_source_id != 3
     ORDER BY ss.session_summary_id ASC
-  `).all() as any[];
+  ` as any[];
 
   return rows.map(row => ({
     responseId: row.response_id,
@@ -159,8 +159,8 @@ export function loadSemanticSessions(): SemanticRaw[] {
 
 // ─── Semantic state computation ────────────────────────────────────
 
-export function computeSemanticStates(sessions?: SemanticRaw[]): SemanticEntryState[] {
-  if (!sessions) sessions = loadSemanticSessions();
+export async function computeSemanticStates(sessions?: SemanticRaw[]): Promise<SemanticEntryState[]> {
+  if (!sessions) sessions = await loadSemanticSessions();
   if (sessions.length < MIN_ENTRIES) return [];
 
   // Personal baselines for all raw densities

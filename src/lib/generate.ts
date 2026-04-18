@@ -53,17 +53,17 @@ export async function runGeneration(options?: GenerationOptions): Promise<void> 
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowStr = localDateStr(tomorrow);
 
-  if (hasQuestionForDate(tomorrowStr)) return;
+  if (await hasQuestionForDate(tomorrowStr)) return;
 
-  const responseCount = getResponseCount();
+  const responseCount = await getResponseCount();
   const seedThreshold = options?.seedDaysOverride ?? SEED_DAYS;
   if (responseCount < seedThreshold) return;
 
   // --- RECENT RAW ENTRIES (always included verbatim) ---
-  const recentResponses = getRecentResponses(RECENT_WINDOW);
+  const recentResponses = await getRecentResponses(RECENT_WINDOW);
 
   // --- REFLECTIONS: recent in full, older only if RAG resurfaces them ---
-  const allReflections = getAllReflections();
+  const allReflections = await getAllReflections();
   const RECENT_REFLECTIONS = 4;
   const recentReflections = allReflections.slice(-RECENT_REFLECTIONS);
   const latestReflection = recentReflections[recentReflections.length - 1] ?? null;
@@ -106,9 +106,9 @@ export async function runGeneration(options?: GenerationOptions): Promise<void> 
 
   // --- SCOPED CONTEXT ---
   // Observations + suppressed questions archived 2026-04-16 — no longer included.
-  const recentFeedback = getRecentFeedback(10);
+  const recentFeedback = await getRecentFeedback(10);
   const recentQuestionIds = recentResponses.map(r => r.question_id);
-  const recentSummaries = getSessionSummariesForQuestions(recentQuestionIds);
+  const recentSummaries = await getSessionSummariesForQuestions(recentQuestionIds);
 
   // --- FORMAT SECTIONS ---
   // Recent entries are sorted DESC from query, reverse for chronological display
@@ -140,26 +140,26 @@ export async function runGeneration(options?: GenerationOptions): Promise<void> 
   }
 
   // Enriched behavioral signals (research-backed formatting)
-  const allSummaries = getAllSessionSummaries();
+  const allSummaries = await getAllSessionSummaries();
   const behavioralSection = recentSummaries.length > 0
     ? formatCompactSignals(recentSummaries, allSummaries)
     : 'No behavioral data available.';
 
   // Dynamics context (8D PersDyn behavioral dynamics)
-  const entryStates = computeEntryStates();
+  const entryStates = await computeEntryStates();
   const dynamics = computeDynamics(entryStates);
   const dynamicsSection = dynamics.entryCount > 0
     ? formatDynamicsContext(dynamics, 'compact')
     : '';
 
   // Life-context from recent calibration extractions
-  const recentLifeContext = getRecentCalibrationContext(20);
+  const recentLifeContext = await getRecentCalibrationContext(20);
   const lifeContextSection = recentLifeContext.length > 0
     ? formatGenerateLifeContext(recentLifeContext)
     : '';
 
   // Session delta trends (same-day calibration → journal shifts)
-  const recentDeltas = getRecentSessionDeltas(14);
+  const recentDeltas = await getRecentSessionDeltas(14);
   const deltaTrendSection = recentDeltas.length > 0
     ? formatCompactDelta(recentDeltas)
     : '';
@@ -346,10 +346,10 @@ Generate 3 candidate questions with your selection, theme tags, and uncertainty 
     ? selectedMatch[1].trim()
     : rawOutput.replace(/\n*(THEME|UNCERTAINTY|RUNNER_UP_\d)\s*:.*/gis, '').trim();
 
-  scheduleQuestion(questionText, tomorrowStr, 'generated');
+  await scheduleQuestion(questionText, tomorrowStr, 'generated');
 
   // Log what went into this prompt for future auditability
-  savePromptTrace({
+  await savePromptTrace({
     type: 'generation',
     recentEntryIds: recentResponses.map(r => r.response_id),
     ragEntryIds: ragEntries.map(e => e.sourceRecordId),

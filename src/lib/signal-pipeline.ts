@@ -8,7 +8,7 @@
  * Called from /api/respond.ts after renderWitnessState().
  */
 
-import db, {
+import sql, {
   saveDynamicalSignals,
   saveMotorSignals,
   saveSemanticSignals,
@@ -27,10 +27,9 @@ import { computeProcessSignals } from './process-signals.ts';
 import { computeCrossSessionSignals } from './cross-session-signals.ts';
 import { logError } from './error-log.ts';
 
-function getKeystrokeStream(questionId: number): KeystrokeEvent[] | null {
-  const row = db.prepare(
-    `SELECT keystroke_stream_json FROM tb_session_events WHERE question_id = ?`
-  ).get(questionId) as { keystroke_stream_json: string | null } | undefined;
+async function getKeystrokeStream(questionId: number): Promise<KeystrokeEvent[] | null> {
+  const rows = await sql`SELECT keystroke_stream_json FROM tb_session_events WHERE question_id = ${questionId}`;
+  const row = rows[0] as { keystroke_stream_json: string | null } | undefined;
 
   if (!row?.keystroke_stream_json) return null;
   try {
@@ -40,48 +39,36 @@ function getKeystrokeStream(questionId: number): KeystrokeEvent[] | null {
   }
 }
 
-function getEventLogJson(questionId: number): string | null {
-  const row = db.prepare(
-    `SELECT event_log_json FROM tb_session_events WHERE question_id = ?`
-  ).get(questionId) as { event_log_json: string | null } | undefined;
+async function getEventLogJson(questionId: number): Promise<string | null> {
+  const rows = await sql`SELECT event_log_json FROM tb_session_events WHERE question_id = ${questionId}`;
+  const row = rows[0] as { event_log_json: string | null } | undefined;
   return row?.event_log_json ?? null;
 }
 
-function getResponseText(questionId: number): string | null {
-  const row = db.prepare(
-    `SELECT text FROM tb_responses WHERE question_id = ?`
-  ).get(questionId) as { text: string | null } | undefined;
+async function getResponseText(questionId: number): Promise<string | null> {
+  const rows = await sql`SELECT text FROM tb_responses WHERE question_id = ${questionId}`;
+  const row = rows[0] as { text: string | null } | undefined;
   return row?.text ?? null;
 }
 
-function getSessionInfo(questionId: number): { totalDurationMs: number; pasteCount: number } {
-  const row = db.prepare(
-    `SELECT total_duration_ms FROM tb_session_summaries WHERE question_id = ?`
-  ).get(questionId) as { total_duration_ms: number | null } | undefined;
-
-  // paste_count may not exist in pre-Phase-1 rows; query separately with fallback
-  let pasteCount = 0;
-  try {
-    const pcRow = db.prepare(
-      `SELECT paste_count FROM tb_session_summaries WHERE question_id = ?`
-    ).get(questionId) as { paste_count: number | null } | undefined;
-    pasteCount = pcRow?.paste_count ?? 0;
-  } catch { /* column doesn't exist in old schema */ }
+async function getSessionInfo(questionId: number): Promise<{ totalDurationMs: number; pasteCount: number }> {
+  const rows = await sql`SELECT total_duration_ms, paste_count FROM tb_session_summaries WHERE question_id = ${questionId}`;
+  const row = rows[0] as { total_duration_ms: number | null; paste_count: number | null } | undefined;
 
   return {
     totalDurationMs: row?.total_duration_ms ?? 0,
-    pasteCount,
+    pasteCount: row?.paste_count ?? 0,
   };
 }
 
-export function computeAndPersistDerivedSignals(questionId: number): void {
-  const stream = getKeystrokeStream(questionId);
+export async function computeAndPersistDerivedSignals(questionId: number): Promise<void> {
+  const stream = await getKeystrokeStream(questionId);
 
   // ── Dynamical signals (previously on-demand) ──
-  if (stream && stream.length >= 10 && !getDynamicalSignals(questionId)) {
+  if (stream && stream.length >= 10 && !(await getDynamicalSignals(questionId))) {
     try {
       const ds = computeDynamicalSignals(stream);
-      saveDynamicalSignals(questionId, {
+      await saveDynamicalSignals(questionId, {
         iki_count: ds.ikiCount,
         hold_flight_count: ds.holdFlightCount,
         permutation_entropy: ds.permutationEntropy,
@@ -101,11 +88,11 @@ export function computeAndPersistDerivedSignals(questionId: number): void {
   }
 
   // ── Motor signals ──
-  if (stream && stream.length >= 10 && !getMotorSignals(questionId)) {
+  if (stream && stream.length >= 10 && !(await getMotorSignals(questionId))) {
     try {
-      const { totalDurationMs } = getSessionInfo(questionId);
+      const { totalDurationMs } = await getSessionInfo(questionId);
       const ms = computeMotorSignals(stream, totalDurationMs);
-      saveMotorSignals(questionId, {
+      await saveMotorSignals(questionId, {
         sample_entropy: ms.sampleEntropy,
         iki_autocorrelation_json: ms.ikiAutocorrelation ? JSON.stringify(ms.ikiAutocorrelation) : null,
         motor_jerk: ms.motorJerk,
@@ -125,13 +112,13 @@ export function computeAndPersistDerivedSignals(questionId: number): void {
   }
 
   // ── Semantic signals ──
-  if (!getSemanticSignals(questionId)) {
+  if (!(await getSemanticSignals(questionId))) {
     try {
-      const text = getResponseText(questionId);
+      const text = await getResponseText(questionId);
       if (text && text.length >= 20) {
-        const { pasteCount } = getSessionInfo(questionId);
+        const { pasteCount } = await getSessionInfo(questionId);
         const ss = computeSemanticSignals(text, pasteCount);
-        saveSemanticSignals(questionId, {
+        await saveSemanticSignals(questionId, {
           idea_density: ss.ideaDensity,
           lexical_sophistication: ss.lexicalSophistication,
           epistemic_stance: ss.epistemicStance,
@@ -150,12 +137,12 @@ export function computeAndPersistDerivedSignals(questionId: number): void {
   }
 
   // ── Process signals ──
-  if (!getProcessSignals(questionId)) {
+  if (!(await getProcessSignals(questionId))) {
     try {
-      const eventLogJson = getEventLogJson(questionId);
+      const eventLogJson = await getEventLogJson(questionId);
       if (eventLogJson) {
         const ps = computeProcessSignals(eventLogJson);
-        saveProcessSignals(questionId, {
+        await saveProcessSignals(questionId, {
           pause_within_word: ps.pauseWithinWord,
           pause_between_word: ps.pauseBetweenWord,
           pause_between_sentence: ps.pauseBetweenSentence,
@@ -173,12 +160,12 @@ export function computeAndPersistDerivedSignals(questionId: number): void {
   }
 
   // ── Cross-session signals (depends on motor signals being persisted first) ──
-  if (!getCrossSessionSignals(questionId)) {
+  if (!(await getCrossSessionSignals(questionId))) {
     try {
-      const text = getResponseText(questionId);
+      const text = await getResponseText(questionId);
       if (text && text.length >= 20) {
-        const cs = computeCrossSessionSignals(questionId, text);
-        saveCrossSessionSignals(questionId, {
+        const cs = await computeCrossSessionSignals(questionId, text);
+        await saveCrossSessionSignals(questionId, {
           self_perplexity: cs.selfPerplexity,
           ncd_lag_1: cs.ncdLag1,
           ncd_lag_3: cs.ncdLag3,

@@ -15,7 +15,7 @@
  */
 
 import { gzipSync } from 'node:zlib';
-import db from './db.ts';
+import sql from './db.ts';
 import { STOPWORDS } from './word-lists.ts';
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -43,30 +43,37 @@ function contentWords(text: string): Set<string> {
   return new Set(tokenize(text).filter(w => !STOPWORDS.has(w) && w.length > 2));
 }
 
-function getPriorTexts(currentQuestionId: number): Array<{ text: string; daysAgo: number }> {
-  const rows = db.prepare(`
+async function getPriorTexts(currentQuestionId: number): Promise<Array<{ text: string; daysAgo: number }>> {
+  const rows = await sql`
     SELECT r.text as text,
-           CAST(julianday(q.scheduled_for) AS INTEGER) as jday
+           q.scheduled_for as scheduled_for
     FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
-    WHERE r.question_id != ?
+    WHERE r.question_id != ${currentQuestionId}
     ORDER BY q.scheduled_for DESC
-  `).all(currentQuestionId) as Array<{ text: string; jday: number }>;
+  ` as Array<{ text: string; scheduled_for: string }>;
 
   if (rows.length === 0) return [];
 
-  // Get current entry's julian day
-  const currentRow = db.prepare(`
-    SELECT CAST(julianday(q.scheduled_for) AS INTEGER) as jday
-    FROM tb_questions q WHERE q.question_id = ?
-  `).get(currentQuestionId) as { jday: number } | undefined;
+  // Get current entry's date
+  const currentRows = await sql`
+    SELECT q.scheduled_for as scheduled_for
+    FROM tb_questions q WHERE q.question_id = ${currentQuestionId}
+  `;
+  const currentRow = currentRows[0] as { scheduled_for: string } | undefined;
 
   if (!currentRow) return [];
 
-  return rows.map(r => ({
-    text: r.text,
-    daysAgo: currentRow.jday - r.jday,
-  }));
+  const currentDate = new Date(currentRow.scheduled_for + 'T00:00:00');
+
+  return rows.map(r => {
+    const entryDate = new Date(r.scheduled_for + 'T00:00:00');
+    const daysAgo = Math.round((currentDate.getTime() - entryDate.getTime()) / (1000 * 60 * 60 * 24));
+    return {
+      text: r.text,
+      daysAgo,
+    };
+  });
 }
 
 // ─── Self-Perplexity (personal trigram model) ───────────────────────
@@ -201,20 +208,19 @@ function vocabRecurrenceDecay(
 // ─── Digraph Stability ──────────────────────────────────────────────
 // Cosine similarity of today's digraph profile to rolling baseline.
 
-function digraphStability(questionId: number): number | null {
+async function digraphStability(questionId: number): Promise<number | null> {
   // Get current session's digraph profile
-  const currentRow = db.prepare(
-    `SELECT digraph_latency_json FROM tb_motor_signals WHERE question_id = ?`
-  ).get(questionId) as { digraph_latency_json: string | null } | undefined;
+  const currentRows = await sql`SELECT digraph_latency_json FROM tb_motor_signals WHERE question_id = ${questionId}`;
+  const currentRow = currentRows[0] as { digraph_latency_json: string | null } | undefined;
 
   if (!currentRow?.digraph_latency_json) return null;
 
   // Get prior sessions' digraph profiles (last 5)
-  const priorRows = db.prepare(`
+  const priorRows = await sql`
     SELECT digraph_latency_json FROM tb_motor_signals
-    WHERE question_id != ? AND digraph_latency_json IS NOT NULL
+    WHERE question_id != ${questionId} AND digraph_latency_json IS NOT NULL
     ORDER BY motor_signal_id DESC LIMIT 5
-  `).all(questionId) as Array<{ digraph_latency_json: string }>;
+  ` as Array<{ digraph_latency_json: string }>;
 
   if (priorRows.length < 2) return null;
 
@@ -326,11 +332,11 @@ function textNetworkAnalysis(text: string): GraphResult {
 
 // ─── Public API ─────────────────────────────────────────────────────
 
-export function computeCrossSessionSignals(
+export async function computeCrossSessionSignals(
   questionId: number,
   currentText: string,
-): CrossSessionSignals {
-  const priorTexts = getPriorTexts(questionId);
+): Promise<CrossSessionSignals> {
+  const priorTexts = await getPriorTexts(questionId);
   const priorTextStrings = priorTexts.map(p => p.text);
 
   const network = textNetworkAnalysis(currentText);
@@ -342,7 +348,7 @@ export function computeCrossSessionSignals(
     ncdLag7: ncdAtLag(currentText, priorTexts, 7),
     ncdLag30: ncdAtLag(currentText, priorTexts, 30),
     vocabRecurrenceDecay: vocabRecurrenceDecay(currentText, priorTexts),
-    digraphStability: digraphStability(questionId),
+    digraphStability: await digraphStability(questionId),
     textNetworkDensity: network.density,
     textNetworkCommunities: network.communities,
     bridgingRatio: network.bridgingRatio,

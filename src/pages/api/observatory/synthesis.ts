@@ -14,7 +14,7 @@
  * zz_archive_*_20260416 tables but not referenced here.
  */
 import type { APIRoute } from 'astro';
-import db from '../../../lib/db.ts';
+import sql from '../../../lib/db.ts';
 import {
   DIM_PLAIN, DIM_HIGH, DIM_LOW, EMO_PLAIN, TREND_VERB,
   CONVERGENCE_HIGH, CONVERGENCE_LOW, RARE_PREFIX,
@@ -36,7 +36,7 @@ interface Discovery { text: string; evidence: string; strength: 'strong' | 'mode
 export const GET: APIRoute = async () => {
   try {
     // Behavioral states + dynamics
-    const behavioralStates = db.prepare(`
+    const behavioralStates = await sql`
       SELECT es.response_id, q.scheduled_for as date,
              es.fluency, es.deliberation, es.revision,
              es.commitment, es.volatility, es.thermal, es.presence, es.convergence
@@ -44,18 +44,18 @@ export const GET: APIRoute = async () => {
       JOIN tb_responses r ON es.response_id = r.response_id
       JOIN tb_questions q ON r.question_id = q.question_id
       ORDER BY es.entry_state_id ASC
-    `).all() as any[];
+    ` as any[];
 
     const behavioralCount = behavioralStates.length;
-    const behavioralDynamics = db.prepare(`
+    const behavioralDynamics = await sql`
       SELECT dimension, baseline, variability, attractor_force, current_state, deviation
       FROM tb_trait_dynamics
-      WHERE entry_count = ?
-    `).all(behavioralCount) as any[];
+      WHERE entry_count = ${behavioralCount}
+    ` as any[];
     const behavioralDynMap = new Map(behavioralDynamics.map((d: any) => [d.dimension, d]));
 
     // Semantic states + dynamics
-    const semanticStates = db.prepare(`
+    const semanticStates = await sql`
       SELECT response_id,
              syntactic_complexity, interrogation, self_focus, uncertainty,
              cognitive_processing,
@@ -63,37 +63,37 @@ export const GET: APIRoute = async () => {
              convergence as semantic_convergence
       FROM tb_semantic_states
       ORDER BY semantic_state_id ASC
-    `).all() as any[];
+    ` as any[];
 
     const semanticCount = semanticStates.length;
-    const semanticDynamics = db.prepare(`
+    const semanticDynamics = await sql`
       SELECT dimension, baseline, variability, attractor_force, current_state, deviation
       FROM tb_semantic_dynamics
-      WHERE entry_count = ?
-    `).all(semanticCount) as any[];
+      WHERE entry_count = ${semanticCount}
+    ` as any[];
     const semanticDynMap = new Map(semanticDynamics.map((d: any) => [d.dimension, d]));
 
     // Couplings
-    const behavioralCouplings = db.prepare(`
+    const behavioralCouplings = await sql`
       SELECT leader, follower, lag_sessions, correlation, direction
       FROM tb_coupling_matrix
       WHERE entry_count = (SELECT MAX(entry_count) FROM tb_coupling_matrix)
       ORDER BY correlation DESC
-    `).all() as any[];
+    ` as any[];
 
-    const semanticCouplings = db.prepare(`
+    const semanticCouplings = await sql`
       SELECT leader, follower, lag_sessions, correlation, direction
       FROM tb_semantic_coupling
       WHERE entry_count = (SELECT MAX(entry_count) FROM tb_semantic_coupling)
       ORDER BY correlation DESC
-    `).all() as any[];
+    ` as any[];
 
-    const emotionCouplings = db.prepare(`
+    const emotionCouplings = await sql`
       SELECT emotion_dim, behavior_dim, lag_sessions, correlation, direction
       FROM tb_emotion_behavior_coupling
       WHERE entry_count = (SELECT MAX(entry_count) FROM tb_emotion_behavior_coupling)
       ORDER BY correlation DESC
-    `).all() as any[];
+    ` as any[];
 
     // ---- 1. RIGHT NOW: notable deviations on the latest entry ----
     const rightNow: Insight[] = [];

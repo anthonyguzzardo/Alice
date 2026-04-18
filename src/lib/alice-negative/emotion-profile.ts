@@ -20,7 +20,7 @@
  *   Cross-domain coupling — extends Critcher (Berkeley xLab) causal trait theories
  */
 
-import db from '../db.ts';
+import sql from '../db.ts';
 import { avg, stddev, percentileRank } from './helpers.ts';
 import { type EntryState, STATE_DIMENSIONS, type StateDimension } from './state-engine.ts';
 
@@ -77,8 +77,8 @@ const COUPLING_THRESHOLD = 0.3;
 
 // ─── Load emotion densities from DB ─────────────────────────────────
 
-export function loadEmotionEntries(): EmotionEntry[] {
-  const rows = db.prepare(`
+export async function loadEmotionEntries(): Promise<EmotionEntry[]> {
+  const rows = await sql`
     SELECT
        r.response_id
       ,ss.nrc_anger_density
@@ -94,7 +94,7 @@ export function loadEmotionEntries(): EmotionEntry[] {
     JOIN tb_responses r ON ss.question_id = r.question_id
     JOIN tb_questions q ON r.question_id = q.question_id
     ORDER BY ss.session_summary_id ASC
-  `).all() as any[];
+  ` as any[];
 
   return rows.map(row => ({
     responseId: row.response_id,
@@ -263,11 +263,11 @@ function discoverEmotionBehaviorCoupling(
 
 // ─── Public API ─────────────────────────────────────────────────────
 
-export function computeEmotionAnalysis(
+export async function computeEmotionAnalysis(
   behaviorStates: EntryState[],
   emotionEntries?: EmotionEntry[],
-): EmotionAnalysis {
-  if (!emotionEntries) emotionEntries = loadEmotionEntries();
+): Promise<EmotionAnalysis> {
+  if (!emotionEntries) emotionEntries = await loadEmotionEntries();
 
   const profile = computeEmotionProfile(emotionEntries);
   const emotionBehaviorCoupling = discoverEmotionBehaviorCoupling(emotionEntries, behaviorStates);

@@ -12,11 +12,11 @@ import type { APIRoute } from 'astro';
 import type { WitnessState } from '../../lib/alice-negative/types.ts';
 import { DEFAULT_WITNESS } from '../../lib/alice-negative/types.ts';
 import { loadPersistedTraits } from '../../lib/alice-negative/interpreter.ts';
-import db from '../../lib/db.ts';
+import sql from '../../lib/db.ts';
 
 export const GET: APIRoute = async () => {
   try {
-    const traits = loadPersistedTraits();
+    const traits = await loadPersistedTraits();
 
     if (!traits) {
       return new Response(JSON.stringify(DEFAULT_WITNESS), {
@@ -24,13 +24,14 @@ export const GET: APIRoute = async () => {
       });
     }
 
-    const currentCount = (db.prepare(
-      `SELECT COUNT(*) as c FROM tb_session_summaries ss
-       JOIN tb_questions q ON ss.question_id = q.question_id
-       WHERE q.question_source_id != 3`
-    ).get() as { c: number }).c;
+    const [countRow] = await sql`
+      SELECT COUNT(*)::int as c FROM tb_session_summaries ss
+      JOIN tb_questions q ON ss.question_id = q.question_id
+      WHERE q.question_source_id != 3
+    `;
+    const currentCount = (countRow as { c: number }).c;
 
-    const state = computeMetadata(currentCount, traits);
+    const state = await computeMetadata(currentCount, traits);
 
     return new Response(JSON.stringify(state), {
       headers: { 'Content-Type': 'application/json' },
@@ -43,16 +44,17 @@ export const GET: APIRoute = async () => {
   }
 };
 
-function computeMetadata(currentCount: number, traits: import('../../lib/alice-negative/types.ts').WitnessTraits): WitnessState {
+async function computeMetadata(currentCount: number, traits: import('../../lib/alice-negative/types.ts').WitnessTraits): Promise<WitnessState> {
   const mass = Math.min(1, Math.log(1 + currentCount) / Math.log(501));
 
-  const lastEntry = db.prepare(`
+  const lastEntryRows = await sql`
     SELECT q.scheduled_for
     FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
     WHERE q.question_source_id != 3
     ORDER BY q.scheduled_for DESC LIMIT 1
-  `).get() as { scheduled_for: string } | null;
+  `;
+  const lastEntry = (lastEntryRows[0] as { scheduled_for: string }) ?? null;
 
   let daysSinceLastEntry = 0;
   let lastEntryDate: string | null = null;

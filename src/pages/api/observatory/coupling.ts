@@ -5,54 +5,52 @@
  * cross-domain emotion→behavior coupling. Designer-facing only.
  */
 import type { APIRoute } from 'astro';
-import db from '../../../lib/db.ts';
+import sql from '../../../lib/db.ts';
 
 export const GET: APIRoute = async () => {
   try {
-    const behavioralCount = (db.prepare(
-      'SELECT COUNT(*) as c FROM tb_entry_states'
-    ).get() as { c: number }).c;
-    const semanticCount = (db.prepare(
-      'SELECT COUNT(*) as c FROM tb_semantic_states'
-    ).get() as { c: number }).c;
+    const [behCountRow] = await sql`SELECT COUNT(*)::int as c FROM tb_entry_states`;
+    const behavioralCount = (behCountRow as { c: number }).c;
+    const [semCountRow] = await sql`SELECT COUNT(*)::int as c FROM tb_semantic_states`;
+    const semanticCount = (semCountRow as { c: number }).c;
 
     // Latest behavioral coupling + dynamics for the current entry count
-    const behavioralCouplings = db.prepare(`
+    const behavioralCouplings = await sql`
       SELECT leader, follower, lag_sessions, correlation, direction
       FROM tb_coupling_matrix
       WHERE entry_count = (SELECT MAX(entry_count) FROM tb_coupling_matrix)
       ORDER BY correlation DESC
-    `).all();
+    `;
 
-    const behavioralDynamics = db.prepare(`
+    const behavioralDynamics = await sql`
       SELECT dimension, baseline, variability, attractor_force, current_state, deviation, window_size
       FROM tb_trait_dynamics
       WHERE entry_count = (SELECT MAX(entry_count) FROM tb_trait_dynamics)
       ORDER BY dimension
-    `).all();
+    `;
 
     // Semantic dynamics + coupling
-    const semanticCouplings = db.prepare(`
+    const semanticCouplings = await sql`
       SELECT leader, follower, lag_sessions, correlation, direction
       FROM tb_semantic_coupling
       WHERE entry_count = (SELECT MAX(entry_count) FROM tb_semantic_coupling)
       ORDER BY correlation DESC
-    `).all();
+    `;
 
-    const semanticDynamics = db.prepare(`
+    const semanticDynamics = await sql`
       SELECT dimension, baseline, variability, attractor_force, current_state, deviation, window_size
       FROM tb_semantic_dynamics
       WHERE entry_count = (SELECT MAX(entry_count) FROM tb_semantic_dynamics)
       ORDER BY dimension
-    `).all();
+    `;
 
     // Emotion → behavior cross-domain coupling
-    const emotionCouplings = db.prepare(`
+    const emotionCouplings = await sql`
       SELECT emotion_dim, behavior_dim, lag_sessions, correlation, direction
       FROM tb_emotion_behavior_coupling
       WHERE entry_count = (SELECT MAX(entry_count) FROM tb_emotion_behavior_coupling)
       ORDER BY correlation DESC
-    `).all();
+    `;
 
     return new Response(JSON.stringify({
       behavioralCount,

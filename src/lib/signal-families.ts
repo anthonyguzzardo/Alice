@@ -250,9 +250,9 @@ export interface VariantTreeResult {
  *   3. For solo: zero ALL families except one → recompute
  *   4. Compute inter-family correlations from the deviation patterns
  */
-export function computeVariantTree(): VariantTreeResult {
-  const sessions = loadSessions();
-  const baseline = computeEntryStates(sessions);
+export async function computeVariantTree(): Promise<VariantTreeResult> {
+  const sessions = await loadSessions();
+  const baseline = await computeEntryStates(sessions);
 
   if (baseline.length === 0) {
     return {
@@ -319,17 +319,17 @@ export function computeVariantTree(): VariantTreeResult {
 
   // ── Leave-one-out ──
   const stateEngineFamilies = SIGNAL_FAMILIES.filter(f => f.feedsDimensions.length > 0);
-  const leaveOneOut: AblationResult[] = stateEngineFamilies.map(family => {
+  const leaveOneOut: AblationResult[] = await Promise.all(stateEngineFamilies.map(async family => {
     const neutralize = familyNeutralizations[family.id];
     if (!neutralize) return makeEmptyAblation([family.id], stateEngineFamilies.map(f => f.id).filter(id => id !== family.id));
 
     const ablatedSessions = sessions.map(s => neutralize(s));
-    const ablatedStates = computeEntryStates(ablatedSessions);
+    const ablatedStates = await computeEntryStates(ablatedSessions);
     return measureDeviation(baseline, ablatedStates, [family.id], baselineVariance);
-  });
+  }));
 
   // ── Solo family (only one family active, rest neutralized) ──
-  const soloFamily: AblationResult[] = stateEngineFamilies.map(family => {
+  const soloFamily: AblationResult[] = await Promise.all(stateEngineFamilies.map(async family => {
     // Neutralize ALL families except this one
     const othersToNeutralize = stateEngineFamilies
       .filter(f => f.id !== family.id)
@@ -344,12 +344,12 @@ export function computeVariantTree(): VariantTreeResult {
       return result;
     });
 
-    const soloStates = computeEntryStates(soloSessions);
+    const soloStates = await computeEntryStates(soloSessions);
     return measureDeviation(baseline, soloStates,
       stateEngineFamilies.filter(f => f.id !== family.id).map(f => f.id),
       baselineVariance,
     );
-  });
+  }));
 
   // ── Inter-family correlation ──
   // Use leave-one-out deviation vectors to compute how correlated families are

@@ -665,15 +665,15 @@ export interface KnowledgeTransformResult {
  * This is what writing looks like when nothing interesting is happening.
  * Cached per call since calibration data changes rarely.
  */
-function computeCalibrationKTFloor(allSummaries: SessionSummaryInput[]): number {
-  const calSessions = getCalibrationSessionsWithText();
+async function computeCalibrationKTFloor(allSummaries: SessionSummaryInput[]): Promise<number> {
+  const calSessions = await getCalibrationSessionsWithText();
   // Need at least 5 calibration sessions with decent length for a reliable floor
   const usable = calSessions.filter(s => s.wordCount >= 20);
   if (usable.length < 3) return 0; // insufficient data — fall back to no floor
 
   const scores: number[] = [];
   for (const cal of usable) {
-    const result = computeRawKTScore(cal, (cal as any).responseText, allSummaries);
+    const result = await computeRawKTScore(cal, (cal as any).responseText, allSummaries);
     scores.push(result.rawScore);
   }
 
@@ -686,11 +686,11 @@ function computeCalibrationKTFloor(allSummaries: SessionSummaryInput[]): number 
 /**
  * Internal: compute raw KT score without calibration adjustment.
  */
-function computeRawKTScore(
+async function computeRawKTScore(
   session: SessionSummaryInput,
   responseText: string,
   allSummaries: SessionSummaryInput[],
-): { rawScore: number; signals: string[] } {
+): Promise<{ rawScore: number; signals: string[] }> {
   const signals: string[] = [];
   let scoreSum = 0;
   let componentCount = 0;
@@ -746,7 +746,7 @@ function computeRawKTScore(
   // The KT signature: short fragmented bursts early → longer sustained bursts later
   // as thinking consolidates during writing.
   try {
-    const bursts = getBurstSequence(session.questionId);
+    const bursts = await getBurstSequence(session.questionId);
     if (bursts.length >= 4) {
       const mid = Math.floor(bursts.length / 2);
       const firstHalfBursts = bursts.slice(0, mid);
@@ -796,13 +796,13 @@ function computeRawKTScore(
  * writing looks like when nothing interesting is happening. The
  * distance above that floor is the real signal.
  */
-export function computeKnowledgeTransformScore(
+export async function computeKnowledgeTransformScore(
   session: SessionSummaryInput,
   responseText: string,
   allSummaries: SessionSummaryInput[],
-): KnowledgeTransformResult {
-  const { rawScore, signals } = computeRawKTScore(session, responseText, allSummaries);
-  const calibrationFloor = computeCalibrationKTFloor(allSummaries);
+): Promise<KnowledgeTransformResult> {
+  const { rawScore, signals } = await computeRawKTScore(session, responseText, allSummaries);
+  const calibrationFloor = await computeCalibrationKTFloor(allSummaries);
   const aboveFloor = Math.max(0, rawScore - calibrationFloor);
 
   if (calibrationFloor > 0 && aboveFloor > 0.15) {

@@ -42,11 +42,6 @@ function daysBetween(dateStr: string, now: Date): number {
   return Math.max(0, Math.floor((now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24)));
 }
 
-function float32ToBuffer(arr: number[]): Buffer {
-  const f32 = new Float32Array(arr);
-  return Buffer.from(f32.buffer);
-}
-
 export async function retrieveSimilar(
   queryText: string,
   options?: RetrievalOptions
@@ -69,7 +64,7 @@ export async function retrieveSimilar(
     : null;
   const excludeDateSet = new Set(excludeDates);
 
-  const candidates = searchVecEmbeddings(float32ToBuffer(embedding), candidateK);
+  const candidates = await searchVecEmbeddings(embedding, candidateK);
 
   const now = new Date();
   const scored: RetrievedEntry[] = [];
@@ -174,7 +169,7 @@ export async function retrieveContrarian(
     : null;
   const excludeDateSet = new Set(excludeDates);
 
-  const candidates = searchVecEmbeddings(float32ToBuffer(center), candidateK);
+  const candidates = await searchVecEmbeddings(center, candidateK);
 
   // Filter and take the MOST distant (last entries, since results are sorted by distance ASC)
   const filtered: RetrievedEntry[] = [];

@@ -34,8 +34,8 @@ import { type EmotionAnalysis, formatEmotionForRenderer } from './emotion-profil
 
 /** Load the latest persisted traits, regardless of entry count.
  *  Returns null only if no witness state has ever been generated. */
-export function loadPersistedTraits(): WitnessTraits | null {
-  const row = getLatestWitnessState();
+export async function loadPersistedTraits(): Promise<WitnessTraits | null> {
+  const row = await getLatestWitnessState();
   if (!row) return null;
 
   try {
@@ -46,8 +46,8 @@ export function loadPersistedTraits(): WitnessTraits | null {
 }
 
 /** Check if a new render is needed (entry count changed since last persist) */
-export function needsNewRender(currentEntryCount: number): boolean {
-  const row = getLatestWitnessState();
+export async function needsNewRender(currentEntryCount: number): Promise<boolean> {
+  const row = await getLatestWitnessState();
   if (!row) return true;
   return row.entry_count !== currentEntryCount;
 }
@@ -206,7 +206,7 @@ async function renderTraitsInner(
 
     if (parsed) {
       // Persist to DB (store dynamics + emotion context)
-      saveWitnessState(
+      await saveWitnessState(
         entryCount,
         JSON.stringify(parsed),
         JSON.stringify({
@@ -227,7 +227,7 @@ async function renderTraitsInner(
   }
 
   // Fallback: return whatever was last persisted, or defaults
-  const lastRow = getLatestWitnessState();
+  const lastRow = await getLatestWitnessState();
   if (lastRow) {
     try { return JSON.parse(lastRow.traits_json) as WitnessTraits; } catch {}
   }
@@ -267,10 +267,10 @@ import type { AliceNegativeSignal } from './types.js';
 
 /** Legacy bridge for scripts/reinterpret.ts — runs full pipeline unconditionally */
 export async function interpretTraits(_sig: AliceNegativeSignal, entryCount: number): Promise<WitnessTraits> {
-  const states = computeEntryStates();
+  const states = await computeEntryStates();
   if (states.length < 3) return { ...DEFAULT_TRAITS };
 
   const dynamics = computeDynamics(states);
-  const emotionAnalysis = computeEmotionAnalysis(states);
+  const emotionAnalysis = await computeEmotionAnalysis(states);
   return renderTraits(dynamics, entryCount, emotionAnalysis);
 }

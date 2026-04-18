@@ -9,7 +9,7 @@ import { runObservation } from '../src/lib/observe.ts';
 import { runGeneration } from '../src/lib/generate.ts';
 import { getResponseCount } from '../src/lib/db.ts';
 
-const count = getResponseCount();
+const count = await getResponseCount();
 console.log(`Response count: ${count}`);
 
 console.log('Running observation...');

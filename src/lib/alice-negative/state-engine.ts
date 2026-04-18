@@ -26,7 +26,7 @@
  *   Normalized to [0, 1]. High convergence = multiple dimensions moved together.
  */
 
-import db from '../db.ts';
+import sql from '../db.ts';
 import { avg, stddev } from './helpers.ts';
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -84,8 +84,8 @@ interface SessionRaw {
   tabAwayRatePerMinute: number;
 }
 
-export function loadSessions(): SessionRaw[] {
-  const rows = db.prepare(`
+export async function loadSessions(): Promise<SessionRaw[]> {
+  const rows = await sql`
     SELECT
        ss.session_summary_id
       ,r.response_id
@@ -113,7 +113,7 @@ export function loadSessions(): SessionRaw[] {
     JOIN tb_questions q ON r.question_id = q.question_id
     WHERE q.question_source_id != 3
     ORDER BY ss.session_summary_id ASC
-  `).all() as any[];
+  ` as any[];
 
   return rows.map(row => {
     const totalCharsTyped = row.total_chars_typed || 1;
@@ -181,8 +181,8 @@ export function loadSessions(): SessionRaw[] {
 
 // ─── 7D State computation ──────────────────────────────────────────
 
-export function computeEntryStates(sessions?: SessionRaw[]): EntryState[] {
-  if (!sessions) sessions = loadSessions();
+export async function computeEntryStates(sessions?: SessionRaw[]): Promise<EntryState[]> {
+  if (!sessions) sessions = await loadSessions();
   if (sessions.length < MIN_ENTRIES) return [];
 
   const hasBurstData = sessions.some(s => s.avgPBurstLength > 0);

@@ -6,31 +6,31 @@
  * Days after a witness state use the most recent witness at that point in time.
  */
 import type { APIRoute } from 'astro';
-import db from '../../lib/db.ts';
+import sql from '../../lib/db.ts';
 import { DEFAULT_WITNESS } from '../../lib/alice-negative/types.ts';
 
 export const GET: APIRoute = async () => {
   // Get distinct session days (by scheduled_for) with real responses
-  const sessionDays = db.prepare(`
+  const sessionDays = await sql`
     SELECT q.scheduled_for, MIN(r.dttm_created_utc) as first_response_utc,
-           COUNT(r.response_id) as response_count
+           COUNT(r.response_id)::int as response_count
     FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
     WHERE q.question_source_id != 3
     GROUP BY q.scheduled_for
     ORDER BY q.scheduled_for ASC
-  `).all() as Array<{
+  ` as Array<{
     scheduled_for: string;
     first_response_utc: string;
     response_count: number;
   }>;
 
   // Get all witness states ordered by creation
-  const witnesses = db.prepare(`
+  const witnesses = await sql`
     SELECT witness_state_id, entry_count, traits_json, dttm_created_utc
     FROM tb_witness_states
     ORDER BY dttm_created_utc ASC
-  `).all() as Array<{
+  ` as Array<{
     witness_state_id: number;
     entry_count: number;
     traits_json: string;

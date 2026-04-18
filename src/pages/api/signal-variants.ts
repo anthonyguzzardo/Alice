@@ -12,9 +12,9 @@
 import type { APIRoute } from 'astro';
 import { computeVariantTree, SIGNAL_FAMILIES } from '../../lib/signal-families.ts';
 
-export const GET: APIRoute = () => {
+export const GET: APIRoute = async () => {
   try {
-    const result = computeVariantTree();
+    const result = await computeVariantTree();
 
     // Strip full baseline states to keep response lean — frontend only needs summaries
     const { baseline, ...rest } = result;

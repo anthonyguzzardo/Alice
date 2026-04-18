@@ -7,12 +7,12 @@
  * Pulls from the live alice.db (no more simulation hardcoding).
  */
 import type { APIRoute } from 'astro';
-import db from '../../../lib/db.ts';
+import sql from '../../../lib/db.ts';
 
 export const GET: APIRoute = async () => {
   try {
     // Behavioral 7D states with question + replay availability
-    const states = db.prepare(`
+    const states = await sql`
       SELECT
          es.response_id
         ,r.question_id
@@ -25,10 +25,10 @@ export const GET: APIRoute = async () => {
       JOIN tb_responses r ON es.response_id = r.response_id
       JOIN tb_questions q ON r.question_id = q.question_id
       ORDER BY es.entry_state_id ASC
-    `).all() as any[];
+    ` as any[];
 
     // Semantic 11D states keyed by response_id
-    const semanticRows = db.prepare(`
+    const semanticRows = await sql`
       SELECT
          response_id
         ,syntactic_complexity, interrogation, self_focus, uncertainty
@@ -37,36 +37,36 @@ export const GET: APIRoute = async () => {
         ,convergence as semantic_convergence
       FROM tb_semantic_states
       ORDER BY semantic_state_id ASC
-    `).all() as any[];
+    ` as any[];
     const semanticByResponse = new Map<number, any>();
     for (const s of semanticRows) semanticByResponse.set(s.response_id, s);
 
     // Session metadata (slice-3 follow-ups) keyed by question_id
-    const metaRows = db.prepare(`
+    const metaRows = await sql`
       SELECT
          question_id
         ,hour_typicality, deletion_curve_type, burst_trajectory_shape
         ,inter_burst_interval_mean_ms, inter_burst_interval_std_ms
         ,deletion_during_burst_count, deletion_between_burst_count
       FROM tb_session_metadata
-    `).all() as any[];
+    ` as any[];
     const metaByQuestion = new Map<number, any>();
     for (const m of metaRows) metaByQuestion.set(m.question_id, m);
 
     // Motor signals keyed by question_id (Phase 2 expansion)
-    const motorRows = db.prepare(`
+    const motorRows = await sql`
       SELECT
          question_id
         ,ex_gaussian_tau, ex_gaussian_mu, ex_gaussian_sigma
         ,tau_proportion, adjacent_hold_time_cov
         ,sample_entropy, motor_jerk, lapse_rate, tempo_drift
       FROM tb_motor_signals
-    `).all() as any[];
+    ` as any[];
     const motorByQuestion = new Map<number, any>();
     for (const m of motorRows) motorByQuestion.set(m.question_id, m);
 
     // Phase 2 cursor/revision/punctuation signals keyed by question_id
-    const phase2Rows = db.prepare(`
+    const phase2Rows = await sql`
       SELECT
          question_id
         ,cursor_fidget_ratio, cursor_stillness_during_pauses
@@ -74,12 +74,12 @@ export const GET: APIRoute = async () => {
         ,mean_revision_distance, punctuation_letter_ratio
       FROM tb_session_summaries
       WHERE cursor_fidget_ratio IS NOT NULL OR punctuation_letter_ratio IS NOT NULL
-    `).all() as any[];
+    ` as any[];
     const phase2ByQuestion = new Map<number, any>();
     for (const p of phase2Rows) phase2ByQuestion.set(p.question_id, p);
 
     // Replay availability: which question_ids have an event log
-    const replayRows = db.prepare(`SELECT DISTINCT question_id FROM tb_session_events`).all() as Array<{ question_id: number }>;
+    const replayRows = await sql`SELECT DISTINCT question_id FROM tb_session_events` as Array<{ question_id: number }>;
     const replayAvailable = new Set(replayRows.map(r => r.question_id));
 
     const enriched = states.map(s => ({

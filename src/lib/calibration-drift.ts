@@ -18,7 +18,7 @@
  * Slice 3 follow-up (2026-04-16). Pure deterministic computation. No LLM.
  */
 
-import db, {
+import sql, {
   saveCalibrationBaselineSnapshot,
   getLatestCalibrationSnapshot,
   type CalibrationHistoryRow,
@@ -60,77 +60,95 @@ interface BaselineRowInput {
   avg_flight_time_mean: number | null;
 }
 
-function computeBaselineSnapshot(deviceType: string | null): BaselineRowInput & { calibration_session_count: number } {
-  const conditions: string[] = ['q.question_source_id = 3'];
-  const params: (string | number)[] = [];
+async function computeBaselineSnapshot(deviceType: string | null): Promise<BaselineRowInput & { calibration_session_count: number }> {
+  let rows;
   if (deviceType) {
-    conditions.push('s.device_type = ?');
-    params.push(deviceType);
+    rows = await sql`
+      SELECT
+         AVG(s.first_keystroke_ms)        as avg_first_keystroke_ms
+        ,AVG(s.commitment_ratio)          as avg_commitment_ratio
+        ,AVG(s.total_duration_ms)         as avg_duration_ms
+        ,AVG(s.pause_count)               as avg_pause_count
+        ,AVG(s.deletion_count)            as avg_deletion_count
+        ,AVG(s.chars_per_minute)          as avg_chars_per_minute
+        ,AVG(s.avg_p_burst_length)        as avg_p_burst_length
+        ,AVG(s.small_deletion_count)      as avg_small_deletion_count
+        ,AVG(s.large_deletion_count)      as avg_large_deletion_count
+        ,AVG(s.inter_key_interval_mean)   as avg_iki_mean
+        ,AVG(s.hold_time_mean)            as avg_hold_time_mean
+        ,AVG(s.flight_time_mean)          as avg_flight_time_mean
+        ,COUNT(*)                          as calibration_session_count
+      FROM tb_session_summaries s
+      JOIN tb_questions q ON s.question_id = q.question_id
+      WHERE q.question_source_id = 3 AND s.device_type = ${deviceType}
+    `;
   } else {
-    // global snapshot ignores device
+    rows = await sql`
+      SELECT
+         AVG(s.first_keystroke_ms)        as avg_first_keystroke_ms
+        ,AVG(s.commitment_ratio)          as avg_commitment_ratio
+        ,AVG(s.total_duration_ms)         as avg_duration_ms
+        ,AVG(s.pause_count)               as avg_pause_count
+        ,AVG(s.deletion_count)            as avg_deletion_count
+        ,AVG(s.chars_per_minute)          as avg_chars_per_minute
+        ,AVG(s.avg_p_burst_length)        as avg_p_burst_length
+        ,AVG(s.small_deletion_count)      as avg_small_deletion_count
+        ,AVG(s.large_deletion_count)      as avg_large_deletion_count
+        ,AVG(s.inter_key_interval_mean)   as avg_iki_mean
+        ,AVG(s.hold_time_mean)            as avg_hold_time_mean
+        ,AVG(s.flight_time_mean)          as avg_flight_time_mean
+        ,COUNT(*)                          as calibration_session_count
+      FROM tb_session_summaries s
+      JOIN tb_questions q ON s.question_id = q.question_id
+      WHERE q.question_source_id = 3
+    `;
   }
 
-  const row = db.prepare(`
-    SELECT
-       AVG(s.first_keystroke_ms)        as avg_first_keystroke_ms
-      ,AVG(s.commitment_ratio)          as avg_commitment_ratio
-      ,AVG(s.total_duration_ms)         as avg_duration_ms
-      ,AVG(s.pause_count)               as avg_pause_count
-      ,AVG(s.deletion_count)            as avg_deletion_count
-      ,AVG(s.chars_per_minute)          as avg_chars_per_minute
-      ,AVG(s.avg_p_burst_length)        as avg_p_burst_length
-      ,AVG(s.small_deletion_count)      as avg_small_deletion_count
-      ,AVG(s.large_deletion_count)      as avg_large_deletion_count
-      ,AVG(s.inter_key_interval_mean)   as avg_iki_mean
-      ,AVG(s.hold_time_mean)            as avg_hold_time_mean
-      ,AVG(s.flight_time_mean)          as avg_flight_time_mean
-      ,COUNT(*)                          as calibration_session_count
-    FROM tb_session_summaries s
-    JOIN tb_questions q ON s.question_id = q.question_id
-    WHERE ${conditions.join(' AND ')}
-  `).get(...params) as BaselineRowInput & { calibration_session_count: number };
-
-  return row;
+  return rows[0] as BaselineRowInput & { calibration_session_count: number };
 }
 
-function getJournalDispersion(field: keyof BaselineRowInput): number | null {
+// Map baseline field names to their corresponding session summary column names
+const BASELINE_TO_COLUMN: Record<string, string> = {
+  avg_first_keystroke_ms: 'first_keystroke_ms',
+  avg_commitment_ratio: 'commitment_ratio',
+  avg_duration_ms: 'total_duration_ms',
+  avg_pause_count: 'pause_count',
+  avg_deletion_count: 'deletion_count',
+  avg_chars_per_minute: 'chars_per_minute',
+  avg_p_burst_length: 'avg_p_burst_length',
+  avg_small_deletion_count: 'small_deletion_count',
+  avg_large_deletion_count: 'large_deletion_count',
+  avg_iki_mean: 'inter_key_interval_mean',
+  avg_hold_time_mean: 'hold_time_mean',
+  avg_flight_time_mean: 'flight_time_mean',
+};
+
+async function getJournalDispersion(field: keyof BaselineRowInput): Promise<number | null> {
   // Per-person dispersion across journal sessions for the source field.
   // Used as the scaling denominator when computing per-dimension drift.
-  const sourceCol = field
-    .replace(/^avg_/, '')
-    .replace('first_keystroke_ms', 'first_keystroke_ms')
-    .replace('commitment_ratio', 'commitment_ratio')
-    .replace('duration_ms', 'total_duration_ms')
-    .replace('pause_count', 'pause_count')
-    .replace('deletion_count', 'deletion_count')
-    .replace('chars_per_minute', 'chars_per_minute')
-    .replace('p_burst_length', 'avg_p_burst_length')
-    .replace('small_deletion_count', 'small_deletion_count')
-    .replace('large_deletion_count', 'large_deletion_count')
-    .replace('iki_mean', 'inter_key_interval_mean')
-    .replace('hold_time_mean', 'hold_time_mean')
-    .replace('flight_time_mean', 'flight_time_mean');
+  const sourceCol = BASELINE_TO_COLUMN[field];
+  if (!sourceCol) return null;
 
-  // Population std on journal-session column. SQLite doesn't have a stddev
-  // function by default, but we can compute it manually.
-  const row = db.prepare(`
-    SELECT s.${sourceCol} as v
-    FROM tb_session_summaries s
-    JOIN tb_questions q ON s.question_id = q.question_id
-    WHERE q.question_source_id != 3 AND s.${sourceCol} IS NOT NULL
-  `).all() as Array<{ v: number }>;
+  // Population std on journal-session column. Postgres has stddev_pop but
+  // we compute manually to stay consistent with the existing approach.
+  const rows = await sql.unsafe(
+    `SELECT s.${sourceCol} as v
+     FROM tb_session_summaries s
+     JOIN tb_questions q ON s.question_id = q.question_id
+     WHERE q.question_source_id != 3 AND s.${sourceCol} IS NOT NULL`
+  ) as Array<{ v: number }>;
 
-  if (row.length < 3) return null;
-  const vals = row.map(r => r.v);
+  if (rows.length < 3) return null;
+  const vals = rows.map(r => r.v);
   const mean = vals.reduce((s, v) => s + v, 0) / vals.length;
   const variance = vals.reduce((s, v) => s + (v - mean) ** 2, 0) / vals.length;
   return Math.sqrt(variance);
 }
 
-function computeDriftMagnitude(
+async function computeDriftMagnitude(
   current: BaselineRowInput,
   previous: CalibrationHistoryRow | null,
-): number | null {
+): Promise<number | null> {
   if (!previous) return 0; // first snapshot has no drift
 
   let sumSq = 0;
@@ -140,7 +158,7 @@ function computeDriftMagnitude(
     const prev = previous[dim] as number | null;
     if (cur == null || prev == null) continue;
 
-    const dispersion = getJournalDispersion(dim as keyof BaselineRowInput);
+    const dispersion = await getJournalDispersion(dim as keyof BaselineRowInput);
     if (dispersion == null || dispersion < 1e-10) continue;
 
     const z = (cur - prev) / dispersion;
@@ -160,13 +178,13 @@ function computeDriftMagnitude(
  * Two snapshots are taken: one global (deviceType=null) and one for the
  * device of the calibration session that just ran (when available).
  */
-export function snapshotCalibrationBaselinesAfterSubmit(deviceType: string | null): void {
+export async function snapshotCalibrationBaselinesAfterSubmit(deviceType: string | null): Promise<void> {
   // Global snapshot
-  const globalSnap = computeBaselineSnapshot(null);
+  const globalSnap = await computeBaselineSnapshot(null);
   if (globalSnap.calibration_session_count > 0) {
-    const prevGlobal = getLatestCalibrationSnapshot(null);
-    const driftGlobal = computeDriftMagnitude(globalSnap, prevGlobal);
-    saveCalibrationBaselineSnapshot({
+    const prevGlobal = await getLatestCalibrationSnapshot(null);
+    const driftGlobal = await computeDriftMagnitude(globalSnap, prevGlobal);
+    await saveCalibrationBaselineSnapshot({
       calibration_session_count: globalSnap.calibration_session_count,
       device_type: null,
       avg_first_keystroke_ms: globalSnap.avg_first_keystroke_ms,
@@ -187,11 +205,11 @@ export function snapshotCalibrationBaselinesAfterSubmit(deviceType: string | nul
 
   // Device-specific snapshot
   if (deviceType) {
-    const deviceSnap = computeBaselineSnapshot(deviceType);
+    const deviceSnap = await computeBaselineSnapshot(deviceType);
     if (deviceSnap.calibration_session_count > 0) {
-      const prevDevice = getLatestCalibrationSnapshot(deviceType);
-      const driftDevice = computeDriftMagnitude(deviceSnap, prevDevice);
-      saveCalibrationBaselineSnapshot({
+      const prevDevice = await getLatestCalibrationSnapshot(deviceType);
+      const driftDevice = await computeDriftMagnitude(deviceSnap, prevDevice);
+      await saveCalibrationBaselineSnapshot({
         calibration_session_count: deviceSnap.calibration_session_count,
         device_type: deviceType,
         avg_first_keystroke_ms: deviceSnap.avg_first_keystroke_ms,

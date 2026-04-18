@@ -8,8 +8,8 @@ import { snapshotCalibrationBaselinesAfterSubmit } from '../../lib/calibration-d
 import { computeAndPersistDerivedSignals } from '../../lib/signal-pipeline.ts';
 import { logError } from '../../lib/error-log.ts';
 
-export const GET: APIRoute = () => {
-  const used = new Set(getUsedCalibrationPrompts());
+export const GET: APIRoute = async () => {
+  const used = new Set(await getUsedCalibrationPrompts());
   const available = CALIBRATION_PROMPTS.filter(p => !used.has(p));
   const pool = available.length > 0 ? available : CALIBRATION_PROMPTS; // cycle if all used
   const prompt = pool[Math.floor(Math.random() * pool.length)];
@@ -42,7 +42,7 @@ export const POST: APIRoute = async ({ request }) => {
   const sentLenVar = sentWordCounts.length > 1 && avgSentLen != null
     ? sentWordCounts.reduce((sum: number, c: number) => sum + (c - avgSentLen) ** 2, 0) / (sentWordCounts.length - 1) : null;
 
-  const questionId = saveCalibrationSession(prompt, text.trim(), {
+  const questionId = await saveCalibrationSession(prompt, text.trim(), {
     questionId: 0,
     firstKeystrokeMs: sessionSummary.firstKeystrokeMs ?? null,
     totalDurationMs: sessionSummary.totalDurationMs ?? null,
@@ -120,7 +120,7 @@ export const POST: APIRoute = async ({ request }) => {
 
   // Store event log + keystroke stream for calibration sessions (same as journal)
   if (Array.isArray(sessionSummary.eventLog) && sessionSummary.eventLog.length > 0) {
-    saveSessionEvents({
+    await saveSessionEvents({
       question_id: questionId,
       event_log_json: JSON.stringify(sessionSummary.eventLog),
       total_events: sessionSummary.eventLog.length,
@@ -136,13 +136,13 @@ export const POST: APIRoute = async ({ request }) => {
   runCalibrationExtraction(questionId, text.trim(), prompt);
 
   // Fire-and-forget: compute derived signals (motor, semantic, process, cross-session)
-  try { computeAndPersistDerivedSignals(questionId); }
+  try { await computeAndPersistDerivedSignals(questionId); }
   catch (err) { logError('calibrate.derived-signals', err, { questionId }); }
 
   // Snapshot calibration baselines after this submission so drift can be
   // tracked over time. Pure deterministic, fire-and-forget.
   try {
-    snapshotCalibrationBaselinesAfterSubmit(sessionSummary.deviceType ?? null);
+    await snapshotCalibrationBaselinesAfterSubmit(sessionSummary.deviceType ?? null);
   } catch (err) {
     logError('calibrate.driftSnapshot', err, { questionId });
   }

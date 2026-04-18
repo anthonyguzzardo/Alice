@@ -12,7 +12,7 @@ export const POST: APIRoute = async ({ request }) => {
     });
   }
 
-  saveQuestionFeedback(questionId, landed);
+  await saveQuestionFeedback(questionId, landed);
 
   return new Response(JSON.stringify({ ok: true }), {
     headers: { 'Content-Type': 'application/json' },

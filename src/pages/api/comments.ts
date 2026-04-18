@@ -10,7 +10,7 @@ export const GET: APIRoute = async ({ url }) => {
     });
   }
 
-  const comments = getCommentsForPaper(slug);
+  const comments = await getCommentsForPaper(slug);
   return new Response(JSON.stringify(comments), {
     headers: { 'Content-Type': 'application/json' },
   });
@@ -35,7 +35,7 @@ export const POST: APIRoute = async ({ request }) => {
     });
   }
 
-  const id = saveComment(slug, authorName.trim(), commentText.trim());
+  const id = await saveComment(slug, authorName.trim(), commentText.trim());
   return new Response(JSON.stringify({ ok: true, id }), {
     headers: { 'Content-Type': 'application/json' },
   });

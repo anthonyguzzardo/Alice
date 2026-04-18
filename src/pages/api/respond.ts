@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import db, {
+import sql, {
   saveResponse, getTodaysQuestion, getTodaysResponse,
   saveSessionSummary, saveBurstSequence, getResponseCount,
   updateDeletionEvents, saveSessionEvents, saveSessionMetadata, getBurstSequence,
@@ -30,7 +30,7 @@ export const POST: APIRoute = async ({ request }) => {
     });
   }
 
-  const question = getTodaysQuestion();
+  const question = await getTodaysQuestion();
   if (!question || question.question_id !== questionId) {
     return new Response(JSON.stringify({ error: 'Invalid question' }), {
       status: 400,
@@ -38,7 +38,7 @@ export const POST: APIRoute = async ({ request }) => {
     });
   }
 
-  const existing = getTodaysResponse();
+  const existing = await getTodaysResponse();
   if (existing) {
     return new Response(JSON.stringify({ error: 'Already responded today' }), {
       status: 409,
@@ -59,143 +59,141 @@ export const POST: APIRoute = async ({ request }) => {
   const sentLenVar = sentWordCounts.length > 1 && avgSentLen != null
     ? sentWordCounts.reduce((sum: number, c: number) => sum + (c - avgSentLen) ** 2, 0) / (sentWordCounts.length - 1) : null;
 
-  // All synchronous DB writes in a single transaction — either everything
+  // All DB writes in a single transaction — either everything
   // commits or nothing does. No more half-baked session state.
-  const persistSession = db.transaction(() => {
-    const responseId = saveResponse(questionId, trimmedText);
-
-    if (sessionSummary) {
-      if (Array.isArray(sessionSummary.burstSequence) && sessionSummary.burstSequence.length > 0) {
-        saveBurstSequence(questionId, sessionSummary.burstSequence);
-      }
-
-      if (Array.isArray(sessionSummary.eventLog) && sessionSummary.eventLog.length > 0) {
-        saveSessionEvents({
-          question_id: questionId,
-          event_log_json: JSON.stringify(sessionSummary.eventLog),
-          total_events: sessionSummary.eventLog.length,
-          session_duration_ms: sessionSummary.totalDurationMs ?? 0,
-          keystroke_stream_json: Array.isArray(sessionSummary.keystrokeStream) && sessionSummary.keystrokeStream.length > 0
-            ? JSON.stringify(sessionSummary.keystrokeStream)
-            : null,
-          total_input_events: sessionSummary.eventLogTotalInputs ?? null,
-          decimation_count: 0,
-        });
-      }
-
-      saveSessionSummary({
-        questionId: sessionSummary.questionId,
-        firstKeystrokeMs: sessionSummary.firstKeystrokeMs ?? null,
-        totalDurationMs: sessionSummary.totalDurationMs ?? null,
-        totalCharsTyped: sessionSummary.totalCharsTyped ?? 0,
-        finalCharCount: sessionSummary.finalCharCount ?? 0,
-        commitmentRatio: sessionSummary.commitmentRatio ?? null,
-        pauseCount: sessionSummary.pauseCount ?? 0,
-        totalPauseMs: sessionSummary.totalPauseMs ?? 0,
-        deletionCount: sessionSummary.deletionCount ?? 0,
-        largestDeletion: sessionSummary.largestDeletion ?? 0,
-        totalCharsDeleted: sessionSummary.totalCharsDeleted ?? 0,
-        tabAwayCount: sessionSummary.tabAwayCount ?? 0,
-        totalTabAwayMs: sessionSummary.totalTabAwayMs ?? 0,
-        wordCount: sessionSummary.wordCount ?? 0,
-        sentenceCount: sessionSummary.sentenceCount ?? 0,
-        smallDeletionCount: sessionSummary.smallDeletionCount ?? null,
-        largeDeletionCount: sessionSummary.largeDeletionCount ?? null,
-        largeDeletionChars: sessionSummary.largeDeletionChars ?? null,
-        firstHalfDeletionChars: sessionSummary.firstHalfDeletionChars ?? null,
-        secondHalfDeletionChars: sessionSummary.secondHalfDeletionChars ?? null,
-        activeTypingMs: sessionSummary.activeTypingMs ?? null,
-        charsPerMinute: sessionSummary.charsPerMinute ?? null,
-        pBurstCount: sessionSummary.pBurstCount ?? null,
-        avgPBurstLength: sessionSummary.avgPBurstLength ?? null,
-        ...densities,
-        interKeyIntervalMean: sessionSummary.interKeyIntervalMean ?? null,
-        interKeyIntervalStd: sessionSummary.interKeyIntervalStd ?? null,
-        revisionChainCount: sessionSummary.revisionChainCount ?? null,
-        revisionChainAvgLength: sessionSummary.revisionChainAvgLength ?? null,
-        holdTimeMean: sessionSummary.holdTimeMean ?? null,
-        holdTimeStd: sessionSummary.holdTimeStd ?? null,
-        flightTimeMean: sessionSummary.flightTimeMean ?? null,
-        flightTimeStd: sessionSummary.flightTimeStd ?? null,
-        keystrokeEntropy: sessionSummary.keystrokeEntropy ?? null,
-        mattr: mattrValue,
-        avgSentenceLength: avgSentLen,
-        sentenceLengthVariance: sentLenVar,
-        scrollBackCount: sessionSummary.scrollBackCount ?? null,
-        questionRereadCount: sessionSummary.questionRereadCount ?? null,
-        confirmationLatencyMs: sessionSummary.confirmationLatencyMs ?? null,
-        pasteCount: sessionSummary.pasteCount ?? null,
-        pasteCharsTotal: sessionSummary.pasteCharsTotal ?? null,
-        readBackCount: sessionSummary.readBackCount ?? null,
-        leadingEdgeRatio: sessionSummary.leadingEdgeRatio ?? null,
-        contextualRevisionCount: sessionSummary.contextualRevisionCount ?? null,
-        preContextualRevisionCount: sessionSummary.preContextualRevisionCount ?? null,
-        consideredAndKeptCount: sessionSummary.consideredAndKeptCount ?? null,
-        holdTimeMeanLeft: sessionSummary.holdTimeMeanLeft ?? null,
-        holdTimeMeanRight: sessionSummary.holdTimeMeanRight ?? null,
-        holdTimeStdLeft: sessionSummary.holdTimeStdLeft ?? null,
-        holdTimeStdRight: sessionSummary.holdTimeStdRight ?? null,
-        holdTimeCV: sessionSummary.holdTimeCV ?? null,
-        negativeFlightTimeCount: sessionSummary.negativeFlightTimeCount ?? null,
-        ikiSkewness: sessionSummary.ikiSkewness ?? null,
-        ikiKurtosis: sessionSummary.ikiKurtosis ?? null,
-        errorDetectionLatencyMean: sessionSummary.errorDetectionLatencyMean ?? null,
-        terminalVelocity: sessionSummary.terminalVelocity ?? null,
-        // Mouse/cursor trajectory (BioCatch, Phase 2 expansion)
-        cursorDistanceDuringPauses: sessionSummary.cursorDistanceDuringPauses ?? null,
-        cursorFidgetRatio: sessionSummary.cursorFidgetRatio ?? null,
-        cursorStillnessDuringPauses: sessionSummary.cursorStillnessDuringPauses ?? null,
-        driftToSubmitCount: sessionSummary.driftToSubmitCount ?? null,
-        cursorPauseSampleCount: sessionSummary.cursorPauseSampleCount ?? null,
-        // Precorrection/postcorrection latency (Springer 2021)
-        deletionExecutionSpeedMean: sessionSummary.deletionExecutionSpeedMean ?? null,
-        postcorrectionLatencyMean: sessionSummary.postcorrectionLatencyMean ?? null,
-        // Revision distance (ScriptLog)
-        meanRevisionDistance: sessionSummary.meanRevisionDistance ?? null,
-        maxRevisionDistance: sessionSummary.maxRevisionDistance ?? null,
-        // Punctuation key latency (Plank 2016)
-        punctuationFlightMean: sessionSummary.punctuationFlightMean ?? null,
-        punctuationLetterRatio: sessionSummary.punctuationLetterRatio ?? null,
-        deviceType: sessionSummary.deviceType ?? null,
-        userAgent: sessionSummary.userAgent ?? null,
-        hourOfDay: sessionSummary.hourOfDay ?? null,
-        dayOfWeek: sessionSummary.dayOfWeek ?? null,
-      });
-
-      // Persist deletion event timing log — must run AFTER saveSessionSummary
-      // since updateDeletionEvents is an UPDATE on the row it creates.
-      if (Array.isArray(sessionSummary.deletionEvents)) {
-        const compact = sessionSummary.deletionEvents.map((d: any) => ({
-          c: Math.max(1, d.chars ?? d.c ?? 1),
-          t: Math.max(0, d.time ?? d.t ?? 0),
-        }));
-        updateDeletionEvents(questionId, JSON.stringify(compact));
-      }
-
-      // Compute and persist slice-3 session metadata
-      const burstsForMeta = getBurstSequence(questionId);
-      const deletionEvents = Array.isArray(sessionSummary.deletionEvents)
-        ? sessionSummary.deletionEvents.map((d: any) => ({
-            c: Math.max(1, d.chars ?? d.c ?? 1),
-            t: Math.max(0, d.time ?? d.t ?? 0),
-          }))
-        : [];
-      const meta = computeSessionMetadata({
-        questionId,
-        hourOfDay: sessionSummary.hourOfDay ?? null,
-        totalDurationMs: sessionSummary.totalDurationMs ?? 0,
-        deletionEvents,
-        bursts: burstsForMeta,
-      });
-      saveSessionMetadata(meta);
-    }
-
-    return responseId;
-  });
-
   let responseId: number;
   try {
-    responseId = persistSession();
+    responseId = await sql.begin(async (sql) => {
+      const responseId = await saveResponse(questionId, trimmedText);
+
+      if (sessionSummary) {
+        if (Array.isArray(sessionSummary.burstSequence) && sessionSummary.burstSequence.length > 0) {
+          await saveBurstSequence(questionId, sessionSummary.burstSequence);
+        }
+
+        if (Array.isArray(sessionSummary.eventLog) && sessionSummary.eventLog.length > 0) {
+          await saveSessionEvents({
+            question_id: questionId,
+            event_log_json: JSON.stringify(sessionSummary.eventLog),
+            total_events: sessionSummary.eventLog.length,
+            session_duration_ms: sessionSummary.totalDurationMs ?? 0,
+            keystroke_stream_json: Array.isArray(sessionSummary.keystrokeStream) && sessionSummary.keystrokeStream.length > 0
+              ? JSON.stringify(sessionSummary.keystrokeStream)
+              : null,
+            total_input_events: sessionSummary.eventLogTotalInputs ?? null,
+            decimation_count: 0,
+          });
+        }
+
+        await saveSessionSummary({
+          questionId: sessionSummary.questionId,
+          firstKeystrokeMs: sessionSummary.firstKeystrokeMs ?? null,
+          totalDurationMs: sessionSummary.totalDurationMs ?? null,
+          totalCharsTyped: sessionSummary.totalCharsTyped ?? 0,
+          finalCharCount: sessionSummary.finalCharCount ?? 0,
+          commitmentRatio: sessionSummary.commitmentRatio ?? null,
+          pauseCount: sessionSummary.pauseCount ?? 0,
+          totalPauseMs: sessionSummary.totalPauseMs ?? 0,
+          deletionCount: sessionSummary.deletionCount ?? 0,
+          largestDeletion: sessionSummary.largestDeletion ?? 0,
+          totalCharsDeleted: sessionSummary.totalCharsDeleted ?? 0,
+          tabAwayCount: sessionSummary.tabAwayCount ?? 0,
+          totalTabAwayMs: sessionSummary.totalTabAwayMs ?? 0,
+          wordCount: sessionSummary.wordCount ?? 0,
+          sentenceCount: sessionSummary.sentenceCount ?? 0,
+          smallDeletionCount: sessionSummary.smallDeletionCount ?? null,
+          largeDeletionCount: sessionSummary.largeDeletionCount ?? null,
+          largeDeletionChars: sessionSummary.largeDeletionChars ?? null,
+          firstHalfDeletionChars: sessionSummary.firstHalfDeletionChars ?? null,
+          secondHalfDeletionChars: sessionSummary.secondHalfDeletionChars ?? null,
+          activeTypingMs: sessionSummary.activeTypingMs ?? null,
+          charsPerMinute: sessionSummary.charsPerMinute ?? null,
+          pBurstCount: sessionSummary.pBurstCount ?? null,
+          avgPBurstLength: sessionSummary.avgPBurstLength ?? null,
+          ...densities,
+          interKeyIntervalMean: sessionSummary.interKeyIntervalMean ?? null,
+          interKeyIntervalStd: sessionSummary.interKeyIntervalStd ?? null,
+          revisionChainCount: sessionSummary.revisionChainCount ?? null,
+          revisionChainAvgLength: sessionSummary.revisionChainAvgLength ?? null,
+          holdTimeMean: sessionSummary.holdTimeMean ?? null,
+          holdTimeStd: sessionSummary.holdTimeStd ?? null,
+          flightTimeMean: sessionSummary.flightTimeMean ?? null,
+          flightTimeStd: sessionSummary.flightTimeStd ?? null,
+          keystrokeEntropy: sessionSummary.keystrokeEntropy ?? null,
+          mattr: mattrValue,
+          avgSentenceLength: avgSentLen,
+          sentenceLengthVariance: sentLenVar,
+          scrollBackCount: sessionSummary.scrollBackCount ?? null,
+          questionRereadCount: sessionSummary.questionRereadCount ?? null,
+          confirmationLatencyMs: sessionSummary.confirmationLatencyMs ?? null,
+          pasteCount: sessionSummary.pasteCount ?? null,
+          pasteCharsTotal: sessionSummary.pasteCharsTotal ?? null,
+          readBackCount: sessionSummary.readBackCount ?? null,
+          leadingEdgeRatio: sessionSummary.leadingEdgeRatio ?? null,
+          contextualRevisionCount: sessionSummary.contextualRevisionCount ?? null,
+          preContextualRevisionCount: sessionSummary.preContextualRevisionCount ?? null,
+          consideredAndKeptCount: sessionSummary.consideredAndKeptCount ?? null,
+          holdTimeMeanLeft: sessionSummary.holdTimeMeanLeft ?? null,
+          holdTimeMeanRight: sessionSummary.holdTimeMeanRight ?? null,
+          holdTimeStdLeft: sessionSummary.holdTimeStdLeft ?? null,
+          holdTimeStdRight: sessionSummary.holdTimeStdRight ?? null,
+          holdTimeCV: sessionSummary.holdTimeCV ?? null,
+          negativeFlightTimeCount: sessionSummary.negativeFlightTimeCount ?? null,
+          ikiSkewness: sessionSummary.ikiSkewness ?? null,
+          ikiKurtosis: sessionSummary.ikiKurtosis ?? null,
+          errorDetectionLatencyMean: sessionSummary.errorDetectionLatencyMean ?? null,
+          terminalVelocity: sessionSummary.terminalVelocity ?? null,
+          // Mouse/cursor trajectory (BioCatch, Phase 2 expansion)
+          cursorDistanceDuringPauses: sessionSummary.cursorDistanceDuringPauses ?? null,
+          cursorFidgetRatio: sessionSummary.cursorFidgetRatio ?? null,
+          cursorStillnessDuringPauses: sessionSummary.cursorStillnessDuringPauses ?? null,
+          driftToSubmitCount: sessionSummary.driftToSubmitCount ?? null,
+          cursorPauseSampleCount: sessionSummary.cursorPauseSampleCount ?? null,
+          // Precorrection/postcorrection latency (Springer 2021)
+          deletionExecutionSpeedMean: sessionSummary.deletionExecutionSpeedMean ?? null,
+          postcorrectionLatencyMean: sessionSummary.postcorrectionLatencyMean ?? null,
+          // Revision distance (ScriptLog)
+          meanRevisionDistance: sessionSummary.meanRevisionDistance ?? null,
+          maxRevisionDistance: sessionSummary.maxRevisionDistance ?? null,
+          // Punctuation key latency (Plank 2016)
+          punctuationFlightMean: sessionSummary.punctuationFlightMean ?? null,
+          punctuationLetterRatio: sessionSummary.punctuationLetterRatio ?? null,
+          deviceType: sessionSummary.deviceType ?? null,
+          userAgent: sessionSummary.userAgent ?? null,
+          hourOfDay: sessionSummary.hourOfDay ?? null,
+          dayOfWeek: sessionSummary.dayOfWeek ?? null,
+        });
+
+        // Persist deletion event timing log — must run AFTER saveSessionSummary
+        // since updateDeletionEvents is an UPDATE on the row it creates.
+        if (Array.isArray(sessionSummary.deletionEvents)) {
+          const compact = sessionSummary.deletionEvents.map((d: any) => ({
+            c: Math.max(1, d.chars ?? d.c ?? 1),
+            t: Math.max(0, d.time ?? d.t ?? 0),
+          }));
+          await updateDeletionEvents(questionId, JSON.stringify(compact));
+        }
+
+        // Compute and persist slice-3 session metadata
+        const burstsForMeta = await getBurstSequence(questionId);
+        const deletionEvents = Array.isArray(sessionSummary.deletionEvents)
+          ? sessionSummary.deletionEvents.map((d: any) => ({
+              c: Math.max(1, d.chars ?? d.c ?? 1),
+              t: Math.max(0, d.time ?? d.t ?? 0),
+            }))
+          : [];
+        const meta = await computeSessionMetadata({
+          questionId,
+          hourOfDay: sessionSummary.hourOfDay ?? null,
+          totalDurationMs: sessionSummary.totalDurationMs ?? 0,
+          deletionEvents,
+          bursts: burstsForMeta,
+        });
+        await saveSessionMetadata(meta);
+      }
+
+      return responseId;
+    });
   } catch (err) {
     logError('respond.transaction', err, { questionId });
     return new Response(JSON.stringify({ error: 'Failed to save session' }), {
@@ -208,7 +206,7 @@ export const POST: APIRoute = async ({ request }) => {
   embedResponse(responseId, question.text, trimmedText, localDateStr())
     .catch(err => logError('respond.embed', err, { responseId, questionId }));
 
-  const responseCount = getResponseCount();
+  const responseCount = await getResponseCount();
 
   // Determine if we should ask "did it land?" (every 5th daily response)
   const askFeedback = responseCount % 5 === 0;
@@ -224,7 +222,7 @@ export const POST: APIRoute = async ({ request }) => {
     try { await renderWitnessState(); }
     catch (err) { logError('respond.witness', err, ctx); }
 
-    try { computeAndPersistDerivedSignals(questionId); }
+    try { await computeAndPersistDerivedSignals(questionId); }
     catch (err) { logError('respond.derived-signals', err, ctx); }
   })();
 

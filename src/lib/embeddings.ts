@@ -10,10 +10,8 @@ const { VoyageAIClient } = voyageModule;
 type VoyageClient = InstanceType<typeof VoyageAIClient>;
 import {
   insertEmbeddingMeta,
-  insertVecEmbedding,
   isRecordEmbedded,
   getUnembeddedResponses,
-  getUnembeddedObservations,
   getUnembeddedReflections,
 } from './db.ts';
 
@@ -37,11 +35,6 @@ function getVoyageClient(): VoyageClient | null {
   }
   voyageClient = new VoyageAIClient({ apiKey });
   return voyageClient;
-}
-
-function float32ToBuffer(arr: number[]): Buffer {
-  const f32 = new Float32Array(arr);
-  return Buffer.from(f32.buffer);
 }
 
 export async function generateEmbedding(text: string): Promise<number[] | null> {
@@ -106,22 +99,22 @@ export async function generateEmbeddings(texts: string[]): Promise<(number[] | n
   }
 }
 
-function storeEmbedding(
+async function storeEmbedding(
   sourceType: keyof typeof SOURCE_IDS,
   sourceRecordId: number,
   embeddedText: string,
   sourceDate: string | null,
   vector: number[]
-): void {
-  const embeddingId = insertEmbeddingMeta(
+): Promise<void> {
+  const embeddingId = await insertEmbeddingMeta(
     SOURCE_IDS[sourceType],
     sourceRecordId,
     embeddedText,
     sourceDate,
-    VOYAGE_MODEL
+    VOYAGE_MODEL,
+    vector,
   );
   if (embeddingId === 0) return; // INSERT OR IGNORE — already exists
-  insertVecEmbedding(embeddingId, float32ToBuffer(vector));
 }
 
 export async function embedResponse(
@@ -130,11 +123,11 @@ export async function embedResponse(
   responseText: string,
   sourceDate: string
 ): Promise<void> {
-  if (isRecordEmbedded(SOURCE_IDS.response, responseId)) return;
+  if (await isRecordEmbedded(SOURCE_IDS.response, responseId)) return;
   const text = `Question: ${questionText}\nResponse: ${responseText}`;
   const vector = await generateEmbedding(text);
   if (!vector) return;
-  storeEmbedding('response', responseId, text, sourceDate, vector);
+  await storeEmbedding('response', responseId, text, sourceDate, vector);
 }
 
 export async function embedObservation(
@@ -142,10 +135,10 @@ export async function embedObservation(
   observationText: string,
   sourceDate: string
 ): Promise<void> {
-  if (isRecordEmbedded(SOURCE_IDS.observation, observationId)) return;
+  if (await isRecordEmbedded(SOURCE_IDS.observation, observationId)) return;
   const vector = await generateEmbedding(observationText);
   if (!vector) return;
-  storeEmbedding('observation', observationId, observationText, sourceDate, vector);
+  await storeEmbedding('observation', observationId, observationText, sourceDate, vector);
 }
 
 export async function embedReflection(
@@ -153,19 +146,19 @@ export async function embedReflection(
   reflectionText: string,
   sourceDate: string
 ): Promise<void> {
-  if (isRecordEmbedded(SOURCE_IDS.reflection, reflectionId)) return;
+  if (await isRecordEmbedded(SOURCE_IDS.reflection, reflectionId)) return;
   const vector = await generateEmbedding(reflectionText);
   if (!vector) return;
-  storeEmbedding('reflection', reflectionId, reflectionText, sourceDate, vector);
+  await storeEmbedding('reflection', reflectionId, reflectionText, sourceDate, vector);
 }
 
 export async function backfillEmbeddings(): Promise<{ embedded: number; failed: number }> {
   let embedded = 0;
   let failed = 0;
 
-  const unembeddedResponses = getUnembeddedResponses();
-  const unembeddedObservations = getUnembeddedObservations();
-  const unembeddedReflections = getUnembeddedReflections();
+  const unembeddedResponses = await getUnembeddedResponses();
+  const unembeddedObservations: Array<{ ai_observation_id: number; observation: string; date: string }> = [];
+  const unembeddedReflections = await getUnembeddedReflections();
 
   const total = unembeddedResponses.length + unembeddedObservations.length + unembeddedReflections.length;
   if (total === 0) {
@@ -182,7 +175,7 @@ export async function backfillEmbeddings(): Promise<{ embedded: number; failed: 
 
     for (let j = 0; j < batch.length; j++) {
       if (vectors[j]) {
-        storeEmbedding('response', batch[j].response_id, texts[j], batch[j].date, vectors[j]!);
+        await storeEmbedding('response', batch[j].response_id, texts[j], batch[j].date, vectors[j]!);
         embedded++;
       } else {
         failed++;
@@ -202,7 +195,7 @@ export async function backfillEmbeddings(): Promise<{ embedded: number; failed: 
 
     for (let j = 0; j < batch.length; j++) {
       if (vectors[j]) {
-        storeEmbedding('observation', batch[j].ai_observation_id, texts[j], batch[j].date, vectors[j]!);
+        await storeEmbedding('observation', batch[j].ai_observation_id, texts[j], batch[j].date, vectors[j]!);
         embedded++;
       } else {
         failed++;
@@ -222,7 +215,7 @@ export async function backfillEmbeddings(): Promise<{ embedded: number; failed: 
 
     for (let j = 0; j < batch.length; j++) {
       if (vectors[j]) {
-        storeEmbedding('reflection', batch[j].reflection_id, texts[j], batch[j].dttm_created_utc, vectors[j]!);
+        await storeEmbedding('reflection', batch[j].reflection_id, texts[j], batch[j].dttm_created_utc, vectors[j]!);
         embedded++;
       } else {
         failed++;

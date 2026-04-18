@@ -14,7 +14,7 @@
  * independently — joint-space distance work is downstream.
  */
 
-import db, {
+import sql, {
   saveEntryState,
   getEntryStateCount,
   saveTraitDynamics,
@@ -32,24 +32,25 @@ import { computeEmotionAnalysis } from './emotion-profile.ts';
 import { renderTraits } from './interpreter.ts';
 
 export async function renderWitnessState(): Promise<void> {
-  const currentCount = (db.prepare(
-    `SELECT COUNT(*) as c FROM tb_session_summaries ss
-     JOIN tb_questions q ON ss.question_id = q.question_id
-     WHERE q.question_source_id != 3`
-  ).get() as { c: number }).c;
+  const countRows = await sql`
+    SELECT COUNT(*) as c FROM tb_session_summaries ss
+    JOIN tb_questions q ON ss.question_id = q.question_id
+    WHERE q.question_source_id != 3
+  `;
+  const currentCount = (countRows[0] as { c: number }).c;
 
   if (currentCount === 0) return;
 
   // ── Phase 1a: Compute 7D behavioral entry states (deterministic) ──
-  const states = computeEntryStates();
+  const states = await computeEntryStates();
   if (states.length < 3) return;
 
   // Persist any new behavioral entry states
-  const existingStateCount = getEntryStateCount();
+  const existingStateCount = await getEntryStateCount();
   if (states.length > existingStateCount) {
     const newStates = states.slice(existingStateCount);
     for (const s of newStates) {
-      saveEntryState({
+      await saveEntryState({
         response_id: s.responseId,
         fluency: s.fluency,
         deliberation: s.deliberation,
@@ -64,12 +65,12 @@ export async function renderWitnessState(): Promise<void> {
   }
 
   // ── Phase 1b: Compute semantic entry states (deterministic, parallel space) ──
-  const semanticStates = computeSemanticStates();
-  const existingSemanticCount = getSemanticStateCount();
+  const semanticStates = await computeSemanticStates();
+  const existingSemanticCount = await getSemanticStateCount();
   if (semanticStates.length > existingSemanticCount) {
     const newSemantic = semanticStates.slice(existingSemanticCount);
     for (const s of newSemantic) {
-      saveSemanticState({
+      await saveSemanticState({
         response_id: s.responseId,
         syntactic_complexity: s.syntactic_complexity,
         interrogation: s.interrogation,
@@ -94,7 +95,7 @@ export async function renderWitnessState(): Promise<void> {
   // ── Phase 2: Behavioral dynamics + coupling (over 7D) ──
   const dynamics = computeDynamics(states);
 
-  saveTraitDynamics(dynamics.dimensions.map(d => ({
+  await saveTraitDynamics(dynamics.dimensions.map(d => ({
     entry_count: currentCount,
     dimension: d.dimension,
     baseline: d.baseline,
@@ -106,7 +107,7 @@ export async function renderWitnessState(): Promise<void> {
   })));
 
   if (dynamics.coupling.length > 0) {
-    saveCouplingMatrix(dynamics.coupling.map(c => ({
+    await saveCouplingMatrix(dynamics.coupling.map(c => ({
       entry_count: currentCount,
       leader: c.leader,
       follower: c.follower,
@@ -120,7 +121,7 @@ export async function renderWitnessState(): Promise<void> {
   if (semanticStates.length >= 3) {
     const semanticDynamics = computeDynamics(semanticStates, SEMANTIC_DIMENSIONS);
 
-    saveSemanticDynamics(semanticDynamics.dimensions.map(d => ({
+    await saveSemanticDynamics(semanticDynamics.dimensions.map(d => ({
       entry_count: currentCount,
       dimension: d.dimension,
       baseline: d.baseline,
@@ -132,7 +133,7 @@ export async function renderWitnessState(): Promise<void> {
     })));
 
     if (semanticDynamics.coupling.length > 0) {
-      saveSemanticCoupling(semanticDynamics.coupling.map(c => ({
+      await saveSemanticCoupling(semanticDynamics.coupling.map(c => ({
         entry_count: currentCount,
         leader: c.leader,
         follower: c.follower,
@@ -144,10 +145,10 @@ export async function renderWitnessState(): Promise<void> {
   }
 
   // ── Phase 3: Emotion profile + emotion→behavior coupling ──
-  const emotionAnalysis = computeEmotionAnalysis(states);
+  const emotionAnalysis = await computeEmotionAnalysis(states);
 
   if (emotionAnalysis.emotionBehaviorCoupling.length > 0) {
-    saveEmotionBehaviorCoupling(emotionAnalysis.emotionBehaviorCoupling.map(c => ({
+    await saveEmotionBehaviorCoupling(emotionAnalysis.emotionBehaviorCoupling.map(c => ({
       entry_count: currentCount,
       emotion_dim: c.emotionDim,
       behavior_dim: c.behaviorDim,

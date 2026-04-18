@@ -12,7 +12,7 @@ export const POST: APIRoute = async ({ request }) => {
     });
   }
 
-  logInteractionEvent(questionId, eventType, metadata);
+  await logInteractionEvent(questionId, eventType, metadata);
 
   return new Response(JSON.stringify({ ok: true }), {
     headers: { 'Content-Type': 'application/json' },

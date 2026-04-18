@@ -14,7 +14,7 @@
  *   5. deletion_during/between_burst — proximity of deletions to burst windows
  */
 
-import db from './db.ts';
+import sql from './db.ts';
 
 export interface SessionMetadataInputs {
   questionId: number;
@@ -60,13 +60,13 @@ function buildHourDensity(hours: number[]): number[] {
   return smoothed.map(v => v / total);
 }
 
-function computeHourTypicality(hour: number | null): number | null {
+async function computeHourTypicality(hour: number | null): Promise<number | null> {
   if (hour == null) return null;
-  const rows = db.prepare(`
+  const rows = await sql`
     SELECT ss.hour_of_day FROM tb_session_summaries ss
     JOIN tb_questions q ON ss.question_id = q.question_id
     WHERE q.question_source_id != 3 AND ss.hour_of_day IS NOT NULL
-  `).all() as Array<{ hour_of_day: number }>;
+  ` as Array<{ hour_of_day: number }>;
 
   if (rows.length < 5) return null; // need a reasonable history first
 
@@ -221,8 +221,8 @@ function computeDeletionBurstProximity(
 
 // ─── Public API ─────────────────────────────────────────────────────
 
-export function computeSessionMetadata(inputs: SessionMetadataInputs): SessionMetadataResult {
-  const hour_typicality = computeHourTypicality(inputs.hourOfDay);
+export async function computeSessionMetadata(inputs: SessionMetadataInputs): Promise<SessionMetadataResult> {
+  const hour_typicality = await computeHourTypicality(inputs.hourOfDay);
   const deletion_curve_type = classifyDeletionCurve(inputs.deletionEvents, inputs.totalDurationMs);
   const burst_trajectory_shape = classifyBurstShape(inputs.bursts);
   const ibi = computeInterBurstInterval(inputs.bursts);

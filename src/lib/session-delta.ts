@@ -423,24 +423,24 @@ export function formatCompactDelta(deltas: SessionDeltaRow[]): string {
 // FIRE-AND-FORGET WRAPPER
 // ----------------------------------------------------------------------------
 
-export function runSessionDelta(journalQuestionId: number, date: string): void {
+export async function runSessionDelta(journalQuestionId: number, date: string): Promise<void> {
   try {
-    const calibrationSummary = getSameDayCalibrationSummary(date);
+    const calibrationSummary = await getSameDayCalibrationSummary(date);
     if (!calibrationSummary) {
       console.log(`[session-delta] No same-day calibration for ${date}, skipping`);
       return;
     }
 
-    const journalSummary = getSessionSummary(journalQuestionId);
+    const journalSummary = await getSessionSummary(journalQuestionId);
     if (!journalSummary) {
       console.log(`[session-delta] No journal session summary for question ${journalQuestionId}, skipping`);
       return;
     }
 
-    const history = getRecentSessionDeltas(30);
+    const history = await getRecentSessionDeltas(30);
     const delta = computeSessionDelta(calibrationSummary, journalSummary, date);
     delta.deltaMagnitude = computeDeltaMagnitude(delta, history);
-    saveSessionDelta(delta);
+    await saveSessionDelta(delta);
 
     console.log(
       `[session-delta] Computed delta for ${date}, magnitude: ${delta.deltaMagnitude?.toFixed(2) ?? 'insufficient history'}`
