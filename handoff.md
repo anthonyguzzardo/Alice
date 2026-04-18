@@ -178,6 +178,9 @@ Rust makes this feasible. A 2000-keystroke entry would take ~25ms. Not urgent si
 ### Circadian-adjusted baselines
 Store both global z-scores AND circadian z-scores in parallel. Must decide before day 30.
 
+### Coupling layer computation (Layer 3)
+Schema exists (`tb_cross_session_signals`, `tb_coupling_matrix`, `tb_emotion_behavior_coupling`, `tb_semantic_coupling`) but the code to compute and populate these tables is not built. These signals measure how behavioral (8D) and semantic (11D) states interact and evolve across days/weeks: lag correlations, NCD at multiple horizons, self-perplexity, vocabulary recurrence decay. Deferred because ~6 journal entries is not enough data for cross-session correlations to be meaningful. Build when entry count reaches ~30+.
+
 ### Joint behavioral-semantic embedding (Phase 6)
 Concatenate state vectors with text embeddings for cognitive-mode-aware RAG.
 

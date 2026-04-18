@@ -268,8 +268,8 @@ const responseId = parseInt(id ?? '', 10);
               <div><div class="k">TE hold→flight</div><div class="v">${ds.teHoldToFlight != null ? ds.teHoldToFlight.toFixed(4) + ' bits' : '—'}</div></div>
               <div><div class="k">TE flight→hold</div><div class="v">${ds.teFlightToHold != null ? ds.teFlightToHold.toFixed(4) + ' bits' : '—'}</div></div>
               <div><div class="k">TE dominance</div><div class="v">${ds.teDominance != null ? (ds.teDominance > 1 ? 'motor→cog ' + ds.teDominance.toFixed(2) + 'x' : 'cog→motor ' + (1/ds.teDominance).toFixed(2) + 'x') : '—'}</div></div>
-              <div><div class="k">IKI series length</div><div class="v">${ds.ikiCount}</div></div>
-              <div><div class="k">hold/flight pairs</div><div class="v">${ds.holdFlightCount}</div></div>
+              <div><div class="k">IKI series length</div><div class="v">${ds.ikiCount != null ? ds.ikiCount : '—'}</div></div>
+              <div><div class="k">hold/flight pairs</div><div class="v">${ds.holdFlightCount != null ? ds.holdFlightCount : '—'}</div></div>
             </div>
           </section>
         ` : '';
