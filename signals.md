@@ -537,6 +537,311 @@ Extracted from calibration (free-write) responses via Claude Sonnet. These are c
 
 ---
 
+---
+
+## Cursor Behavior and Writing Process (Phase 1 Expansion, 2026-04-17)
+
+### confirmationLatencyMs
+- **Capture:** `submitTime - lastInputTime`
+- **Unit:** milliseconds
+- **Why:** The hesitation between finishing writing and pressing submit. Measures the "is it done?" metacognitive moment. Validated by Monaro et al. 2018 (95% deception detection accuracy).
+- **Table:** tb_session_summaries
+- **Citation:** Monaro et al. 2018
+
+### pasteCount
+- **Capture:** `paste` event listener on textarea
+- **Unit:** count
+- **Why:** Construct validity signal. External text insertion breaks the unmediated cognitive exercise. When pasteCount > 0, text-derived semantic signals are flagged as contaminated.
+- **Table:** tb_session_summaries
+
+### pasteCharsTotal
+- **Capture:** Sum of `e.clipboardData.getData('text/plain').length` across paste events
+- **Unit:** characters
+- **Table:** tb_session_summaries
+
+### readBackCount
+- **Capture:** `selectionchange` events where cursor moves but no `input` follows within 500ms
+- **Unit:** count
+- **Why:** Metacognitive monitoring. The writer re-reads what they wrote without changing it. Pure observation behavior that produces no text trace.
+- **Table:** tb_session_summaries
+- **Citation:** Lindgren & Sullivan 2006
+
+### leadingEdgeRatio
+- **Capture:** `leadingEdgeInputCount / totalInputActionCount` where leading edge = `selectionStart >= value.length`
+- **Unit:** ratio (0-1)
+- **Why:** Writing linearity. 1.0 = perfectly linear (knowledge-telling). Lower = recursive, navigating back to restructure (knowledge-transforming).
+- **Table:** tb_session_summaries
+- **Citation:** Galbraith 2009
+
+### contextualRevisionCount
+- **Capture:** Deletions where `selectionStart < value.length - 1` (navigated back into text)
+- **Unit:** count
+- **Why:** Higher-order review and restructuring. Distinguished from pre-contextual revision (immediate self-correction at leading edge).
+- **Table:** tb_session_summaries
+- **Citation:** Lindgren & Sullivan 2006
+
+### preContextualRevisionCount
+- **Capture:** Deletions at leading edge (`selectionStart >= value.length - 1`)
+- **Unit:** count
+- **Why:** Immediate self-monitoring during formulation.
+- **Table:** tb_session_summaries
+
+### consideredAndKeptCount
+- **Capture:** `selectionchange` events where a range selection collapses without deletion
+- **Unit:** count
+- **Why:** The writer selected text, considered cutting it, and decided it stays. A decision-confidence signal that captures deliberation producing no text change.
+- **Table:** tb_session_summaries
+
+### holdTimeMeanLeft / holdTimeMeanRight / holdTimeStdLeft / holdTimeStdRight
+- **Capture:** Hold times partitioned by QWERTY left/right hand key mapping
+- **Unit:** milliseconds
+- **Why:** Motor laterality asymmetry. Non-dominant hand degrades first under cognitive load. Increasing asymmetry may indicate motor decline or sustained stress.
+- **Table:** tb_session_summaries
+- **Citation:** Giancardo et al. 2016 (neuroQWERTY)
+
+### holdTimeCV
+- **Capture:** `holdTimeStd / holdTimeMean`
+- **Unit:** dimensionless
+- **Why:** Motor consistency independent of speed. Most sensitive single feature for detecting early motor impairment in neuroQWERTY research.
+- **Table:** tb_session_summaries
+- **Citation:** Giancardo et al. 2016
+
+### negativeFlightTimeCount
+- **Capture:** Flight times where `keydown[n] < keyup[n-1]` (key rollover)
+- **Unit:** count
+- **Why:** Motor automaticity. High rollover = fingers running ahead of conscious control. Low rollover = deliberate key-by-key typing.
+- **Table:** tb_session_summaries
+- **Citation:** Teh et al. 2013
+
+### ikiSkewness
+- **Capture:** Third standardized moment of IKI distribution
+- **Unit:** dimensionless
+- **Why:** How often deep thinking interrupts flow. Right-skewed = many short intervals with occasional long pauses.
+- **Table:** tb_session_summaries
+- **Citation:** Heliyon 2021
+
+### ikiKurtosis
+- **Capture:** Fourth standardized moment minus 3 (excess kurtosis)
+- **Unit:** dimensionless
+- **Why:** How extreme are the pauses when they happen. High kurtosis = more extreme outlier events.
+- **Table:** tb_session_summaries
+
+### errorDetectionLatencyMean
+- **Capture:** Mean interval from last non-delete keystroke to backspace press
+- **Unit:** milliseconds
+- **Why:** How quickly the writer detects their own errors. Leading indicator of fatigue that appears before general speed declines.
+- **Table:** tb_session_summaries
+- **Citation:** Haag et al. 2020
+
+### terminalVelocity
+- **Capture:** Mean IKI of final 10% of keystrokes / session mean IKI
+- **Unit:** ratio
+- **Why:** Finish-line behavior. > 1 = slowing down (careful, metacognitive). < 1 = speeding up (rushing, satisficing).
+- **Table:** tb_session_summaries
+
+---
+
+## Motor Signals (from keystroke stream)
+
+### sampleEntropy
+- **Capture:** Richman & Moorman (2000) SampEn algorithm, m=2, r=0.2*std, on IKI series
+- **Unit:** nats
+- **Why:** Temporal regularity of keystroke rhythm. Distinct from Shannon entropy (distribution shape) and permutation entropy (ordinal patterns). Lower = more rigid cognitive control. Higher = more erratic motor-cognitive coupling. Correlated r=0.59 with executive function in BiAffect research.
+- **Table:** tb_motor_signals
+- **Citation:** Richman & Moorman 2000; Ajilore et al. 2025
+
+### ikiAutocorrelation
+- **Capture:** Pearson correlation of IKI[t] vs IKI[t+lag] for lags 1-5
+- **Unit:** JSON array of 5 correlation coefficients
+- **Why:** Cognitive rhythm fingerprint. High autocorrelation at short lags = rhythmic, metronomic typing. Rapid decay = stochastic, interrupt-driven. Individually distinctive and shifts under stress.
+- **Table:** tb_motor_signals
+- **Citation:** DARPA Active Authentication
+
+### motorJerk
+- **Capture:** Mean absolute second derivative of the IKI series
+- **Unit:** ms/step^2
+- **Why:** Motor planning smoothness. High jerk = jerky, poorly planned motor execution. Low jerk = smooth, well-planned. Standard in digitized handwriting analysis but novel for keyboard typing.
+- **Table:** tb_motor_signals
+
+### lapseRate
+- **Capture:** Count of IKIs > mean + 3*std, divided by session minutes
+- **Unit:** lapses per minute
+- **Why:** Micro-dropouts in sustained attention. Not deliberate pauses. Fatigue manifests as increased lapse frequency before general speed declines.
+- **Table:** tb_motor_signals
+- **Citation:** Haag et al. 2020
+
+### tempoDrift
+- **Capture:** Linear regression slope of mean IKI across session quartiles
+- **Unit:** ms/quartile
+- **Why:** Positive = slowing down (fatigue). Negative = speeding up (warming up). Distinct from burst trajectory shape (which measures deletion timing).
+- **Table:** tb_motor_signals
+
+### ikiCompressionRatio
+- **Capture:** `gzip(IKI series as comma-separated integers).length / raw.length`
+- **Unit:** ratio
+- **Why:** Multi-scale complexity of timing sequence. High = repetitive/metronomic. Low = varied/complex. Captures patterns that summary statistics miss.
+- **Table:** tb_motor_signals
+
+### digraphLatencyProfile
+- **Capture:** Mean flight time for top 10 most frequent consecutive key pairs
+- **Unit:** JSON: `{digraph: meanFlightMs}`
+- **Why:** Individually distinctive biometric. Deviations from personal baseline indicate cognitive disruption, stress, or altered motor state. CMU's keystroke dynamics lab showed these are more stable than aggregate speed metrics.
+- **Table:** tb_motor_signals
+- **Citation:** Killourhy & Maxion (CMU)
+
+---
+
+## Extended Semantic Signals (from final text)
+
+### ideaDensity
+- **Capture:** (verbs + adjectives + adverbs + prepositions + conjunctions) / total words, via POS-proxy word lists
+- **Unit:** ratio
+- **Why:** Propositions per word. The Nun Study found low idea density at age 22 predicted Alzheimer's 58 years later. As a cognitive reserve marker, it captures the density of conceptual thinking.
+- **Table:** tb_semantic_signals
+- **Citation:** Snowdon et al. 1996
+
+### lexicalSophistication
+- **Capture:** Proportion of content words NOT in the top ~2000 most common English words
+- **Unit:** ratio (0-1)
+- **Why:** Under cognitive load or fatigue, people regress to higher-frequency, earlier-acquired words. Longitudinal shifts toward simpler vocabulary may indicate cognitive reserve depletion.
+- **Table:** tb_semantic_signals
+- **Citation:** Kyle & Crossley 2017 (TAALES)
+
+### epistemicStance
+- **Capture:** boosterDensity / (boosterDensity + hedgingDensity)
+- **Unit:** ratio (0-1), null if no markers
+- **Why:** The full confidence spectrum. 0 = all hedging. 1 = all certainty. In depressive states, boosters collapse. In manic states, boosters spike.
+- **Table:** tb_semantic_signals
+- **Citation:** Hyland 2005
+
+### integrativeComplexity
+- **Capture:** (contrastive connectives + integrative connectives) / sentence count
+- **Unit:** connectives per sentence
+- **Why:** Low IC = black-and-white thinking, cognitive rigidity. High IC = nuanced, multi-perspective processing. Longitudinal decline associated with stress and depression.
+- **Table:** tb_semantic_signals
+- **Citation:** Suedfeld & Tetlock
+
+### deepCohesion
+- **Capture:** (causal + temporal + intentional connectives) / total words
+- **Unit:** density
+- **Why:** Whether the writer is building explicit causal chains and temporal sequences rather than listing observations. Longitudinal decline may indicate reduced capacity for structured causal thinking.
+- **Table:** tb_semantic_signals
+- **Citation:** McNamara et al. (Coh-Metrix)
+
+### referentialCohesion
+- **Capture:** Mean content-word overlap between adjacent sentence pairs
+- **Unit:** ratio (0-1)
+- **Why:** How well ideas connect across sentences. High = maintains thread. Low = disconnected ideas.
+- **Table:** tb_semantic_signals
+- **Citation:** Graesser et al. (Coh-Metrix)
+
+### emotionalValenceArc
+- **Capture:** NRC valence (joy+trust - anger+fear+sadness) computed in thirds, classified as ascending/descending/vee/peak/flat
+- **Unit:** categorical
+- **Why:** The shape of emotional processing through the entry. Does the writer arrive at resolution, escalate into distress, or maintain flatness?
+- **Table:** tb_semantic_signals
+- **Citation:** Reagan et al. 2016
+
+### textCompressionRatio
+- **Capture:** `gzip(text).length / text.length`
+- **Unit:** ratio
+- **Why:** Information density. Highly compressible = repetitive/predictable. Low compression = information-dense, varied.
+- **Table:** tb_semantic_signals
+
+---
+
+## Process Signals (from event log replay)
+
+### pauseWithinWord / pauseBetweenWord / pauseBetweenSentence
+- **Capture:** Classify each pause > 2s by surrounding character context in reconstructed text state
+- **Unit:** count
+- **Why:** Skilled writers pause at sentence boundaries (planning). Less skilled pause within words (transcription difficulty). A shift from within-word to between-sentence pausing tracks improving cognitive fluency.
+- **Table:** tb_process_signals
+- **Citation:** Deane 2015; Baaijen & Galbraith 2018
+
+### abandonedThoughtCount
+- **Capture:** Pattern detection: pause > 2s, then type 3-50 chars, then delete >= 70% of those chars, then type new text
+- **Unit:** count
+- **Why:** Captures self-censorship and suppressed ideas. The cognitive labor that left zero trace in the final text. Not a deletion (those are corrections). This is a thought the writer considered, began to commit to, and abandoned.
+- **Table:** tb_process_signals
+
+### rBurstCount / iBurstCount
+- **Capture:** R-burst = production burst ending with deletion. I-burst = burst starting with cursor navigation backward.
+- **Unit:** count
+- **Why:** R-bursts = immediate self-monitoring ("generate then correct"). I-bursts = reflective revision ("step back and rethink"). Higher I-burst ratio indicates more sophisticated writing.
+- **Table:** tb_process_signals
+- **Citation:** Deane 2015
+
+### vocabExpansionRate
+- **Capture:** Heaps' law exponent from vocabulary growth curve within session
+- **Unit:** dimensionless (0-1, typically 0.4-0.8)
+- **Why:** Near 1 = every word is new (no repetition). Near 0 = early saturation (circular writing).
+- **Table:** tb_process_signals
+- **Citation:** Heaps' Law
+
+### phaseTransitionPoint
+- **Capture:** Session position (0-1) where deletion rate first exceeds insertion rate in a sliding window
+- **Unit:** ratio (0-1)
+- **Why:** Divides the session into composition and revision phases. Early transition = quick draft then extensive revision. Late/null = continuous composition.
+- **Table:** tb_process_signals
+
+### strategyShiftCount
+- **Capture:** Count of positions where running mean burst length shifts by > 1 std from previous window
+- **Unit:** count
+- **Why:** Detects when the writer changes cognitive strategy mid-session.
+- **Table:** tb_process_signals
+
+---
+
+## Cross-Session Signals (require prior entries)
+
+### selfPerplexity
+- **Capture:** Character trigram model built from all prior entries, scored against today's text. Laplace-smoothed conditional probabilities.
+- **Unit:** perplexity (higher = more novel)
+- **Why:** The direct mathematical operationalization of the Option C thesis. If cognitive reserve is eroding, language becomes more predictable against personal baseline. Requires 5+ prior entries to be meaningful.
+- **Table:** tb_cross_session_signals
+
+### ncdLag1 / ncdLag3 / ncdLag7 / ncdLag30
+- **Capture:** Normalized Compression Distance between today's text and the entry N days ago. NCD = (C(xy) - min(C(x),C(y))) / max(C(x),C(y)) via gzip.
+- **Unit:** distance (0-1), null if no entry at that lag
+- **Why:** Pure mathematical measure of "cognitive rut" vs "cognitive expansion." NCD near 0 = texts are essentially the same. NCD near 1 = completely different.
+- **Table:** tb_cross_session_signals
+- **Citation:** Cilibrasi & Vitanyi 2005
+
+### vocabRecurrenceDecay
+- **Capture:** Exponential decay rate of Jaccard similarity of content words across lags 1, 3, 7 days
+- **Unit:** decay rate (higher = faster vocabulary refresh)
+- **Why:** Measures whether the writer is circling the same ideas (slow decay) or generating new territory (fast decay).
+- **Table:** tb_cross_session_signals
+
+### digraphStability
+- **Capture:** Cosine similarity between today's digraph latency profile and rolling mean of last 5 sessions
+- **Unit:** similarity (0-1)
+- **Why:** Your cognitive fingerprint's drift. Not "how you're typing today" but "how much has your typing changed from your own baseline."
+- **Table:** tb_cross_session_signals
+- **Citation:** CMU Keystroke Dynamics Lab
+
+### textNetworkDensity
+- **Capture:** Co-occurrence graph (window=5, stopwords removed). Density = 2*edges / (nodes*(nodes-1)).
+- **Unit:** density (0-1)
+- **Why:** How interconnected the concepts are. Dense = tightly argued, recursive thinking. Sparse = linear, list-like thinking.
+- **Table:** tb_cross_session_signals
+- **Citation:** InfraNodus methodology
+
+### textNetworkCommunities
+- **Capture:** Connected component count in co-occurrence graph
+- **Unit:** count
+- **Why:** Number of distinct concept clusters. More communities with weak bridges = more fragmented thinking.
+- **Table:** tb_cross_session_signals
+
+### bridgingRatio
+- **Capture:** Proportion of nodes with degree in top 20% (high-betweenness proxy)
+- **Unit:** ratio (0-1)
+- **Why:** High bridging = integrative, synthesizing thinking. Low bridging = compartmentalized thinking.
+- **Table:** tb_cross_session_signals
+
+---
+
 ## Signal Count
 
 | Category | Count |
@@ -556,4 +861,9 @@ Extracted from calibration (free-write) responses via Claude Sonnet. These are c
 | Dynamical signals | 11 |
 | Calibration context | 7 dimensions |
 | Device/temporal | 3 |
-| **Total** | **~96 distinct signals** |
+| Cursor behavior / writing process (Phase 1) | 17 |
+| Motor signals | 7 |
+| Extended semantic signals | 8 |
+| Process signals | 9 |
+| Cross-session signals | 10 |
+| **Total** | **~147 distinct signals** |

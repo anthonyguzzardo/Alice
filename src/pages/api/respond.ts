@@ -12,6 +12,7 @@ import { computeLinguisticDensities } from '../../lib/linguistic.ts';
 import { computeMATTR } from '../../lib/alice-negative/helpers.ts';
 import { renderWitnessState } from '../../lib/alice-negative/render-witness.ts';
 import { computeSessionMetadata } from '../../lib/session-metadata.ts';
+import { computeAndPersistDerivedSignals } from '../../lib/signal-pipeline.ts';
 
 // Note: runObservation (three-frame + prediction + suppressed question) and
 // runReflection (weekly narrative) removed 2026-04-16 in interpretive-layer
@@ -122,6 +123,24 @@ export const POST: APIRoute = async ({ request }) => {
         sentenceLengthVariance: sentLenVar,
         scrollBackCount: sessionSummary.scrollBackCount ?? null,
         questionRereadCount: sessionSummary.questionRereadCount ?? null,
+        confirmationLatencyMs: sessionSummary.confirmationLatencyMs ?? null,
+        pasteCount: sessionSummary.pasteCount ?? null,
+        pasteCharsTotal: sessionSummary.pasteCharsTotal ?? null,
+        readBackCount: sessionSummary.readBackCount ?? null,
+        leadingEdgeRatio: sessionSummary.leadingEdgeRatio ?? null,
+        contextualRevisionCount: sessionSummary.contextualRevisionCount ?? null,
+        preContextualRevisionCount: sessionSummary.preContextualRevisionCount ?? null,
+        consideredAndKeptCount: sessionSummary.consideredAndKeptCount ?? null,
+        holdTimeMeanLeft: sessionSummary.holdTimeMeanLeft ?? null,
+        holdTimeMeanRight: sessionSummary.holdTimeMeanRight ?? null,
+        holdTimeStdLeft: sessionSummary.holdTimeStdLeft ?? null,
+        holdTimeStdRight: sessionSummary.holdTimeStdRight ?? null,
+        holdTimeCV: sessionSummary.holdTimeCV ?? null,
+        negativeFlightTimeCount: sessionSummary.negativeFlightTimeCount ?? null,
+        ikiSkewness: sessionSummary.ikiSkewness ?? null,
+        ikiKurtosis: sessionSummary.ikiKurtosis ?? null,
+        errorDetectionLatencyMean: sessionSummary.errorDetectionLatencyMean ?? null,
+        terminalVelocity: sessionSummary.terminalVelocity ?? null,
         deviceType: sessionSummary.deviceType ?? null,
         userAgent: sessionSummary.userAgent ?? null,
         hourOfDay: sessionSummary.hourOfDay ?? null,
@@ -189,6 +208,9 @@ export const POST: APIRoute = async ({ request }) => {
 
     try { await renderWitnessState(); }
     catch (err) { logError('respond.witness', err, ctx); }
+
+    try { computeAndPersistDerivedSignals(questionId); }
+    catch (err) { logError('respond.derived-signals', err, ctx); }
   })();
 
   return new Response(JSON.stringify({ ok: true, askFeedback, questionId }), {

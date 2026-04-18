@@ -819,6 +819,44 @@
           // {c: keyCode, d: downOffsetMs, u: upOffsetMs} tuples.
           const keystrokeStream: Array<{c: string; d: number; u: number}> = [];
 
+          // Enriched: cursor behavior and writing process tracking
+          // Selection tracking for leading-edge vs navigated-back classification
+          let leadingEdgeInputCount = 0;
+          let totalInputActionCount = 0;
+          let contextualRevisionCount = 0;
+          let preContextualRevisionCount = 0;
+
+          // Read-back detection: cursor moves without subsequent editing
+          let readBackCount = 0;
+          let readBackPending = false;
+          let readBackTimer: ReturnType<typeof setTimeout> | null = null;
+
+          // Selection-without-deletion: considered-and-kept events
+          let consideredAndKeptCount = 0;
+          let lastSelectionWasRange = false;
+
+          // Paste detection: construct validity signal
+          let pasteCount = 0;
+          let pasteCharsTotal = 0;
+
+          // Hand-lateralized hold times (QWERTY mapping, Kim et al. 2024)
+          const holdTimesLeft: number[] = [];
+          const holdTimesRight: number[] = [];
+          const LEFT_HAND_CODES = new Set([
+            'Backquote','Digit1','Digit2','Digit3','Digit4','Digit5',
+            'KeyQ','KeyW','KeyE','KeyR','KeyT',
+            'KeyA','KeyS','KeyD','KeyF','KeyG',
+            'KeyZ','KeyX','KeyC','KeyV','KeyB',
+            'Tab','CapsLock','ShiftLeft','ControlLeft','AltLeft','MetaLeft',
+          ]);
+
+          // Negative flight time (rollover rate, Teh et al. 2013)
+          let negativeFlightTimeCount = 0;
+
+          // Error detection latency: char-to-backspace intervals (Haag et al. 2020)
+          const errorDetectionLatencies: number[] = [];
+          let lastNonDeleteKeystrokeTime: number | null = null;
+
           // Enriched: session metadata (Czerwinski et al. 2004)
           // Scroll-back and re-read behavior correlate with engagement depth
           let scrollBackCount = 0;
@@ -838,6 +876,37 @@
               questionRereadCount++;
             }
           }, { passive: true });
+
+          // Read-back detection: cursor repositioning without subsequent editing
+          // Fires when user arrows/clicks into existing text to re-read, then
+          // moves back without changing anything. (Lindgren & Sullivan 2006)
+          document.addEventListener('selectionchange', () => {
+            if (document.activeElement !== textarea) return;
+            if (readBackTimer) clearTimeout(readBackTimer);
+            readBackPending = true;
+            readBackTimer = setTimeout(() => {
+              if (readBackPending) {
+                readBackCount++;
+                readBackPending = false;
+              }
+            }, 500);
+
+            // Selection-without-deletion tracking: if previously had a range
+            // selection and now it's collapsed, user selected and deselected
+            // without deleting = considered-and-kept
+            const hasRange = textarea.selectionStart !== textarea.selectionEnd;
+            if (lastSelectionWasRange && !hasRange) {
+              consideredAndKeptCount++;
+            }
+            lastSelectionWasRange = hasRange;
+          });
+
+          // Paste detection: construct validity signal (Option C thesis)
+          textarea.addEventListener('paste', (e: ClipboardEvent) => {
+            pasteCount++;
+            const pasted = e.clipboardData?.getData('text/plain') ?? '';
+            pasteCharsTotal += pasted.length;
+          });
 
           textarea.addEventListener('keydown', (e: KeyboardEvent) => {
             const now = Date.now();
@@ -859,8 +928,26 @@
               // Flight time: keyup[n-1] → keydown[n] (cognitive planning interval)
               if (lastKeyupTime !== null) {
                 const ft = now - lastKeyupTime;
-                if (ft > 0 && ft < 5000) flightTimes.push(ft);
+                if (ft > 0 && ft < 5000) {
+                  flightTimes.push(ft);
+                } else if (ft < 0) {
+                  // Negative flight time = key rollover (next key pressed before
+                  // previous released). Signature of motor automaticity.
+                  negativeFlightTimeCount++;
+                }
               }
+            }
+
+            // Leading-edge vs navigated-back classification (Galbraith 2009)
+            totalInputActionCount++;
+            if (textarea.selectionStart >= textarea.value.length) {
+              leadingEdgeInputCount++;
+            }
+
+            // Cancel pending read-back — an edit followed the cursor move
+            if (readBackPending) {
+              readBackPending = false;
+              if (readBackTimer) clearTimeout(readBackTimer);
             }
 
             // Revision chain detection (Leijten & Van Waes 2013)
@@ -875,11 +962,26 @@
                 currentRevisionChainLength = 1;
               }
               lastDeletionTime = now;
+
+              // Error detection latency: time from last non-delete keystroke
+              // to this backspace (Haag et al. 2020 fatigue marker)
+              if (lastNonDeleteKeystrokeTime !== null) {
+                const edl = now - lastNonDeleteKeystrokeTime;
+                if (edl > 0 && edl < 5000) errorDetectionLatencies.push(edl);
+              }
+
+              // Contextual vs pre-contextual revision (Lindgren & Sullivan 2006)
+              if (textarea.selectionStart < textarea.value.length - 1) {
+                contextualRevisionCount++;
+              } else {
+                preContextualRevisionCount++;
+              }
             } else {
               if (currentRevisionChainLength > 0) {
                 revisionChains.push(currentRevisionChainLength);
                 currentRevisionChainLength = 0;
               }
+              lastNonDeleteKeystrokeTime = now;
             }
           });
 
@@ -897,6 +999,12 @@
                   d: downTime - pageOpenTime,
                   u: now - pageOpenTime,
                 });
+                // Hand-lateralized hold times (QWERTY, Kim et al. 2024)
+                if (LEFT_HAND_CODES.has(e.code)) {
+                  holdTimesLeft.push(ht);
+                } else {
+                  holdTimesRight.push(ht);
+                }
               }
               keydownTimes.delete(e.code);
             }
@@ -1131,6 +1239,59 @@
             const revChainAvgLength = revChainCount > 0
               ? revisionChains.reduce((a, b) => a + b, 0) / revChainCount : null;
 
+            // Derived: confirmation latency (Monaro et al. 2018, deception detection)
+            // Time between last keystroke and submit — the "is it done?" moment
+            const confirmationLatencyMs = lastInputTime
+              ? submitTime - lastInputTime : null;
+
+            // Derived: writing linearity (Galbraith 2009, knowledge-transforming)
+            const leadingEdgeRatio = totalInputActionCount > 0
+              ? leadingEdgeInputCount / totalInputActionCount : null;
+
+            // Derived: hand-lateralized hold times (neuroQWERTY, Giancardo et al. 2016)
+            const htLeftCount = holdTimesLeft.length;
+            const holdTimeMeanLeft = htLeftCount > 0
+              ? holdTimesLeft.reduce((a, b) => a + b, 0) / htLeftCount : null;
+            const holdTimeStdLeft = htLeftCount > 1
+              ? Math.sqrt(holdTimesLeft.reduce((s, v) => s + (v - holdTimeMeanLeft!) ** 2, 0) / (htLeftCount - 1)) : null;
+            const htRightCount = holdTimesRight.length;
+            const holdTimeMeanRight = htRightCount > 0
+              ? holdTimesRight.reduce((a, b) => a + b, 0) / htRightCount : null;
+            const holdTimeStdRight = htRightCount > 1
+              ? Math.sqrt(holdTimesRight.reduce((s, v) => s + (v - holdTimeMeanRight!) ** 2, 0) / (htRightCount - 1)) : null;
+
+            // Derived: hold time CV — motor consistency (neuroQWERTY, most sensitive PD feature)
+            const holdTimeCV = (holdTimeMean != null && holdTimeMean > 0 && holdTimeStd != null)
+              ? holdTimeStd / holdTimeMean : null;
+
+            // Derived: IKI skewness and kurtosis (Heliyon 2021, distribution shape)
+            let ikiSkewness: number | null = null;
+            let ikiKurtosis: number | null = null;
+            if (ikiCount >= 10 && ikiMean != null && ikiStd != null && ikiStd > 0) {
+              let m3 = 0, m4 = 0;
+              for (const iki of interKeyIntervals) {
+                const d = (iki - ikiMean) / ikiStd;
+                m3 += d * d * d;
+                m4 += d * d * d * d;
+              }
+              ikiSkewness = m3 / ikiCount;
+              ikiKurtosis = (m4 / ikiCount) - 3; // excess kurtosis
+            }
+
+            // Derived: error detection latency (Haag et al. 2020)
+            const edlCount = errorDetectionLatencies.length;
+            const errorDetectionLatencyMean = edlCount > 0
+              ? errorDetectionLatencies.reduce((a, b) => a + b, 0) / edlCount : null;
+
+            // Derived: terminal velocity (chronemics — approach to the finish line)
+            let terminalVelocity: number | null = null;
+            if (ikiCount >= 20 && ikiMean != null && ikiMean > 0) {
+              const tail = Math.max(2, Math.floor(ikiCount * 0.1));
+              const tailSlice = interKeyIntervals.slice(-tail);
+              const tailMean = tailSlice.reduce((a, b) => a + b, 0) / tailSlice.length;
+              terminalVelocity = tailMean / ikiMean;
+            }
+
             const sessionSummary = {
               questionId,
               firstKeystrokeMs,
@@ -1173,6 +1334,25 @@
               // Session metadata (Czerwinski et al. 2004)
               scrollBackCount,
               questionRereadCount,
+              // Cursor behavior and writing process (Phase 1 expansion)
+              confirmationLatencyMs,
+              pasteCount,
+              pasteCharsTotal,
+              readBackCount,
+              leadingEdgeRatio,
+              contextualRevisionCount,
+              preContextualRevisionCount,
+              consideredAndKeptCount,
+              holdTimeMeanLeft,
+              holdTimeMeanRight,
+              holdTimeStdLeft,
+              holdTimeStdRight,
+              holdTimeCV,
+              negativeFlightTimeCount,
+              ikiSkewness,
+              ikiKurtosis,
+              errorDetectionLatencyMean,
+              terminalVelocity,
               // Slice-3 follow-up: deletion events with ms-offset for
               // deletion-density curve classification.
               deletionEvents: deletionTimestamps.map(d => ({

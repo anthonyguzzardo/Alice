@@ -353,6 +353,25 @@ db.exec(`
     -- DELETION EVENT LOG (slice 3 follow-up — for deletion-density curve classification)
     -- JSON array: [{c: chars, t: ms_offset_from_session_start}, ...]
     ,deletion_events_json       TEXT             -- per-deletion timing log
+    -- CURSOR BEHAVIOR + WRITING PROCESS (Phase 1 expansion, 2026-04-17)
+    ,confirmation_latency_ms    INTEGER          -- last keystroke to submit (Monaro et al. 2018)
+    ,paste_count                INTEGER          -- external text insertions (construct validity)
+    ,paste_chars_total          INTEGER          -- total pasted characters
+    ,read_back_count            INTEGER          -- cursor moves without editing (metacognitive monitoring)
+    ,leading_edge_ratio         REAL             -- keystrokes at text end / total (Galbraith 2009)
+    ,contextual_revision_count  INTEGER          -- deletions navigated back into text (Lindgren & Sullivan 2006)
+    ,pre_contextual_revision_count INTEGER       -- deletions at leading edge
+    ,considered_and_kept_count  INTEGER          -- select then deselect without deleting
+    ,hold_time_mean_left        REAL             -- left hand motor execution (neuroQWERTY)
+    ,hold_time_mean_right       REAL             -- right hand motor execution
+    ,hold_time_std_left         REAL             -- left hand motor variability
+    ,hold_time_std_right        REAL             -- right hand motor variability
+    ,hold_time_cv               REAL             -- hold time coefficient of variation (most sensitive PD feature)
+    ,negative_flight_time_count INTEGER          -- key rollover rate (motor automaticity, Teh et al. 2013)
+    ,iki_skewness               REAL             -- IKI distribution asymmetry (Heliyon 2021)
+    ,iki_kurtosis               REAL             -- IKI distribution tail heaviness
+    ,error_detection_latency_mean REAL           -- char-to-backspace interval (Haag et al. 2020 fatigue)
+    ,terminal_velocity          REAL             -- final 10% IKI / session mean (finish-line behavior)
     -- CONTEXT
     ,device_type                TEXT             -- 'mobile' or 'desktop'
     ,user_agent                 TEXT             -- raw user agent string
@@ -842,6 +861,142 @@ db.exec(`
     ,dttm_created_utc      TEXT    DEFAULT (datetime('now'))
     ,created_by            TEXT    DEFAULT 'system'
   );
+
+  -- --------------------------------------------------------------------------
+  -- tb_dynamical_signals
+  -- --------------------------------------------------------------------------
+  -- PURPOSE: Persisted nonlinear dynamics from keystroke stream (previously
+  --          computed on-demand in observatory entry endpoint)
+  -- USE CASE: Trajectory visualization, cross-session comparison
+  -- MUTABILITY: Append-only (one row per session)
+  -- LOGICAL FK: question_id -> tb_questions.question_id
+  -- FOOTER: dttm_created_utc, created_by
+  -- --------------------------------------------------------------------------
+  CREATE TABLE IF NOT EXISTS tb_dynamical_signals (
+     dynamical_signal_id          INTEGER PRIMARY KEY AUTOINCREMENT
+    ,question_id                  INTEGER NOT NULL UNIQUE
+    ,iki_count                    INTEGER
+    ,hold_flight_count            INTEGER
+    ,permutation_entropy          REAL
+    ,permutation_entropy_raw      REAL
+    ,dfa_alpha                    REAL
+    ,rqa_determinism              REAL
+    ,rqa_laminarity               REAL
+    ,rqa_trapping_time            REAL
+    ,rqa_recurrence_rate          REAL
+    ,te_hold_to_flight            REAL
+    ,te_flight_to_hold            REAL
+    ,te_dominance                 REAL
+    ,dttm_created_utc             TEXT    DEFAULT (datetime('now'))
+    ,created_by                   TEXT    DEFAULT 'system'
+  );
+
+  -- --------------------------------------------------------------------------
+  -- tb_motor_signals
+  -- --------------------------------------------------------------------------
+  -- PURPOSE: Motor and rhythmic features derived from keystroke stream.
+  --          Captures cognitive rhythm, motor smoothness, fatigue, and
+  --          typing automaticity beyond what dynamical signals cover.
+  -- USE CASE: Longitudinal motor signature tracking, fatigue detection
+  -- MUTABILITY: Append-only (one row per session)
+  -- LOGICAL FK: question_id -> tb_questions.question_id
+  -- FOOTER: dttm_created_utc, created_by
+  -- --------------------------------------------------------------------------
+  CREATE TABLE IF NOT EXISTS tb_motor_signals (
+     motor_signal_id              INTEGER PRIMARY KEY AUTOINCREMENT
+    ,question_id                  INTEGER NOT NULL UNIQUE
+    ,sample_entropy               REAL             -- Richman & Moorman 2000; temporal regularity
+    ,iki_autocorrelation_json     TEXT             -- JSON array of 5 floats, lags 1-5
+    ,motor_jerk                   REAL             -- mean absolute 2nd derivative of IKI velocity
+    ,lapse_rate                   REAL             -- IKIs > mean+3*std per minute (Haag et al. 2020)
+    ,tempo_drift                  REAL             -- IKI slope across session quartiles
+    ,iki_compression_ratio        REAL             -- gzip(IKI series) / raw length
+    ,digraph_latency_json         TEXT             -- JSON: {digraph: meanFlightMs} top 10
+    ,dttm_created_utc             TEXT    DEFAULT (datetime('now'))
+    ,created_by                   TEXT    DEFAULT 'system'
+  );
+
+  -- --------------------------------------------------------------------------
+  -- tb_semantic_signals
+  -- --------------------------------------------------------------------------
+  -- PURPOSE: Extended text-level semantic features beyond NRC/LIWC densities.
+  --          Idea density, lexical sophistication, epistemic stance, cohesion,
+  --          emotional arc, compression.
+  -- USE CASE: Longitudinal cognitive reserve tracking (Nun Study paradigm)
+  -- MUTABILITY: Append-only (one row per session)
+  -- LOGICAL FK: question_id -> tb_questions.question_id
+  -- FOOTER: dttm_created_utc, created_by
+  -- --------------------------------------------------------------------------
+  CREATE TABLE IF NOT EXISTS tb_semantic_signals (
+     semantic_signal_id           INTEGER PRIMARY KEY AUTOINCREMENT
+    ,question_id                  INTEGER NOT NULL UNIQUE
+    ,idea_density                 REAL             -- propositions/words (Snowdon 1996)
+    ,lexical_sophistication       REAL             -- proportion non-high-freq words (Kyle 2017)
+    ,epistemic_stance             REAL             -- booster/(booster+hedge) (Hyland 2005)
+    ,integrative_complexity       REAL             -- connectives/sentence (Suedfeld)
+    ,deep_cohesion                REAL             -- causal+temporal+intentional density (Coh-Metrix)
+    ,referential_cohesion         REAL             -- content word overlap between sentences
+    ,emotional_valence_arc        TEXT             -- ascending|descending|vee|peak|flat (Reagan 2016)
+    ,text_compression_ratio       REAL             -- gzip(text)/raw (Kolmogorov proxy)
+    ,lexicon_version              INTEGER NOT NULL DEFAULT 1
+    ,paste_contaminated           INTEGER NOT NULL DEFAULT 0
+    ,dttm_created_utc             TEXT    DEFAULT (datetime('now'))
+    ,created_by                   TEXT    DEFAULT 'system'
+  );
+
+  -- --------------------------------------------------------------------------
+  -- tb_process_signals
+  -- --------------------------------------------------------------------------
+  -- PURPOSE: Writing process features derived from event log replay.
+  --          Pause location, abandoned thoughts, R/I bursts, phase transitions.
+  -- USE CASE: Knowledge-transforming vs knowledge-telling classification
+  -- MUTABILITY: Append-only (one row per session)
+  -- LOGICAL FK: question_id -> tb_questions.question_id
+  -- FOOTER: dttm_created_utc, created_by
+  -- --------------------------------------------------------------------------
+  CREATE TABLE IF NOT EXISTS tb_process_signals (
+     process_signal_id            INTEGER PRIMARY KEY AUTOINCREMENT
+    ,question_id                  INTEGER NOT NULL UNIQUE
+    ,pause_within_word            INTEGER          -- pauses inside words (transcription difficulty)
+    ,pause_between_word           INTEGER          -- pauses at word boundaries (lexical selection)
+    ,pause_between_sentence       INTEGER          -- pauses at sentence boundaries (planning)
+    ,abandoned_thought_count      INTEGER          -- pause-type-delete-redirect patterns
+    ,r_burst_count                INTEGER          -- bursts ending with leading-edge revision
+    ,i_burst_count                INTEGER          -- bursts starting with navigation back
+    ,vocab_expansion_rate         REAL             -- Heaps exponent (vocabulary growth)
+    ,phase_transition_point       REAL             -- 0-1 position where revision dominates
+    ,strategy_shift_count         INTEGER          -- change points in burst length series
+    ,dttm_created_utc             TEXT    DEFAULT (datetime('now'))
+    ,created_by                   TEXT    DEFAULT 'system'
+  );
+
+  -- --------------------------------------------------------------------------
+  -- tb_cross_session_signals
+  -- --------------------------------------------------------------------------
+  -- PURPOSE: Signals requiring comparison to prior entries. Self-perplexity,
+  --          normalized compression distance, vocabulary recurrence, digraph
+  --          stability, text network density.
+  -- USE CASE: Cognitive reserve trajectory, novelty vs repetition detection
+  -- MUTABILITY: Append-only (one row per session)
+  -- LOGICAL FK: question_id -> tb_questions.question_id
+  -- FOOTER: dttm_created_utc, created_by
+  -- --------------------------------------------------------------------------
+  CREATE TABLE IF NOT EXISTS tb_cross_session_signals (
+     cross_session_signal_id      INTEGER PRIMARY KEY AUTOINCREMENT
+    ,question_id                  INTEGER NOT NULL UNIQUE
+    ,self_perplexity              REAL             -- personal trigram model perplexity
+    ,ncd_lag_1                    REAL             -- NCD to 1-day-ago entry
+    ,ncd_lag_3                    REAL             -- NCD to 3-day-ago entry
+    ,ncd_lag_7                    REAL             -- NCD to 7-day-ago entry
+    ,ncd_lag_30                   REAL             -- NCD to 30-day-ago entry
+    ,vocab_recurrence_decay       REAL             -- Jaccard similarity decay rate
+    ,digraph_stability            REAL             -- cosine similarity to rolling digraph baseline
+    ,text_network_density         REAL             -- co-occurrence graph density
+    ,text_network_communities     INTEGER          -- number of concept clusters
+    ,bridging_ratio               REAL             -- high-betweenness nodes / total nodes
+    ,dttm_created_utc             TEXT    DEFAULT (datetime('now'))
+    ,created_by                   TEXT    DEFAULT 'system'
+  );
 `);
 
 // --------------------------------------------------------------------------
@@ -1289,6 +1444,25 @@ export interface SessionSummaryInput {
   // Session metadata (Czerwinski et al. 2004)
   scrollBackCount: number | null;
   questionRereadCount: number | null;
+  // Cursor behavior + writing process (Phase 1 expansion)
+  confirmationLatencyMs: number | null;
+  pasteCount: number | null;
+  pasteCharsTotal: number | null;
+  readBackCount: number | null;
+  leadingEdgeRatio: number | null;
+  contextualRevisionCount: number | null;
+  preContextualRevisionCount: number | null;
+  consideredAndKeptCount: number | null;
+  holdTimeMeanLeft: number | null;
+  holdTimeMeanRight: number | null;
+  holdTimeStdLeft: number | null;
+  holdTimeStdRight: number | null;
+  holdTimeCV: number | null;
+  negativeFlightTimeCount: number | null;
+  ikiSkewness: number | null;
+  ikiKurtosis: number | null;
+  errorDetectionLatencyMean: number | null;
+  terminalVelocity: number | null;
   // Context
   deviceType: string | null;
   userAgent: string | null;
@@ -1316,8 +1490,17 @@ export function saveSessionSummary(s: SessionSummaryInput): void {
        keystroke_entropy,
        mattr, avg_sentence_length, sentence_length_variance,
        scroll_back_count, question_reread_count,
+       confirmation_latency_ms, paste_count, paste_chars_total,
+       read_back_count, leading_edge_ratio,
+       contextual_revision_count, pre_contextual_revision_count,
+       considered_and_kept_count,
+       hold_time_mean_left, hold_time_mean_right,
+       hold_time_std_left, hold_time_std_right, hold_time_cv,
+       negative_flight_time_count,
+       iki_skewness, iki_kurtosis,
+       error_detection_latency_mean, terminal_velocity,
        device_type, user_agent, hour_of_day, day_of_week
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (${Array(70).fill('?').join(', ')})
   `).run(
     s.questionId, s.firstKeystrokeMs, s.totalDurationMs,
     s.totalCharsTyped, s.finalCharCount, s.commitmentRatio,
@@ -1336,6 +1519,15 @@ export function saveSessionSummary(s: SessionSummaryInput): void {
     s.keystrokeEntropy,
     s.mattr, s.avgSentenceLength, s.sentenceLengthVariance,
     s.scrollBackCount, s.questionRereadCount,
+    s.confirmationLatencyMs, s.pasteCount, s.pasteCharsTotal,
+    s.readBackCount, s.leadingEdgeRatio,
+    s.contextualRevisionCount, s.preContextualRevisionCount,
+    s.consideredAndKeptCount,
+    s.holdTimeMeanLeft, s.holdTimeMeanRight,
+    s.holdTimeStdLeft, s.holdTimeStdRight, s.holdTimeCV,
+    s.negativeFlightTimeCount,
+    s.ikiSkewness, s.ikiKurtosis,
+    s.errorDetectionLatencyMean, s.terminalVelocity,
     s.deviceType, s.userAgent, s.hourOfDay, s.dayOfWeek
   );
 }
@@ -2876,6 +3068,196 @@ export function saveComment(slug: string, authorName: string, commentText: strin
     VALUES (?, ?, ?, ?)
   `).run(slug, authorName, commentText, nowStr());
   return Number(result.lastInsertRowid);
+}
+
+// ----------------------------------------------------------------------------
+// DYNAMICAL SIGNALS (persisted, previously on-demand)
+// ----------------------------------------------------------------------------
+
+export interface DynamicalSignalRow {
+  dynamical_signal_id: number;
+  question_id: number;
+  iki_count: number | null;
+  hold_flight_count: number | null;
+  permutation_entropy: number | null;
+  permutation_entropy_raw: number | null;
+  dfa_alpha: number | null;
+  rqa_determinism: number | null;
+  rqa_laminarity: number | null;
+  rqa_trapping_time: number | null;
+  rqa_recurrence_rate: number | null;
+  te_hold_to_flight: number | null;
+  te_flight_to_hold: number | null;
+  te_dominance: number | null;
+}
+
+export function saveDynamicalSignals(questionId: number, s: Omit<DynamicalSignalRow, 'dynamical_signal_id' | 'question_id'>): number {
+  const result = db.prepare(`
+    INSERT OR IGNORE INTO tb_dynamical_signals (
+       question_id, iki_count, hold_flight_count,
+       permutation_entropy, permutation_entropy_raw, dfa_alpha,
+       rqa_determinism, rqa_laminarity, rqa_trapping_time, rqa_recurrence_rate,
+       te_hold_to_flight, te_flight_to_hold, te_dominance
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    questionId, s.iki_count, s.hold_flight_count,
+    s.permutation_entropy, s.permutation_entropy_raw, s.dfa_alpha,
+    s.rqa_determinism, s.rqa_laminarity, s.rqa_trapping_time, s.rqa_recurrence_rate,
+    s.te_hold_to_flight, s.te_flight_to_hold, s.te_dominance
+  );
+  return Number(result.lastInsertRowid);
+}
+
+export function getDynamicalSignals(questionId: number): DynamicalSignalRow | null {
+  return db.prepare(`SELECT * FROM tb_dynamical_signals WHERE question_id = ?`).get(questionId) as DynamicalSignalRow | null;
+}
+
+// ----------------------------------------------------------------------------
+// MOTOR SIGNALS
+// ----------------------------------------------------------------------------
+
+export interface MotorSignalRow {
+  motor_signal_id: number;
+  question_id: number;
+  sample_entropy: number | null;
+  iki_autocorrelation_json: string | null;
+  motor_jerk: number | null;
+  lapse_rate: number | null;
+  tempo_drift: number | null;
+  iki_compression_ratio: number | null;
+  digraph_latency_json: string | null;
+}
+
+export function saveMotorSignals(questionId: number, s: Omit<MotorSignalRow, 'motor_signal_id' | 'question_id'>): number {
+  const result = db.prepare(`
+    INSERT OR IGNORE INTO tb_motor_signals (
+       question_id, sample_entropy, iki_autocorrelation_json,
+       motor_jerk, lapse_rate, tempo_drift,
+       iki_compression_ratio, digraph_latency_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    questionId, s.sample_entropy, s.iki_autocorrelation_json,
+    s.motor_jerk, s.lapse_rate, s.tempo_drift,
+    s.iki_compression_ratio, s.digraph_latency_json
+  );
+  return Number(result.lastInsertRowid);
+}
+
+export function getMotorSignals(questionId: number): MotorSignalRow | null {
+  return db.prepare(`SELECT * FROM tb_motor_signals WHERE question_id = ?`).get(questionId) as MotorSignalRow | null;
+}
+
+// ----------------------------------------------------------------------------
+// SEMANTIC SIGNALS
+// ----------------------------------------------------------------------------
+
+export interface SemanticSignalRow {
+  semantic_signal_id: number;
+  question_id: number;
+  idea_density: number | null;
+  lexical_sophistication: number | null;
+  epistemic_stance: number | null;
+  integrative_complexity: number | null;
+  deep_cohesion: number | null;
+  referential_cohesion: number | null;
+  emotional_valence_arc: string | null;
+  text_compression_ratio: number | null;
+  lexicon_version: number;
+  paste_contaminated: number;
+}
+
+export function saveSemanticSignals(questionId: number, s: Omit<SemanticSignalRow, 'semantic_signal_id' | 'question_id'>): number {
+  const result = db.prepare(`
+    INSERT OR IGNORE INTO tb_semantic_signals (
+       question_id, idea_density, lexical_sophistication, epistemic_stance,
+       integrative_complexity, deep_cohesion, referential_cohesion,
+       emotional_valence_arc, text_compression_ratio, lexicon_version, paste_contaminated
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    questionId, s.idea_density, s.lexical_sophistication, s.epistemic_stance,
+    s.integrative_complexity, s.deep_cohesion, s.referential_cohesion,
+    s.emotional_valence_arc, s.text_compression_ratio, s.lexicon_version, s.paste_contaminated
+  );
+  return Number(result.lastInsertRowid);
+}
+
+export function getSemanticSignals(questionId: number): SemanticSignalRow | null {
+  return db.prepare(`SELECT * FROM tb_semantic_signals WHERE question_id = ?`).get(questionId) as SemanticSignalRow | null;
+}
+
+// ----------------------------------------------------------------------------
+// PROCESS SIGNALS
+// ----------------------------------------------------------------------------
+
+export interface ProcessSignalRow {
+  process_signal_id: number;
+  question_id: number;
+  pause_within_word: number | null;
+  pause_between_word: number | null;
+  pause_between_sentence: number | null;
+  abandoned_thought_count: number | null;
+  r_burst_count: number | null;
+  i_burst_count: number | null;
+  vocab_expansion_rate: number | null;
+  phase_transition_point: number | null;
+  strategy_shift_count: number | null;
+}
+
+export function saveProcessSignals(questionId: number, s: Omit<ProcessSignalRow, 'process_signal_id' | 'question_id'>): number {
+  const result = db.prepare(`
+    INSERT OR IGNORE INTO tb_process_signals (
+       question_id, pause_within_word, pause_between_word, pause_between_sentence,
+       abandoned_thought_count, r_burst_count, i_burst_count,
+       vocab_expansion_rate, phase_transition_point, strategy_shift_count
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    questionId, s.pause_within_word, s.pause_between_word, s.pause_between_sentence,
+    s.abandoned_thought_count, s.r_burst_count, s.i_burst_count,
+    s.vocab_expansion_rate, s.phase_transition_point, s.strategy_shift_count
+  );
+  return Number(result.lastInsertRowid);
+}
+
+export function getProcessSignals(questionId: number): ProcessSignalRow | null {
+  return db.prepare(`SELECT * FROM tb_process_signals WHERE question_id = ?`).get(questionId) as ProcessSignalRow | null;
+}
+
+// ----------------------------------------------------------------------------
+// CROSS-SESSION SIGNALS
+// ----------------------------------------------------------------------------
+
+export interface CrossSessionSignalRow {
+  cross_session_signal_id: number;
+  question_id: number;
+  self_perplexity: number | null;
+  ncd_lag_1: number | null;
+  ncd_lag_3: number | null;
+  ncd_lag_7: number | null;
+  ncd_lag_30: number | null;
+  vocab_recurrence_decay: number | null;
+  digraph_stability: number | null;
+  text_network_density: number | null;
+  text_network_communities: number | null;
+  bridging_ratio: number | null;
+}
+
+export function saveCrossSessionSignals(questionId: number, s: Omit<CrossSessionSignalRow, 'cross_session_signal_id' | 'question_id'>): number {
+  const result = db.prepare(`
+    INSERT OR IGNORE INTO tb_cross_session_signals (
+       question_id, self_perplexity, ncd_lag_1, ncd_lag_3, ncd_lag_7, ncd_lag_30,
+       vocab_recurrence_decay, digraph_stability,
+       text_network_density, text_network_communities, bridging_ratio
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    questionId, s.self_perplexity, s.ncd_lag_1, s.ncd_lag_3, s.ncd_lag_7, s.ncd_lag_30,
+    s.vocab_recurrence_decay, s.digraph_stability,
+    s.text_network_density, s.text_network_communities, s.bridging_ratio
+  );
+  return Number(result.lastInsertRowid);
+}
+
+export function getCrossSessionSignals(questionId: number): CrossSessionSignalRow | null {
+  return db.prepare(`SELECT * FROM tb_cross_session_signals WHERE question_id = ?`).get(questionId) as CrossSessionSignalRow | null;
 }
 
 export default db;

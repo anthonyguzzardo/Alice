@@ -131,6 +131,10 @@ import '../../styles/observatory.css';
         return (v >= 0 ? '+' : '') + Number(v).toFixed(2) + 'σ';
       }
 
+      function resolveCssVar(el, v) {
+        return getComputedStyle(el).getPropertyValue(v.replace('var(', '').replace(')', '').trim()) || v;
+      }
+
       function drawChart(canvas, values, color, dates) {
         const dpr = window.devicePixelRatio || 1;
         const rect = canvas.getBoundingClientRect();
@@ -143,6 +147,11 @@ import '../../styles/observatory.css';
         const ctx = canvas.getContext('2d');
         ctx.scale(dpr, dpr);
 
+        // Resolve CSS variables for canvas (Canvas 2D doesn't understand var())
+        const colBorder = resolveCssVar(canvas, 'var(--border)');
+        const colFaint = resolveCssVar(canvas, 'var(--text-faint)');
+        const colLine = resolveCssVar(canvas, color);
+
         const padL = 32, padR = 8, padT = 8, padB = 20;
         const chartW = w - padL - padR;
         const chartH = h - padT - padB;
@@ -153,7 +162,7 @@ import '../../styles/observatory.css';
 
         // Zero line
         const zeroY = padT + chartH / 2;
-        ctx.strokeStyle = 'var(--border)';
+        ctx.strokeStyle = colBorder;
         ctx.lineWidth = 1;
         ctx.setLineDash([3, 3]);
         ctx.beginPath();
@@ -165,7 +174,7 @@ import '../../styles/observatory.css';
         // ±1σ reference lines
         const oneUp = padT + chartH * (1 - (1 + yRange) / (2 * yRange));
         const oneDown = padT + chartH * (1 - (-1 + yRange) / (2 * yRange));
-        ctx.strokeStyle = 'var(--border)';
+        ctx.strokeStyle = colBorder;
         ctx.lineWidth = 0.5;
         ctx.setLineDash([2, 4]);
         ctx.beginPath();
@@ -177,7 +186,7 @@ import '../../styles/observatory.css';
         ctx.setLineDash([]);
 
         // Y-axis labels
-        ctx.fillStyle = 'var(--text-faint)';
+        ctx.fillStyle = colFaint;
         ctx.font = '9px SF Mono, Menlo, monospace';
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
@@ -195,6 +204,15 @@ import '../../styles/observatory.css';
           }
         }
 
+        // Single point: draw a dot only
+        if (validPoints.length === 1) {
+          ctx.beginPath();
+          ctx.arc(validPoints[0].x, validPoints[0].y, 3, 0, Math.PI * 2);
+          ctx.fillStyle = colLine;
+          ctx.fill();
+          return;
+        }
+
         if (validPoints.length < 2) return;
 
         // Fill area
@@ -203,14 +221,11 @@ import '../../styles/observatory.css';
         for (const p of validPoints) ctx.lineTo(p.x, p.y);
         ctx.lineTo(validPoints[validPoints.length - 1].x, zeroY);
         ctx.closePath();
-
-        // Resolve CSS variable for fill
-        const resolved = getComputedStyle(canvas).getPropertyValue(color.replace('var(', '').replace(')', '').trim()) || color;
-        ctx.fillStyle = resolved + '18';
+        ctx.fillStyle = colLine + '18';
         ctx.fill();
 
         // Stroke
-        ctx.strokeStyle = resolved;
+        ctx.strokeStyle = colLine;
         ctx.lineWidth = 1.5;
         ctx.lineJoin = 'round';
         ctx.beginPath();
@@ -224,12 +239,12 @@ import '../../styles/observatory.css';
         for (const p of validPoints) {
           ctx.beginPath();
           ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
-          ctx.fillStyle = resolved;
+          ctx.fillStyle = colLine;
           ctx.fill();
         }
 
         // Date labels (first and last)
-        ctx.fillStyle = 'var(--text-faint)';
+        ctx.fillStyle = colFaint;
         ctx.font = '9px SF Mono, Menlo, monospace';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
@@ -336,13 +351,23 @@ import '../../styles/observatory.css';
           allValues['sem_convergence'] = { values: semConv, color: 'var(--semantic)' };
         }
 
-        document.querySelectorAll('.trajectory-chart').forEach(canvas => {
-          const dim = canvas.dataset.dim;
-          const color = canvas.dataset.color;
-          const entry = allValues[dim];
-          if (entry) {
-            drawChart(canvas, entry.values, color, dates);
-          }
+        function drawAll() {
+          document.querySelectorAll('.trajectory-chart').forEach(canvas => {
+            const dim = canvas.dataset.dim;
+            const color = canvas.dataset.color;
+            const entry = allValues[dim];
+            if (entry) {
+              drawChart(canvas, entry.values, color, dates);
+            }
+          });
+        }
+
+        drawAll();
+
+        let resizeTimer;
+        window.addEventListener('resize', () => {
+          clearTimeout(resizeTimer);
+          resizeTimer = setTimeout(drawAll, 150);
         });
       }).catch(err => {
         document.getElementById('trajectory-content').innerHTML = `<div class="empty">failed to load: ${err?.message ?? err}</div>`;

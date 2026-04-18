@@ -7,7 +7,7 @@
  * Pulls from the live alice.db.
  */
 import type { APIRoute } from 'astro';
-import db from '../../../../lib/db.ts';
+import db, { getDynamicalSignals, getMotorSignals } from '../../../../lib/db.ts';
 import { computeDynamicalSignals, type KeystrokeEvent } from '../../../../lib/dynamical-signals.ts';
 
 export const GET: APIRoute = async ({ params }) => {
@@ -126,9 +126,9 @@ export const GET: APIRoute = async ({ params }) => {
       WHERE question_id = ? ORDER BY session_event_id DESC LIMIT 1
     `).get(entryState.question_id) as any;
 
-    // Compute dynamical signals from keystroke stream if available
-    let dynamicalSignals = null;
-    if (replayRow?.keystroke_stream_json) {
+    // Read persisted dynamical signals; fall back to on-demand compute
+    let dynamicalSignals: any = getDynamicalSignals(entryState.question_id);
+    if (!dynamicalSignals && replayRow?.keystroke_stream_json) {
       try {
         const stream: KeystrokeEvent[] = JSON.parse(replayRow.keystroke_stream_json);
         if (stream.length > 0) {
@@ -136,6 +136,9 @@ export const GET: APIRoute = async ({ params }) => {
         }
       } catch { /* malformed JSON — skip */ }
     }
+
+    // Read persisted motor signals
+    const motorSignals = getMotorSignals(entryState.question_id);
 
     // Navigation
     const prev = db.prepare(`
@@ -157,6 +160,7 @@ export const GET: APIRoute = async ({ params }) => {
       metadata,
       burstSequence,
       dynamicalSignals,
+      motorSignals,
       replay: replayRow ? {
         available: true,
         totalEvents: replayRow.total_events,

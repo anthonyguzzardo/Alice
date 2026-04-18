@@ -80,10 +80,11 @@ import '../../styles/observatory.css';
       }
 
       function dotColor(z) {
-        if (z == null) return '#ddd';
-        if (Math.abs(z) < 1) return '#555';
-        if (z > 0) return '#6b8e6b';
-        return '#b5603f';
+        const s = getComputedStyle(document.documentElement);
+        if (z == null) return s.getPropertyValue('--border').trim() || '#ddd';
+        if (Math.abs(z) < 1) return s.getPropertyValue('--text-muted').trim() || '#555';
+        if (z > 0) return s.getPropertyValue('--positive').trim() || '#6b8e6b';
+        return s.getPropertyValue('--negative').trim() || '#b5603f';
       }
 
       function renderInsights(insights, container) {
@@ -123,7 +124,8 @@ import '../../styles/observatory.css';
         `).join('');
       }
 
-      function sparkline(values, color = '#7a5a44') {
+      function sparkline(values, color = null) {
+        if (!color) color = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#7a5a44';
         const n = values.length;
         if (n < 2) return '<span class="spark"></span>';
         const min = Math.min(...values);
@@ -195,7 +197,7 @@ import '../../styles/observatory.css';
             </div>
             <div class="kpi flex1">
               <div class="k">drift trajectory</div>
-              ${sparkline(drifts, '#8a5a44')}
+              ${sparkline(drifts)}
             </div>
           </div>
         `;

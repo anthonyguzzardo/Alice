@@ -73,6 +73,10 @@ const responseId = parseInt(id ?? '', 10);
         return (v / 60000).toFixed(1) + 'min';
       }
 
+      function resolveCssVar(el, v) {
+        return getComputedStyle(el).getPropertyValue(v.replace('var(', '').replace(')', '').trim()) || v;
+      }
+
       function drawRadar(canvas, dims, values, color) {
         const dpr = window.devicePixelRatio || 1;
         const size = 300;
@@ -83,6 +87,10 @@ const responseId = parseInt(id ?? '', 10);
         const ctx = canvas.getContext('2d');
         ctx.scale(dpr, dpr);
 
+        const colBorder = resolveCssVar(canvas, 'var(--border)');
+        const colBorderFocus = resolveCssVar(canvas, 'var(--border-focus)');
+        const colFaint = resolveCssVar(canvas, 'var(--text-faint)');
+
         const cx = size / 2, cy = size / 2, maxR = 110;
         const n = dims.length;
         const angle = (2 * Math.PI) / n;
@@ -91,7 +99,7 @@ const responseId = parseInt(id ?? '', 10);
 
         // Reference rings
         for (const ring of [-2, -1, 0, 1, 2]) {
-          ctx.strokeStyle = ring === 0 ? '#888' : '#ddd';
+          ctx.strokeStyle = ring === 0 ? colBorderFocus : colBorder;
           ctx.lineWidth = ring === 0 ? 1 : 0.5;
           ctx.beginPath();
           for (let i = 0; i <= n; i++) {
@@ -108,13 +116,13 @@ const responseId = parseInt(id ?? '', 10);
         // Axes + labels
         for (let i = 0; i < n; i++) {
           const a = -Math.PI / 2 + i * angle;
-          ctx.strokeStyle = '#ddd';
+          ctx.strokeStyle = colBorder;
           ctx.lineWidth = 0.5;
           ctx.beginPath();
           ctx.moveTo(cx, cy);
           ctx.lineTo(cx + Math.cos(a) * maxR, cy + Math.sin(a) * maxR);
           ctx.stroke();
-          ctx.fillStyle = '#999';
+          ctx.fillStyle = colFaint;
           ctx.font = '9px SF Mono, monospace';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
