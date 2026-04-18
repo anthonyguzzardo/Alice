@@ -20,20 +20,25 @@ import sql, {
   getProcessSignals,
   getCrossSessionSignals,
 } from './db.ts';
-import { computeDynamicalSignals, type KeystrokeEvent } from './dynamical-signals.ts';
-import { computeMotorSignals } from './motor-signals.ts';
+import {
+  computeDynamicalSignals,
+  computeMotorSignals,
+  computeProcessSignals,
+} from './signals-native.ts';
+import type { KeystrokeEvent } from './dynamical-signals.ts';
 import { computeSemanticSignals } from './semantic-signals.ts';
-import { computeProcessSignals } from './process-signals.ts';
 import { computeCrossSessionSignals } from './cross-session-signals.ts';
 import { logError } from './error-log.ts';
 
 async function getKeystrokeStream(questionId: number): Promise<KeystrokeEvent[] | null> {
   const rows = await sql`SELECT keystroke_stream_json FROM tb_session_events WHERE question_id = ${questionId}`;
-  const row = rows[0] as { keystroke_stream_json: string | null } | undefined;
+  const row = rows[0] as { keystroke_stream_json: unknown } | undefined;
 
   if (!row?.keystroke_stream_json) return null;
+  // JSONB auto-parsed by postgres driver; handle both parsed and string forms
+  if (Array.isArray(row.keystroke_stream_json)) return row.keystroke_stream_json as KeystrokeEvent[];
   try {
-    return JSON.parse(row.keystroke_stream_json) as KeystrokeEvent[];
+    return JSON.parse(row.keystroke_stream_json as string) as KeystrokeEvent[];
   } catch {
     return null;
   }
@@ -41,8 +46,12 @@ async function getKeystrokeStream(questionId: number): Promise<KeystrokeEvent[] 
 
 async function getEventLogJson(questionId: number): Promise<string | null> {
   const rows = await sql`SELECT event_log_json FROM tb_session_events WHERE question_id = ${questionId}`;
-  const row = rows[0] as { event_log_json: string | null } | undefined;
-  return row?.event_log_json ?? null;
+  const row = rows[0] as { event_log_json: unknown } | undefined;
+  if (!row?.event_log_json) return null;
+  // JSONB auto-parsed by postgres driver; re-stringify for signal functions
+  return typeof row.event_log_json === 'string'
+    ? row.event_log_json
+    : JSON.stringify(row.event_log_json);
 }
 
 async function getResponseText(questionId: number): Promise<string | null> {

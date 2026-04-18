@@ -5,7 +5,7 @@ A personal, monastic daily thinking journal. One question per day. No gamificati
 ## Stack
 - Astro (SSR with Node adapter)
 - PostgreSQL 17 + pgvector (connection: `postgres://localhost/alice`)
-- Rust signal engine via napi-rs (Phase 2, in progress)
+- Rust signal engine via napi-rs (`src-rs/`, dynamical + motor + process signals)
 - Claude API (@anthropic-ai/sdk) for question generation and pattern surfacing
 - TypeScript (strict)
 
@@ -18,6 +18,9 @@ A personal, monastic daily thinking journal. One question per day. No gamificati
 - Seed questions in `src/lib/seeds.ts`
 - Nightly script (`npm run generate`) generates tomorrow's question from past responses
 - SQLite backup preserved at `src/lib/db-sqlite.ts` and `data/alice.db`
+- Rust signal engine in `src-rs/` built via `npm run build:rust`
+- Signal pipeline (`src/lib/signals-native.ts`) loads Rust via napi-rs with automatic TS fallback
+- `npm run build` runs Rust build before Astro build
 
 ## Database Conventions
 - **Table prefixes**: `te_` (enumeration/static), `td_` (dictionary), `tb_` (normal/mutable), `tm_` (matrix), `th_` (history)
@@ -37,6 +40,7 @@ A personal, monastic daily thinking journal. One question per day. No gamificati
 - **All db functions are async**: Every function exported from `src/lib/db.ts` returns a Promise. Every call site must `await`. If you add a new db function, it must be async.
 - **PostgreSQL camelCase aliases**: PG lowercases unquoted identifiers. Use double quotes for camelCase aliases in SQL: `SELECT col AS "camelCase"`.
 - **JSONB auto-parsing**: The postgres driver auto-parses JSONB columns into JS objects. Functions returning JSONB fields that callers expect as strings must re-stringify them.
+- **Rust native module**: Loaded via `createRequire` in `signals-native.ts`. The `.node` file is platform-specific (`alice-signals.darwin-arm64.node`). If it fails to load, all three signal families fall back to TypeScript automatically. Rebuild with `npm run build:rust` after changing `src-rs/` code.
 
 ## Philosophy
 Every technical decision should serve depth over speed. If it optimizes for engagement or throughput, it's wrong. The design is the philosophy.

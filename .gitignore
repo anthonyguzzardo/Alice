@@ -27,5 +27,9 @@ data/
 .idea/
 
 
+# rust build artifacts
+src-rs/target/
+src-rs/*.node
+
 # large media
 *.mov
