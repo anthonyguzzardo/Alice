@@ -483,6 +483,7 @@
         <button class="nav-menu-btn" id="nav-menu-btn" aria-label="Navigation" title="Navigation">&#x2022;&#x2022;&#x2022;</button>
         <div class="nav-dropdown" id="nav-dropdown">
           <a href="/about">About</a>
+          <a href="/papers">Papers</a>
           <div class="nav-divider"></div>
           <a href="/alice-negative">Alice Negative</a>
           <a href="/observatory">Observatory</a>
@@ -813,6 +814,11 @@
           let lastKeyupTime: number | null = null;
           const keydownTimes = new Map<string, number>();
 
+          // Raw keystroke stream for dynamical signal analysis (RQA, DFA,
+          // permutation entropy, transfer entropy). Stores compact
+          // {c: keyCode, d: downOffsetMs, u: upOffsetMs} tuples.
+          const keystrokeStream: Array<{c: string; d: number; u: number}> = [];
+
           // Enriched: session metadata (Czerwinski et al. 2004)
           // Scroll-back and re-read behavior correlate with engagement depth
           let scrollBackCount = 0;
@@ -884,7 +890,14 @@
             const downTime = keydownTimes.get(e.code);
             if (downTime != null) {
               const ht = now - downTime;
-              if (ht > 0 && ht < 2000) holdTimes.push(ht); // cap at 2s — held keys are not motor signal
+              if (ht > 0 && ht < 2000) {
+                holdTimes.push(ht); // cap at 2s — held keys are not motor signal
+                keystrokeStream.push({
+                  c: e.code,
+                  d: downTime - pageOpenTime,
+                  u: now - pageOpenTime,
+                });
+              }
               keydownTimes.delete(e.code);
             }
           });
@@ -975,7 +988,7 @@
 
             if (pauseTimer) clearTimeout(pauseTimer);
             pauseTimer = window.setTimeout(() => {
-              if (textarea.value.trim()) {
+              if (firstKeystrokeSent) {
                 pauseCount++;
                 pauseStartTime = Date.now();
                 trackEvent(questionId, 'pause', JSON.stringify({
@@ -1165,6 +1178,8 @@
               })),
               // Read-only playback substrate (text snapshots over time).
               eventLog,
+              // Raw keystroke stream for dynamical signal analysis
+              keystrokeStream,
               // Context
               deviceType,
               userAgent: rawUserAgent,
@@ -1344,6 +1359,11 @@
         let calLastKeyupTime: number | null = null;
         const calKeydownTimes = new Map<string, number>();
 
+        // Raw keystroke stream + event log (same as journal sessions)
+        const calKeystrokeStream: Array<{c: string; d: number; u: number}> = [];
+        const calEventLog: Array<[number, string]> = [];
+        const CAL_EVENT_LOG_CAP = 2000;
+
         // Session metadata (Czerwinski et al. 2004)
         let calScrollBackCount = 0;
         let calLastScrollTop = 0;
@@ -1399,7 +1419,14 @@
           const downTime = calKeydownTimes.get(e.code);
           if (downTime != null) {
             const ht = now - downTime;
-            if (ht > 0 && ht < 2000) calHoldTimes.push(ht);
+            if (ht > 0 && ht < 2000) {
+              calHoldTimes.push(ht);
+              calKeystrokeStream.push({
+                c: e.code,
+                d: downTime - pageOpenTime,
+                u: now - pageOpenTime,
+              });
+            }
             calKeydownTimes.delete(e.code);
           }
         });
@@ -1408,6 +1435,14 @@
           const now = Date.now();
           const currentLength = textarea.value.length;
           const delta = currentLength - lastTextLength;
+
+          // Capture text snapshot for event log (same as journal sessions)
+          if (calEventLog.length >= CAL_EVENT_LOG_CAP) {
+            for (let i = calEventLog.length - 2; i >= 0; i -= 2) {
+              calEventLog.splice(i, 1);
+            }
+          }
+          calEventLog.push([now - pageOpenTime, textarea.value]);
 
           if (delta > 0) {
             totalCharsTyped += delta;
@@ -1454,7 +1489,7 @@
 
           if (pauseTimer) clearTimeout(pauseTimer);
           pauseTimer = window.setTimeout(() => {
-            if (textarea.value.trim()) {
+            if (firstKeystrokeSent) {
               pauseCount++;
               pauseStartTime = Date.now();
               isPaused = true;
@@ -1589,6 +1624,10 @@
             keystrokeEntropy: calKeystrokeEntropy,
             scrollBackCount: calScrollBackCount,
             questionRereadCount: 0, // not tracked in calibration — no persistent question to re-read
+            // Read-only playback substrate (text snapshots over time)
+            eventLog: calEventLog,
+            // Raw keystroke stream for dynamical signal analysis
+            keystrokeStream: calKeystrokeStream,
             // Context
             deviceType,
             userAgent: rawUserAgent,

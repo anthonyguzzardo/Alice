@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { saveCalibrationSession, getUsedCalibrationPrompts } from '../../lib/db.ts';
+import { saveCalibrationSession, getUsedCalibrationPrompts, saveSessionEvents } from '../../lib/db.ts';
 import { CALIBRATION_PROMPTS } from '../../lib/calibration-prompts.ts';
 import { computeLinguisticDensities } from '../../lib/linguistic.ts';
 import { computeMATTR } from '../../lib/alice-negative/helpers.ts';
@@ -86,6 +86,19 @@ export const POST: APIRoute = async ({ request }) => {
     hourOfDay: sessionSummary.hourOfDay ?? null,
     dayOfWeek: sessionSummary.dayOfWeek ?? null,
   });
+
+  // Store event log + keystroke stream for calibration sessions (same as journal)
+  if (Array.isArray(sessionSummary.eventLog) && sessionSummary.eventLog.length > 0) {
+    saveSessionEvents({
+      question_id: questionId,
+      event_log_json: JSON.stringify(sessionSummary.eventLog),
+      total_events: sessionSummary.eventLog.length,
+      session_duration_ms: sessionSummary.totalDurationMs ?? 0,
+      keystroke_stream_json: Array.isArray(sessionSummary.keystrokeStream) && sessionSummary.keystrokeStream.length > 0
+        ? JSON.stringify(sessionSummary.keystrokeStream)
+        : null,
+    });
+  }
 
   // Fire-and-forget: extract life-context tags from calibration response text.
   // Non-blocking — extraction failure never prevents calibration from succeeding.

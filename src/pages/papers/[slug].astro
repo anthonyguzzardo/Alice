@@ -1,0 +1,610 @@
+---
+import { getPaper } from '../../lib/papers.ts';
+import { getCommentsForPaper } from '../../lib/db.ts';
+
+const { slug } = Astro.params;
+const paper = getPaper(slug!);
+
+if (!paper) {
+  return Astro.redirect('/papers');
+}
+
+const comments = getCommentsForPaper(slug!);
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Alice - {paper.title}</title>
+    <script is:inline>
+      (function() {
+        var t = localStorage.getItem('alice-theme') || 'light';
+        document.documentElement.setAttribute('data-theme', t);
+      })();
+    </script>
+    <style is:global>
+      @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap');
+
+      :root {
+        --bg: #f5f2ed;
+        --bg-input: #ebe7e1;
+        --text: #1a1a1a;
+        --text-muted: #6b6560;
+        --text-faint: #9a9590;
+        --border: #ccc5bc;
+        --border-focus: #8a8580;
+      }
+
+      [data-theme="dark"] {
+        --bg: #0a0a0a;
+        --bg-input: #161514;
+        --text: #ffffff;
+        --text-muted: #7a7570;
+        --text-faint: #4a4540;
+        --border: #333;
+        --border-focus: #666;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      html, body {
+        min-height: 100%;
+        background: var(--bg);
+        color: var(--text);
+        font-family: 'EB Garamond', Georgia, serif;
+      }
+
+      body {
+        display: flex;
+        justify-content: center;
+        padding: 6rem 2rem 8rem;
+      }
+
+      .page {
+        max-width: 720px;
+        width: 100%;
+        padding-bottom: 6rem;
+      }
+
+      /* --- Nav --- */
+      .top-controls {
+        position: fixed;
+        top: 2rem;
+        right: 2rem;
+        display: flex;
+        gap: 0.6rem;
+        align-items: center;
+        z-index: 10;
+      }
+
+      .top-btn {
+        background: none;
+        border: 1px solid var(--border);
+        border-radius: 50%;
+        width: 36px;
+        height: 36px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s ease;
+        color: var(--text-muted);
+        font-size: 1rem;
+      }
+
+      .top-btn:hover {
+        border-color: var(--border-focus);
+        color: var(--text);
+      }
+
+      .nav-menu { position: relative; }
+
+      .nav-menu-btn {
+        background: none;
+        border: 1px solid var(--border);
+        border-radius: 50%;
+        width: 36px;
+        height: 36px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s ease;
+        color: var(--text-muted);
+        font-size: 1.1rem;
+      }
+
+      .nav-menu-btn:hover,
+      .nav-menu-btn.open {
+        border-color: var(--border-focus);
+        color: var(--text);
+      }
+
+      .nav-dropdown {
+        position: absolute;
+        top: calc(100% + 0.6rem);
+        right: 0;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 0.5rem 0;
+        min-width: 180px;
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(-4px);
+        transition: opacity 0.2s ease, transform 0.2s ease;
+        z-index: 100;
+      }
+
+      .nav-dropdown.open {
+        opacity: 1;
+        pointer-events: auto;
+        transform: translateY(0);
+      }
+
+      .nav-dropdown a {
+        display: block;
+        padding: 0.6rem 1.2rem;
+        color: var(--text-muted);
+        text-decoration: none;
+        font-size: 1.05rem;
+        letter-spacing: 0.03em;
+        transition: color 0.2s ease, background 0.2s ease;
+      }
+
+      .nav-dropdown a:hover {
+        color: var(--text);
+        background: var(--bg-input);
+      }
+
+      .nav-dropdown a.current { color: var(--text); }
+
+      .nav-dropdown .nav-divider {
+        height: 1px;
+        background: var(--border);
+        margin: 0.4rem 1.2rem;
+      }
+
+      /* --- Paper header --- */
+      .paper-meta {
+        margin-bottom: 1rem;
+      }
+
+      .paper-date {
+        font-size: 0.85rem;
+        color: var(--text-faint);
+        text-transform: uppercase;
+        letter-spacing: 0.15em;
+        margin-bottom: 0.3rem;
+      }
+
+      .paper-version {
+        font-size: 0.85rem;
+        color: var(--text-faint);
+        letter-spacing: 0.05em;
+      }
+
+      .back-link {
+        display: inline-block;
+        font-size: 0.95rem;
+        color: var(--text-faint);
+        text-decoration: none;
+        letter-spacing: 0.05em;
+        margin-bottom: 2.5rem;
+        transition: color 0.2s ease;
+      }
+
+      .back-link:hover {
+        color: var(--text-muted);
+      }
+
+      /* --- Paper body (rendered markdown) --- */
+      .paper-body h1 {
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-size: 2.2rem;
+        font-weight: 300;
+        font-style: italic;
+        line-height: 1.35;
+        letter-spacing: 0.02em;
+        color: var(--text);
+        margin-bottom: 0.8rem;
+      }
+
+      .paper-body h2 {
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-size: 1.6rem;
+        font-weight: 400;
+        font-style: italic;
+        line-height: 1.4;
+        color: var(--text);
+        margin-top: 3rem;
+        margin-bottom: 1.2rem;
+      }
+
+      .paper-body h3 {
+        font-size: 1.15rem;
+        font-weight: 500;
+        color: var(--text);
+        margin-top: 2rem;
+        margin-bottom: 0.8rem;
+      }
+
+      .paper-body p {
+        font-size: 1.15rem;
+        line-height: 1.85;
+        color: var(--text-muted);
+        margin-bottom: 1.2rem;
+      }
+
+      .paper-body strong {
+        color: var(--text);
+        font-weight: 500;
+      }
+
+      .paper-body em {
+        font-style: italic;
+      }
+
+      .paper-body blockquote {
+        border-left: 2px solid var(--border);
+        padding-left: 1.5rem;
+        margin: 1.5rem 0;
+        color: var(--text-faint);
+      }
+
+      .paper-body ul, .paper-body ol {
+        margin: 1rem 0 1.5rem 1.5rem;
+        color: var(--text-muted);
+      }
+
+      .paper-body li {
+        font-size: 1.15rem;
+        line-height: 1.85;
+        margin-bottom: 0.5rem;
+      }
+
+      .paper-body hr {
+        border: none;
+        height: 1px;
+        background: var(--border);
+        margin: 3rem auto;
+        width: 3rem;
+      }
+
+      .paper-body table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 1.5rem 0;
+        font-size: 0.95rem;
+      }
+
+      .paper-body th, .paper-body td {
+        border: 1px solid var(--border);
+        padding: 0.6rem 0.8rem;
+        text-align: left;
+        color: var(--text-muted);
+      }
+
+      .paper-body th {
+        color: var(--text);
+        font-weight: 500;
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      .paper-body a {
+        color: var(--text);
+        text-decoration-color: var(--border);
+        text-underline-offset: 3px;
+        transition: text-decoration-color 0.2s ease;
+      }
+
+      .paper-body a:hover {
+        text-decoration-color: var(--text);
+      }
+
+      /* --- Collapsible sections (References, Appendix) --- */
+      .paper-body details.collapsible-section {
+        margin-top: 3rem;
+      }
+
+      .paper-body details.collapsible-section summary {
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-size: 1.6rem;
+        font-weight: 400;
+        font-style: italic;
+        line-height: 1.4;
+        color: var(--text);
+        cursor: pointer;
+        list-style: none;
+        margin-bottom: 1.2rem;
+      }
+
+      .paper-body details.collapsible-section summary::before {
+        content: '+ ';
+        font-family: 'EB Garamond', Georgia, serif;
+        font-style: normal;
+        color: var(--text-faint);
+      }
+
+      .paper-body details[open].collapsible-section summary::before {
+        content: '- ';
+      }
+
+      .paper-body details.collapsible-section summary::-webkit-details-marker {
+        display: none;
+      }
+
+      /* --- Comments --- */
+      .comments-section {
+        margin-top: 5rem;
+        padding-top: 3rem;
+        border-top: 1px solid var(--border);
+      }
+
+      .comments-heading {
+        font-size: 0.85rem;
+        color: var(--text-faint);
+        text-transform: uppercase;
+        letter-spacing: 0.15em;
+        margin-bottom: 2rem;
+      }
+
+      .comment {
+        margin-bottom: 2rem;
+        padding-bottom: 2rem;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .comment:last-of-type {
+        border-bottom: none;
+      }
+
+      .comment-author {
+        font-size: 0.95rem;
+        font-weight: 500;
+        color: var(--text);
+        margin-bottom: 0.2rem;
+      }
+
+      .comment-date {
+        font-size: 0.8rem;
+        color: var(--text-faint);
+        margin-bottom: 0.8rem;
+      }
+
+      .comment-text {
+        font-size: 1.05rem;
+        line-height: 1.7;
+        color: var(--text-muted);
+        white-space: pre-wrap;
+      }
+
+      .comment-form {
+        margin-top: 2.5rem;
+      }
+
+      .form-field {
+        margin-bottom: 1.2rem;
+      }
+
+      .form-field label {
+        display: block;
+        font-size: 0.8rem;
+        color: var(--text-faint);
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        margin-bottom: 0.4rem;
+      }
+
+      .form-field input,
+      .form-field textarea {
+        width: 100%;
+        padding: 0.8rem;
+        background: var(--bg-input);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        color: var(--text);
+        font-family: 'EB Garamond', Georgia, serif;
+        font-size: 1.05rem;
+        line-height: 1.6;
+        transition: border-color 0.2s ease;
+      }
+
+      .form-field input:focus,
+      .form-field textarea:focus {
+        outline: none;
+        border-color: var(--border-focus);
+      }
+
+      .form-field textarea {
+        min-height: 120px;
+        resize: vertical;
+      }
+
+      .submit-btn {
+        background: none;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 0.6rem 1.8rem;
+        color: var(--text-muted);
+        font-family: 'EB Garamond', Georgia, serif;
+        font-size: 1rem;
+        letter-spacing: 0.05em;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      .submit-btn:hover {
+        border-color: var(--border-focus);
+        color: var(--text);
+      }
+
+      .submit-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+
+      .no-comments {
+        font-size: 1.05rem;
+        color: var(--text-faint);
+        font-style: italic;
+        margin-bottom: 2rem;
+      }
+
+      .comment-success {
+        font-size: 0.95rem;
+        color: var(--text-muted);
+        margin-top: 1rem;
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="top-controls">
+      <div class="nav-menu">
+        <button class="nav-menu-btn" id="nav-menu-btn" aria-label="Navigation" title="Navigation">&#x2022;&#x2022;&#x2022;</button>
+        <div class="nav-dropdown" id="nav-dropdown">
+          <a href="/">Journal</a>
+          <a href="/about">About</a>
+          <a href="/papers" class="current">Papers</a>
+          <div class="nav-divider"></div>
+          <a href="/alice-negative">Alice Negative</a>
+          <a href="/observatory">Observatory</a>
+          <div class="nav-divider"></div>
+          <a href="/dev/signals">Signal Sandbox</a>
+        </div>
+      </div>
+      <button class="top-btn" id="theme-toggle" aria-label="Toggle theme"></button>
+    </div>
+
+    <div class="page">
+      <a href="/papers" class="back-link">&larr; All papers</a>
+
+      <div class="paper-meta">
+        <div class="paper-date">{paper.date} <span class="paper-version">&middot; v{paper.version}</span></div>
+      </div>
+
+      <div class="paper-body" set:html={paper.html} />
+
+      <!-- Comments -->
+      <div class="comments-section">
+        <div class="comments-heading">Comments</div>
+
+        <div id="comments-list">
+          {comments.length === 0 ? (
+            <p class="no-comments">No comments yet.</p>
+          ) : (
+            comments.map(c => (
+              <div class="comment">
+                <div class="comment-author">{c.author_name}</div>
+                <div class="comment-date">{c.dttm_created_utc.slice(0, 10)}</div>
+                <div class="comment-text">{c.comment_text}</div>
+              </div>
+            ))
+          )}
+        </div>
+
+        <form class="comment-form" id="comment-form">
+          <div class="form-field">
+            <label for="author-name">Name</label>
+            <input type="text" id="author-name" name="authorName" maxlength="100" required />
+          </div>
+          <div class="form-field">
+            <label for="comment-text">Comment</label>
+            <textarea id="comment-text" name="commentText" maxlength="5000" required></textarea>
+          </div>
+          <button type="submit" class="submit-btn" id="submit-btn">Post comment</button>
+          <div class="comment-success" id="comment-success">Comment posted.</div>
+        </form>
+      </div>
+    </div>
+
+    <script is:inline define:vars={{ slug: paper.slug }}>
+      // Nav
+      const navMenuBtn = document.getElementById('nav-menu-btn');
+      const navDropdown = document.getElementById('nav-dropdown');
+
+      navMenuBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = navDropdown.classList.toggle('open');
+        navMenuBtn.classList.toggle('open', isOpen);
+      });
+
+      document.addEventListener('click', () => {
+        navDropdown.classList.remove('open');
+        navMenuBtn.classList.remove('open');
+      });
+
+      // Theme
+      const themeBtn = document.getElementById('theme-toggle');
+      const saved = localStorage.getItem('alice-theme') || 'light';
+      document.documentElement.setAttribute('data-theme', saved);
+      themeBtn.textContent = saved === 'dark' ? '\u2600' : '\u263E';
+
+      themeBtn.addEventListener('click', () => {
+        const current = document.documentElement.getAttribute('data-theme');
+        const next = current === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        localStorage.setItem('alice-theme', next);
+        themeBtn.textContent = next === 'dark' ? '\u2600' : '\u263E';
+      });
+
+      // Comment form
+      const form = document.getElementById('comment-form');
+      const submitBtn = document.getElementById('submit-btn');
+      const successMsg = document.getElementById('comment-success');
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        submitBtn.disabled = true;
+        successMsg.style.display = 'none';
+
+        const authorName = document.getElementById('author-name').value.trim();
+        const commentText = document.getElementById('comment-text').value.trim();
+
+        if (!authorName || !commentText) {
+          submitBtn.disabled = false;
+          return;
+        }
+
+        try {
+          const res = await fetch('/api/comments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ slug, authorName, commentText }),
+          });
+
+          if (res.ok) {
+            // Append comment to list
+            const list = document.getElementById('comments-list');
+            const noComments = list.querySelector('.no-comments');
+            if (noComments) noComments.remove();
+
+            const today = new Date().toISOString().slice(0, 10);
+            const div = document.createElement('div');
+            div.className = 'comment';
+            div.innerHTML =
+              '<div class="comment-author">' + authorName.replace(/</g, '&lt;') + '</div>' +
+              '<div class="comment-date">' + today + '</div>' +
+              '<div class="comment-text">' + commentText.replace(/</g, '&lt;') + '</div>';
+            list.appendChild(div);
+
+            form.reset();
+            successMsg.style.display = 'block';
+          }
+        } catch (err) {
+          // silent
+        }
+
+        submitBtn.disabled = false;
+      });
+    </script>
+  </body>
+</html>

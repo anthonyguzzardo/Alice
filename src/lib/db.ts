@@ -620,6 +620,7 @@ db.exec(`
     ,event_log_json        TEXT    NOT NULL
     ,total_events          INTEGER NOT NULL
     ,session_duration_ms   INTEGER NOT NULL
+    ,keystroke_stream_json TEXT        -- Raw keydown/keyup pairs: [{c,d,u}] (code, downMs, upMs)
     -- FOOTER
     ,dttm_created_utc      TEXT    DEFAULT (datetime('now'))
     ,created_by            TEXT    DEFAULT 'client'
@@ -973,6 +974,24 @@ db.exec(`
     -- FOOTER
     ,dttm_created_utc                    TEXT    NOT NULL DEFAULT (datetime('now'))
     ,created_by                          TEXT    NOT NULL DEFAULT 'system'
+  );
+
+  -- --------------------------------------------------------------------------
+  -- tb_paper_comments
+  -- --------------------------------------------------------------------------
+  -- PURPOSE: Reader comments on published research papers.
+  -- USE CASE: Public-facing discussion on papers hosted at /papers/[slug].
+  -- MUTABILITY: Append-only
+  -- REFERENCED BY: api/comments.ts, papers/[slug].astro
+  -- FOOTER: Yes
+  -- --------------------------------------------------------------------------
+  CREATE TABLE IF NOT EXISTS tb_paper_comments (
+     paper_comment_id    INTEGER PRIMARY KEY AUTOINCREMENT
+    ,paper_slug          TEXT    NOT NULL
+    ,author_name         TEXT    NOT NULL
+    ,comment_text        TEXT    NOT NULL
+    ,dttm_created_utc    TEXT    NOT NULL DEFAULT (datetime('now'))
+    ,created_by          TEXT    NOT NULL DEFAULT 'reader'
   );
 `);
 
@@ -1473,13 +1492,14 @@ export interface SessionEventsRow {
   event_log_json: string;
   total_events: number;
   session_duration_ms: number;
+  keystroke_stream_json?: string | null;
 }
 
 export function saveSessionEvents(row: Omit<SessionEventsRow, 'session_event_id'>): number {
   const result = db.prepare(`
-    INSERT INTO tb_session_events (question_id, event_log_json, total_events, session_duration_ms)
-    VALUES (?, ?, ?, ?)
-  `).run(row.question_id, row.event_log_json, row.total_events, row.session_duration_ms);
+    INSERT INTO tb_session_events (question_id, event_log_json, total_events, session_duration_ms, keystroke_stream_json)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(row.question_id, row.event_log_json, row.total_events, row.session_duration_ms, row.keystroke_stream_json ?? null);
   return Number(result.lastInsertRowid);
 }
 
@@ -2821,6 +2841,37 @@ export function getPredictionsForQuestion(_questionId: number): Array<{
   dttmCreatedUtc: string; dttmGradedUtc: string | null;
 }> {
   return []; // archived
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PAPER COMMENTS
+// ═══════════════════════════════════════════════════════════════════
+
+export function getCommentsForPaper(slug: string): Array<{
+  paper_comment_id: number;
+  author_name: string;
+  comment_text: string;
+  dttm_created_utc: string;
+}> {
+  return db.prepare(`
+    SELECT paper_comment_id, author_name, comment_text, dttm_created_utc
+    FROM tb_paper_comments
+    WHERE paper_slug = ?
+    ORDER BY dttm_created_utc ASC
+  `).all(slug) as Array<{
+    paper_comment_id: number;
+    author_name: string;
+    comment_text: string;
+    dttm_created_utc: string;
+  }>;
+}
+
+export function saveComment(slug: string, authorName: string, commentText: string): number {
+  const result = db.prepare(`
+    INSERT INTO tb_paper_comments (paper_slug, author_name, comment_text, dttm_created_utc)
+    VALUES (?, ?, ?, ?)
+  `).run(slug, authorName, commentText, nowStr());
+  return Number(result.lastInsertRowid);
 }
 
 export default db;

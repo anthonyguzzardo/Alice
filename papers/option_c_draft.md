@@ -1,3 +1,13 @@
+---
+title: "The Quiet Debt: Cognitive Reserve, AI Offloading, and the Instruments We Don't Yet Have"
+slug: quiet-debt
+author: Anthony Guzzardo
+date: 2026-04-17
+status: draft
+version: 1
+abstract: "Widespread adoption of generative AI, by systematically reducing the cognitive demand of daily tasks across the lifespan, may reduce population-level cognitive reserve accumulation — with consequences that will not manifest for 20 to 30 years."
+---
+
 # The Quiet Debt: Cognitive Reserve, AI Offloading, and the Instruments We Don't Yet Have
 
 **Anthony Guzzardo**

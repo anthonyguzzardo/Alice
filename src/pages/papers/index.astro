@@ -1,12 +1,14 @@
 ---
+import { listPapers } from '../../lib/papers.ts';
 
+const papers = listPapers('published');
 ---
 
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Alice — About</title>
+    <title>Alice - Papers</title>
     <script is:inline>
       (function() {
         var t = localStorage.getItem('alice-theme') || 'light';
@@ -111,11 +113,7 @@
         font-size: 1.1rem;
       }
 
-      .nav-menu-btn:hover {
-        border-color: var(--border-focus);
-        color: var(--text);
-      }
-
+      .nav-menu-btn:hover,
       .nav-menu-btn.open {
         border-color: var(--border-focus);
         color: var(--text);
@@ -187,58 +185,75 @@
         letter-spacing: 0.02em;
       }
 
-      .section {
-        margin-bottom: 3.5rem;
-      }
-
-      .section-heading {
-        font-size: 0.85rem;
-        color: var(--text-faint);
-        text-transform: uppercase;
-        letter-spacing: 0.15em;
-        margin-bottom: 1.2rem;
-      }
-
-      .section p {
-        font-size: 1.25rem;
-        line-height: 1.8;
-        color: var(--text-muted);
-        margin-bottom: 1rem;
-      }
-
-      .section p:last-child {
-        margin-bottom: 0;
-      }
-
       .divider {
         width: 3rem;
         height: 1px;
         background: var(--border);
-        margin: 4rem 0;
+        margin: 3rem 0;
       }
 
-      .principles {
+      .paper-list {
         list-style: none;
         padding: 0;
       }
 
-      .principles li {
-        font-size: 1.25rem;
-        line-height: 1.8;
-        color: var(--text-muted);
-        margin-bottom: 1.2rem;
-        padding-left: 1.5rem;
-        position: relative;
+      .paper-item {
+        margin-bottom: 3rem;
       }
 
-      .principles li::before {
-        content: '';
-        position: absolute;
-        left: 0;
-        top: 0.85em;
-        width: 6px;
-        height: 1px;
-        background: var(--border-focus);
+      .paper-item a {
+        text-decoration: none;
+        color: inherit;
+        display: block;
+        padding: 1.5rem;
+        margin: -1.5rem;
+        border-radius: 6px;
+        transition: background 0.2s ease;
+      }
+
+      .paper-item a:hover {
+        background: var(--bg-input);
+      }
+
+      .paper-item a:hover .paper-title {
+        color: var(--text);
+      }
+
+      .paper-date {
+        font-size: 0.85rem;
+        color: var(--text-faint);
+        text-transform: uppercase;
+        letter-spacing: 0.15em;
+        margin-bottom: 0.5rem;
+      }
+
+      .paper-version {
+        font-size: 0.85rem;
+        color: var(--text-faint);
+        letter-spacing: 0.05em;
+      }
+
+      .paper-title {
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-size: 1.6rem;
+        font-weight: 400;
+        font-style: italic;
+        line-height: 1.4;
+        color: var(--text-muted);
+        margin-bottom: 0.6rem;
+        transition: color 0.2s ease;
+      }
+
+      .paper-abstract {
+        font-size: 1.1rem;
+        line-height: 1.7;
+        color: var(--text-faint);
+      }
+
+      .empty {
+        font-size: 1.25rem;
+        color: var(--text-faint);
+        font-style: italic;
       }
     </style>
   </head>
@@ -248,8 +263,8 @@
         <button class="nav-menu-btn" id="nav-menu-btn" aria-label="Navigation" title="Navigation">&#x2022;&#x2022;&#x2022;</button>
         <div class="nav-dropdown" id="nav-dropdown">
           <a href="/">Journal</a>
-          <a href="/about" class="current">About</a>
-          <a href="/papers">Papers</a>
+          <a href="/about">About</a>
+          <a href="/papers" class="current">Papers</a>
           <div class="nav-divider"></div>
           <a href="/alice-negative">Alice Negative</a>
           <a href="/observatory">Observatory</a>
@@ -261,43 +276,29 @@
     </div>
 
     <div class="page">
-      <h1 class="title">Alice</h1>
-      <p class="subtitle">A personal thinking journal. One question per day. No gamification. No dashboard. Just depth.</p>
-
-      <div class="section">
-        <div class="section-heading">How it works</div>
-        <p>Each day, Alice asks you one question. You write. That's it.</p>
-        <p>The question is generated from what you've written before — not to summarize you, but to push you somewhere you haven't gone yet. There is no archive to browse, no streak to maintain, no score to optimize.</p>
-      </div>
-
-      <div class="section">
-        <div class="section-heading">What it isn't</div>
-        <p>Alice is not a therapist, not a chatbot, not a productivity tool. It doesn't give advice. It doesn't respond to what you write. It listens, and then it asks a better question.</p>
-      </div>
+      <h1 class="title">Papers</h1>
+      <p class="subtitle">Research and position papers. Versioned, dated, open to comment.</p>
 
       <div class="divider"></div>
 
-      <div class="section">
-        <div class="section-heading">Principles</div>
-        <ul class="principles">
-          <li>One question per day. Not because more would be hard — because depth requires constraint.</li>
-          <li>No history visible. What you wrote is yours. The journal remembers so you don't have to perform for it.</li>
-          <li>No engagement metrics. No streaks, no badges, no notifications. If you don't open it, it waits.</li>
-          <li>Slow by design. The interface enforces a pause before you write and delays the submit button. Speed is not the point.</li>
+      {papers.length > 0 ? (
+        <ul class="paper-list">
+          {papers.map(paper => (
+            <li class="paper-item">
+              <a href={`/papers/${paper.slug}`}>
+                <div class="paper-date">{paper.date} <span class="paper-version">&middot; v{paper.version}</span></div>
+                <div class="paper-title">{paper.title}</div>
+                <div class="paper-abstract">{paper.abstract}</div>
+              </a>
+            </li>
+          ))}
         </ul>
-      </div>
-
-      <div class="divider"></div>
-
-      <div class="section">
-        <div class="section-heading">Why</div>
-        <p>Most tools designed for thinking are actually designed for producing. They optimize for output, frequency, and engagement — the exact pressures that prevent honest reflection.</p>
-        <p>Alice takes the opposite position. Every technical decision serves depth over speed. If it optimizes for engagement or throughput, it's wrong.</p>
-      </div>
+      ) : (
+        <p class="empty">Nothing published yet.</p>
+      )}
     </div>
 
     <script>
-      // Nav menu dropdown
       const navMenuBtn = document.getElementById('nav-menu-btn')!;
       const navDropdown = document.getElementById('nav-dropdown')!;
 
@@ -312,18 +313,17 @@
         navMenuBtn.classList.remove('open');
       });
 
-      // Theme toggle
       const themeBtn = document.getElementById('theme-toggle')!;
       const saved = localStorage.getItem('alice-theme') || 'light';
       document.documentElement.setAttribute('data-theme', saved);
-      themeBtn.textContent = saved === 'dark' ? '☀' : '☾';
+      themeBtn.textContent = saved === 'dark' ? '\u2600' : '\u263E';
 
       themeBtn.addEventListener('click', () => {
         const current = document.documentElement.getAttribute('data-theme');
         const next = current === 'dark' ? 'light' : 'dark';
         document.documentElement.setAttribute('data-theme', next);
         localStorage.setItem('alice-theme', next);
-        themeBtn.textContent = next === 'dark' ? '☀' : '☾';
+        themeBtn.textContent = next === 'dark' ? '\u2600' : '\u263E';
       });
     </script>
   </body>
