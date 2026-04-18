@@ -2,26 +2,33 @@
 
 Technical specification of every signal Alice captures, how it is captured, and why it matters.
 
+## Infrastructure
+
+- **Timing source:** `performance.now()` (DOMHighResTimestamp, ~5 microsecond resolution). All timing values are fractional milliseconds (e.g., `1523.456789`), not integer milliseconds.
+- **Timing storage:** PostgreSQL `DOUBLE PRECISION` (IEEE 754 float64, 15-17 significant digits). No precision loss from capture through storage.
+- **Signal computation:** Dynamical, motor, and process signals computed by Rust native engine via napi-rs (`src-rs/`). Semantic and cross-session signals remain in TypeScript. Automatic fallback to TypeScript if Rust unavailable.
+- **Rust type alignment:** All signal values are `f64` in Rust, `number` in TypeScript, `DOUBLE PRECISION` in PostgreSQL. IEEE 754 at every boundary, no conversion loss.
+
 ---
 
 ## Raw Production
 
 ### firstKeystrokeMs
 - **Capture:** Elapsed time from page open to first `input` event with positive delta
-- **Unit:** milliseconds
+- **Unit:** fractional milliseconds (microsecond precision via `performance.now()`)
 - **Why:** Measures initial hesitation, the gap between reading and committing to write. Long delays suggest the question landed somewhere uncomfortable or complex. Short delays suggest immediacy or familiarity.
 - **Feeds:** 7D deliberation dimension
 - **Citation:** Deane 2015
 
 ### totalDurationMs
 - **Capture:** Page open timestamp to submit button click
-- **Unit:** milliseconds
+- **Unit:** fractional milliseconds (microsecond precision)
 - **Why:** Wall-clock session length. Meaningful only in combination with active typing time, since raw duration includes pauses and tab-aways.
 - **Feeds:** Active typing normalization
 
 ### activeTypingMs
 - **Capture:** `totalDurationMs - totalPauseMs - totalTabAwayMs`
-- **Unit:** milliseconds
+- **Unit:** fractional milliseconds (microsecond precision)
 - **Why:** Isolates genuine production time from thinking time and distraction time. This is the denominator for speed calculations. The pause bug we fixed on 2026-04-17 was inflating this value by failing to detect pauses after deleting to empty.
 - **Feeds:** Speed normalization for charsPerMinute
 
@@ -75,7 +82,7 @@ Technical specification of every signal Alice captures, how it is captured, and 
 
 ### totalPauseMs
 - **Capture:** Sum of all pause durations. Each pause starts when the 30-second timer fires and ends on the next `input` event.
-- **Unit:** milliseconds
+- **Unit:** fractional milliseconds (microsecond precision)
 - **Why:** Total thinking time. Subtracted from totalDurationMs to compute activeTypingMs.
 - **Feeds:** Speed normalization
 
@@ -87,7 +94,7 @@ Technical specification of every signal Alice captures, how it is captured, and 
 
 ### totalTabAwayMs
 - **Capture:** Sum of time between tab blur and tab focus events
-- **Unit:** milliseconds
+- **Unit:** fractional milliseconds (microsecond precision)
 - **Why:** Total distraction time. Subtracted from totalDurationMs alongside pause time.
 - **Feeds:** Speed normalization, 7D presence
 
@@ -189,28 +196,28 @@ A P-burst (production burst) is a continuous run of typing with no pause longer 
 
 ### interKeyIntervalMean
 - **Capture:** Mean of gaps between consecutive non-repeat `keydown` events, filtered to < 5 seconds
-- **Unit:** milliseconds
+- **Unit:** fractional milliseconds (microsecond precision)
 - **Why:** Average hesitation between keystrokes. Slower intervals indicate deliberate word retrieval or cognitive load. Faster intervals indicate automatic production.
 - **Feeds:** Observation-only
 - **Citation:** Epp et al. 2011
 
 ### interKeyIntervalStd
 - **Capture:** Standard deviation of inter-key intervals
-- **Unit:** milliseconds
+- **Unit:** fractional milliseconds (microsecond precision)
 - **Why:** Rhythm variability. High variability (CV > 0.8) suggests cognitive switching or hesitation patterns. Low variability (CV < 0.4) suggests flow state or automatic writing.
 - **Feeds:** Observation-only
 - **Citation:** Epp et al. 2011
 
 ### holdTimeMean / holdTimeStd
 - **Capture:** Duration from `keydown` to `keyup` per key, capped at 2 seconds. Tracked via a Map keyed by `e.code`. Auto-repeat events (`e.repeat`) are excluded.
-- **Unit:** milliseconds
+- **Unit:** fractional milliseconds (microsecond precision)
 - **Why:** Hold time measures motor execution, how long the finger physically presses the key. It is largely independent of cognitive planning. Changes in hold time across sessions may reflect fatigue, motor state, or physical tension.
 - **Feeds:** Observation-only, dynamical signals (transfer entropy source)
 - **Citation:** Kim et al. 2024 (JMIR)
 
 ### flightTimeMean / flightTimeStd
 - **Capture:** Duration from previous `keyup` to current `keydown`, capped at 5 seconds
-- **Unit:** milliseconds
+- **Unit:** fractional milliseconds (microsecond precision)
 - **Why:** Flight time measures the gap between releasing one key and pressing the next, the cognitive planning interval. This is where word retrieval, syntactic planning, and hesitation live. Flight time dominance (high flight-to-hold ratio) indicates deliberate, top-down writing.
 - **Feeds:** Observation-only, dynamical signals (transfer entropy source)
 - **Citation:** Kim et al. 2024 (JMIR)
@@ -263,10 +270,10 @@ A P-burst (production burst) is a continuous run of typing with no pause longer 
 ## Raw Keystroke Stream
 
 ### keystrokeStream
-- **Capture:** Array of `{c: e.code, d: downOffsetMs, u: upOffsetMs}` tuples, recorded in the `keyup` handler when hold time is valid (> 0, < 2000ms). Offset is relative to page open.
-- **Unit:** array of objects
-- **Why:** The raw material for dynamical signal computation. Every other keystroke signal (IKI mean, hold time mean, etc.) is a summary statistic that collapses the temporal structure. The raw stream preserves sequential dependencies, fractal scaling, recurrence patterns, and causal coupling between motor and cognitive channels. This is the difference between knowing "average temperature was 72F" and having the minute-by-minute weather record.
-- **Feeds:** Dynamical signals (permutation entropy, DFA, RQA, transfer entropy)
+- **Capture:** Array of `{c: e.code, d: downOffsetMs, u: upOffsetMs}` tuples, recorded in the `keyup` handler when hold time is valid (> 0, < 2000ms). Offsets are fractional milliseconds relative to page open via `performance.now()` (e.g., `d: 1523.456, u: 1603.891`).
+- **Unit:** array of objects, timing in fractional milliseconds (microsecond precision)
+- **Why:** The raw material for dynamical and motor signal computation via the Rust native engine. Every other keystroke signal (IKI mean, hold time mean, etc.) is a summary statistic that collapses the temporal structure. The raw stream preserves sequential dependencies, fractal scaling, recurrence patterns, and causal coupling between motor and cognitive channels. Microsecond precision enables sub-millisecond digraph latency profiles and tighter recurrence thresholds in RQA.
+- **Feeds:** Rust signal engine (dynamical signals: permutation entropy, DFA, RQA, transfer entropy; motor signals: sample entropy, ex-Gaussian, autocorrelation, jerk, digraph latency, adjacent hold-time covariance)
 - **Citation:** Enables Peng et al. 1994, Bandt & Pompe 2002, Webber & Zbilut 2005, Schreiber 2000
 
 ### eventLog
@@ -358,7 +365,7 @@ Derived server-side from burst sequences and deletion event timestamps.
 
 ### inter_burst_interval_mean_ms / inter_burst_interval_std_ms
 - **Capture:** Mean and standard deviation of gaps between consecutive burst boundaries
-- **Unit:** milliseconds
+- **Unit:** fractional milliseconds (microsecond precision)
 - **Why:** How long the writer pauses between thought units. Long, variable gaps suggest deep between-burst processing. Short, consistent gaps suggest rapid-fire idea generation.
 - **Feeds:** Observation-only
 - **Citation:** Chenoweth & Hayes 2001
@@ -436,7 +443,7 @@ All dimensions are z-scored against personal history. Kept orthogonal to the beh
 
 ## Dynamical Signals
 
-Computed from the raw keystroke stream. These treat the IKI series as the output of a complex adaptive system rather than a bag of statistics.
+Computed from the raw keystroke stream by the Rust native engine (`src-rs/dynamical.rs`). These treat the IKI series as the output of a complex adaptive system rather than a bag of statistics. Full computation on a 500-keystroke stream: ~0.6ms.
 
 ### permutationEntropy
 - **Computation:** Bandt & Pompe ordinal pattern distribution. Takes every consecutive triplet of IKI values, classifies by rank order (6 possible patterns for order-3), computes Shannon entropy of the pattern distribution, normalizes by log2(3!) = 2.585 bits.
@@ -543,7 +550,7 @@ Extracted from calibration (free-write) responses via Claude Sonnet. These are c
 
 ### confirmationLatencyMs
 - **Capture:** `submitTime - lastInputTime`
-- **Unit:** milliseconds
+- **Unit:** fractional milliseconds (microsecond precision)
 - **Why:** The hesitation between finishing writing and pressing submit. Measures the "is it done?" metacognitive moment. Validated by Monaro et al. 2018 (95% deception detection accuracy).
 - **Table:** tb_session_summaries
 - **Citation:** Monaro et al. 2018
@@ -595,7 +602,7 @@ Extracted from calibration (free-write) responses via Claude Sonnet. These are c
 
 ### holdTimeMeanLeft / holdTimeMeanRight / holdTimeStdLeft / holdTimeStdRight
 - **Capture:** Hold times partitioned by QWERTY left/right hand key mapping
-- **Unit:** milliseconds
+- **Unit:** fractional milliseconds (microsecond precision)
 - **Why:** Motor laterality asymmetry. Non-dominant hand degrades first under cognitive load. Increasing asymmetry may indicate motor decline or sustained stress.
 - **Table:** tb_session_summaries
 - **Citation:** Giancardo et al. 2016 (neuroQWERTY)
@@ -629,7 +636,7 @@ Extracted from calibration (free-write) responses via Claude Sonnet. These are c
 
 ### errorDetectionLatencyMean
 - **Capture:** Mean interval from last non-delete keystroke to backspace press
-- **Unit:** milliseconds
+- **Unit:** fractional milliseconds (microsecond precision)
 - **Why:** How quickly the writer detects their own errors. Leading indicator of fatigue that appears before general speed declines.
 - **Table:** tb_session_summaries
 - **Citation:** Haag et al. 2020
@@ -642,10 +649,10 @@ Extracted from calibration (free-write) responses via Claude Sonnet. These are c
 
 ---
 
-## Motor Signals (from keystroke stream)
+## Motor Signals (from keystroke stream, Rust engine)
 
 ### sampleEntropy
-- **Capture:** Richman & Moorman (2000) SampEn algorithm, m=2, r=0.2*std, on IKI series
+- **Capture:** Richman & Moorman (2000) SampEn algorithm, m=2, r=0.2*std, on IKI series. Computed in Rust (`src-rs/motor.rs`). O(n^2*m) complexity; runs in ~0.9ms for 500 keystrokes vs ~300ms in TypeScript.
 - **Unit:** nats
 - **Why:** Temporal regularity of keystroke rhythm. Distinct from Shannon entropy (distribution shape) and permutation entropy (ordinal patterns). Lower = more rigid cognitive control. Higher = more erratic motor-cognitive coupling. Correlated r=0.59 with executive function in BiAffect research.
 - **Table:** tb_motor_signals
@@ -678,7 +685,7 @@ Extracted from calibration (free-write) responses via Claude Sonnet. These are c
 - **Table:** tb_motor_signals
 
 ### ikiCompressionRatio
-- **Capture:** `gzip(IKI series as comma-separated integers).length / raw.length`
+- **Capture:** `gzip(IKI series as comma-separated values).length / raw.length`. Computed in Rust (`src-rs/motor.rs`) via flate2.
 - **Unit:** ratio
 - **Why:** Multi-scale complexity of timing sequence. High = repetitive/metronomic. Low = varied/complex. Captures patterns that summary statistics miss.
 - **Table:** tb_motor_signals
@@ -751,7 +758,7 @@ Extracted from calibration (free-write) responses via Claude Sonnet. These are c
 
 ---
 
-## Process Signals (from event log replay)
+## Process Signals (from event log replay, Rust engine)
 
 ### pauseWithinWord / pauseBetweenWord / pauseBetweenSentence
 - **Capture:** Classify each pause > 2s by surrounding character context in reconstructed text state
@@ -886,14 +893,14 @@ Extends the error-correction model from a single phase (error detection, already
 
 ### deletionExecutionSpeedMean
 - **Capture:** Mean IKI between consecutive deletion keystrokes within revision chains (sequential backspace/delete keys within 500ms of each other)
-- **Unit:** milliseconds
+- **Unit:** fractional milliseconds (microsecond precision)
 - **Why:** How fast the writer executes a deletion once the decision is made. Slow deletion = tentative, reconsidering mid-delete. Fast deletion = decisive, committed to the cut. This is phase 2 of the three-phase error correction model.
 - **Table:** tb_session_summaries
 - **Citation:** Springer 2021; Lindgren & Sullivan 2006
 
 ### postcorrectionLatencyMean
 - **Capture:** Mean time from last deletion keystroke to next insertion keystroke
-- **Unit:** milliseconds
+- **Unit:** fractional milliseconds (microsecond precision)
 - **Why:** How long it takes to re-engage after correcting. Long re-orientation = the error disrupted the train of thought. Short re-orientation = seamless recovery. This is phase 3: the "getting back on track" cost of each error.
 - **Table:** tb_session_summaries
 - **Citation:** Springer 2021
@@ -922,7 +929,7 @@ Extends the error-correction model from a single phase (error detection, already
 
 ### punctuationFlightMean
 - **Capture:** Mean flight time (keyup to keydown) before punctuation keystrokes (Period, Comma, Slash, Quote, Semicolon, BracketLeft, BracketRight, Minus, Equal, Backquote, Backslash)
-- **Unit:** milliseconds
+- **Unit:** fractional milliseconds (microsecond precision)
 - **Why:** Punctuation requires syntactic decision-making (where does this clause end? comma or period?), a different cognitive process than letter production (motor execution of a known word). Clinical keystroke research shows punctuation-adjacent latencies cluster separately as a distinct "cognition score."
 - **Table:** tb_session_summaries
 - **Citation:** Plank 2016 (COLING); clinical keystroke dynamics literature
@@ -938,8 +945,8 @@ Extends the error-correction model from a single phase (error detection, already
 ## Motor Signals: Phase 2 Additions (2026-04-18)
 
 ### exGaussianTau
-- **Capture:** Fit ex-Gaussian distribution to per-session flight time array (outliers above Q3 + 3*IQR removed before fitting). Method of moments: `tau = std * cbrt(skewness / 2)`
-- **Unit:** milliseconds
+- **Capture:** Fit ex-Gaussian distribution to per-session flight time array (outliers above Q3 + 3*IQR removed before fitting). Method of moments: `tau = std * cbrt(skewness / 2)`. Computed in Rust (`src-rs/motor.rs`).
+- **Unit:** fractional milliseconds (microsecond precision)
 - **Why:** The ex-Gaussian decomposes flight time into a Gaussian component (motor execution speed) and an exponential tail (cognitive slowing). Mean flight time conflates both. Tau isolates the cognitive part. BiAffect demonstrated that tau shifts predict mood episodes in bipolar disorder before summary statistics (mean, std) move. This is the single most validated digital phenotyping signal from the keystroke dynamics literature.
 - **Minimum data:** 50+ flight times with positive skewness after outlier removal
 - **Table:** tb_motor_signals
@@ -947,13 +954,13 @@ Extends the error-correction model from a single phase (error detection, already
 
 ### exGaussianMu
 - **Capture:** `mean(flightTimes) - tau` (after outlier removal)
-- **Unit:** milliseconds
+- **Unit:** fractional milliseconds (microsecond precision)
 - **Why:** The Gaussian mean: motor execution speed stripped of cognitive slowing. Pure motor baseline.
 - **Table:** tb_motor_signals
 
 ### exGaussianSigma
 - **Capture:** `sqrt(variance(flightTimes) - tau^2)` (after outlier removal)
-- **Unit:** milliseconds
+- **Unit:** fractional milliseconds (microsecond precision)
 - **Why:** The Gaussian standard deviation: motor noise stripped of cognitive slowing. Motor consistency independent of thinking pauses.
 - **Table:** tb_motor_signals
 

@@ -14,7 +14,7 @@ The system measures, the system retrieves, the system juxtaposes. The system doe
 
 **Text-only narrative interpretation is commoditizable.** Anything a frontier model can say after reading the same chat transcript will be reproduced by every future frontier model. Investing the system's depth there means rebuilding it on every model release.
 
-**The behavioral signal substrate is the moat.** ~147 deterministic signals across keystroke dynamics (P-bursts, hold/flight time, entropy, transfer entropy, DFA, RQA), motor signals (laterality, jerk, lapse rate, digraph profiles), cursor behavior (leading edge ratio, contextual revision, paste blocking), revision topology, calibration deltas, parallel behavioral and semantic dynamics, extended semantic signals (idea density, integrative complexity, cohesion), process signals (abandoned thoughts, R/I-burst decomposition, phase transitions), cross-session signals (self-perplexity, NCD, text network analysis), and per-session metadata (deletion-density curves, burst-trajectory shapes, inter-burst rhythm, hour typicality) — these survive arbitrarily capable future models because the substrate is the writer's body, not their text. A future GPT-N reading the transcript cannot see what the keystroke pipeline measured.
+**The behavioral signal substrate is the moat.** ~163 deterministic signals across keystroke dynamics (P-bursts, hold/flight time, entropy, transfer entropy, DFA, RQA), motor signals (laterality, jerk, lapse rate, digraph profiles), cursor behavior (leading edge ratio, contextual revision, paste blocking), revision topology, calibration deltas, parallel behavioral and semantic dynamics, extended semantic signals (idea density, integrative complexity, cohesion), process signals (abandoned thoughts, R/I-burst decomposition, phase transitions), cross-session signals (self-perplexity, NCD, text network analysis), and per-session metadata (deletion-density curves, burst-trajectory shapes, inter-burst rhythm, hour typicality) — these survive arbitrarily capable future models because the substrate is the writer's body, not their text. A future GPT-N reading the transcript cannot see what the keystroke pipeline measured.
 
 So Alice does few things. Capture signals. Compute deterministic dynamics on parallel orthogonal spaces. Generate tomorrow's question from a bounded context. Render a designer-facing Observatory. Let the writer interpret their own behavior by watching it back, not by reading the system's opinion of it.
 
@@ -150,7 +150,7 @@ What you submitted. Stored as-is. Never surfaced back.
 
 The system silently captures raw input events throughout the session — keystrokes, deletions, pauses, tab-aways, resumptions. On submission these are crunched into a session summary: a single row of derived behavioral metrics plus context metadata. Per-burst sequence data is captured in `tb_burst_sequences` for within-session pattern detection (Baaijen & Galbraith 2012). A per-keystroke event log (text snapshots over time) is captured in `tb_session_events` to enable read-only playback.
 
-The session summary populates ~147 deterministic signals across multiple categories:
+The session summary populates ~163 deterministic signals across multiple categories:
 
 - **Raw production** — first-keystroke latency, active typing speed, commitment ratio, confirmation latency (Monaro et al. 2018).
 - **Pause and engagement** — pause counts/duration, tab-away behavior.
@@ -161,7 +161,7 @@ The session summary populates ~147 deterministic signals across multiple categor
 - **Motor signals** — hold time laterality (left/right hand decomposition, Giancardo et al. 2016 neuroQWERTY), hold time CV, negative flight time count (key rollover as automaticity signal, Teh et al. 2013), sample entropy (Richman & Moorman 2000), IKI autocorrelation (DARPA Active Authentication), motor jerk, lapse rate, tempo drift, IKI compression ratio, digraph latency profile (Killourhy & Maxion, CMU).
 - **Revision chains** — chain count and average length (Leijten & Van Waes 2013).
 - **Re-engagement** — scroll-back and question-reread counts (Czerwinski et al. 2004, Bereiter & Scardamalia 1987).
-- **Dynamical signals** — permutation entropy (Bandt & Pompe 2002), DFA alpha (Peng et al. 1994), RQA determinism/laminarity/trapping time/recurrence rate (Webber & Zbilut 2005), transfer entropy hold-to-flight and flight-to-hold with dominance ratio (Schreiber 2000).
+- **Dynamical signals** (Rust engine) -- permutation entropy (Bandt & Pompe 2002), DFA alpha (Peng et al. 1994), RQA determinism/laminarity/trapping time/recurrence rate (Webber & Zbilut 2005), transfer entropy hold-to-flight and flight-to-hold with dominance ratio (Schreiber 2000).
 - **Extended semantic signals** — idea density (Snowdon et al. 1996), lexical sophistication (Kyle & Crossley 2017), epistemic stance (Hyland 2005), integrative complexity (Suedfeld & Tetlock), deep cohesion and referential cohesion (McNamara et al., Coh-Metrix), emotional valence arc (Reagan et al. 2016), text compression ratio.
 - **Process signals** (from event log replay) — pause location classification (within-word, between-word, between-sentence; Deane 2015), abandoned thought detection, R-burst/I-burst decomposition (Deane 2015), vocabulary expansion rate (Heaps' law), phase transition point, strategy shift count.
 - **Cross-session signals** — self-perplexity (character trigram novelty against personal baseline), normalized compression distance at lags 1/3/7/30 (Cilibrasi & Vitanyi 2005), vocabulary recurrence decay, digraph stability (CMU Keystroke Dynamics Lab), text network density/communities/bridging ratio (InfraNodus methodology).
@@ -299,7 +299,7 @@ Synchronous (before the done message returns):
 3. **Session summary saved.** Full ~50-field row of client-computed behavioral metrics + server-computed densities into `tb_session_summaries`.
 4. **Burst sequence and per-keystroke event log persisted** to `tb_burst_sequences` and `tb_session_events`. Deletion-event timing log attached to the session row.
 5. **Per-session metadata computed** — hour typicality, deletion-density curve, burst trajectory shape, inter-burst rhythm, burst-deletion proximity. Persisted to `tb_session_metadata`.
-6. **Embedding fires-and-forgets** — entry vectorized via Voyage AI, stored in sqlite-vec. Failures degrade future retrieval to recency-only.
+6. **Embedding fires-and-forgets** -- entry vectorized via Voyage AI, stored in pgvector with HNSW index. Failures degrade future retrieval to recency-only.
 
 Async background (the user already has their done message):
 - **Question generation** — during seeds (days 1-30), no-op. After day 30, assembles a bounded context window via semantic retrieval and generates tomorrow's question.
@@ -319,16 +319,21 @@ There are no cron jobs, no scheduled tasks, no server dependencies. The system i
 ## Stack
 
 - **Astro** (SSR, Node adapter)
-- **SQLite** via better-sqlite3 + **sqlite-vec** (vector search in the same database)
-- **Claude API** (`@anthropic-ai/sdk`) — Claude Sonnet for question generation, calibration content extraction, and witness-trait rendering
-- **Voyage AI** (`voyageai`) — voyage-3-lite embeddings for semantic retrieval
-- **Three.js** — 3D rendering of the Alice Negative witness-form
+- **PostgreSQL 17** + **pgvector** (HNSW-indexed vector search, JSONB, microsecond-precision timing via `DOUBLE PRECISION`)
+- **Rust signal engine** via napi-rs (`src-rs/`) for dynamical, motor, and process signal computation. ~200x faster than TypeScript on quadratic algorithms (RQA, sample entropy). Automatic TypeScript fallback if native module unavailable.
+- **Claude API** (`@anthropic-ai/sdk`) for question generation, calibration content extraction, and witness-trait rendering
+- **Voyage AI** (`voyageai`) for voyage-3-lite embeddings and semantic retrieval
+- **Three.js** for 3D rendering of the Alice Negative witness-form
 - **TypeScript** (strict)
 
 ## Architecture
 
 - Single user, no auth
-- SQLite database at `data/alice.db` (includes vector embeddings via sqlite-vec)
+- PostgreSQL 17 database (`alice`, connection via `ALICE_PG_URL` env var) with pgvector HNSW-indexed embeddings
+- SQLite backup preserved at `src/lib/db-sqlite.ts` and `data/alice.db`
+- Schema managed by `scripts/create-postgres-schema.sql` with proper PostgreSQL types: `DOUBLE PRECISION` for all timing and signal values, `BOOLEAN` for flags, `DATE` for calendar dates, `TIMESTAMPTZ` for event timestamps, `SMALLINT` for bounded integers with `CHECK` constraints, `JSONB` for structured data
+- Rust native signal engine (`src-rs/`) for compute-heavy algorithms (RQA O(n^2), sample entropy O(n^2*m), DFA, permutation entropy, transfer entropy, ex-Gaussian fitting, process signal replay). Automatic TypeScript fallback. Built via `npm run build:rust`, auto-built on `npm run dev`.
+- Microsecond-precision keystroke capture via `performance.now()` (~5 microsecond resolution). IEEE 754 float64 at every boundary: browser capture, JSON transport, Rust `f64` computation, PostgreSQL `DOUBLE PRECISION` storage. No conversion loss.
 - Seed questions in `src/lib/seeds.ts`
 - RAG-based memory: every entry is embedded and retrievable by semantic similarity with recency weighting
 - Contrarian retrieval: deliberately surfaces entries that are most *dissimilar* to current themes
@@ -339,20 +344,21 @@ There are no cron jobs, no scheduled tasks, no server dependencies. The system i
 - Same-day session delta with personal-range contextualization
 - Behavioral 7D and parallel semantic 11D state spaces, kept orthogonal at construction time; calibrations excluded by design (they are the reference frame, not points within it)
 - PersDyn dynamics (baseline, variability, attractor force, system entropy, phase, velocity, coupling) computed separately on each space
-- Emotion → behavior coupling discovery across the content/process boundary
+- Emotion to behavior coupling discovery across the content/process boundary
 - Per-session metadata signals (hour typicality, deletion-density curve, burst trajectory shape, inter-burst rhythm, burst-deletion proximity)
-- Motor signals (`tb_motor_signals`) — sample entropy, IKI autocorrelation, motor jerk, lapse rate, tempo drift, IKI compression ratio, digraph latency profile
-- Extended semantic signals (`tb_semantic_signals`) — idea density, lexical sophistication, epistemic stance, integrative complexity, deep/referential cohesion, emotional valence arc, text compression ratio
-- Process signals (`tb_process_signals`) — pause location, abandoned thoughts, R/I-burst decomposition, vocabulary expansion rate, phase transition, strategy shifts
-- Cross-session signals (`tb_cross_session_signals`) — self-perplexity, NCD at multiple lags, vocabulary recurrence decay, digraph stability, text network analysis
+- Motor signals (`tb_motor_signals`, Rust engine) -- sample entropy, IKI autocorrelation, motor jerk, lapse rate, tempo drift, IKI compression ratio, digraph latency profile, ex-Gaussian tau/mu/sigma, tau proportion, adjacent hold-time covariance
+- Dynamical signals (`tb_dynamical_signals`, Rust engine) -- permutation entropy, DFA alpha, RQA (determinism, laminarity, trapping time, recurrence rate), transfer entropy (hold-to-flight, flight-to-hold, dominance)
+- Extended semantic signals (`tb_semantic_signals`, TypeScript) -- idea density, lexical sophistication, epistemic stance, integrative complexity, deep/referential cohesion, emotional valence arc, text compression ratio
+- Process signals (`tb_process_signals`, Rust engine) -- pause location, abandoned thoughts, R/I-burst decomposition, vocabulary expansion rate, phase transition, strategy shifts
+- Cross-session signals (`tb_cross_session_signals`, TypeScript) -- self-perplexity, NCD at multiple lags, vocabulary recurrence decay, digraph stability, text network analysis
 - Calibration drift as a designer-facing health metric on the reference frame itself
 - Per-keystroke event log for read-only playback
-- Structured receipt code path (deterministic, no LLM, no narrative) present but not auto-invoked — waiting on designer-facing viewer
+- Structured receipt code path (deterministic, no LLM, no narrative) present but not auto-invoked
 - "Did it land?" feedback every 5th submission
-- Designer-facing Observatory (`/observatory/*`) — never user-facing
-- Alice Negative witness-form (`/alice-negative`) — 26-trait 3D rendering driven by validated behavioral dynamics, re-rendered each submission via one LLM call whose input is deterministic math
-- Graceful degradation — if Voyage AI is unavailable, falls back to recency-only retrieval
-- All analysis triggered on submit — no cron, no scheduler
+- Designer-facing Observatory (`/observatory/*`) -- never user-facing
+- Alice Negative witness-form (`/alice-negative`) -- 26-trait 3D rendering driven by validated behavioral dynamics, re-rendered each submission via one LLM call whose input is deterministic math
+- Graceful degradation -- if Voyage AI is unavailable, falls back to recency-only retrieval; if Rust engine unavailable, falls back to TypeScript signal computation
+- All analysis triggered on submit -- no cron, no scheduler
 
 ### Key Modules
 
@@ -363,14 +369,16 @@ There are no cron jobs, no scheduled tasks, no server dependencies. The system i
 - **Session metadata** — `src/lib/session-metadata.ts`. Computes the slice-3 follow-up signals (hour typicality, deletion curve, burst shape, inter-burst rhythm, burst-deletion proximity). Called synchronously from `respond.ts`.
 - **Calibration drift** — `src/lib/calibration-drift.ts`. Snapshots baselines on every calibration submit; computes drift magnitude as z-norm L2 distance against per-dimension journal-session dispersion.
 - **Signal formatting** — `src/lib/signals.ts`. Research-backed verbalization of behavioral data + dynamics for question-generation prompts. Informed by Netflix "From Logs to Language" (2026), anchoring bias research, "Lost in the Middle" (TACL 2024).
-- **Signal registry** — `src/lib/signal-registry.ts`. Canonical vocabulary of ~147 deterministic signals. Serves as documentation of what the substrate captures.
+- **Signal registry** -- `src/lib/signal-registry.ts`. Canonical vocabulary of ~163 deterministic signals. Serves as documentation of what the substrate captures.
 - **Question generation** — `src/lib/generate.ts`. Phase-2-only; assembles bounded context and produces tomorrow's question.
 - **Linguistic density pipeline** — `src/lib/linguistic.ts`. Server-side computation of NRC + LIWC densities on every submission.
 - **Per-burst sequence capture** — client-side P-burst tracking, persisted to `tb_burst_sequences`.
 - **Per-keystroke event log** — client-side delta-encoded capture (`[offsetMs, cursorPos, deletedCount, insertedText]` tuples), persisted to `tb_session_events` for replay. No cap or decimation needed. Legacy snapshot-format sessions are detected and reconstructed automatically by the playback API.
 - **Calibration content extraction** — `src/lib/calibration-extract.ts`. Sonnet-based structured tag extraction from free-write text.
 - **Session-delta engine** — `src/lib/session-delta.ts`. Same-day journal-vs-calibration behavioral shift across 10 dimensions.
-- **Observatory APIs** — `src/pages/api/observatory/*`. `states`, `synthesis`, `coupling`, `entry/[id]`, `calibration-drift`, `playback/[questionId]`. All read from live `alice.db`. No simulation hardcoding.
+- **Rust signal engine** -- `src-rs/src/{dynamical,motor,process}.rs`. napi-rs native module. All compute-heavy O(n^2) algorithms (RQA, sample entropy, DFA) run in Rust at ~200x TypeScript speed. `src/lib/signals-native.ts` loads the native module with automatic fallback. Built by `src-rs/build.sh` (auto-invoked by `npm run dev`; installs Rust toolchain if missing; skips rebuild if source unchanged).
+- **Signal pipeline** -- `src/lib/signal-pipeline.ts`. Orchestrates all 5 signal families (dynamical, motor, semantic, process, cross-session) as independent fire-and-forget computations after session submission.
+- **Observatory APIs** -- `src/pages/api/observatory/*`. `states`, `synthesis`, `coupling`, `entry/[id]`, `calibration-drift`, `playback/[questionId]`. All read from live PostgreSQL. No simulation hardcoding.
 
 ### Historical Data
 
@@ -381,13 +389,11 @@ Prior schema state (pre-2026-04-16 interpretive layer, pre-slice-3 8D behavioral
 | Command | Action |
 | :--- | :--- |
 | `npm install` | Install dependencies |
-| `npm run dev` | Start local dev server at `localhost:4321` |
-| `npm run build` | Build for production |
+| `npm run dev` | Build Rust engine (auto-installs Rust if needed, skips if unchanged) + start local dev server at `localhost:4321` |
+| `npm run build` | Build Rust engine + Astro production build |
+| `npm run build:rust` | Build Rust signal engine only |
 | `npm run generate` | Manually trigger tomorrow's question generation |
 | `npm run backfill` | Embed all existing entries for RAG retrieval |
-| `npm run simulate` | Run simulation (mechanics mode, Haiku) |
-| `npm run simulate -- --quality` | Run simulation (quality mode, Sonnet) |
-| `npm run simulate -- --dry-run` | Dry run simulation (data only, no AI calls) |
 | `npx tsx scripts/backfill-slice3-history.ts` | Backfill 7D + semantic + metadata + calibration baselines from existing history (idempotent) |
 
 ## Philosophy
