@@ -92,7 +92,7 @@ export async function saveReflection(text: string, type: 'weekly' | 'monthly' = 
   return row.reflection_id;
 }
 
-export async function logInteractionEvent(questionId: number, eventType: string, metadata?: string): Promise<void> {
+export async function logInteractionEvent(questionId: number, eventType: string, metadata?: string | Record<string, unknown>): Promise<void> {
   const typeRows = await sql`
     SELECT interaction_event_type_id FROM te_interaction_event_type WHERE enum_code = ${eventType}
   `;
@@ -768,7 +768,7 @@ export async function saveCalibrationSession(
 export async function saveQuestionFeedback(questionId: number, landed: boolean): Promise<void> {
   await sql`
     INSERT INTO tb_question_feedback (question_id, landed)
-    VALUES (${questionId}, ${landed ? 1 : 0})
+    VALUES (${questionId}, ${landed})
     ON CONFLICT (question_id) DO NOTHING
   `;
 }
@@ -2028,7 +2028,7 @@ export interface SemanticSignalRow {
   emotional_valence_arc: string | null;
   text_compression_ratio: number | null;
   lexicon_version: number;
-  paste_contaminated: number;
+  paste_contaminated: boolean;
 }
 
 export async function saveSemanticSignals(questionId: number, s: Omit<SemanticSignalRow, 'semantic_signal_id' | 'question_id'>): Promise<number> {

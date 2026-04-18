@@ -729,7 +729,7 @@
         } else {
           hideNav();
           const questionId = data.question.id;
-          const pageOpenTime = Date.now();
+          const pageOpenTime = performance.now();
           trackEvent(questionId, 'page_open');
 
           inputArea.innerHTML = `
@@ -754,7 +754,7 @@
           // Writing is open from the moment the surface renders. The room
           // may still be dim until presence lands, but nothing is blocked.
           textarea.focus();
-          const writingOpenedAt = Date.now();
+          const writingOpenedAt = performance.now();
 
           // Submit visibility: both gates must pass (time + content).
           // 90s from writing-open removes implicit "finish" pressure
@@ -763,7 +763,7 @@
           setTimeout(maybeShowSubmit, 90000);
 
           function maybeShowSubmit() {
-            const timeOk = Date.now() - writingOpenedAt >= 90000;
+            const timeOk = performance.now() - writingOpenedAt >= 90000;
             const contentOk = textarea.value.trim().length >= 20;
             if (timeOk && contentOk) {
               submitRow.classList.remove('hidden');
@@ -880,7 +880,7 @@
 
           const mouseTrackingInterval = window.setInterval(() => {
             if (!firstKeystrokeSent || !lastInputTime) return;
-            if ((Date.now() - lastInputTime) < 2000) return;
+            if ((performance.now() - lastInputTime) < 2000) return;
             // In a pause: sample cursor position
             const dx = currentMouseX - lastMouseSampleX;
             const dy = currentMouseY - lastMouseSampleY;
@@ -986,7 +986,7 @@
           });
 
           textarea.addEventListener('keydown', (e: KeyboardEvent) => {
-            const now = Date.now();
+            const now = performance.now();
 
             // Skip auto-repeat events from held keys — not real keypresses
             if (!e.repeat) {
@@ -1080,7 +1080,7 @@
 
           // Hold time: keydown → keyup per key (motor execution duration)
           textarea.addEventListener('keyup', (e: KeyboardEvent) => {
-            const now = Date.now();
+            const now = performance.now();
             lastKeyupTime = now;
             const downTime = keydownTimes.get(e.code);
             if (downTime != null) {
@@ -1104,7 +1104,7 @@
           });
 
           textarea.addEventListener('input', () => {
-            const now = Date.now();
+            const now = performance.now();
             const currentLength = textarea.value.length;
             const delta = currentLength - lastTextLength;
 
@@ -1182,14 +1182,14 @@
             maybeShowSubmit();
 
             if (!firstKeystrokeSent) {
-              firstKeystrokeTime = Date.now();
+              firstKeystrokeTime = performance.now();
               trackEvent(questionId, 'first_keystroke');
               firstKeystrokeSent = true;
             }
 
             if (isPaused) {
               if (pauseStartTime) {
-                totalPauseMs += Date.now() - pauseStartTime;
+                totalPauseMs += performance.now() - pauseStartTime;
                 pauseStartTime = null;
               }
               trackEvent(questionId, 'resume', JSON.stringify({
@@ -1202,7 +1202,7 @@
             pauseTimer = window.setTimeout(() => {
               if (firstKeystrokeSent) {
                 pauseCount++;
-                pauseStartTime = Date.now();
+                pauseStartTime = performance.now();
                 trackEvent(questionId, 'pause', JSON.stringify({
                   textLength: currentLength,
                 }));
@@ -1213,7 +1213,7 @@
 
           document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
-              const blurTime = Date.now();
+              const blurTime = performance.now();
               tabAwayStartTime = blurTime;
               // Close current P-burst on tab-away
               if (currentBurstChars > 0) {
@@ -1229,7 +1229,7 @@
               trackEvent(questionId, 'tab_blur');
             } else {
               if (tabAwayStartTime) {
-                const awayMs = Date.now() - tabAwayStartTime;
+                const awayMs = performance.now() - tabAwayStartTime;
                 totalTabAwayMs += awayMs;
                 tabAwayCount++;
                 tabAwayStartTime = null;
@@ -1247,12 +1247,12 @@
 
             // Finalize pause if still in one
             if (isPaused && pauseStartTime) {
-              totalPauseMs += Date.now() - pauseStartTime;
+              totalPauseMs += performance.now() - pauseStartTime;
             }
 
             // Close final P-burst
             if (currentBurstChars > 0) {
-              const now = Date.now();
+              const now = performance.now();
               burstLengths.push(currentBurstChars);
               burstSequence.push({
                 chars: currentBurstChars,
@@ -1266,7 +1266,7 @@
               revisionChains.push(currentRevisionChainLength);
             }
 
-            const submitTime = Date.now();
+            const submitTime = performance.now();
             const finalCharCount = text.length;
             const wordCount = text.split(/\s+/).filter(Boolean).length;
             const sentenceCount = text.split(/[.!?]+/).filter((s: string) => s.trim()).length;
@@ -1632,7 +1632,7 @@
         promptDiv.textContent = prompt;
         inputArea.appendChild(promptDiv);
 
-        const pageOpenTime = Date.now();
+        const pageOpenTime = performance.now();
 
         const formHtml = document.createElement('div');
         formHtml.innerHTML = `
@@ -1737,7 +1737,7 @@
 
         const calMouseTrackingInterval = window.setInterval(() => {
           if (!firstKeystrokeSent || !lastInputTime) return;
-          if ((Date.now() - lastInputTime) < 2000) return;
+          if ((performance.now() - lastInputTime) < 2000) return;
           const dx = calCurrentMouseX - calLastMouseSampleX;
           const dy = calCurrentMouseY - calLastMouseSampleY;
           const dist = Math.sqrt(dx * dx + dy * dy);
@@ -1797,7 +1797,7 @@
         });
 
         textarea.addEventListener('keydown', (e: KeyboardEvent) => {
-          const now = Date.now();
+          const now = performance.now();
 
           // Skip auto-repeat events from held keys
           if (!e.repeat) {
@@ -1873,7 +1873,7 @@
 
         // Hold time: keydown → keyup per key (motor execution duration)
         textarea.addEventListener('keyup', (e: KeyboardEvent) => {
-          const now = Date.now();
+          const now = performance.now();
           calLastKeyupTime = now;
           const downTime = calKeydownTimes.get(e.code);
           if (downTime != null) {
@@ -1896,7 +1896,7 @@
         });
 
         textarea.addEventListener('input', () => {
-          const now = Date.now();
+          const now = performance.now();
           const currentLength = textarea.value.length;
           const delta = currentLength - lastTextLength;
 
@@ -1946,14 +1946,14 @@
           submitBtn.disabled = !textarea.value.trim();
 
           if (!firstKeystrokeSent) {
-            firstKeystrokeTime = Date.now();
+            firstKeystrokeTime = performance.now();
             firstKeystrokeSent = true;
             scheduleFade();
           }
 
           if (isPaused) {
             if (pauseStartTime) {
-              totalPauseMs += Date.now() - pauseStartTime;
+              totalPauseMs += performance.now() - pauseStartTime;
               pauseStartTime = null;
             }
             isPaused = false;
@@ -1963,7 +1963,7 @@
           pauseTimer = window.setTimeout(() => {
             if (firstKeystrokeSent) {
               pauseCount++;
-              pauseStartTime = Date.now();
+              pauseStartTime = performance.now();
               isPaused = true;
             }
           }, 30000);
@@ -1977,7 +1977,7 @@
           submitBtn.textContent = '...';
 
           if (isPaused && pauseStartTime) {
-            totalPauseMs += Date.now() - pauseStartTime;
+            totalPauseMs += performance.now() - pauseStartTime;
           }
 
           // Close final P-burst
@@ -1986,7 +1986,7 @@
           // Close final revision chain
           if (calCurrentRevChainLength > 0) calRevisionChains.push(calCurrentRevChainLength);
 
-          const submitTime = Date.now();
+          const submitTime = performance.now();
           const finalCharCount = text.length;
           const wordCount = text.split(/\s+/).filter(Boolean).length;
           const sentenceCount = text.split(/[.!?]+/).filter((s: string) => s.trim()).length;

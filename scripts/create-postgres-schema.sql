@@ -1,12 +1,38 @@
 -- ============================================================================
 -- Alice PostgreSQL Schema
 -- ============================================================================
--- Migrated from SQLite (better-sqlite3 + sqlite-vec) to PostgreSQL 17 + pgvector.
--- All migration ALTERs baked into final CREATE TABLE statements.
--- Naming: te_ = enum, tb_ = mutable, zz_archive_ = preserved historical
--- Surrogate keys: table_name_id (never just "id")
--- Logical foreign keys only (no physical FK constraints)
--- Footer: dttm_created_utc, created_by, dttm_modified_utc, modified_by
+-- PostgreSQL 17 + pgvector. Single-user cognitive journaling instrument.
+--
+-- TYPE DECISIONS:
+--   INT (4B)           — surrogate keys, counts that could theoretically exceed 32K
+--   SMALLINT (2B)      — bounded small integers (hour 0-23, day 0-6, lag 1-30, index)
+--   DOUBLE PRECISION   — all timing (microsecond-precision from performance.now()),
+--                        all signal values (IEEE 754 f64, matches Rust f64 exactly),
+--                        all ratios/densities/entropies
+--   TEXT               — unbounded strings. PG TEXT = VARCHAR without limit, same
+--                        storage, same performance. PG has no NVARCHAR; TEXT is
+--                        already UTF-8 with full ICU collation support.
+--   BOOLEAN            — binary flags. Never INT 0/1.
+--   DATE               — calendar dates. Never TEXT 'YYYY-MM-DD'.
+--   TIMESTAMPTZ        — all timestamps. Never TIMESTAMP (no timezone = drift risk
+--                        if server TZ changes). Stored as microseconds since epoch
+--                        internally (int64), so no float rounding on timestamps.
+--   JSONB              — structured data (event logs, keystroke streams, arrays).
+--                        Binary storage, indexable, auto-parsed by postgres.js driver.
+--   vector(512)        — pgvector embedding type, HNSW-indexed.
+--
+-- RUST ALIGNMENT:
+--   DOUBLE PRECISION <-> f64 (exact IEEE 754 match, no conversion loss)
+--   INT              <-> i32 (exact range match: -2^31 to 2^31-1)
+--   SMALLINT         <-> i16 (but napi-rs exports as i32/JsNumber; safe upcast)
+--   BOOLEAN          <-> bool
+--   TEXT             <-> String
+--   JSONB            <-> serde_json::Value or String (serialized)
+--
+-- NAMING: te_ = enum, td_ = dictionary, tb_ = mutable, tm_ = matrix, th_ = history
+-- KEYS: table_name_id (never just "id")
+-- FK: logical only (no physical FK constraints)
+-- FOOTER: dttm_created_utc, created_by, dttm_modified_utc, modified_by
 -- ============================================================================
 
 CREATE EXTENSION IF NOT EXISTS vector;
@@ -15,8 +41,10 @@ CREATE EXTENSION IF NOT EXISTS vector;
 -- ENUM TABLES (static, no footer)
 -- ============================================================================
 
+-- PURPOSE: question origin classification
+-- MUTABILITY: static after deploy
 CREATE TABLE IF NOT EXISTS te_question_source (
-   question_source_id  INT PRIMARY KEY
+   question_source_id  SMALLINT PRIMARY KEY
   ,enum_code           TEXT UNIQUE NOT NULL
   ,name                TEXT NOT NULL
 );
@@ -29,8 +57,10 @@ ON CONFLICT DO NOTHING;
 
 -- --------------------------------------------------------------------------
 
+-- PURPOSE: reflection cadence
+-- MUTABILITY: static after deploy
 CREATE TABLE IF NOT EXISTS te_reflection_type (
-   reflection_type_id  INT PRIMARY KEY
+   reflection_type_id  SMALLINT PRIMARY KEY
   ,enum_code           TEXT UNIQUE NOT NULL
   ,name                TEXT NOT NULL
 );
@@ -42,8 +72,10 @@ ON CONFLICT DO NOTHING;
 
 -- --------------------------------------------------------------------------
 
+-- PURPOSE: client-side interaction event classification
+-- MUTABILITY: static after deploy
 CREATE TABLE IF NOT EXISTS te_interaction_event_type (
-   interaction_event_type_id  INT PRIMARY KEY
+   interaction_event_type_id  SMALLINT PRIMARY KEY
   ,enum_code                  TEXT UNIQUE NOT NULL
   ,name                       TEXT NOT NULL
 );
@@ -62,8 +94,10 @@ ON CONFLICT DO NOTHING;
 
 -- --------------------------------------------------------------------------
 
+-- PURPOSE: LLM prompt trace classification
+-- MUTABILITY: static after deploy
 CREATE TABLE IF NOT EXISTS te_prompt_trace_type (
-   prompt_trace_type_id  INT PRIMARY KEY
+   prompt_trace_type_id  SMALLINT PRIMARY KEY
   ,enum_code             TEXT UNIQUE NOT NULL
   ,name                  TEXT NOT NULL
 );
@@ -76,8 +110,10 @@ ON CONFLICT DO NOTHING;
 
 -- --------------------------------------------------------------------------
 
+-- PURPOSE: embedding source classification
+-- MUTABILITY: static after deploy
 CREATE TABLE IF NOT EXISTS te_embedding_source (
-   embedding_source_id  INT PRIMARY KEY
+   embedding_source_id  SMALLINT PRIMARY KEY
   ,enum_code            TEXT UNIQUE NOT NULL
   ,name                 TEXT NOT NULL
 );
@@ -90,8 +126,10 @@ ON CONFLICT DO NOTHING;
 
 -- --------------------------------------------------------------------------
 
+-- PURPOSE: calibration context dimension classification
+-- MUTABILITY: static after deploy
 CREATE TABLE IF NOT EXISTS te_context_dimension (
-   context_dimension_id  INT PRIMARY KEY
+   context_dimension_id  SMALLINT PRIMARY KEY
   ,enum_code             TEXT UNIQUE NOT NULL
   ,name                  TEXT NOT NULL
 );
@@ -110,48 +148,66 @@ ON CONFLICT DO NOTHING;
 -- CORE MUTABLE TABLES
 -- ============================================================================
 
+-- PURPOSE: daily questions (seed, generated, calibration)
+-- USE CASE: one row per question, scheduled_for is unique calendar date
+-- MUTABILITY: insert once, rarely updated (intervention fields may be set later)
+-- REFERENCED BY: tb_responses, tb_session_summaries, tb_session_events, tb_burst_sequences
+-- FOOTER: yes
 CREATE TABLE IF NOT EXISTS tb_questions (
-   question_id           INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
-  ,text                  TEXT NOT NULL
-  ,question_source_id    INT  NOT NULL DEFAULT 1
-  ,scheduled_for         TEXT UNIQUE
-  ,intervention_intent_id  INT
-  ,intervention_rationale  TEXT
-  ,dttm_created_utc      TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-  ,created_by            TEXT NOT NULL DEFAULT 'system'
-  ,dttm_modified_utc     TIMESTAMPTZ
-  ,modified_by           TEXT
+   question_id            INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,text                   TEXT NOT NULL
+  ,question_source_id     SMALLINT NOT NULL DEFAULT 1
+  ,scheduled_for          DATE UNIQUE
+  ,intervention_intent_id INT
+  ,intervention_rationale TEXT
+  ,dttm_created_utc       TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ,created_by             TEXT NOT NULL DEFAULT 'system'
+  ,dttm_modified_utc      TIMESTAMPTZ
+  ,modified_by            TEXT
 );
 
 -- --------------------------------------------------------------------------
 
+-- PURPOSE: user journal responses
+-- USE CASE: one row per response, one response per question
+-- MUTABILITY: insert once, never updated (black box)
+-- REFERENCED BY: tb_entry_states, tb_semantic_states, tb_embeddings
+-- FOOTER: yes
 CREATE TABLE IF NOT EXISTS tb_responses (
-   response_id           INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
-  ,question_id           INT  NOT NULL
-  ,text                  TEXT NOT NULL
-  ,dttm_created_utc      TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-  ,created_by            TEXT NOT NULL DEFAULT 'user'
-  ,dttm_modified_utc     TIMESTAMPTZ
-  ,modified_by           TEXT
+   response_id        INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,question_id        INT NOT NULL UNIQUE
+  ,text               TEXT NOT NULL
+  ,dttm_created_utc   TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ,created_by         TEXT NOT NULL DEFAULT 'user'
+  ,dttm_modified_utc  TIMESTAMPTZ
+  ,modified_by        TEXT
 );
 
 -- --------------------------------------------------------------------------
 
+-- PURPOSE: client-side interaction event log (page_open, keystroke, pause, etc.)
+-- USE CASE: append-only event stream per session
+-- MUTABILITY: insert only
+-- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_interaction_events (
    interaction_event_id       INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
-  ,question_id                INT  NOT NULL
-  ,interaction_event_type_id  INT  NOT NULL
-  ,metadata                   TEXT
+  ,question_id                INT      NOT NULL
+  ,interaction_event_type_id  SMALLINT NOT NULL
+  ,metadata                   JSONB
   ,dttm_created_utc           TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
   ,created_by                 TEXT NOT NULL DEFAULT 'client'
 );
 
 -- --------------------------------------------------------------------------
 
+-- PURPOSE: periodic AI-generated reflections over response history
+-- USE CASE: weekly/monthly synthesis
+-- MUTABILITY: insert once, may be regenerated
+-- FOOTER: yes
 CREATE TABLE IF NOT EXISTS tb_reflections (
    reflection_id                INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
   ,text                         TEXT NOT NULL
-  ,reflection_type_id           INT  NOT NULL DEFAULT 1
+  ,reflection_type_id           SMALLINT NOT NULL DEFAULT 1
   ,coverage_through_response_id INT
   ,dttm_created_utc             TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
   ,created_by                   TEXT NOT NULL DEFAULT 'system'
@@ -161,32 +217,60 @@ CREATE TABLE IF NOT EXISTS tb_reflections (
 
 -- --------------------------------------------------------------------------
 
+-- PURPOSE: user feedback on whether a question "landed"
+-- USE CASE: one boolean per question
+-- MUTABILITY: insert once
+-- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_question_feedback (
    question_feedback_id  INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
   ,question_id           INT     NOT NULL UNIQUE
-  ,landed                INT     NOT NULL
+  ,landed                BOOLEAN NOT NULL
   ,dttm_created_utc      TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-  ,created_by            TEXT    NOT NULL DEFAULT 'user'
+  ,created_by            TEXT NOT NULL DEFAULT 'user'
 );
 
 -- --------------------------------------------------------------------------
 
+-- PURPOSE: per-session behavioral summary computed from raw keystroke capture
+-- USE CASE: one row per session, computed at submission time
+-- MUTABILITY: insert once, never updated
+-- REFERENCED BY: state engine, signal pipeline, observatory
+-- FOOTER: created only
+--
+-- TIMING COLUMNS: DOUBLE PRECISION (f64)
+--   Source: performance.now() in browser, ~5 microsecond resolution.
+--   Values are offsets in fractional milliseconds (e.g. 1523.456789).
+--   Max session ~2 hours = 7,200,000.000 ms. f64 has 15+ significant digits,
+--   so 7 integer digits + 8 fractional digits = no precision loss.
+--   NUMERIC would be 4-10x slower for arithmetic with no gain since the
+--   source resolution is ~5 microseconds (3 fractional digits meaningful).
+--
+-- RATIO/DENSITY COLUMNS: DOUBLE PRECISION (f64)
+--   All are [0,1] bounded or small positive reals. f64 has 15-17 significant
+--   digits; ratios computed from counts < 100K have at most 5 significant
+--   digits. No precision concern.
+--
+-- COUNT COLUMNS: INT (i32)
+--   Max value 2,147,483,647. Keystroke counts per session < 50,000.
+--   SMALLINT (i16, max 32,767) would technically work for most counts but
+--   risks overflow on edge cases (paste_chars_total, total_chars_typed for
+--   very long sessions) and saves only 2 bytes per column. Not worth the risk.
 CREATE TABLE IF NOT EXISTS tb_session_summaries (
    session_summary_id          INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
   ,question_id                 INT  NOT NULL UNIQUE
-  -- Behavioral core
-  ,first_keystroke_ms          INT
-  ,total_duration_ms           INT
+  -- Behavioral core (timing: f64 microsecond-precision offsets)
+  ,first_keystroke_ms          DOUBLE PRECISION
+  ,total_duration_ms           DOUBLE PRECISION
   ,total_chars_typed           INT
   ,final_char_count            INT
   ,commitment_ratio            DOUBLE PRECISION
   ,pause_count                 INT
-  ,total_pause_ms              INT
+  ,total_pause_ms              DOUBLE PRECISION
   ,deletion_count              INT
   ,largest_deletion            INT
   ,total_chars_deleted         INT
   ,tab_away_count              INT
-  ,total_tab_away_ms           INT
+  ,total_tab_away_ms           DOUBLE PRECISION
   ,word_count                  INT
   ,sentence_count              INT
   -- Deletion decomposition
@@ -196,11 +280,11 @@ CREATE TABLE IF NOT EXISTS tb_session_summaries (
   ,first_half_deletion_chars   INT
   ,second_half_deletion_chars  INT
   -- Production fluency
-  ,active_typing_ms            INT
+  ,active_typing_ms            DOUBLE PRECISION
   ,chars_per_minute            DOUBLE PRECISION
   ,p_burst_count               INT
   ,avg_p_burst_length          DOUBLE PRECISION
-  -- NRC Emotion Lexicon densities
+  -- NRC Emotion Lexicon densities (word count / total words, [0,1])
   ,nrc_anger_density           DOUBLE PRECISION
   ,nrc_fear_density            DOUBLE PRECISION
   ,nrc_joy_density             DOUBLE PRECISION
@@ -215,14 +299,14 @@ CREATE TABLE IF NOT EXISTS tb_session_summaries (
   ,inter_key_interval_std      DOUBLE PRECISION
   ,revision_chain_count        INT
   ,revision_chain_avg_length   DOUBLE PRECISION
-  -- Hold time + flight time decomposition
+  -- Hold time + flight time decomposition (microsecond-precision)
   ,hold_time_mean              DOUBLE PRECISION
   ,hold_time_std               DOUBLE PRECISION
   ,flight_time_mean            DOUBLE PRECISION
   ,flight_time_std             DOUBLE PRECISION
-  -- Keystroke entropy
+  -- Keystroke entropy (bits)
   ,keystroke_entropy           DOUBLE PRECISION
-  -- Lexical diversity
+  -- Lexical diversity ([0,1])
   ,mattr                       DOUBLE PRECISION
   -- Sentence metrics
   ,avg_sentence_length         DOUBLE PRECISION
@@ -230,10 +314,10 @@ CREATE TABLE IF NOT EXISTS tb_session_summaries (
   -- Session metadata
   ,scroll_back_count           INT
   ,question_reread_count       INT
-  -- Deletion event log
+  -- Deletion event log (array of {chars, time, type})
   ,deletion_events_json        JSONB
   -- Cursor behavior + writing process (Phase 1 expansion)
-  ,confirmation_latency_ms     INT
+  ,confirmation_latency_ms     DOUBLE PRECISION
   ,paste_count                 INT
   ,paste_chars_total           INT
   ,read_back_count             INT
@@ -257,20 +341,20 @@ CREATE TABLE IF NOT EXISTS tb_session_summaries (
   ,cursor_stillness_during_pauses DOUBLE PRECISION
   ,drift_to_submit_count       INT
   ,cursor_pause_sample_count   INT
-  -- Precorrection/postcorrection latency
+  -- Precorrection/postcorrection latency (microsecond-precision)
   ,deletion_execution_speed_mean DOUBLE PRECISION
   ,postcorrection_latency_mean DOUBLE PRECISION
-  -- Revision distance
+  -- Revision distance (character positions)
   ,mean_revision_distance      DOUBLE PRECISION
   ,max_revision_distance       INT
-  -- Punctuation key latency
+  -- Punctuation key latency (microsecond-precision)
   ,punctuation_flight_mean     DOUBLE PRECISION
   ,punctuation_letter_ratio    DOUBLE PRECISION
   -- Context
   ,device_type                 TEXT
   ,user_agent                  TEXT
-  ,hour_of_day                 INT
-  ,day_of_week                 INT
+  ,hour_of_day                 SMALLINT CHECK (hour_of_day BETWEEN 0 AND 23)
+  ,day_of_week                 SMALLINT CHECK (day_of_week BETWEEN 0 AND 6)
   -- Footer
   ,dttm_created_utc            TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
   ,created_by                  TEXT NOT NULL DEFAULT 'system'
@@ -278,9 +362,13 @@ CREATE TABLE IF NOT EXISTS tb_session_summaries (
 
 -- --------------------------------------------------------------------------
 
+-- PURPOSE: LLM prompt provenance for auditability
+-- USE CASE: one row per LLM call (generation, observation, reflection)
+-- MUTABILITY: insert only
+-- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_prompt_traces (
    prompt_trace_id        INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
-  ,prompt_trace_type_id   INT  NOT NULL
+  ,prompt_trace_type_id   SMALLINT NOT NULL
   ,output_record_id       INT
   ,recent_entry_ids       JSONB
   ,rag_entry_ids          JSONB
@@ -294,15 +382,21 @@ CREATE TABLE IF NOT EXISTS tb_prompt_traces (
 );
 
 -- --------------------------------------------------------------------------
--- tb_embeddings: metadata + pgvector column (replaces sqlite-vec virtual table)
--- --------------------------------------------------------------------------
 
+-- PURPOSE: vector embeddings for semantic search (RAG)
+-- USE CASE: one embedding per response/observation/reflection
+-- MUTABILITY: insert once, may be regenerated on model change
+-- FOOTER: created only
+--
+-- vector(512): pgvector stores as array of float4 (32-bit). This is intentional;
+-- embedding dimensions do not benefit from float64 precision (models output
+-- float32). 512 dims * 4 bytes = 2048 bytes per vector.
 CREATE TABLE IF NOT EXISTS tb_embeddings (
    embedding_id          INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
-  ,embedding_source_id   INT  NOT NULL
-  ,source_record_id      INT  NOT NULL
+  ,embedding_source_id   SMALLINT NOT NULL
+  ,source_record_id      INT      NOT NULL
   ,embedded_text         TEXT NOT NULL
-  ,source_date           TEXT
+  ,source_date           DATE
   ,model_name            TEXT NOT NULL DEFAULT 'voyage-3-lite'
   ,embedding             vector(512)
   ,dttm_created_utc      TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -317,34 +411,46 @@ CREATE INDEX IF NOT EXISTS idx_embeddings_vector ON tb_embeddings
 -- WITNESS, STATE, DYNAMICS, COUPLING TABLES
 -- ============================================================================
 
+-- PURPOSE: AI witness state snapshots (trait + signal JSON blobs)
+-- USE CASE: one row per observation cycle
+-- MUTABILITY: insert only
+-- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_witness_states (
    witness_state_id    INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
   ,entry_count         INT  NOT NULL
   ,traits_json         JSONB NOT NULL
   ,signals_json        JSONB NOT NULL
-  ,model_name          TEXT DEFAULT 'claude-sonnet-4-20250514'
-  ,dttm_created_utc    TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-  ,created_by          TEXT DEFAULT 'system'
+  ,model_name          TEXT NOT NULL DEFAULT 'claude-sonnet-4-20250514'
+  ,dttm_created_utc    TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ,created_by          TEXT NOT NULL DEFAULT 'system'
 );
 
 -- --------------------------------------------------------------------------
 
+-- PURPOSE: P-burst sequences per session
+-- USE CASE: ordered burst-level decomposition of writing flow
+-- MUTABILITY: insert only
+-- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_burst_sequences (
    burst_sequence_id      INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
-  ,question_id            INT  NOT NULL
-  ,burst_index            INT  NOT NULL
-  ,burst_char_count       INT  NOT NULL
-  ,burst_duration_ms      INT  NOT NULL
-  ,burst_start_offset_ms  INT  NOT NULL
+  ,question_id            INT      NOT NULL
+  ,burst_index            SMALLINT NOT NULL
+  ,burst_char_count       INT      NOT NULL
+  ,burst_duration_ms      DOUBLE PRECISION NOT NULL
+  ,burst_start_offset_ms  DOUBLE PRECISION NOT NULL
   ,dttm_created_utc       TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
   ,created_by             TEXT NOT NULL DEFAULT 'client'
 );
 
 -- --------------------------------------------------------------------------
 
+-- PURPOSE: derived session-level metadata (computed post-submission)
+-- USE CASE: hour typicality, burst trajectory shape, deletion curve
+-- MUTABILITY: insert once per session
+-- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_session_metadata (
    session_metadata_id           INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
-  ,question_id                   INT  NOT NULL
+  ,question_id                   INT NOT NULL UNIQUE
   ,hour_typicality               DOUBLE PRECISION
   ,deletion_curve_type           TEXT
   ,burst_trajectory_shape        TEXT
@@ -352,15 +458,19 @@ CREATE TABLE IF NOT EXISTS tb_session_metadata (
   ,inter_burst_interval_std_ms   DOUBLE PRECISION
   ,deletion_during_burst_count   INT
   ,deletion_between_burst_count  INT
-  ,dttm_created_utc              TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-  ,created_by                    TEXT DEFAULT 'system'
+  ,dttm_created_utc              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ,created_by                    TEXT NOT NULL DEFAULT 'system'
 );
 
 -- --------------------------------------------------------------------------
 
+-- PURPOSE: calibration baseline history snapshots
+-- USE CASE: tracks baseline drift over calibration sessions
+-- MUTABILITY: insert only (append-only history)
+-- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_calibration_baselines_history (
    calibration_history_id        INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
-  ,calibration_session_count     INT  NOT NULL
+  ,calibration_session_count     INT NOT NULL
   ,device_type                   TEXT
   ,avg_first_keystroke_ms        DOUBLE PRECISION
   ,avg_commitment_ratio          DOUBLE PRECISION
@@ -375,30 +485,50 @@ CREATE TABLE IF NOT EXISTS tb_calibration_baselines_history (
   ,avg_hold_time_mean            DOUBLE PRECISION
   ,avg_flight_time_mean          DOUBLE PRECISION
   ,drift_magnitude               DOUBLE PRECISION
-  ,dttm_created_utc              TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-  ,created_by                    TEXT DEFAULT 'system'
+  ,dttm_created_utc              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ,created_by                    TEXT NOT NULL DEFAULT 'system'
 );
 
 -- --------------------------------------------------------------------------
 
+-- PURPOSE: raw event log + keystroke stream per session
+-- USE CASE: replay, process signal computation, dynamical signal computation
+-- MUTABILITY: insert once per session
+-- FOOTER: created only
+--
+-- event_log_json: JSONB array of [offsetMs, cursorPos, deletedCount, insertedText]
+--   offsetMs is DOUBLE PRECISION in the JSON (microsecond-precision from performance.now())
+--   JSONB stores numbers as numeric internally; no float precision loss on storage.
+--   postgres.js auto-parses JSONB on read; signal functions must accept parsed arrays.
+--
+-- keystroke_stream_json: JSONB array of {c: keyCode, d: keydownOffset, u: keyupOffset}
+--   d and u are DOUBLE PRECISION offsets from page open (microsecond-precision).
+--   Consumed by Rust signal engine via JSON.stringify() round-trip.
 CREATE TABLE IF NOT EXISTS tb_session_events (
    session_event_id       INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
-  ,question_id            INT  NOT NULL
+  ,question_id            INT NOT NULL UNIQUE
   ,event_log_json         JSONB NOT NULL
   ,total_events           INT   NOT NULL
-  ,session_duration_ms    INT   NOT NULL
+  ,session_duration_ms    DOUBLE PRECISION NOT NULL
   ,keystroke_stream_json  JSONB
   ,total_input_events     INT
   ,decimation_count       INT
-  ,dttm_created_utc       TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-  ,created_by             TEXT DEFAULT 'client'
+  ,dttm_created_utc       TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ,created_by             TEXT NOT NULL DEFAULT 'client'
 );
 
 -- --------------------------------------------------------------------------
 
+-- PURPOSE: 8D behavioral state per journal entry
+-- USE CASE: PersDyn state engine output, observatory visualization
+-- MUTABILITY: insert once, recomputable from session summaries
+-- FOOTER: created only
+--
+-- All dimensions are DOUBLE PRECISION [0,1] normalized.
+-- Rust f64 -> JS number -> PG float8. No conversion loss.
 CREATE TABLE IF NOT EXISTS tb_entry_states (
    entry_state_id    INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
-  ,response_id       INT            NOT NULL
+  ,response_id       INT NOT NULL UNIQUE
   ,fluency           DOUBLE PRECISION NOT NULL
   ,deliberation      DOUBLE PRECISION NOT NULL
   ,revision          DOUBLE PRECISION NOT NULL
@@ -407,59 +537,75 @@ CREATE TABLE IF NOT EXISTS tb_entry_states (
   ,thermal           DOUBLE PRECISION NOT NULL
   ,presence          DOUBLE PRECISION NOT NULL
   ,convergence       DOUBLE PRECISION NOT NULL
-  ,dttm_created_utc  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-  ,created_by        TEXT DEFAULT 'system'
+  ,dttm_created_utc  TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ,created_by        TEXT NOT NULL DEFAULT 'system'
 );
 
 -- --------------------------------------------------------------------------
 
+-- PURPOSE: per-dimension trait dynamics (baseline, variability, attractor)
+-- USE CASE: PersDyn trait tracking, convergence detection
+-- MUTABILITY: recomputed each session (latest row per dimension is current)
+-- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_trait_dynamics (
    trait_dynamic_id   INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
-  ,entry_count        INT  NOT NULL
-  ,dimension          TEXT NOT NULL
+  ,entry_count        INT      NOT NULL
+  ,dimension          TEXT     NOT NULL
   ,baseline           DOUBLE PRECISION NOT NULL
   ,variability        DOUBLE PRECISION NOT NULL
   ,attractor_force    DOUBLE PRECISION NOT NULL
   ,current_state      DOUBLE PRECISION NOT NULL
   ,deviation          DOUBLE PRECISION NOT NULL
-  ,window_size        INT  NOT NULL
-  ,dttm_created_utc   TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-  ,created_by         TEXT DEFAULT 'system'
+  ,window_size        SMALLINT NOT NULL
+  ,dttm_created_utc   TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ,created_by         TEXT NOT NULL DEFAULT 'system'
 );
 
 -- --------------------------------------------------------------------------
 
+-- PURPOSE: cross-dimension coupling (which dimensions lead/follow)
+-- USE CASE: coupling matrix in observatory
+-- MUTABILITY: recomputed each session
+-- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_coupling_matrix (
    coupling_id        INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
-  ,entry_count        INT  NOT NULL
-  ,leader             TEXT NOT NULL
-  ,follower           TEXT NOT NULL
-  ,lag_sessions       INT  NOT NULL
+  ,entry_count        INT      NOT NULL
+  ,leader             TEXT     NOT NULL
+  ,follower           TEXT     NOT NULL
+  ,lag_sessions       SMALLINT NOT NULL
   ,correlation        DOUBLE PRECISION NOT NULL
   ,direction          DOUBLE PRECISION NOT NULL
-  ,dttm_created_utc   TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-  ,created_by         TEXT DEFAULT 'system'
+  ,dttm_created_utc   TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ,created_by         TEXT NOT NULL DEFAULT 'system'
 );
 
 -- --------------------------------------------------------------------------
 
+-- PURPOSE: emotion-behavior cross-space coupling
+-- USE CASE: NRC emotion dims correlated with behavioral dims at lag
+-- MUTABILITY: recomputed each session
+-- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_emotion_behavior_coupling (
    emotion_coupling_id  INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
-  ,entry_count          INT  NOT NULL
-  ,emotion_dim          TEXT NOT NULL
-  ,behavior_dim         TEXT NOT NULL
-  ,lag_sessions         INT  NOT NULL
+  ,entry_count          INT      NOT NULL
+  ,emotion_dim          TEXT     NOT NULL
+  ,behavior_dim         TEXT     NOT NULL
+  ,lag_sessions         SMALLINT NOT NULL
   ,correlation          DOUBLE PRECISION NOT NULL
   ,direction            DOUBLE PRECISION NOT NULL
-  ,dttm_created_utc     TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-  ,created_by           TEXT DEFAULT 'system'
+  ,dttm_created_utc     TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ,created_by           TEXT NOT NULL DEFAULT 'system'
 );
 
 -- --------------------------------------------------------------------------
 
+-- PURPOSE: 11D+ semantic state per journal entry
+-- USE CASE: parallel semantic space to behavioral 8D
+-- MUTABILITY: insert once, recomputable
+-- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_semantic_states (
    semantic_state_id     INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
-  ,response_id           INT            NOT NULL
+  ,response_id           INT NOT NULL UNIQUE
   ,syntactic_complexity  DOUBLE PRECISION NOT NULL
   ,interrogation         DOUBLE PRECISION NOT NULL
   ,self_focus            DOUBLE PRECISION NOT NULL
@@ -476,44 +622,57 @@ CREATE TABLE IF NOT EXISTS tb_semantic_states (
   ,agency_framing        DOUBLE PRECISION
   ,temporal_orientation  DOUBLE PRECISION
   ,convergence           DOUBLE PRECISION NOT NULL
-  ,dttm_created_utc      TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-  ,created_by            TEXT DEFAULT 'system'
+  ,dttm_created_utc      TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ,created_by            TEXT NOT NULL DEFAULT 'system'
 );
 
 -- --------------------------------------------------------------------------
 
+-- PURPOSE: per-dimension semantic trait dynamics
+-- MUTABILITY: recomputed each session
+-- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_semantic_dynamics (
    semantic_dynamic_id  INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
-  ,entry_count          INT  NOT NULL
-  ,dimension            TEXT NOT NULL
+  ,entry_count          INT      NOT NULL
+  ,dimension            TEXT     NOT NULL
   ,baseline             DOUBLE PRECISION NOT NULL
   ,variability          DOUBLE PRECISION NOT NULL
   ,attractor_force      DOUBLE PRECISION NOT NULL
   ,current_state        DOUBLE PRECISION NOT NULL
   ,deviation            DOUBLE PRECISION NOT NULL
-  ,window_size          INT  NOT NULL
-  ,dttm_created_utc     TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-  ,created_by           TEXT DEFAULT 'system'
+  ,window_size          SMALLINT NOT NULL
+  ,dttm_created_utc     TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ,created_by           TEXT NOT NULL DEFAULT 'system'
 );
 
 -- --------------------------------------------------------------------------
 
+-- PURPOSE: semantic cross-dimension coupling
+-- MUTABILITY: recomputed each session
+-- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_semantic_coupling (
    semantic_coupling_id  INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
-  ,entry_count           INT  NOT NULL
-  ,leader                TEXT NOT NULL
-  ,follower              TEXT NOT NULL
-  ,lag_sessions          INT  NOT NULL
+  ,entry_count           INT      NOT NULL
+  ,leader                TEXT     NOT NULL
+  ,follower              TEXT     NOT NULL
+  ,lag_sessions          SMALLINT NOT NULL
   ,correlation           DOUBLE PRECISION NOT NULL
   ,direction             DOUBLE PRECISION NOT NULL
-  ,dttm_created_utc      TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-  ,created_by            TEXT DEFAULT 'system'
+  ,dttm_created_utc      TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ,created_by            TEXT NOT NULL DEFAULT 'system'
 );
 
 -- ============================================================================
 -- SIGNAL TABLES (append-only, one row per session)
 -- ============================================================================
+-- All signal values are DOUBLE PRECISION (Rust f64 -> JS number -> PG float8).
+-- No conversion loss at any boundary. Nullable because short sessions may not
+-- produce enough data for computation (e.g., RQA needs >= 30 IKIs).
 
+-- PURPOSE: nonlinear dynamical signals from IKI series
+-- USE CASE: RQA, DFA, permutation entropy, transfer entropy
+-- MUTABILITY: insert once, recomputable from keystroke_stream_json
+-- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_dynamical_signals (
    dynamical_signal_id          INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
   ,question_id                  INT NOT NULL UNIQUE
@@ -529,12 +688,16 @@ CREATE TABLE IF NOT EXISTS tb_dynamical_signals (
   ,te_hold_to_flight            DOUBLE PRECISION
   ,te_flight_to_hold            DOUBLE PRECISION
   ,te_dominance                 DOUBLE PRECISION
-  ,dttm_created_utc             TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-  ,created_by                   TEXT DEFAULT 'system'
+  ,dttm_created_utc             TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ,created_by                   TEXT NOT NULL DEFAULT 'system'
 );
 
 -- --------------------------------------------------------------------------
 
+-- PURPOSE: motor rhythm and biometric signals
+-- USE CASE: sample entropy, ex-Gaussian, digraph latency, motor coordination
+-- MUTABILITY: insert once, recomputable from keystroke_stream_json
+-- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_motor_signals (
    motor_signal_id              INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
   ,question_id                  INT NOT NULL UNIQUE
@@ -550,12 +713,16 @@ CREATE TABLE IF NOT EXISTS tb_motor_signals (
   ,ex_gaussian_sigma            DOUBLE PRECISION
   ,tau_proportion               DOUBLE PRECISION
   ,adjacent_hold_time_cov       DOUBLE PRECISION
-  ,dttm_created_utc             TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-  ,created_by                   TEXT DEFAULT 'system'
+  ,dttm_created_utc             TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ,created_by                   TEXT NOT NULL DEFAULT 'system'
 );
 
 -- --------------------------------------------------------------------------
 
+-- PURPOSE: text-level semantic signals from response content
+-- USE CASE: idea density, lexical sophistication, cohesion, valence arc
+-- MUTABILITY: insert once, recomputable from response text
+-- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_semantic_signals (
    semantic_signal_id           INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
   ,question_id                  INT NOT NULL UNIQUE
@@ -567,14 +734,18 @@ CREATE TABLE IF NOT EXISTS tb_semantic_signals (
   ,referential_cohesion         DOUBLE PRECISION
   ,emotional_valence_arc        TEXT
   ,text_compression_ratio       DOUBLE PRECISION
-  ,lexicon_version              INT NOT NULL DEFAULT 1
-  ,paste_contaminated           INT NOT NULL DEFAULT 0
-  ,dttm_created_utc             TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-  ,created_by                   TEXT DEFAULT 'system'
+  ,lexicon_version              SMALLINT NOT NULL DEFAULT 1
+  ,paste_contaminated           BOOLEAN NOT NULL DEFAULT FALSE
+  ,dttm_created_utc             TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ,created_by                   TEXT NOT NULL DEFAULT 'system'
 );
 
 -- --------------------------------------------------------------------------
 
+-- PURPOSE: writing process signals from event log replay
+-- USE CASE: pause location, abandoned thoughts, burst classification
+-- MUTABILITY: insert once, recomputable from event_log_json
+-- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_process_signals (
    process_signal_id            INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
   ,question_id                  INT NOT NULL UNIQUE
@@ -587,12 +758,16 @@ CREATE TABLE IF NOT EXISTS tb_process_signals (
   ,vocab_expansion_rate         DOUBLE PRECISION
   ,phase_transition_point       DOUBLE PRECISION
   ,strategy_shift_count         INT
-  ,dttm_created_utc             TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-  ,created_by                   TEXT DEFAULT 'system'
+  ,dttm_created_utc             TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ,created_by                   TEXT NOT NULL DEFAULT 'system'
 );
 
 -- --------------------------------------------------------------------------
 
+-- PURPOSE: cross-session longitudinal signals
+-- USE CASE: self-perplexity, NCD, vocab recurrence, text network structure
+-- MUTABILITY: insert once, recomputable from historical responses
+-- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_cross_session_signals (
    cross_session_signal_id      INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
   ,question_id                  INT NOT NULL UNIQUE
@@ -606,18 +781,22 @@ CREATE TABLE IF NOT EXISTS tb_cross_session_signals (
   ,text_network_density         DOUBLE PRECISION
   ,text_network_communities     INT
   ,bridging_ratio               DOUBLE PRECISION
-  ,dttm_created_utc             TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-  ,created_by                   TEXT DEFAULT 'system'
+  ,dttm_created_utc             TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ,created_by                   TEXT NOT NULL DEFAULT 'system'
 );
 
 -- ============================================================================
 -- CALIBRATION & CONTEXT TABLES
 -- ============================================================================
 
+-- PURPOSE: extracted context tags from calibration responses
+-- USE CASE: incidental supervision for confound tracking
+-- MUTABILITY: insert once per calibration
+-- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_calibration_context (
    calibration_context_id  INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
-  ,question_id             INT  NOT NULL
-  ,context_dimension_id    INT  NOT NULL
+  ,question_id             INT      NOT NULL
+  ,context_dimension_id    SMALLINT NOT NULL
   ,value                   TEXT NOT NULL
   ,detail                  TEXT
   ,confidence              DOUBLE PRECISION NOT NULL DEFAULT 1.0
@@ -627,12 +806,16 @@ CREATE TABLE IF NOT EXISTS tb_calibration_context (
 
 -- --------------------------------------------------------------------------
 
+-- PURPOSE: calibration vs journal session delta for same-day comparison
+-- USE CASE: separating state-of-day from trait signal
+-- MUTABILITY: insert once per day with both sessions
+-- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_session_delta (
    session_delta_id                    INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
-  ,session_date                        TEXT NOT NULL UNIQUE
+  ,session_date                        DATE NOT NULL UNIQUE
   ,calibration_question_id             INT  NOT NULL
   ,journal_question_id                 INT  NOT NULL
-  -- Delta dimensions
+  -- Delta dimensions (journal - calibration, signed)
   ,delta_first_person                  DOUBLE PRECISION
   ,delta_cognitive                     DOUBLE PRECISION
   ,delta_hedging                       DOUBLE PRECISION
@@ -645,7 +828,7 @@ CREATE TABLE IF NOT EXISTS tb_session_delta (
   ,delta_flight_time_mean              DOUBLE PRECISION
   -- Composite
   ,delta_magnitude                     DOUBLE PRECISION
-  -- Raw values
+  -- Raw values (for reconstruction)
   ,calibration_first_person            DOUBLE PRECISION
   ,journal_first_person                DOUBLE PRECISION
   ,calibration_cognitive               DOUBLE PRECISION
@@ -673,6 +856,10 @@ CREATE TABLE IF NOT EXISTS tb_session_delta (
 
 -- --------------------------------------------------------------------------
 
+-- PURPOSE: public paper comments
+-- USE CASE: reader feedback on published research
+-- MUTABILITY: insert only
+-- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_paper_comments (
    paper_comment_id    INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
   ,paper_slug          TEXT NOT NULL

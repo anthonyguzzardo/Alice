@@ -137,7 +137,7 @@ export async function computeAndPersistDerivedSignals(questionId: number): Promi
           emotional_valence_arc: ss.emotionalValenceArc,
           text_compression_ratio: ss.textCompressionRatio,
           lexicon_version: ss.lexiconVersion,
-          paste_contaminated: ss.pasteContaminated ? 1 : 0,
+          paste_contaminated: ss.pasteContaminated,
         });
       }
     } catch (err) {
