@@ -8,6 +8,7 @@
  */
 import type { APIRoute } from 'astro';
 import db from '../../../../lib/db.ts';
+import { computeDynamicalSignals, type KeystrokeEvent } from '../../../../lib/dynamical-signals.ts';
 
 export const GET: APIRoute = async ({ params }) => {
   try {
@@ -119,11 +120,22 @@ export const GET: APIRoute = async ({ params }) => {
       ORDER BY burst_index ASC
     `).all(entryState.question_id) as any[];
 
-    // Replay availability
+    // Replay availability + keystroke stream
     const replayRow = db.prepare(`
-      SELECT total_events, session_duration_ms FROM tb_session_events
+      SELECT total_events, session_duration_ms, keystroke_stream_json FROM tb_session_events
       WHERE question_id = ? ORDER BY session_event_id DESC LIMIT 1
     `).get(entryState.question_id) as any;
+
+    // Compute dynamical signals from keystroke stream if available
+    let dynamicalSignals = null;
+    if (replayRow?.keystroke_stream_json) {
+      try {
+        const stream: KeystrokeEvent[] = JSON.parse(replayRow.keystroke_stream_json);
+        if (stream.length > 0) {
+          dynamicalSignals = computeDynamicalSignals(stream);
+        }
+      } catch { /* malformed JSON — skip */ }
+    }
 
     // Navigation
     const prev = db.prepare(`
@@ -144,6 +156,7 @@ export const GET: APIRoute = async ({ params }) => {
       sessionSummary,
       metadata,
       burstSequence,
+      dynamicalSignals,
       replay: replayRow ? {
         available: true,
         totalEvents: replayRow.total_events,

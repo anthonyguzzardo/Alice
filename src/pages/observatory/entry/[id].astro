@@ -146,7 +146,7 @@ const responseId = parseInt(id ?? '', 10);
           document.getElementById('entry-content').innerHTML = `<div class="empty">${data.error}</div>`;
           return;
         }
-        const { entryState, semanticState, sessionSummary, metadata, replay, navigation } = data;
+        const { entryState, semanticState, sessionSummary, metadata, dynamicalSignals, replay, navigation } = data;
 
         const navRow = `
           <div class="nav-row">
@@ -223,6 +223,26 @@ const responseId = parseInt(id ?? '', 10);
           </section>
         `;
 
+        const ds = dynamicalSignals;
+        const dynamicalPanel = ds ? `
+          <section class="panel">
+            <h2>Dynamical signals · nonlinear keystroke analysis</h2>
+            <div class="stat-grid">
+              <div><div class="k">permutation entropy</div><div class="v">${ds.permutationEntropy != null ? ds.permutationEntropy.toFixed(3) + ' (norm)' : '—'}</div></div>
+              <div><div class="k">DFA alpha</div><div class="v">${ds.dfaAlpha != null ? ds.dfaAlpha.toFixed(3) : '—'}</div></div>
+              <div><div class="k">RQA determinism</div><div class="v">${ds.rqaDeterminism != null ? (ds.rqaDeterminism * 100).toFixed(1) + '%' : '—'}</div></div>
+              <div><div class="k">RQA laminarity</div><div class="v">${ds.rqaLaminarity != null ? (ds.rqaLaminarity * 100).toFixed(1) + '%' : '—'}</div></div>
+              <div><div class="k">RQA trapping time</div><div class="v">${ds.rqaTrappingTime != null ? ds.rqaTrappingTime.toFixed(1) : '—'}</div></div>
+              <div><div class="k">RQA recurrence rate</div><div class="v">${ds.rqaRecurrenceRate != null ? (ds.rqaRecurrenceRate * 100).toFixed(1) + '%' : '—'}</div></div>
+              <div><div class="k">TE hold→flight</div><div class="v">${ds.teHoldToFlight != null ? ds.teHoldToFlight.toFixed(4) + ' bits' : '—'}</div></div>
+              <div><div class="k">TE flight→hold</div><div class="v">${ds.teFlightToHold != null ? ds.teFlightToHold.toFixed(4) + ' bits' : '—'}</div></div>
+              <div><div class="k">TE dominance</div><div class="v">${ds.teDominance != null ? (ds.teDominance > 1 ? 'motor→cog ' + ds.teDominance.toFixed(2) + 'x' : 'cog→motor ' + (1/ds.teDominance).toFixed(2) + 'x') : '—'}</div></div>
+              <div><div class="k">IKI series length</div><div class="v">${ds.ikiCount}</div></div>
+              <div><div class="k">hold/flight pairs</div><div class="v">${ds.holdFlightCount}</div></div>
+            </div>
+          </section>
+        ` : '';
+
         const summary = sessionSummary;
         const summaryPanel = summary ? `
           <section class="panel">
@@ -253,7 +273,7 @@ const responseId = parseInt(id ?? '', 10);
         ` : '';
 
         document.getElementById('entry-content').innerHTML =
-          questionBox + navRow + radars + metadataPanel + summaryPanel;
+          questionBox + navRow + radars + metadataPanel + dynamicalPanel + summaryPanel;
 
         // Draw radars after DOM is in place
         const behCanvas = document.getElementById('radar-beh');

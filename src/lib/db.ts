@@ -621,6 +621,8 @@ db.exec(`
     ,total_events          INTEGER NOT NULL
     ,session_duration_ms   INTEGER NOT NULL
     ,keystroke_stream_json TEXT        -- Raw keydown/keyup pairs: [{c,d,u}] (code, downMs, upMs)
+    ,total_input_events   INTEGER     -- Total input events before decimation (null = pre-instrumentation)
+    ,decimation_count     INTEGER     -- How many times the cap fired (0 = no data loss)
     -- FOOTER
     ,dttm_created_utc      TEXT    DEFAULT (datetime('now'))
     ,created_by            TEXT    DEFAULT 'client'
@@ -1493,13 +1495,15 @@ export interface SessionEventsRow {
   total_events: number;
   session_duration_ms: number;
   keystroke_stream_json?: string | null;
+  total_input_events?: number | null;
+  decimation_count?: number | null;
 }
 
 export function saveSessionEvents(row: Omit<SessionEventsRow, 'session_event_id'>): number {
   const result = db.prepare(`
-    INSERT INTO tb_session_events (question_id, event_log_json, total_events, session_duration_ms, keystroke_stream_json)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(row.question_id, row.event_log_json, row.total_events, row.session_duration_ms, row.keystroke_stream_json ?? null);
+    INSERT INTO tb_session_events (question_id, event_log_json, total_events, session_duration_ms, keystroke_stream_json, total_input_events, decimation_count)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(row.question_id, row.event_log_json, row.total_events, row.session_duration_ms, row.keystroke_stream_json ?? null, row.total_input_events ?? null, row.decimation_count ?? null);
   return Number(result.lastInsertRowid);
 }
 

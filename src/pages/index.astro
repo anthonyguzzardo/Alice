@@ -785,11 +785,11 @@
           let largeDeletionChars = 0;
           const deletionTimestamps: Array<{chars: number; time: number}> = [];
 
-          // Read-only playback event log: [t_ms_offset_from_pageOpen, text_snapshot]
-          // Captured on every input event; capped to avoid pathological bloat.
-          // Replay engine reconstructs the timeline by setting textarea.value
-          // at the corresponding offset.
-          const EVENT_LOG_CAP = 5000;
+          // Read-only playback event log: delta-encoded.
+          // Format: [offsetMs, cursorPos, deletedCount, insertedText]
+          // Reconstructed to full text snapshots by the playback API.
+          // No cap needed — deltas are ~20 bytes each vs hundreds for snapshots.
+          let eventLogTotalInputs = 0;
           const eventLog: Array<[number, string]> = [];
 
           // Enriched: P-burst tracking (Chenoweth & Hayes, 2s threshold)
@@ -910,12 +910,15 @@
             // Capture text snapshot for read-only playback. Cap entries; if
             // the cap is hit, drop every other prior entry to keep newer ones
             // (preserves recent fidelity at the cost of older granularity).
-            if (eventLog.length >= EVENT_LOG_CAP) {
-              for (let i = eventLog.length - 2; i >= 0; i -= 2) {
-                eventLog.splice(i, 1);
-              }
+            eventLogTotalInputs++;
+            // Delta-encoded: [offsetMs, cursorPos, deletedCount, insertedText]
+            const cursorPos = textarea.selectionStart;
+            if (delta > 0) {
+              const inserted = textarea.value.slice(cursorPos - delta, cursorPos);
+              eventLog.push([now - pageOpenTime, cursorPos - delta, 0, inserted]);
+            } else if (delta < 0) {
+              eventLog.push([now - pageOpenTime, cursorPos, -delta, '']);
             }
-            eventLog.push([now - pageOpenTime, textarea.value]);
 
             // Time-based prompt fade starts on first keystroke — the prompt
             // dims because you've been with it long enough, not because
@@ -1176,8 +1179,9 @@
                 chars: d.chars,
                 time: d.time - pageOpenTime,
               })),
-              // Read-only playback substrate (text snapshots over time).
+              // Read-only playback substrate (delta-encoded).
               eventLog,
+              eventLogTotalInputs,
               // Raw keystroke stream for dynamical signal analysis
               keystrokeStream,
               // Context
@@ -1362,8 +1366,6 @@
         // Raw keystroke stream + event log (same as journal sessions)
         const calKeystrokeStream: Array<{c: string; d: number; u: number}> = [];
         const calEventLog: Array<[number, string]> = [];
-        const CAL_EVENT_LOG_CAP = 2000;
-
         // Session metadata (Czerwinski et al. 2004)
         let calScrollBackCount = 0;
         let calLastScrollTop = 0;
@@ -1436,13 +1438,14 @@
           const currentLength = textarea.value.length;
           const delta = currentLength - lastTextLength;
 
-          // Capture text snapshot for event log (same as journal sessions)
-          if (calEventLog.length >= CAL_EVENT_LOG_CAP) {
-            for (let i = calEventLog.length - 2; i >= 0; i -= 2) {
-              calEventLog.splice(i, 1);
-            }
+          // Delta-encoded event log (same format as journal sessions)
+          const calCursorPos = textarea.selectionStart;
+          if (delta > 0) {
+            const inserted = textarea.value.slice(calCursorPos - delta, calCursorPos);
+            calEventLog.push([now - pageOpenTime, calCursorPos - delta, 0, inserted]);
+          } else if (delta < 0) {
+            calEventLog.push([now - pageOpenTime, calCursorPos, -delta, '']);
           }
-          calEventLog.push([now - pageOpenTime, textarea.value]);
 
           if (delta > 0) {
             totalCharsTyped += delta;

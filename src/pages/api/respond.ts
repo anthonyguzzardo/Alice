@@ -77,6 +77,8 @@ export const POST: APIRoute = async ({ request }) => {
           keystroke_stream_json: Array.isArray(sessionSummary.keystrokeStream) && sessionSummary.keystrokeStream.length > 0
             ? JSON.stringify(sessionSummary.keystrokeStream)
             : null,
+          total_input_events: sessionSummary.eventLogTotalInputs ?? null,
+          decimation_count: 0,
         });
       }
 

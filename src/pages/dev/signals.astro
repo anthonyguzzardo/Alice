@@ -400,6 +400,22 @@
           <dd>Shannon entropy of the inter-key interval distribution. Measures how unpredictable your typing rhythm is. High entropy = irregular, switching between fast bursts and long pauses. Low entropy = metronomic, consistent rhythm. Different from IKI std — entropy captures the shape of the distribution, not just its spread. Correlated with executive function at d=-1.28.</dd>
           <dd class="cite">Ajilore et al., 2025 (BiAffect/Frontiers in Psychiatry)</dd>
 
+          <dt>Permutation Entropy</dt>
+          <dd>Ordinal pattern distribution of consecutive IKI triplets. Instead of looking at timing values, looks at their rank order (is this interval faster, slower, or middle?). High = all patterns equally likely, genuinely novel composition. Low = habitual rhythm, cognitive autopilot. Invariant to device differences and caffeine.</dd>
+          <dd class="cite">Bandt & Pompe, 2002</dd>
+
+          <dt>DFA Alpha (Fractal Scaling)</dt>
+          <dd>Detrended Fluctuation Analysis exponent. Measures whether your keystroke timing has fractal structure. ~0.5 = white noise (no structure, copying). ~0.7-0.9 = pink/1/f noise (long-range correlations, healthy engaged cognition). ~1.0+ = brown noise (over-correlated, perseveration).</dd>
+          <dd class="cite">Peng et al., 1994; Van Orden et al., 2003</dd>
+
+          <dt>RQA (Recurrence Quantification)</dt>
+          <dd>Treats the IKI series as a trajectory through cognitive state space. Determinism = how predictable the trajectory is. Laminarity = how often the system gets stuck in a state (fixation). Trapping time = how long stuck states last. High determinism + high laminarity = deep structured processing.</dd>
+          <dd class="cite">Webber & Zbilut, 2005</dd>
+
+          <dt>Transfer Entropy</dt>
+          <dd>Causal information flow between hold times (motor) and flight times (cognitive). TE hold-to-flight = motor driving cognition (automatic writing, fingers know before mind). TE flight-to-hold = cognition driving motor (deliberate writing, each keystroke decided). The dominance ratio shows which direction controls.</dd>
+          <dd class="cite">Schreiber, 2000</dd>
+
           <dt>Linguistic Densities</dt>
           <dd>Word category counts divided by total words. NRC emotion categories (anger, fear, joy, sadness, trust, anticipation) come from the NRC Emotion Lexicon. Cognitive, hedging, and first-person densities come from Pennebaker's LIWC categories. Slopes of these over time are the real signal.</dd>
           <dd class="cite">Mohammad & Turney, 2013; Pennebaker, 2011</dd>
@@ -495,6 +511,9 @@
       const flightTimes: number[] = [];
       let lastKeyupTime: number | null = null;
       const keydownTimes = new Map<string, number>();
+
+      // Raw keystroke stream for dynamical signals
+      const keystrokeStream: Array<{c: string; d: number; u: number}> = [];
 
       // Scroll tracking
       let scrollBackCount = 0;
@@ -615,6 +634,7 @@
         flightTimes.length = 0;
         lastKeyupTime = null;
         keydownTimes.clear();
+        keystrokeStream.length = 0;
         scrollBackCount = 0;
         lastScrollTop = 0;
         linguisticDensities = {};
@@ -677,7 +697,14 @@
         const downTime = keydownTimes.get(e.code);
         if (downTime != null) {
           const ht = now - downTime;
-          if (ht > 0 && ht < 2000) holdTimes.push(ht);
+          if (ht > 0 && ht < 2000) {
+            holdTimes.push(ht);
+            keystrokeStream.push({
+              c: e.code,
+              d: downTime - pageOpenTime,
+              u: now - pageOpenTime,
+            });
+          }
           keydownTimes.delete(e.code);
         }
       });
@@ -745,7 +772,7 @@
 
         if (pauseTimer) clearTimeout(pauseTimer);
         pauseTimer = window.setTimeout(() => {
-          if (textarea.value.trim()) {
+          if (firstKeystrokeSent) {
             pauseCount++;
             pauseStartTime = Date.now();
             isPaused = true;
@@ -803,6 +830,179 @@
             renderMetrics();
           }
         } catch { /* ignore */ }
+      }
+
+      // ── Dynamical signal computation (client-side) ─────────
+      function computePermutationEntropy(series: number[], order = 3): { normalized: number; raw: number } | null {
+        if (series.length < order + 10) return null;
+        const patternCounts = new Map<string, number>();
+        const n = series.length - order + 1;
+        for (let i = 0; i < n; i++) {
+          const w = series.slice(i, i + order);
+          const idx = Array.from({ length: order }, (_, k) => k);
+          idx.sort((a, b) => w[a] - w[b]);
+          const key = idx.join(',');
+          patternCounts.set(key, (patternCounts.get(key) ?? 0) + 1);
+        }
+        let entropy = 0;
+        for (const count of patternCounts.values()) {
+          const p = count / n;
+          if (p > 0) entropy -= p * Math.log2(p);
+        }
+        let factorial = 1;
+        for (let i = 2; i <= order; i++) factorial *= i;
+        const maxEntropy = Math.log2(factorial);
+        return { normalized: maxEntropy > 0 ? entropy / maxEntropy : 0, raw: entropy };
+      }
+
+      function computeDFA(series: number[]): number | null {
+        if (series.length < 50) return null;
+        const N = series.length;
+        const mean = series.reduce((a, b) => a + b, 0) / N;
+        const y = new Array(N);
+        y[0] = series[0] - mean;
+        for (let i = 1; i < N; i++) y[i] = y[i - 1] + (series[i] - mean);
+        const minBox = 4, maxBox = Math.floor(N / 4);
+        if (maxBox < minBox) return null;
+        const logS: number[] = [], logF: number[] = [];
+        const numSizes = Math.min(15, maxBox - minBox + 1);
+        for (let i = 0; i < numSizes; i++) {
+          const boxSize = Math.round(minBox * Math.pow(maxBox / minBox, i / (numSizes - 1)));
+          if (logS.length > 0 && boxSize === logS[logS.length - 1]) continue;
+          const numBoxes = Math.floor(N / boxSize);
+          if (numBoxes < 2) continue;
+          let sumF = 0;
+          for (let b = 0; b < numBoxes; b++) {
+            const start = b * boxSize;
+            let sx = 0, sy = 0, sxx = 0, sxy = 0;
+            for (let j = 0; j < boxSize; j++) { sx += j; sy += y[start + j]; sxx += j * j; sxy += j * y[start + j]; }
+            const denom = boxSize * sxx - sx * sx;
+            const slope = denom !== 0 ? (boxSize * sxy - sx * sy) / denom : 0;
+            const intercept = (sy - slope * sx) / boxSize;
+            let ss = 0;
+            for (let j = 0; j < boxSize; j++) { const t = intercept + slope * j; ss += (y[start + j] - t) ** 2; }
+            sumF += Math.sqrt(ss / boxSize);
+          }
+          const F = sumF / numBoxes;
+          if (F > 0) { logS.push(Math.log(boxSize)); logF.push(Math.log(F)); }
+        }
+        if (logS.length < 4) return null;
+        const n = logS.length;
+        let sx = 0, sy = 0, sxx = 0, sxy = 0;
+        for (let i = 0; i < n; i++) { sx += logS[i]; sy += logF[i]; sxx += logS[i] ** 2; sxy += logS[i] * logF[i]; }
+        const d = n * sxx - sx * sx;
+        return Math.abs(d) < 1e-10 ? null : (n * sxy - sx * sy) / d;
+      }
+
+      function computeRQA(series: number[]): { determinism: number; laminarity: number; trappingTime: number; recurrenceRate: number } | null {
+        const N = series.length;
+        if (N < 30) return null;
+        const mean = series.reduce((a, b) => a + b, 0) / N;
+        const std = Math.sqrt(series.reduce((s, v) => s + (v - mean) ** 2, 0) / N);
+        const eps = std * 0.2;
+        if (eps <= 0) return null;
+        const M = Math.min(N, 500);
+        let totalRec = 0, diagPts = 0, vertPts = 0, vertLen = 0, vertLines = 0;
+        for (let k = 1; k < M; k++) {
+          let ll = 0;
+          for (let i = 0; i < M - k; i++) {
+            if (Math.abs(series[i] - series[i + k]) <= eps) { totalRec++; ll++; }
+            else { if (ll >= 2) diagPts += ll; ll = 0; }
+          }
+          if (ll >= 2) diagPts += ll;
+        }
+        for (let j = 0; j < M; j++) {
+          let ll = 0;
+          for (let i = 0; i < M; i++) {
+            if (i === j) continue;
+            if (Math.abs(series[i] - series[j]) <= eps) { ll++; }
+            else { if (ll >= 2) { vertPts += ll; vertLen += ll; vertLines++; } ll = 0; }
+          }
+          if (ll >= 2) { vertPts += ll; vertLen += ll; vertLines++; }
+        }
+        const pairs = M * (M - 1) / 2;
+        return {
+          determinism: Math.min(1, totalRec > 0 ? diagPts / totalRec : 0),
+          laminarity: Math.min(1, totalRec > 0 ? vertPts / (totalRec * 2) : 0),
+          trappingTime: vertLines > 0 ? vertLen / vertLines : 0,
+          recurrenceRate: pairs > 0 ? totalRec / pairs : 0,
+        };
+      }
+
+      function computeTransferEntropy(source: number[], target: number[]): number | null {
+        const N = Math.min(source.length, target.length);
+        if (N < 30) return null;
+        function disc(arr: number[]): number[] {
+          const sorted = [...arr].sort((a, b) => a - b);
+          const t1 = sorted[Math.floor(sorted.length / 3)];
+          const t2 = sorted[Math.floor(2 * sorted.length / 3)];
+          return arr.map(v => v <= t1 ? 0 : v <= t2 ? 1 : 2);
+        }
+        const S = disc(source.slice(0, N)), T = disc(target.slice(0, N));
+        const counts: Record<string, number> = {}, cT: Record<string, number> = {}, cTS: Record<string, number> = {}, cTn: Record<string, number> = {};
+        let total = 0;
+        for (let i = 1; i < N - 1; i++) {
+          const tP = T[i - 1], sP = S[i - 1], tN = T[i];
+          const kF = `${tN},${tP},${sP}`, kT = `${tP}`, kTS = `${tP},${sP}`, kTn = `${tN},${tP}`;
+          counts[kF] = (counts[kF] ?? 0) + 1;
+          cT[kT] = (cT[kT] ?? 0) + 1;
+          cTS[kTS] = (cTS[kTS] ?? 0) + 1;
+          cTn[kTn] = (cTn[kTn] ?? 0) + 1;
+          total++;
+        }
+        if (total < 20) return null;
+        let te = 0;
+        for (const [key, count] of Object.entries(counts)) {
+          const [tN, tP, sP] = key.split(',');
+          const pF = count / total, pTS = (cTS[`${tP},${sP}`] ?? 0) / total;
+          const pTn = (cTn[`${tN},${tP}`] ?? 0) / total, pT = (cT[tP] ?? 0) / total;
+          if (pTS > 0 && pT > 0 && pTn > 0) {
+            const cond = pF / pTS, marg = pTn / pT;
+            if (cond > 0 && marg > 0) te += pF * Math.log2(cond / marg);
+          }
+        }
+        return Math.max(0, te);
+      }
+
+      function computeDynamicalSignals() {
+        const ikis: number[] = [];
+        for (let i = 1; i < keystrokeStream.length; i++) {
+          const gap = keystrokeStream[i].d - keystrokeStream[i - 1].d;
+          if (gap > 0 && gap < 5000) ikis.push(gap);
+        }
+        const holds: number[] = [], flights: number[] = [];
+        for (let i = 0; i < keystrokeStream.length; i++) {
+          const ht = keystrokeStream[i].u - keystrokeStream[i].d;
+          if (ht > 0 && ht < 2000) holds.push(ht);
+          if (i > 0) {
+            const ft = keystrokeStream[i].d - keystrokeStream[i - 1].u;
+            if (ft > 0 && ft < 5000) flights.push(ft);
+          }
+        }
+        const minLen = Math.min(holds.length, flights.length);
+        const pe = computePermutationEntropy(ikis);
+        const alpha = computeDFA(ikis);
+        const rqaResult = computeRQA(ikis);
+        const teHF = computeTransferEntropy(holds.slice(0, minLen), flights.slice(0, minLen));
+        const teFH = computeTransferEntropy(flights.slice(0, minLen), holds.slice(0, minLen));
+        let teDom: number | null = null;
+        if (teHF != null && teFH != null && (teHF + teFH) > 0) {
+          teDom = teFH > 0 ? teHF / teFH : (teHF > 0 ? Infinity : 1);
+        }
+        return {
+          ikiCount: ikis.length,
+          holdFlightCount: minLen,
+          permutationEntropy: pe?.normalized ?? null,
+          permutationEntropyRaw: pe?.raw ?? null,
+          dfaAlpha: alpha,
+          rqaDeterminism: rqaResult?.determinism ?? null,
+          rqaLaminarity: rqaResult?.laminarity ?? null,
+          rqaTrappingTime: rqaResult?.trappingTime ?? null,
+          rqaRecurrenceRate: rqaResult?.recurrenceRate ?? null,
+          teHoldToFlight: teHF,
+          teFlightToHold: teFH,
+          teDominance: teDom,
+        };
       }
 
       // ── Compute all client-side metrics ────────────────────
@@ -1082,6 +1282,33 @@
             <div class="section-title">Entropy (Ajilore et al. 2025)</div>
             ${row('Keystroke entropy', m.keystrokeEntropy != null ? fmt(m.keystrokeEntropy, 2) + ' bits' : '—')}
           </div>
+
+          ${(() => {
+            const ds = computeDynamicalSignals();
+            const sufficient = ds.ikiCount >= 30;
+            const dfaLabel = ds.dfaAlpha != null
+              ? (ds.dfaAlpha < 0.6 ? 'white noise' : ds.dfaAlpha < 0.85 ? 'pink (1/f)' : ds.dfaAlpha < 1.1 ? 'pink-brown' : 'brown noise')
+              : '';
+            const teLabel = ds.teDominance != null
+              ? (ds.teDominance > 1 ? 'motor \u2192 cog ' + ds.teDominance.toFixed(2) + 'x' : 'cog \u2192 motor ' + (1 / ds.teDominance).toFixed(2) + 'x')
+              : '';
+            return `
+              <div class="section">
+                <div class="section-title">Dynamical Signals${!sufficient ? ' (need 30+ keystrokes)' : ''}</div>
+                ${row('IKI series', ds.ikiCount + ' pts')}
+                ${row('Hold/flight pairs', ds.holdFlightCount + ' pts')}
+                ${row('Perm entropy', ds.permutationEntropy != null ? fmt(ds.permutationEntropy, 3) + ' (norm)' : '—')}
+                ${row('DFA \u03b1', ds.dfaAlpha != null ? fmt(ds.dfaAlpha, 3) + (dfaLabel ? ' \u2014 ' + dfaLabel : '') : '—')}
+                ${row('RQA determinism', ds.rqaDeterminism != null ? fmtPct(ds.rqaDeterminism) : '—')}
+                ${row('RQA laminarity', ds.rqaLaminarity != null ? fmtPct(ds.rqaLaminarity) : '—')}
+                ${row('RQA trapping time', ds.rqaTrappingTime != null ? fmt(ds.rqaTrappingTime, 1) : '—')}
+                ${row('RQA recurrence', ds.rqaRecurrenceRate != null ? fmtPct(ds.rqaRecurrenceRate) : '—')}
+                ${row('TE hold\u2192flight', ds.teHoldToFlight != null ? fmt(ds.teHoldToFlight, 4) + ' bits' : '—')}
+                ${row('TE flight\u2192hold', ds.teFlightToHold != null ? fmt(ds.teFlightToHold, 4) + ' bits' : '—')}
+                ${row('TE dominance', teLabel || '—')}
+              </div>
+            `;
+          })()}
 
           <div class="section">
             <div class="section-title">Linguistic Densities (NRC / Pennebaker)</div>

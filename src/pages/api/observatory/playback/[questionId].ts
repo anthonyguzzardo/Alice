@@ -25,11 +25,27 @@ export const GET: APIRoute = async ({ params }) => {
       });
     }
 
-    let events: unknown = [];
+    let rawEvents: any[] = [];
     try {
-      events = JSON.parse(row.event_log_json);
+      rawEvents = JSON.parse(row.event_log_json);
     } catch {
-      events = [];
+      rawEvents = [];
+    }
+
+    // Detect format and reconstruct full text snapshots for the replay page.
+    // Old format: [offsetMs, fullText] — pass through.
+    // New delta format: [offsetMs, cursorPos, deletedCount, insertedText] — reconstruct.
+    let events: Array<[number, string]> = [];
+    if (rawEvents.length > 0 && rawEvents[0].length === 4 && typeof rawEvents[0][1] === 'number') {
+      // Delta format: reconstruct full text at each step
+      let text = '';
+      for (const [ts, pos, del, ins] of rawEvents) {
+        text = text.slice(0, pos) + ins + text.slice(pos + del);
+        events.push([ts, text]);
+      }
+    } else {
+      // Legacy snapshot format: pass through
+      events = rawEvents;
     }
 
     // Resolve response_id so replay can link back to the correct entry
