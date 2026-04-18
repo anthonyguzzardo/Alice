@@ -549,14 +549,15 @@ Extracted from calibration (free-write) responses via Claude Sonnet. These are c
 - **Citation:** Monaro et al. 2018
 
 ### pasteCount
-- **Capture:** `paste` event listener on textarea
-- **Unit:** count
-- **Why:** Construct validity signal. External text insertion breaks the unmediated cognitive exercise. When pasteCount > 0, text-derived semantic signals are flagged as contaminated.
+- **Capture:** `paste` event listener on textarea with `e.preventDefault()`. Paste is **blocked at the interface level**; the text never enters the box. Attempts are still counted.
+- **Unit:** count (of blocked attempts)
+- **Why:** Construct isolation, not construct compliance. Paste being structurally impossible means every downstream signal is guaranteed to reflect unmediated cognitive production. The attempt count is itself a signal: it measures moments of construct pressure where the writer reached for cognitive offloading and was forced to continue producing unaided. Sessions with elevated attempt counts likely have distinctive signatures in the keystroke stream immediately following the blocked attempt.
 - **Table:** tb_session_summaries
 
 ### pasteCharsTotal
-- **Capture:** Sum of `e.clipboardData.getData('text/plain').length` across paste events
+- **Capture:** Sum of `e.clipboardData.getData('text/plain').length` across blocked paste attempts. Records what was attempted, not what entered the box.
 - **Unit:** characters
+- **Why:** The volume of text the writer tried to offload. A blocked paste of 3 characters is a typo shortcut. A blocked paste of 200 characters is an attempt to import external thinking.
 - **Table:** tb_session_summaries
 
 ### readBackCount

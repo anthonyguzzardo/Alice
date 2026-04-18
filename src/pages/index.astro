@@ -903,11 +903,24 @@
             lastSelectionWasRange = hasRange;
           });
 
-          // Paste detection: construct validity signal (Option C thesis)
+          // Paste blocked: construct isolation (Option C thesis)
+          // Count attempts but prevent the action. The attempt count is itself
+          // a signal about moments of construct pressure.
+          let pasteMessageShown = false;
           textarea.addEventListener('paste', (e: ClipboardEvent) => {
+            e.preventDefault();
             pasteCount++;
             const pasted = e.clipboardData?.getData('text/plain') ?? '';
             pasteCharsTotal += pasted.length;
+            if (!pasteMessageShown) {
+              pasteMessageShown = true;
+              const msg = document.createElement('div');
+              msg.textContent = 'paste is disabled during writing';
+              msg.style.cssText = 'position:fixed;bottom:2rem;left:50%;transform:translateX(-50%);font-family:var(--mono);font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-faint);opacity:1;transition:opacity 2s ease 3s;pointer-events:none;';
+              document.body.appendChild(msg);
+              setTimeout(() => { msg.style.opacity = '0'; }, 100);
+              setTimeout(() => { msg.remove(); }, 6000);
+            }
           });
 
           textarea.addEventListener('keydown', (e: KeyboardEvent) => {
@@ -1589,9 +1602,20 @@
           calLastSelectionWasRange = hasRange;
         });
 
+        let calPasteMessageShown = false;
         textarea.addEventListener('paste', (e: ClipboardEvent) => {
+          e.preventDefault();
           calPasteCount++;
           calPasteCharsTotal += e.clipboardData?.getData('text/plain')?.length ?? 0;
+          if (!calPasteMessageShown) {
+            calPasteMessageShown = true;
+            const msg = document.createElement('div');
+            msg.textContent = 'paste is disabled during writing';
+            msg.style.cssText = 'position:fixed;bottom:2rem;left:50%;transform:translateX(-50%);font-family:var(--mono);font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-faint);opacity:1;transition:opacity 2s ease 3s;pointer-events:none;';
+            document.body.appendChild(msg);
+            setTimeout(() => { msg.style.opacity = '0'; }, 100);
+            setTimeout(() => { msg.remove(); }, 6000);
+          }
         });
 
         textarea.addEventListener('keydown', (e: KeyboardEvent) => {
