@@ -57,7 +57,7 @@
       * { margin: 0; padding: 0; box-sizing: border-box; }
 
       html, body {
-        height: 100%;
+        min-height: 100%;
         background: var(--bg);
         color: var(--text);
         font-family: 'EB Garamond', Georgia, serif;
@@ -65,18 +65,20 @@
 
       body {
         display: flex;
-        justify-content: center;
-        padding: 2rem;
+        padding: 2rem 2rem 6rem;
         gap: 2rem;
-        max-width: 1200px;
+        max-width: 1800px;
         margin: 0 auto;
       }
 
       .write-col {
-        flex: 1;
+        flex: 0 0 420px;
         display: flex;
         flex-direction: column;
-        max-width: 700px;
+        position: sticky;
+        top: 2rem;
+        align-self: flex-start;
+        max-height: calc(100vh - 4rem);
       }
 
       .header {
@@ -150,12 +152,12 @@
 
       .prompt-question {
         font-family: 'EB Garamond', Georgia, serif;
-        font-size: 1.6rem;
+        font-size: 1.3rem;
         font-style: italic;
         font-weight: 400;
         color: var(--text-muted);
-        margin-bottom: 1rem;
-        line-height: 1.5;
+        margin-bottom: 0.8rem;
+        line-height: 1.4;
       }
 
       .prompt-label {
@@ -168,15 +170,15 @@
       textarea {
         width: 100%;
         flex: 1;
-        min-height: 400px;
+        min-height: 300px;
         background: var(--bg-input);
         border: 1px solid var(--border);
         border-radius: 4px;
         color: var(--text);
         font-family: inherit;
-        font-size: 1.3rem;
-        line-height: 1.8;
-        padding: 1.5rem;
+        font-size: 1.15rem;
+        line-height: 1.7;
+        padding: 1.2rem;
         resize: none;
         outline: none;
       }
@@ -221,34 +223,38 @@
       }
 
       .metrics-col {
-        width: 380px;
-        overflow-y: auto;
-        max-height: 100vh;
-        padding-right: 0.5rem;
+        flex: 1;
+        min-width: 0;
+      }
+
+      .metrics-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+        padding-bottom: 4rem;
       }
 
       .section {
-        margin-bottom: 1.5rem;
-        border-bottom: 1px solid var(--section-border);
-        padding-bottom: 1rem;
+        background: var(--panel-bg);
+        border: 1px solid var(--section-border);
+        border-radius: 4px;
+        padding: 0.8rem 1rem;
       }
 
-      .section:last-child { border-bottom: none; }
-
       .section-title {
-        font-size: 0.8rem;
+        font-size: 0.7rem;
         text-transform: uppercase;
         letter-spacing: 0.12em;
         color: var(--text-faint);
-        margin-bottom: 0.6rem;
+        margin-bottom: 0.5rem;
       }
 
       .metric-row {
         display: flex;
         justify-content: space-between;
         align-items: baseline;
-        padding: 0.15rem 0;
-        font-size: 0.95rem;
+        padding: 0.1rem 0;
+        font-size: 0.85rem;
       }
 
       .metric-label {
@@ -258,7 +264,7 @@
       .metric-value {
         color: var(--metric-value);
         font-variant-numeric: tabular-nums;
-        min-width: 60px;
+        min-width: 50px;
         text-align: right;
       }
 
@@ -268,9 +274,10 @@
 
       .delta-section {
         background: var(--panel-bg);
-        border-radius: 6px;
-        padding: 1rem;
-        margin-top: 1rem;
+        border: 1px solid var(--section-border);
+        border-radius: 4px;
+        padding: 0.8rem 1rem;
+        grid-column: 1 / -1;
       }
 
       .delta-section .section-title {
@@ -415,6 +422,22 @@
           <dt>Transfer Entropy</dt>
           <dd>Causal information flow between hold times (motor) and flight times (cognitive). TE hold-to-flight = motor driving cognition (automatic writing, fingers know before mind). TE flight-to-hold = cognition driving motor (deliberate writing, each keystroke decided). The dominance ratio shows which direction controls.</dd>
           <dd class="cite">Schreiber, 2000</dd>
+
+          <dt>Mouse/Cursor Trajectory</dt>
+          <dd>Cursor movement sampled every 200ms during typing pauses (>2s). Cursor distance = total px moved while not typing. Fidget ratio = distance per ms of active typing (involuntary motor restlessness). Stillness = proportion of pause samples with &lt;5px movement. Drift-to-submit = how many times the cursor entered the submit button during a pause then left (hesitation-to-commit signal).</dd>
+          <dd class="cite">BioCatch (Unit 8200 cognitive biometrics)</dd>
+
+          <dt>Error Correction</dt>
+          <dd>Three-phase model: deletion execution speed = mean IKI within deletion chains (how fast you delete once you start). Postcorrection latency = ms from last delete to next insert (cognitive re-planning after an error). Separates motor automaticity from the thinking required to recover.</dd>
+          <dd class="cite">Springer, 2021</dd>
+
+          <dt>Revision Distance</dt>
+          <dd>How far back from the leading edge (end of text) the cursor is when a deletion happens. Mean revision distance captures typical reach-back depth. Max revision distance captures the deepest restructuring event. Deep revisions indicate rethinking structure, not fixing typos.</dd>
+          <dd class="cite">Lindgren & Sullivan, 2006 (ScriptLog)</dd>
+
+          <dt>Punctuation Latency</dt>
+          <dd>Flight time (key release to next key press) before punctuation keys vs. letter keys. Punctuation requires syntactic decisions (where to end a clause, whether to use a comma). The ratio captures how much harder punctuation placement is relative to word production. Higher ratio = more syntactic planning load.</dd>
+          <dd class="cite">Plank, 2016 (COLING)</dd>
 
           <dt>Linguistic Densities</dt>
           <dd>Word category counts divided by total words. NRC emotion categories (anger, fear, joy, sadness, trust, anticipation) come from the NRC Emotion Lexicon. Cognitive, hedging, and first-person densities come from Pennebaker's LIWC categories. Slopes of these over time are the real signal.</dd>
@@ -1220,6 +1243,7 @@
         }
 
         metricsEl.innerHTML = `
+          <div class="metrics-grid">
           <div class="section">
             <div class="section-title">Timing</div>
             ${row('Duration', fmtDuration(m.totalDurationMs))}
@@ -1276,11 +1300,30 @@
             ${row('Flight time mean', fmtMs(m.flightTimeMean))}
             ${row('Flight time std', fmtMs(m.flightTimeStd))}
             ${row('Hold/flight ratio', m.holdTimeMean != null && m.flightTimeMean != null && m.flightTimeMean > 0 ? fmt(m.holdTimeMean / m.flightTimeMean, 2) : '—')}
+            ${row('Keystroke entropy', m.keystrokeEntropy != null ? fmt(m.keystrokeEntropy, 2) + ' bits' : '—')}
           </div>
 
           <div class="section">
-            <div class="section-title">Entropy (Ajilore et al. 2025)</div>
-            ${row('Keystroke entropy', m.keystrokeEntropy != null ? fmt(m.keystrokeEntropy, 2) + ' bits' : '—')}
+            <div class="section-title">Mouse / Cursor (BioCatch)</div>
+            ${row('Cursor distance', m.cursorDistanceDuringPauses > 0 ? fmt(m.cursorDistanceDuringPauses, 0) + ' px' : '—')}
+            ${row('Fidget ratio', m.cursorFidgetRatio != null ? fmt(m.cursorFidgetRatio, 4) + ' px/ms' : '—')}
+            ${row('Stillness', fmtPct(m.cursorStillnessDuringPauses))}
+            ${row('Drift to submit', m.driftToSubmitCount)}
+            ${row('Pause samples', m.cursorPauseSampleCount)}
+          </div>
+
+          <div class="section">
+            <div class="section-title">Error Correction (Springer 2021)</div>
+            ${row('Del exec speed', fmtMs(m.deletionExecutionSpeedMean))}
+            ${row('Postcorrection', fmtMs(m.postcorrectionLatencyMean))}
+            ${row('Mean rev distance', m.meanRevisionDistance != null ? fmt(m.meanRevisionDistance, 0) + ' chars' : '—')}
+            ${row('Max rev distance', m.maxRevisionDistance != null ? m.maxRevisionDistance + ' chars' : '—')}
+          </div>
+
+          <div class="section">
+            <div class="section-title">Punctuation (Plank 2016)</div>
+            ${row('Punct flight mean', fmtMs(m.punctuationFlightMean))}
+            ${row('Punct/letter ratio', m.punctuationLetterRatio != null ? fmt(m.punctuationLetterRatio, 3) + 'x' : '—')}
           </div>
 
           ${(() => {
@@ -1324,6 +1367,7 @@
           </div>
 
           ${deltaHTML}
+          </div>
         `;
       }
 

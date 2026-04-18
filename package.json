@@ -11,8 +11,7 @@
     "preview": "astro preview",
     "astro": "astro",
     "generate": "npx tsx src/scripts/generate-question.ts",
-    "backfill": "npx tsx src/scripts/backfill-embeddings.ts",
-    "simulate": "npx tsx src/scripts/simulate.ts"
+    "backfill": "npx tsx src/scripts/backfill-embeddings.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.88.0",

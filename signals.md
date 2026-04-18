@@ -843,6 +843,136 @@ Extracted from calibration (free-write) responses via Claude Sonnet. These are c
 
 ---
 
+## Mouse/Cursor Trajectory (Phase 2 Expansion, 2026-04-18)
+
+Captures motor restlessness, absorption, and drift-to-submit behavior during cognitive pauses. A pause for mouse tracking is >2s since last input event (aligns with P-burst threshold). Sampled every 200ms.
+
+### cursorDistanceDuringPauses
+- **Capture:** Sum of Euclidean distances between consecutive 200ms mouse position samples during pauses. `sum(sqrt((x2-x1)^2 + (y2-y1)^2))`
+- **Unit:** pixels
+- **Why:** Total cursor movement during thinking time. High distance = motor restlessness or fidgeting. Low distance = absorption or disengagement. BioCatch's 3,000-signal system treats mouse behavior during non-mouse tasks as a primary cognitive channel.
+- **Table:** tb_session_summaries
+- **Citation:** BioCatch cognitive biometrics; Pusara & Brodley 2004
+
+### cursorFidgetRatio
+- **Capture:** `cursorDistanceDuringPauses / activeTypingMs`
+- **Unit:** pixels per millisecond
+- **Why:** Motor restlessness normalized by session length. Independent of how many pauses occurred. High ratio = agitated or distracted. Low ratio = still, whether from absorption or fatigue.
+- **Table:** tb_session_summaries
+
+### cursorStillnessDuringPauses
+- **Capture:** Proportion of 200ms pause samples where cursor displacement < 5px
+- **Unit:** ratio (0-1)
+- **Why:** Absorption proxy. High stillness (>0.9) means the writer is frozen in place during pauses, thinking without moving. Low stillness means the hands are active even when the keys aren't.
+- **Table:** tb_session_summaries
+
+### driftToSubmitCount
+- **Capture:** Number of pauses where cursor entered the submit button bounding rect then left without clicking
+- **Unit:** count
+- **Why:** "Almost done" moments. The writer considered submitting, moved toward the button, then pulled back to continue writing. Each drift is a metacognitive decision to extend the session.
+- **Table:** tb_session_summaries
+
+### cursorPauseSampleCount
+- **Capture:** Total 200ms samples taken during pauses
+- **Unit:** count
+- **Why:** Denominator for stillness ratio. Also a proxy for total pause time (samples * 200ms).
+- **Table:** tb_session_summaries
+
+---
+
+## Precorrection / Postcorrection Latency (Phase 2 Expansion, 2026-04-18)
+
+Extends the error-correction model from a single phase (error detection, already captured as `errorDetectionLatencyMean`) to three phases. Based on Springer 2021 (automated revision extraction from keystroke logs).
+
+### deletionExecutionSpeedMean
+- **Capture:** Mean IKI between consecutive deletion keystrokes within revision chains (sequential backspace/delete keys within 500ms of each other)
+- **Unit:** milliseconds
+- **Why:** How fast the writer executes a deletion once the decision is made. Slow deletion = tentative, reconsidering mid-delete. Fast deletion = decisive, committed to the cut. This is phase 2 of the three-phase error correction model.
+- **Table:** tb_session_summaries
+- **Citation:** Springer 2021; Lindgren & Sullivan 2006
+
+### postcorrectionLatencyMean
+- **Capture:** Mean time from last deletion keystroke to next insertion keystroke
+- **Unit:** milliseconds
+- **Why:** How long it takes to re-engage after correcting. Long re-orientation = the error disrupted the train of thought. Short re-orientation = seamless recovery. This is phase 3: the "getting back on track" cost of each error.
+- **Table:** tb_session_summaries
+- **Citation:** Springer 2021
+
+---
+
+## Revision Distance (Phase 2 Expansion, 2026-04-18)
+
+### meanRevisionDistance
+- **Capture:** Mean character offset from leading edge across all contextual revisions (deletions where `selectionStart < value.length - 1`)
+- **Formula:** `mean(value.length - selectionStart)` per contextual revision
+- **Unit:** characters
+- **Why:** `contextualRevisionCount` counts how many times the writer navigated back. Revision distance measures how FAR back. A revision 5 characters from the end is a typo fix at the leading edge. A revision 200 characters back is structural rethinking. The depth distribution distinguishes surface editing from deep restructuring.
+- **Table:** tb_session_summaries
+- **Citation:** Lindgren & Sullivan 2006 (ScriptLog); Severinson Eklundh & Kollberg 2003
+
+### maxRevisionDistance
+- **Capture:** Maximum character offset from leading edge across all contextual revisions
+- **Unit:** characters
+- **Why:** The single deepest revision in the session. A max distance of 500 characters means the writer went back to the opening and restructured. A max distance of 10 means all revisions were near the cursor.
+- **Table:** tb_session_summaries
+
+---
+
+## Punctuation Key Latency (Phase 2 Expansion, 2026-04-18)
+
+### punctuationFlightMean
+- **Capture:** Mean flight time (keyup to keydown) before punctuation keystrokes (Period, Comma, Slash, Quote, Semicolon, BracketLeft, BracketRight, Minus, Equal, Backquote, Backslash)
+- **Unit:** milliseconds
+- **Why:** Punctuation requires syntactic decision-making (where does this clause end? comma or period?), a different cognitive process than letter production (motor execution of a known word). Clinical keystroke research shows punctuation-adjacent latencies cluster separately as a distinct "cognition score."
+- **Table:** tb_session_summaries
+- **Citation:** Plank 2016 (COLING); clinical keystroke dynamics literature
+
+### punctuationLetterRatio
+- **Capture:** `punctuationFlightMean / letterFlightMean` where letter flight times are filtered to `Key*` codes only
+- **Unit:** ratio
+- **Why:** Relative cognitive cost of punctuation decisions vs. letter production. Ratio near 1.0 = punctuation is automatic, no syntactic hesitation. Ratio > 1.5 = punctuation requires substantially more planning than letter typing. Longitudinal changes may indicate shifts in syntactic planning capacity.
+- **Table:** tb_session_summaries
+
+---
+
+## Motor Signals: Phase 2 Additions (2026-04-18)
+
+### exGaussianTau
+- **Capture:** Fit ex-Gaussian distribution to per-session flight time array (outliers above Q3 + 3*IQR removed before fitting). Method of moments: `tau = std * cbrt(skewness / 2)`
+- **Unit:** milliseconds
+- **Why:** The ex-Gaussian decomposes flight time into a Gaussian component (motor execution speed) and an exponential tail (cognitive slowing). Mean flight time conflates both. Tau isolates the cognitive part. BiAffect demonstrated that tau shifts predict mood episodes in bipolar disorder before summary statistics (mean, std) move. This is the single most validated digital phenotyping signal from the keystroke dynamics literature.
+- **Minimum data:** 50+ flight times with positive skewness after outlier removal
+- **Table:** tb_motor_signals
+- **Citation:** Zulueta et al. 2018 (BiAffect); Luce 1986; Heathcote et al. 1991
+
+### exGaussianMu
+- **Capture:** `mean(flightTimes) - tau` (after outlier removal)
+- **Unit:** milliseconds
+- **Why:** The Gaussian mean: motor execution speed stripped of cognitive slowing. Pure motor baseline.
+- **Table:** tb_motor_signals
+
+### exGaussianSigma
+- **Capture:** `sqrt(variance(flightTimes) - tau^2)` (after outlier removal)
+- **Unit:** milliseconds
+- **Why:** The Gaussian standard deviation: motor noise stripped of cognitive slowing. Motor consistency independent of thinking pauses.
+- **Table:** tb_motor_signals
+
+### tauProportion
+- **Capture:** `tau / mean(flightTimes)`
+- **Unit:** ratio (0-1)
+- **Why:** What fraction of mean flight time is attributable to cognitive slowing vs. motor speed. High tau proportion (>0.5) means most of the inter-key delay is thinking, not moving. Low tau proportion means the delay is mostly motor execution.
+- **Table:** tb_motor_signals
+
+### adjacentHoldTimeCov
+- **Capture:** Pearson correlation between consecutive hold times: `corr(holdTime[0:n-1], holdTime[1:n])`
+- **Unit:** correlation coefficient (-1 to 1)
+- **Minimum data:** 30+ consecutive hold times
+- **Why:** Measures sequential motor coordination. Lateralized hold times (left/right hand) measure spatial asymmetry. This measures temporal coupling: does the duration of one keypress predict the next? In neuroQWERTY research, this covariance degrades before mean hold time shifts in Parkinson's. It is a leading indicator of motor coordination decline.
+- **Table:** tb_motor_signals
+- **Citation:** Giancardo et al. 2016 (neuroQWERTY); nQ Medical clinical validation
+
+---
+
 ## Signal Count
 
 | Category | Count |
@@ -863,8 +993,13 @@ Extracted from calibration (free-write) responses via Claude Sonnet. These are c
 | Calibration context | 7 dimensions |
 | Device/temporal | 3 |
 | Cursor behavior / writing process (Phase 1) | 17 |
+| Mouse/cursor trajectory (Phase 2) | 5 |
+| Precorrection / postcorrection (Phase 2) | 2 |
+| Revision distance (Phase 2) | 2 |
+| Punctuation key latency (Phase 2) | 2 |
 | Motor signals | 7 |
+| Motor signals: Phase 2 additions | 5 |
 | Extended semantic signals | 8 |
 | Process signals | 9 |
 | Cross-session signals | 10 |
-| **Total** | **~147 distinct signals** |
+| **Total** | **~163 distinct signals** |

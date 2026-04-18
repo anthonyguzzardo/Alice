@@ -1,7 +1,7 @@
 /**
  * Signal Family Taxonomy & Ablation Engine
  *
- * Groups ~100 individual signals into meaningful families, maps their
+ * Groups ~163 individual signals into meaningful families, maps their
  * downstream dependencies into the 8D state engine, and computes
  * ablation results: what happens when you remove one family, two families,
  * or run with only one family.
@@ -138,6 +138,49 @@ export const SIGNAL_FAMILIES: SignalFamily[] = [
     sessionFields: ['cognitiveDensity'],
     feedsDimensions: [],
     citation: 'Pennebaker 1997',
+  },
+
+  // ── Phase 2 observation-only families (added 2026-04-18) ──────────
+
+  {
+    id: 'cursor_trajectory',
+    label: 'Mouse/Cursor Trajectory',
+    description: 'Cursor movement during typing pauses (>2s). Total distance, fidget ratio (px/ms), stillness proportion, and drift-to-submit count. Captures cognitive load through involuntary motor behavior when writing stalls. Observation-only.',
+    sessionFields: ['cursorDistanceDuringPauses', 'cursorFidgetRatio', 'cursorStillnessDuringPauses', 'driftToSubmitCount', 'cursorPauseSampleCount'],
+    feedsDimensions: [],
+    citation: 'BioCatch (Unit 8200 cognitive biometrics)',
+  },
+  {
+    id: 'error_correction',
+    label: 'Error Correction',
+    description: 'Three-phase error correction model: detection (pause before delete), execution (IKI within deletion chains), and recovery (latency from last delete to next insert). Separates motor automaticity from cognitive re-planning after errors. Observation-only.',
+    sessionFields: ['deletionExecutionSpeedMean', 'postcorrectionLatencyMean'],
+    feedsDimensions: [],
+    citation: 'Springer 2021',
+  },
+  {
+    id: 'revision_distance',
+    label: 'Revision Distance',
+    description: 'How far back from the leading edge a writer reaches to revise. Mean and max revision distance in characters. Deep revisions (far from cursor) indicate restructuring; shallow revisions are surface corrections. Observation-only.',
+    sessionFields: ['meanRevisionDistance', 'maxRevisionDistance'],
+    feedsDimensions: [],
+    citation: 'Lindgren & Sullivan 2006 (ScriptLog)',
+  },
+  {
+    id: 'punctuation_latency',
+    label: 'Punctuation Latency',
+    description: 'Flight time before punctuation keys vs. letter keys. Punctuation requires syntactic planning (clause boundaries, sentence structure), so the ratio captures how much more cognitive load punctuation placement demands relative to word production. Observation-only.',
+    sessionFields: ['punctuationFlightMean', 'punctuationLetterRatio'],
+    feedsDimensions: [],
+    citation: 'Plank 2016 (COLING)',
+  },
+  {
+    id: 'motor_biometrics',
+    label: 'Motor Biometrics',
+    description: 'Ex-Gaussian decomposition of flight time distribution: mu (motor baseline speed), sigma (motor noise), tau (exponential tail, cognitive slowing). Tau proportion isolates the cognitive fraction of motor timing. Adjacent hold-time covariance captures fine motor coordination between consecutive keystrokes. Observation-only.',
+    sessionFields: ['exGaussianTau', 'exGaussianMu', 'exGaussianSigma', 'tauProportion', 'adjacentHoldTimeCov'],
+    feedsDimensions: [],
+    citation: 'Zulueta 2018 (BiAffect); Giancardo 2016 (neuroQWERTY)',
   },
 ];
 

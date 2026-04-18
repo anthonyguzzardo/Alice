@@ -97,7 +97,24 @@ export const GET: APIRoute = async ({ params }) => {
         first_person_density as firstPersonDensity,
         device_type as deviceType,
         hour_of_day as hourOfDay,
-        day_of_week as dayOfWeek
+        day_of_week as dayOfWeek,
+        confirmation_latency_ms as confirmationLatencyMs,
+        leading_edge_ratio as leadingEdgeRatio,
+        contextual_revision_count as contextualRevisionCount,
+        pre_contextual_revision_count as preContextualRevisionCount,
+        read_back_count as readBackCount,
+        considered_and_kept_count as consideredAndKeptCount,
+        cursor_distance_during_pauses as cursorDistanceDuringPauses,
+        cursor_fidget_ratio as cursorFidgetRatio,
+        cursor_stillness_during_pauses as cursorStillnessDuringPauses,
+        drift_to_submit_count as driftToSubmitCount,
+        cursor_pause_sample_count as cursorPauseSampleCount,
+        deletion_execution_speed_mean as deletionExecutionSpeedMean,
+        postcorrection_latency_mean as postcorrectionLatencyMean,
+        mean_revision_distance as meanRevisionDistance,
+        max_revision_distance as maxRevisionDistance,
+        punctuation_flight_mean as punctuationFlightMean,
+        punctuation_letter_ratio as punctuationLetterRatio
       FROM tb_session_summaries
       WHERE question_id = ?
     `).get(entryState.question_id) as any;

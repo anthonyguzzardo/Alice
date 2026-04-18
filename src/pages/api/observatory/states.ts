@@ -53,6 +53,31 @@ export const GET: APIRoute = async () => {
     const metaByQuestion = new Map<number, any>();
     for (const m of metaRows) metaByQuestion.set(m.question_id, m);
 
+    // Motor signals keyed by question_id (Phase 2 expansion)
+    const motorRows = db.prepare(`
+      SELECT
+         question_id
+        ,ex_gaussian_tau, ex_gaussian_mu, ex_gaussian_sigma
+        ,tau_proportion, adjacent_hold_time_cov
+        ,sample_entropy, motor_jerk, lapse_rate, tempo_drift
+      FROM tb_motor_signals
+    `).all() as any[];
+    const motorByQuestion = new Map<number, any>();
+    for (const m of motorRows) motorByQuestion.set(m.question_id, m);
+
+    // Phase 2 cursor/revision/punctuation signals keyed by question_id
+    const phase2Rows = db.prepare(`
+      SELECT
+         question_id
+        ,cursor_fidget_ratio, cursor_stillness_during_pauses
+        ,deletion_execution_speed_mean, postcorrection_latency_mean
+        ,mean_revision_distance, punctuation_letter_ratio
+      FROM tb_session_summaries
+      WHERE cursor_fidget_ratio IS NOT NULL OR punctuation_letter_ratio IS NOT NULL
+    `).all() as any[];
+    const phase2ByQuestion = new Map<number, any>();
+    for (const p of phase2Rows) phase2ByQuestion.set(p.question_id, p);
+
     // Replay availability: which question_ids have an event log
     const replayRows = db.prepare(`SELECT DISTINCT question_id FROM tb_session_events`).all() as Array<{ question_id: number }>;
     const replayAvailable = new Set(replayRows.map(r => r.question_id));
@@ -61,6 +86,8 @@ export const GET: APIRoute = async () => {
       ...s,
       semantic: semanticByResponse.get(s.response_id) ?? null,
       metadata: metaByQuestion.get(s.question_id) ?? null,
+      motor: motorByQuestion.get(s.question_id) ?? null,
+      phase2: phase2ByQuestion.get(s.question_id) ?? null,
       replayAvailable: replayAvailable.has(s.question_id),
     }));
 

@@ -155,7 +155,7 @@ const responseId = parseInt(id ?? '', 10);
           document.getElementById('entry-content').innerHTML = `<div class="empty">${data.error}</div>`;
           return;
         }
-        const { entryState, semanticState, sessionSummary, metadata, dynamicalSignals, replay, navigation } = data;
+        const { entryState, semanticState, sessionSummary, metadata, dynamicalSignals, motorSignals, replay, navigation } = data;
 
         const navRow = `
           <div class="nav-row">
@@ -274,7 +274,55 @@ const responseId = parseInt(id ?? '', 10);
           </section>
         ` : '';
 
+        const ms = motorSignals;
+        function tauRegime(tp) {
+          if (tp == null) return '';
+          if (tp > 0.7) return 'cognitive-dominant';
+          if (tp > 0.4) return 'mixed';
+          return 'motor-dominant';
+        }
+        const motorPanel = ms ? `
+          <section class="panel">
+            <h2>Motor signals · ex-Gaussian decomposition + motor coordination</h2>
+            <div class="stat-grid">
+              <div><div class="k">ex-Gaussian tau</div><div class="v">${ms.ex_gaussian_tau != null ? ms.ex_gaussian_tau.toFixed(1) + 'ms · ' + tauRegime(ms.tau_proportion) : '—'}</div></div>
+              <div><div class="k">ex-Gaussian mu</div><div class="v">${ms.ex_gaussian_mu != null ? ms.ex_gaussian_mu.toFixed(1) + 'ms' : '—'}</div></div>
+              <div><div class="k">ex-Gaussian sigma</div><div class="v">${ms.ex_gaussian_sigma != null ? ms.ex_gaussian_sigma.toFixed(1) + 'ms' : '—'}</div></div>
+              <div><div class="k">tau proportion</div><div class="v">${ms.tau_proportion != null ? (ms.tau_proportion * 100).toFixed(1) + '%' : '—'}</div></div>
+              <div><div class="k">adjacent hold-time cov</div><div class="v">${ms.adjacent_hold_time_cov != null ? ms.adjacent_hold_time_cov.toFixed(3) : '—'}</div></div>
+              <div><div class="k">sample entropy</div><div class="v">${ms.sample_entropy != null ? ms.sample_entropy.toFixed(3) : '—'}</div></div>
+              <div><div class="k">motor jerk</div><div class="v">${ms.motor_jerk != null ? ms.motor_jerk.toFixed(1) : '—'}</div></div>
+              <div><div class="k">lapse rate</div><div class="v">${ms.lapse_rate != null ? ms.lapse_rate.toFixed(2) + '/min' : '—'}</div></div>
+              <div><div class="k">tempo drift</div><div class="v">${ms.tempo_drift != null ? (ms.tempo_drift > 0 ? '+' : '') + ms.tempo_drift.toFixed(1) + ' ms/q' : '—'}</div></div>
+              <div><div class="k">compression ratio</div><div class="v">${ms.iki_compression_ratio != null ? ms.iki_compression_ratio.toFixed(3) : '—'}</div></div>
+            </div>
+          </section>
+        ` : '';
+
         const summary = sessionSummary;
+        const phase2Panel = summary ? `
+          <section class="panel">
+            <h2>Phase 2 signals · cursor, revision depth, punctuation, error correction</h2>
+            <div class="stat-grid">
+              <div><div class="k">cursor distance (pauses)</div><div class="v">${summary.cursorDistanceDuringPauses != null ? Math.round(summary.cursorDistanceDuringPauses) + ' px' : '—'}</div></div>
+              <div><div class="k">cursor fidget ratio</div><div class="v">${summary.cursorFidgetRatio != null ? summary.cursorFidgetRatio.toFixed(4) + ' px/ms' : '—'}</div></div>
+              <div><div class="k">cursor stillness</div><div class="v">${summary.cursorStillnessDuringPauses != null ? (summary.cursorStillnessDuringPauses * 100).toFixed(1) + '%' : '—'}</div></div>
+              <div><div class="k">drift to submit</div><div class="v">${summary.driftToSubmitCount ?? '—'}</div></div>
+              <div><div class="k">pause samples</div><div class="v">${summary.cursorPauseSampleCount ?? '—'}</div></div>
+              <div><div class="k">deletion exec speed</div><div class="v">${summary.deletionExecutionSpeedMean != null ? Math.round(summary.deletionExecutionSpeedMean) + 'ms' : '—'}</div></div>
+              <div><div class="k">postcorrection latency</div><div class="v">${summary.postcorrectionLatencyMean != null ? Math.round(summary.postcorrectionLatencyMean) + 'ms' : '—'}</div></div>
+              <div><div class="k">mean revision distance</div><div class="v">${summary.meanRevisionDistance != null ? Math.round(summary.meanRevisionDistance) + ' chars' : '—'}</div></div>
+              <div><div class="k">max revision distance</div><div class="v">${summary.maxRevisionDistance != null ? summary.maxRevisionDistance + ' chars' : '—'}</div></div>
+              <div><div class="k">punctuation flight mean</div><div class="v">${summary.punctuationFlightMean != null ? Math.round(summary.punctuationFlightMean) + 'ms' : '—'}</div></div>
+              <div><div class="k">punct / letter ratio</div><div class="v">${summary.punctuationLetterRatio != null ? summary.punctuationLetterRatio.toFixed(3) + 'x' : '—'}</div></div>
+              <div><div class="k">confirmation latency</div><div class="v">${summary.confirmationLatencyMs != null ? (summary.confirmationLatencyMs / 1000).toFixed(1) + 's' : '—'}</div></div>
+              <div><div class="k">leading edge ratio</div><div class="v">${summary.leadingEdgeRatio != null ? (summary.leadingEdgeRatio * 100).toFixed(1) + '%' : '—'}</div></div>
+              <div><div class="k">contextual / pre-contextual revisions</div><div class="v">${summary.contextualRevisionCount ?? '—'} / ${summary.preContextualRevisionCount ?? '—'}</div></div>
+              <div><div class="k">read-back / considered-and-kept</div><div class="v">${summary.readBackCount ?? '—'} / ${summary.consideredAndKeptCount ?? '—'}</div></div>
+            </div>
+          </section>
+        ` : '';
+
         const summaryPanel = summary ? `
           <section class="panel">
             <h2>Session summary · keystroke + linguistic substrate</h2>
@@ -304,7 +352,7 @@ const responseId = parseInt(id ?? '', 10);
         ` : '';
 
         document.getElementById('entry-content').innerHTML =
-          questionBox + navRow + radars + metadataPanel + dynamicalPanel + summaryPanel;
+          questionBox + navRow + radars + metadataPanel + dynamicalPanel + motorPanel + phase2Panel + summaryPanel;
 
         // Draw radars after DOM is in place
         const behCanvas = document.getElementById('radar-beh');

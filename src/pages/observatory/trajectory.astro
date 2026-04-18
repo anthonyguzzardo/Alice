@@ -126,9 +126,37 @@ import '../../styles/observatory.css';
         { key: 'nrc_anticipation', label: 'Anticipation', color: 'var(--warn)' },
       ];
 
+      const MOTOR_DIMS = [
+        { key: 'ex_gaussian_tau', label: 'Ex-Gaussian tau', color: 'var(--accent)', unit: 'ms' },
+        { key: 'tau_proportion', label: 'Tau proportion', color: 'var(--accent)', unit: '%' },
+        { key: 'adjacent_hold_time_cov', label: 'Adjacent hold cov', color: 'var(--accent)', unit: '' },
+        { key: 'sample_entropy', label: 'Sample entropy', color: 'var(--accent)', unit: '' },
+        { key: 'lapse_rate', label: 'Lapse rate', color: 'var(--negative)', unit: '/min' },
+        { key: 'tempo_drift', label: 'Tempo drift', color: 'var(--warn)', unit: 'ms/q' },
+      ];
+
+      const PHASE2_DIMS = [
+        { key: 'cursor_fidget_ratio', label: 'Cursor fidget', color: 'var(--semantic)', unit: 'px/ms' },
+        { key: 'cursor_stillness_during_pauses', label: 'Cursor stillness', color: 'var(--semantic)', unit: '%' },
+        { key: 'deletion_execution_speed_mean', label: 'Deletion exec speed', color: 'var(--warn)', unit: 'ms' },
+        { key: 'postcorrection_latency_mean', label: 'Postcorrection latency', color: 'var(--warn)', unit: 'ms' },
+        { key: 'punctuation_letter_ratio', label: 'Punct/letter ratio', color: 'var(--semantic)', unit: 'x' },
+      ];
+
       function fmtZ(v) {
         if (v == null) return '—';
         return (v >= 0 ? '+' : '') + Number(v).toFixed(2) + 'σ';
+      }
+
+      function fmtRaw(v, unit) {
+        if (v == null) return '—';
+        if (unit === '%') return (v * 100).toFixed(1) + '%';
+        if (unit === 'ms') return Math.round(v) + 'ms';
+        if (unit === '/min') return v.toFixed(2) + '/min';
+        if (unit === 'ms/q') return (v > 0 ? '+' : '') + v.toFixed(1) + 'ms/q';
+        if (unit === 'px/ms') return v.toFixed(4);
+        if (unit === 'x') return v.toFixed(3) + 'x';
+        return Number(v).toFixed(3);
       }
 
       function resolveCssVar(el, v) {
@@ -274,6 +302,23 @@ import '../../styles/observatory.css';
         return html;
       }
 
+      function renderRawSection(label, dims, states, getVal) {
+        let html = `<div class="section-label">${label}</div><div class="chart-row">`;
+        for (const dim of dims) {
+          const values = states.map(s => getVal(s, dim.key));
+          const latest = values[values.length - 1];
+          html += `
+            <div class="chart-panel">
+              <h3>${dim.label}</h3>
+              <canvas class="trajectory-chart raw-chart" data-dim="${dim.key}" data-color="${dim.color}"></canvas>
+              <div class="latest-reading">latest: <span class="val">${fmtRaw(latest, dim.unit)}</span></div>
+            </div>
+          `;
+        }
+        html += '</div>';
+        return html;
+      }
+
       fetch('/api/observatory/states').then(r => r.json()).then(data => {
         if (data.error) {
           document.getElementById('trajectory-content').innerHTML = `<div class="empty">${data.error}</div>`;
@@ -334,6 +379,28 @@ import '../../styles/observatory.css';
           </div>
         `;
 
+        // Motor signals trajectory (Phase 2)
+        const hasMotor = states.some(s => s.motor != null);
+        if (hasMotor) {
+          html += renderRawSection(
+            'Motor signals · ex-Gaussian + rhythm + fatigue',
+            MOTOR_DIMS,
+            states,
+            (s, key) => s.motor?.[key] ?? null
+          );
+        }
+
+        // Phase 2 cursor/revision/punctuation trajectory
+        const hasPhase2 = states.some(s => s.phase2 != null);
+        if (hasPhase2) {
+          html += renderRawSection(
+            'Phase 2 · cursor, error correction, punctuation',
+            PHASE2_DIMS,
+            states,
+            (s, key) => s.phase2?.[key] ?? null
+          );
+        }
+
         document.getElementById('trajectory-content').innerHTML = html;
 
         // Draw all charts
@@ -350,6 +417,99 @@ import '../../styles/observatory.css';
         if (hasSemantic) {
           allValues['sem_convergence'] = { values: semConv, color: 'var(--semantic)' };
         }
+        if (hasMotor) {
+          for (const dim of MOTOR_DIMS) {
+            allValues[dim.key] = { values: states.map(s => s.motor?.[dim.key] ?? null), color: dim.color };
+          }
+        }
+        if (hasPhase2) {
+          for (const dim of PHASE2_DIMS) {
+            allValues[dim.key] = { values: states.map(s => s.phase2?.[dim.key] ?? null), color: dim.color };
+          }
+        }
+
+        function drawRawChart(canvas, values, color, dates) {
+          const dpr = window.devicePixelRatio || 1;
+          const rect = canvas.getBoundingClientRect();
+          const w = rect.width, h = rect.height;
+          canvas.width = w * dpr;
+          canvas.height = h * dpr;
+          canvas.style.width = w + 'px';
+          canvas.style.height = h + 'px';
+          const ctx = canvas.getContext('2d');
+          ctx.scale(dpr, dpr);
+
+          const colBorder = resolveCssVar(canvas, 'var(--border)');
+          const colFaint = resolveCssVar(canvas, 'var(--text-faint)');
+          const colLine = resolveCssVar(canvas, color);
+
+          const padL = 40, padR = 8, padT = 8, padB = 20;
+          const chartW = w - padL - padR, chartH = h - padT - padB;
+
+          const valid = values.filter(v => v != null);
+          if (valid.length === 0) return;
+          const minV = Math.min(...valid), maxV = Math.max(...valid);
+          const range = maxV - minV || 1;
+          const yMin = minV - range * 0.1, yMax = maxV + range * 0.1;
+          const yRange = yMax - yMin;
+
+          // Mean reference line
+          const meanV = valid.reduce((a,b) => a+b, 0) / valid.length;
+          const meanY = padT + chartH * (1 - (meanV - yMin) / yRange);
+          ctx.strokeStyle = colBorder;
+          ctx.lineWidth = 0.5;
+          ctx.setLineDash([3, 3]);
+          ctx.beginPath();
+          ctx.moveTo(padL, meanY);
+          ctx.lineTo(padL + chartW, meanY);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          // Y-axis labels
+          ctx.fillStyle = colFaint;
+          ctx.font = '9px SF Mono, Menlo, monospace';
+          ctx.textAlign = 'right';
+          ctx.textBaseline = 'middle';
+          const fmt = (v) => Math.abs(v) >= 100 ? Math.round(v) : v.toFixed(1);
+          ctx.fillText(fmt(yMax), padL - 4, padT);
+          ctx.fillText(fmt(yMin), padL - 4, padT + chartH);
+
+          // Plot
+          const pts = [];
+          for (let i = 0; i < values.length; i++) {
+            if (values[i] != null) {
+              const x = padL + (values.length === 1 ? chartW / 2 : (i / (values.length - 1)) * chartW);
+              const y = padT + chartH * (1 - (values[i] - yMin) / yRange);
+              pts.push({ x, y });
+            }
+          }
+          if (pts.length === 1) {
+            ctx.beginPath(); ctx.arc(pts[0].x, pts[0].y, 3, 0, Math.PI * 2);
+            ctx.fillStyle = colLine; ctx.fill(); return;
+          }
+          if (pts.length < 2) return;
+
+          ctx.strokeStyle = colLine; ctx.lineWidth = 1.5; ctx.lineJoin = 'round';
+          ctx.beginPath();
+          for (let i = 0; i < pts.length; i++) {
+            if (i === 0) ctx.moveTo(pts[i].x, pts[i].y);
+            else ctx.lineTo(pts[i].x, pts[i].y);
+          }
+          ctx.stroke();
+          for (const p of pts) {
+            ctx.beginPath(); ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
+            ctx.fillStyle = colLine; ctx.fill();
+          }
+          if (dates.length > 0) {
+            ctx.fillStyle = colFaint; ctx.font = '9px SF Mono, Menlo, monospace';
+            ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+            ctx.fillText(dates[0], padL, padT + chartH + 4);
+            if (dates.length > 1) {
+              ctx.textAlign = 'right';
+              ctx.fillText(dates[dates.length - 1], padL + chartW, padT + chartH + 4);
+            }
+          }
+        }
 
         function drawAll() {
           document.querySelectorAll('.trajectory-chart').forEach(canvas => {
@@ -357,7 +517,11 @@ import '../../styles/observatory.css';
             const color = canvas.dataset.color;
             const entry = allValues[dim];
             if (entry) {
-              drawChart(canvas, entry.values, color, dates);
+              if (canvas.classList.contains('raw-chart')) {
+                drawRawChart(canvas, entry.values, color, dates);
+              } else {
+                drawChart(canvas, entry.values, color, dates);
+              }
             }
           });
         }
