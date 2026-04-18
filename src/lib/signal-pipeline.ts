@@ -113,6 +113,11 @@ export function computeAndPersistDerivedSignals(questionId: number): void {
         tempo_drift: ms.tempoDrift,
         iki_compression_ratio: ms.ikiCompressionRatio,
         digraph_latency_json: ms.digraphLatencyProfile ? JSON.stringify(ms.digraphLatencyProfile) : null,
+        ex_gaussian_tau: ms.exGaussianTau,
+        ex_gaussian_mu: ms.exGaussianMu,
+        ex_gaussian_sigma: ms.exGaussianSigma,
+        tau_proportion: ms.tauProportion,
+        adjacent_hold_time_cov: ms.adjacentHoldTimeCov,
       });
     } catch (err) {
       logError('signal-pipeline.motor', err, { questionId });

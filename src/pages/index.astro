@@ -859,6 +859,67 @@
           const errorDetectionLatencies: number[] = [];
           let lastNonDeleteKeystrokeTime: number | null = null;
 
+          // Mouse/cursor trajectory during pauses (BioCatch cognitive biometrics)
+          // Captures motor restlessness, absorption, and drift-to-submit behavior
+          // during cognitive pauses (>2s since last input, aligns with P-burst threshold).
+          const mousePauseSamples: Array<{x: number; y: number}> = [];
+          let currentMouseX = 0;
+          let currentMouseY = 0;
+          let lastMouseSampleX = 0;
+          let lastMouseSampleY = 0;
+          let cursorTotalDistance = 0;
+          let cursorStillSamples = 0;
+          let driftToSubmitCount = 0;
+          let lastWasInSubmit = false;
+
+          document.addEventListener('mousemove', (e: MouseEvent) => {
+            currentMouseX = e.clientX;
+            currentMouseY = e.clientY;
+          });
+
+          const mouseTrackingInterval = window.setInterval(() => {
+            if (!firstKeystrokeSent || !lastInputTime) return;
+            if ((Date.now() - lastInputTime) < 2000) return;
+            // In a pause: sample cursor position
+            const dx = currentMouseX - lastMouseSampleX;
+            const dy = currentMouseY - lastMouseSampleY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            cursorTotalDistance += dist;
+            if (dist < 5) cursorStillSamples++;
+            mousePauseSamples.push({ x: currentMouseX, y: currentMouseY });
+            lastMouseSampleX = currentMouseX;
+            lastMouseSampleY = currentMouseY;
+            // Drift-to-submit detection
+            const btnRect = submitBtn.getBoundingClientRect();
+            const inSubmit = currentMouseX >= btnRect.left && currentMouseX <= btnRect.right
+              && currentMouseY >= btnRect.top && currentMouseY <= btnRect.bottom;
+            if (inSubmit && !lastWasInSubmit) driftToSubmitCount++;
+            lastWasInSubmit = inSubmit;
+          }, 200);
+
+          // Precorrection/postcorrection latency (Lindgren; Springer 2021)
+          // Phase 2: IKIs within deletion chains (execution speed)
+          // Phase 3: time from last deletion to next insertion (re-orientation)
+          const deletionExecutionIKIs: number[] = [];
+          const postcorrectionLatencies: number[] = [];
+          let lastDeletionKeystrokeTime: number | null = null;
+          let awaitingPostcorrection = false;
+          let deletionChainEndTime: number | null = null;
+
+          // Revision distance (ScriptLog, Lindgren & Sullivan 2006)
+          // How far back from the leading edge each contextual revision targets
+          const revisionDistances: number[] = [];
+
+          // Punctuation key latency (clinical keystroke research; Plank 2016 COLING)
+          // Punctuation requires syntactic decision-making, distinct from letter production
+          const punctuationFlightTimes: number[] = [];
+          const letterFlightTimes: number[] = [];
+          const PUNCTUATION_CODES = new Set([
+            'Period', 'Comma', 'Slash', 'Quote', 'Semicolon',
+            'BracketLeft', 'BracketRight', 'Minus', 'Equal',
+            'Backquote', 'Backslash',
+          ]);
+
           // Enriched: session metadata (Czerwinski et al. 2004)
           // Scroll-back and re-read behavior correlate with engagement depth
           let scrollBackCount = 0;
@@ -945,6 +1006,12 @@
                 const ft = now - lastKeyupTime;
                 if (ft > 0 && ft < 5000) {
                   flightTimes.push(ft);
+                  // Punctuation vs letter flight time segregation (Plank 2016)
+                  if (PUNCTUATION_CODES.has(e.code)) {
+                    punctuationFlightTimes.push(ft);
+                  } else if (e.code.startsWith('Key')) {
+                    letterFlightTimes.push(ft);
+                  }
                 } else if (ft < 0) {
                   // Negative flight time = key rollover (next key pressed before
                   // previous released). Signature of motor automaticity.
@@ -970,6 +1037,10 @@
             if (e.key === 'Backspace' || e.key === 'Delete') {
               if (lastDeletionTime !== null && (now - lastDeletionTime) < 500) {
                 currentRevisionChainLength++;
+                // Deletion execution IKI: time between consecutive deletions
+                // within a chain (Springer 2021: phase 2 of error correction)
+                const delIKI = now - lastDeletionTime;
+                if (delIKI > 0 && delIKI < 2000) deletionExecutionIKIs.push(delIKI);
               } else {
                 if (currentRevisionChainLength > 0) {
                   revisionChains.push(currentRevisionChainLength);
@@ -977,6 +1048,8 @@
                 currentRevisionChainLength = 1;
               }
               lastDeletionTime = now;
+              lastDeletionKeystrokeTime = now;
+              awaitingPostcorrection = true;
 
               // Error detection latency: time from last non-delete keystroke
               // to this backspace (Haag et al. 2020 fatigue marker)
@@ -986,8 +1059,12 @@
               }
 
               // Contextual vs pre-contextual revision (Lindgren & Sullivan 2006)
-              if (textarea.selectionStart < textarea.value.length - 1) {
+              const isContextual = textarea.selectionStart < textarea.value.length - 1;
+              if (isContextual) {
                 contextualRevisionCount++;
+                // Revision distance: how far back from leading edge (ScriptLog)
+                const dist = textarea.value.length - textarea.selectionStart;
+                if (dist > 0) revisionDistances.push(dist);
               } else {
                 preContextualRevisionCount++;
               }
@@ -1053,6 +1130,14 @@
 
             if (delta > 0) {
               totalCharsTyped += delta;
+
+              // Postcorrection re-orientation latency (Springer 2021: phase 3)
+              // Time from last deletion keystroke to first insertion after correction
+              if (awaitingPostcorrection && lastDeletionKeystrokeTime !== null) {
+                const pcl = now - lastDeletionKeystrokeTime;
+                if (pcl > 0 && pcl < 10000) postcorrectionLatencies.push(pcl);
+                awaitingPostcorrection = false;
+              }
 
               // P-burst tracking: 2s gap = new burst
               if (lastInputTime !== null && (now - lastInputTime) > 2000) {
@@ -1307,6 +1392,41 @@
               terminalVelocity = tailMean / ikiMean;
             }
 
+            // Derived: mouse/cursor trajectory (BioCatch cognitive biometrics)
+            clearInterval(mouseTrackingInterval);
+            const totalMouseSamples = mousePauseSamples.length;
+            const cursorFidgetRatio = activeTypingMs > 0
+              ? cursorTotalDistance / activeTypingMs : null;
+            const cursorStillnessDuringPauses = totalMouseSamples > 0
+              ? cursorStillSamples / totalMouseSamples : null;
+
+            // Derived: deletion execution speed (Springer 2021, phase 2)
+            const delExecCount = deletionExecutionIKIs.length;
+            const deletionExecutionSpeedMean = delExecCount > 0
+              ? deletionExecutionIKIs.reduce((a, b) => a + b, 0) / delExecCount : null;
+
+            // Derived: postcorrection re-orientation latency (phase 3)
+            const pcCount = postcorrectionLatencies.length;
+            const postcorrectionLatencyMean = pcCount > 0
+              ? postcorrectionLatencies.reduce((a, b) => a + b, 0) / pcCount : null;
+
+            // Derived: revision distance stats (ScriptLog, Lindgren & Sullivan 2006)
+            const revDistCount = revisionDistances.length;
+            const meanRevisionDistance = revDistCount > 0
+              ? revisionDistances.reduce((a, b) => a + b, 0) / revDistCount : null;
+            const maxRevisionDistance = revDistCount > 0
+              ? Math.max(...revisionDistances) : null;
+
+            // Derived: punctuation key latency (clinical keystroke research)
+            const punctFtCount = punctuationFlightTimes.length;
+            const punctuationFlightMean = punctFtCount > 0
+              ? punctuationFlightTimes.reduce((a, b) => a + b, 0) / punctFtCount : null;
+            const letterFtCount = letterFlightTimes.length;
+            const letterFlightMean = letterFtCount > 0
+              ? letterFlightTimes.reduce((a, b) => a + b, 0) / letterFtCount : null;
+            const punctuationLetterRatio = (punctuationFlightMean != null && letterFlightMean != null && letterFlightMean > 0)
+              ? punctuationFlightMean / letterFlightMean : null;
+
             const sessionSummary = {
               questionId,
               firstKeystrokeMs,
@@ -1368,6 +1488,21 @@
               ikiKurtosis,
               errorDetectionLatencyMean,
               terminalVelocity,
+              // Mouse/cursor trajectory (BioCatch cognitive biometrics)
+              cursorDistanceDuringPauses: cursorTotalDistance,
+              cursorFidgetRatio,
+              cursorStillnessDuringPauses,
+              driftToSubmitCount,
+              cursorPauseSampleCount: totalMouseSamples,
+              // Precorrection/postcorrection latency (Springer 2021)
+              deletionExecutionSpeedMean,
+              postcorrectionLatencyMean,
+              // Revision distance (ScriptLog, Lindgren & Sullivan 2006)
+              meanRevisionDistance,
+              maxRevisionDistance,
+              // Punctuation key latency (Plank 2016 COLING)
+              punctuationFlightMean,
+              punctuationLetterRatio,
               // Slice-3 follow-up: deletion events with ms-offset for
               // deletion-density curve classification.
               deletionEvents: deletionTimestamps.map(d => ({
@@ -1583,6 +1718,48 @@
         const calErrorDetectionLatencies: number[] = [];
         let calLastNonDeleteKeystrokeTime: number | null = null;
 
+        // Phase 2 expansion: mouse, precorrection/postcorrection, revision distance, punctuation
+        const calMousePauseSamples: Array<{x: number; y: number}> = [];
+        let calCurrentMouseX = 0;
+        let calCurrentMouseY = 0;
+        let calLastMouseSampleX = 0;
+        let calLastMouseSampleY = 0;
+        let calCursorTotalDistance = 0;
+        let calCursorStillSamples = 0;
+        let calDriftToSubmitCount = 0;
+        let calLastWasInSubmit = false;
+
+        document.addEventListener('mousemove', (e: MouseEvent) => {
+          calCurrentMouseX = e.clientX;
+          calCurrentMouseY = e.clientY;
+        });
+
+        const calMouseTrackingInterval = window.setInterval(() => {
+          if (!firstKeystrokeSent || !lastInputTime) return;
+          if ((Date.now() - lastInputTime) < 2000) return;
+          const dx = calCurrentMouseX - calLastMouseSampleX;
+          const dy = calCurrentMouseY - calLastMouseSampleY;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          calCursorTotalDistance += dist;
+          if (dist < 5) calCursorStillSamples++;
+          calMousePauseSamples.push({ x: calCurrentMouseX, y: calCurrentMouseY });
+          calLastMouseSampleX = calCurrentMouseX;
+          calLastMouseSampleY = calCurrentMouseY;
+          const btnRect = submitBtn.getBoundingClientRect();
+          const inSubmit = calCurrentMouseX >= btnRect.left && calCurrentMouseX <= btnRect.right
+            && calCurrentMouseY >= btnRect.top && calCurrentMouseY <= btnRect.bottom;
+          if (inSubmit && !calLastWasInSubmit) calDriftToSubmitCount++;
+          calLastWasInSubmit = inSubmit;
+        }, 200);
+
+        const calDeletionExecutionIKIs: number[] = [];
+        const calPostcorrectionLatencies: number[] = [];
+        let calLastDeletionKeystrokeTime: number | null = null;
+        let calAwaitingPostcorrection = false;
+        const calRevisionDistances: number[] = [];
+        const calPunctuationFlightTimes: number[] = [];
+        const calLetterFlightTimes: number[] = [];
+
         textarea.addEventListener('scroll', () => {
           if (textarea.scrollTop < calLastScrollTop && calLastScrollTop > 0) {
             calScrollBackCount++;
@@ -1637,6 +1814,11 @@
               const ft = now - calLastKeyupTime;
               if (ft > 0 && ft < 5000) {
                 calFlightTimes.push(ft);
+                if (PUNCTUATION_CODES.has(e.code)) {
+                  calPunctuationFlightTimes.push(ft);
+                } else if (e.code.startsWith('Key')) {
+                  calLetterFlightTimes.push(ft);
+                }
               } else if (ft < 0) {
                 calNegativeFlightTimeCount++;
               }
@@ -1656,19 +1838,26 @@
           if (e.key === 'Backspace' || e.key === 'Delete') {
             if (calLastDeletionTime !== null && (now - calLastDeletionTime) < 500) {
               calCurrentRevChainLength++;
+              const delIKI = now - calLastDeletionTime;
+              if (delIKI > 0 && delIKI < 2000) calDeletionExecutionIKIs.push(delIKI);
             } else {
               if (calCurrentRevChainLength > 0) calRevisionChains.push(calCurrentRevChainLength);
               calCurrentRevChainLength = 1;
             }
             calLastDeletionTime = now;
+            calLastDeletionKeystrokeTime = now;
+            calAwaitingPostcorrection = true;
 
             if (calLastNonDeleteKeystrokeTime !== null) {
               const edl = now - calLastNonDeleteKeystrokeTime;
               if (edl > 0 && edl < 5000) calErrorDetectionLatencies.push(edl);
             }
 
-            if (textarea.selectionStart < textarea.value.length - 1) {
+            const calIsContextual = textarea.selectionStart < textarea.value.length - 1;
+            if (calIsContextual) {
               calContextualRevisionCount++;
+              const dist = textarea.value.length - textarea.selectionStart;
+              if (dist > 0) calRevisionDistances.push(dist);
             } else {
               calPreContextualRevisionCount++;
             }
@@ -1721,6 +1910,13 @@
 
           if (delta > 0) {
             totalCharsTyped += delta;
+
+            // Postcorrection re-orientation latency (Springer 2021: phase 3)
+            if (calAwaitingPostcorrection && calLastDeletionKeystrokeTime !== null) {
+              const pcl = now - calLastDeletionKeystrokeTime;
+              if (pcl > 0 && pcl < 10000) calPostcorrectionLatencies.push(pcl);
+              calAwaitingPostcorrection = false;
+            }
 
             // P-burst tracking: 2s gap = new burst
             if (lastInputTime !== null && (now - lastInputTime) > 2000) {
@@ -1905,6 +2101,41 @@
             calTerminalVelocity = tailMean / calIkiMean;
           }
 
+          // Phase 2: mouse/cursor trajectory
+          clearInterval(calMouseTrackingInterval);
+          const calTotalMouseSamples = calMousePauseSamples.length;
+          const calCursorFidgetRatio = activeTypingMs > 0
+            ? calCursorTotalDistance / activeTypingMs : null;
+          const calCursorStillnessDuringPauses = calTotalMouseSamples > 0
+            ? calCursorStillSamples / calTotalMouseSamples : null;
+
+          // Phase 2: deletion execution speed
+          const calDelExecCount = calDeletionExecutionIKIs.length;
+          const calDeletionExecutionSpeedMean = calDelExecCount > 0
+            ? calDeletionExecutionIKIs.reduce((a, b) => a + b, 0) / calDelExecCount : null;
+
+          // Phase 2: postcorrection latency
+          const calPcCount = calPostcorrectionLatencies.length;
+          const calPostcorrectionLatencyMean = calPcCount > 0
+            ? calPostcorrectionLatencies.reduce((a, b) => a + b, 0) / calPcCount : null;
+
+          // Phase 2: revision distance
+          const calRevDistCount = calRevisionDistances.length;
+          const calMeanRevisionDistance = calRevDistCount > 0
+            ? calRevisionDistances.reduce((a, b) => a + b, 0) / calRevDistCount : null;
+          const calMaxRevisionDistance = calRevDistCount > 0
+            ? Math.max(...calRevisionDistances) : null;
+
+          // Phase 2: punctuation key latency
+          const calPunctFtCount = calPunctuationFlightTimes.length;
+          const calPunctuationFlightMean = calPunctFtCount > 0
+            ? calPunctuationFlightTimes.reduce((a, b) => a + b, 0) / calPunctFtCount : null;
+          const calLetterFtCount = calLetterFlightTimes.length;
+          const calLetterFlightMean = calLetterFtCount > 0
+            ? calLetterFlightTimes.reduce((a, b) => a + b, 0) / calLetterFtCount : null;
+          const calPunctuationLetterRatio = (calPunctuationFlightMean != null && calLetterFlightMean != null && calLetterFlightMean > 0)
+            ? calPunctuationFlightMean / calLetterFlightMean : null;
+
           const sessionSummary = {
             firstKeystrokeMs,
             totalDurationMs,
@@ -1962,6 +2193,18 @@
             ikiKurtosis: calIkiKurtosis,
             errorDetectionLatencyMean: calErrorDetectionLatencyMean,
             terminalVelocity: calTerminalVelocity,
+            // Phase 2 expansion
+            cursorDistanceDuringPauses: calCursorTotalDistance,
+            cursorFidgetRatio: calCursorFidgetRatio,
+            cursorStillnessDuringPauses: calCursorStillnessDuringPauses,
+            driftToSubmitCount: calDriftToSubmitCount,
+            cursorPauseSampleCount: calTotalMouseSamples,
+            deletionExecutionSpeedMean: calDeletionExecutionSpeedMean,
+            postcorrectionLatencyMean: calPostcorrectionLatencyMean,
+            meanRevisionDistance: calMeanRevisionDistance,
+            maxRevisionDistance: calMaxRevisionDistance,
+            punctuationFlightMean: calPunctuationFlightMean,
+            punctuationLetterRatio: calPunctuationLetterRatio,
             // Read-only playback substrate (text snapshots over time)
             eventLog: calEventLog,
             // Raw keystroke stream for dynamical signal analysis

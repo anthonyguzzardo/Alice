@@ -30,6 +30,12 @@ export interface MotorSignals {
   tempoDrift: number | null;
   ikiCompressionRatio: number | null;
   digraphLatencyProfile: Record<string, number> | null;
+  // Phase 2 expansion (2026-04-18)
+  exGaussianTau: number | null;
+  exGaussianMu: number | null;
+  exGaussianSigma: number | null;
+  tauProportion: number | null;
+  adjacentHoldTimeCov: number | null;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────
@@ -226,6 +232,97 @@ function digraphLatencyProfile(stream: KeystrokeEvent[]): Record<string, number>
   return profile;
 }
 
+// ─── Ex-Gaussian Tau (BiAffect / Zulueta 2018) ────────────────────
+// Decomposes flight time distribution into Gaussian (motor speed) and
+// exponential tail (cognitive slowing). Method of moments fitting.
+// Tau shifts predict mood episodes before summary statistics move.
+
+function exGaussianFit(flightTimes: number[]): {
+  tau: number | null;
+  mu: number | null;
+  sigma: number | null;
+  tauProportion: number | null;
+} {
+  if (flightTimes.length < 50) return { tau: null, mu: null, sigma: null, tauProportion: null };
+
+  // Remove extreme outliers before fitting (BiAffect approach):
+  // cap at Q3 + 3*IQR to prevent heavy tails from breaking method of moments.
+  const sorted = [...flightTimes].sort((a, b) => a - b);
+  const q1 = sorted[Math.floor(sorted.length * 0.25)];
+  const q3 = sorted[Math.floor(sorted.length * 0.75)];
+  const iqr = q3 - q1;
+  const cap = q3 + 3 * iqr;
+  const filtered = flightTimes.filter(v => v <= cap);
+  if (filtered.length < 50) return { tau: null, mu: null, sigma: null, tauProportion: null };
+
+  const m = mean(filtered);
+  const s = std(filtered, m);
+  if (s <= 0) return { tau: null, mu: null, sigma: null, tauProportion: null };
+
+  // Skewness (third standardized moment)
+  const n = filtered.length;
+  let m3 = 0;
+  for (const v of filtered) {
+    const d = (v - m) / s;
+    m3 += d * d * d;
+  }
+  const skew = m3 / n;
+
+  // Ex-Gaussian only valid for positively skewed distributions
+  if (skew <= 0) return { tau: null, mu: null, sigma: null, tauProportion: null };
+
+  // Method of moments: tau = std * (skewness/2)^(1/3)
+  const tau = s * Math.cbrt(skew / 2);
+  const variance = s * s;
+  const tauSq = tau * tau;
+
+  // Gaussian variance = total variance - tau^2
+  const gaussianVar = variance - tauSq;
+  if (gaussianVar <= 0) return { tau: null, mu: null, sigma: null, tauProportion: null };
+
+  const sigma = Math.sqrt(gaussianVar);
+  const mu = m - tau;
+
+  // Sanity: mu should be positive for flight times
+  if (mu <= 0) return { tau: null, mu: null, sigma: null, tauProportion: null };
+
+  const tauProportion = m > 0 ? tau / m : null;
+
+  return { tau, mu, sigma, tauProportion };
+}
+
+// ─── Adjacent Hold-Time Covariance (neuroQWERTY, Giancardo 2016) ───
+// Pearson correlation between consecutive hold times. Motor coordination
+// signal that degrades before mean hold time shifts in Parkinson's.
+
+function adjacentHoldTimeCov(stream: KeystrokeEvent[]): number | null {
+  // Extract hold times in sequence
+  const holdTimes: number[] = [];
+  for (const evt of stream) {
+    const ht = evt.u - evt.d;
+    if (ht > 0 && ht < 2000) holdTimes.push(ht);
+  }
+  if (holdTimes.length < 30) return null;
+
+  const x = holdTimes.slice(0, -1);
+  const y = holdTimes.slice(1);
+  const n = x.length;
+
+  const mx = mean(x);
+  const my = mean(y);
+  const sx = std(x, mx);
+  const sy = std(y, my);
+
+  if (sx === 0 || sy === 0) return null;
+
+  let cov = 0;
+  for (let i = 0; i < n; i++) {
+    cov += (x[i] - mx) * (y[i] - my);
+  }
+
+  return cov / (n * sx * sy);
+}
+
 // ─── Public API ─────────────────────────────────────────────────────
 
 export function computeMotorSignals(
@@ -233,6 +330,14 @@ export function computeMotorSignals(
   totalDurationMs: number,
 ): MotorSignals {
   const ikis = extractIKI(stream);
+
+  // Extract flight times for ex-Gaussian fitting
+  const flightTimesArr: number[] = [];
+  for (let i = 1; i < stream.length; i++) {
+    const ft = stream[i].d - stream[i - 1].u;
+    if (ft > 0 && ft < 5000) flightTimesArr.push(ft);
+  }
+  const exg = exGaussianFit(flightTimesArr);
 
   return {
     sampleEntropy: sampleEntropy(ikis),
@@ -242,5 +347,10 @@ export function computeMotorSignals(
     tempoDrift: tempoDrift(ikis),
     ikiCompressionRatio: ikiCompressionRatio(ikis),
     digraphLatencyProfile: digraphLatencyProfile(stream),
+    exGaussianTau: exg.tau,
+    exGaussianMu: exg.mu,
+    exGaussianSigma: exg.sigma,
+    tauProportion: exg.tauProportion,
+    adjacentHoldTimeCov: adjacentHoldTimeCov(stream),
   };
 }

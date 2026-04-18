@@ -372,6 +372,21 @@ db.exec(`
     ,iki_kurtosis               REAL             -- IKI distribution tail heaviness
     ,error_detection_latency_mean REAL           -- char-to-backspace interval (Haag et al. 2020 fatigue)
     ,terminal_velocity          REAL             -- final 10% IKI / session mean (finish-line behavior)
+    -- MOUSE/CURSOR TRAJECTORY (BioCatch cognitive biometrics, Phase 2 expansion 2026-04-18)
+    ,cursor_distance_during_pauses REAL          -- total mouse distance (px) during >2s pauses
+    ,cursor_fidget_ratio        REAL             -- cursorDistance / activeTypingMs (restlessness)
+    ,cursor_stillness_during_pauses REAL          -- proportion of pause samples with <5px movement
+    ,drift_to_submit_count      INTEGER          -- times cursor entered submit button during pause
+    ,cursor_pause_sample_count  INTEGER          -- total 200ms samples taken during pauses
+    -- PRECORRECTION/POSTCORRECTION LATENCY (Springer 2021; Lindgren & Sullivan 2006)
+    ,deletion_execution_speed_mean REAL           -- mean IKI within deletion chains (phase 2)
+    ,postcorrection_latency_mean REAL             -- mean ms from last delete to next insert (phase 3)
+    -- REVISION DISTANCE (ScriptLog, Lindgren & Sullivan 2006)
+    ,mean_revision_distance     REAL             -- mean chars from leading edge per contextual revision
+    ,max_revision_distance      INTEGER          -- deepest revision in session
+    -- PUNCTUATION KEY LATENCY (clinical keystroke research; Plank 2016 COLING)
+    ,punctuation_flight_mean    REAL             -- mean flight time before punctuation keys
+    ,punctuation_letter_ratio   REAL             -- punctuation flight / letter flight (syntactic cost)
     -- CONTEXT
     ,device_type                TEXT             -- 'mobile' or 'desktop'
     ,user_agent                 TEXT             -- raw user agent string
@@ -912,6 +927,13 @@ db.exec(`
     ,tempo_drift                  REAL             -- IKI slope across session quartiles
     ,iki_compression_ratio        REAL             -- gzip(IKI series) / raw length
     ,digraph_latency_json         TEXT             -- JSON: {digraph: meanFlightMs} top 10
+    -- EX-GAUSSIAN TAU (BiAffect / Zulueta 2018; Phase 2 expansion 2026-04-18)
+    ,ex_gaussian_tau              REAL             -- exponential tail of flight time distribution (cognitive slowing)
+    ,ex_gaussian_mu               REAL             -- Gaussian mean of flight time distribution (motor baseline)
+    ,ex_gaussian_sigma            REAL             -- Gaussian std of flight time distribution (motor noise)
+    ,tau_proportion               REAL             -- tau / mean(flightTimes) (cognitive fraction)
+    -- ADJACENT HOLD-TIME COVARIANCE (neuroQWERTY, Giancardo et al. 2016)
+    ,adjacent_hold_time_cov       REAL             -- Pearson corr of consecutive hold times (motor coordination)
     ,dttm_created_utc             TEXT    DEFAULT (datetime('now'))
     ,created_by                   TEXT    DEFAULT 'system'
   );
@@ -1301,6 +1323,54 @@ try {
   // safe to ignore
 }
 
+// --------------------------------------------------------------------------
+// MIGRATION: Phase 2 expansion signals (2026-04-18)
+// Mouse trajectory, precorrection/postcorrection, revision distance,
+// punctuation latency on tb_session_summaries.
+// Ex-Gaussian tau and adjacent hold-time covariance on tb_motor_signals.
+// --------------------------------------------------------------------------
+try {
+  const cols5 = db.prepare(`PRAGMA table_info(tb_session_summaries)`).all() as Array<{ name: string }>;
+  const phase2Cols: Array<[string, string]> = [
+    ['cursor_distance_during_pauses', 'REAL'],
+    ['cursor_fidget_ratio', 'REAL'],
+    ['cursor_stillness_during_pauses', 'REAL'],
+    ['drift_to_submit_count', 'INTEGER'],
+    ['cursor_pause_sample_count', 'INTEGER'],
+    ['deletion_execution_speed_mean', 'REAL'],
+    ['postcorrection_latency_mean', 'REAL'],
+    ['mean_revision_distance', 'REAL'],
+    ['max_revision_distance', 'INTEGER'],
+    ['punctuation_flight_mean', 'REAL'],
+    ['punctuation_letter_ratio', 'REAL'],
+  ];
+  for (const [col, type] of phase2Cols) {
+    if (!cols5.some(c => c.name === col)) {
+      db.exec(`ALTER TABLE tb_session_summaries ADD COLUMN ${col} ${type}`);
+    }
+  }
+} catch {
+  // safe to ignore
+}
+
+try {
+  const motorCols = db.prepare(`PRAGMA table_info(tb_motor_signals)`).all() as Array<{ name: string }>;
+  const newMotorCols: Array<[string, string]> = [
+    ['ex_gaussian_tau', 'REAL'],
+    ['ex_gaussian_mu', 'REAL'],
+    ['ex_gaussian_sigma', 'REAL'],
+    ['tau_proportion', 'REAL'],
+    ['adjacent_hold_time_cov', 'REAL'],
+  ];
+  for (const [col, type] of newMotorCols) {
+    if (!motorCols.some(c => c.name === col)) {
+      db.exec(`ALTER TABLE tb_motor_signals ADD COLUMN ${col} ${type}`);
+    }
+  }
+} catch {
+  // safe to ignore
+}
+
 // ----------------------------------------------------------------------------
 // QUERIES
 // ----------------------------------------------------------------------------
@@ -1463,6 +1533,21 @@ export interface SessionSummaryInput {
   ikiKurtosis: number | null;
   errorDetectionLatencyMean: number | null;
   terminalVelocity: number | null;
+  // Mouse/cursor trajectory (BioCatch, Phase 2 expansion)
+  cursorDistanceDuringPauses: number | null;
+  cursorFidgetRatio: number | null;
+  cursorStillnessDuringPauses: number | null;
+  driftToSubmitCount: number | null;
+  cursorPauseSampleCount: number | null;
+  // Precorrection/postcorrection latency (Springer 2021)
+  deletionExecutionSpeedMean: number | null;
+  postcorrectionLatencyMean: number | null;
+  // Revision distance (ScriptLog)
+  meanRevisionDistance: number | null;
+  maxRevisionDistance: number | null;
+  // Punctuation key latency (Plank 2016)
+  punctuationFlightMean: number | null;
+  punctuationLetterRatio: number | null;
   // Context
   deviceType: string | null;
   userAgent: string | null;
@@ -1499,8 +1584,14 @@ export function saveSessionSummary(s: SessionSummaryInput): void {
        negative_flight_time_count,
        iki_skewness, iki_kurtosis,
        error_detection_latency_mean, terminal_velocity,
+       cursor_distance_during_pauses, cursor_fidget_ratio,
+       cursor_stillness_during_pauses, drift_to_submit_count,
+       cursor_pause_sample_count,
+       deletion_execution_speed_mean, postcorrection_latency_mean,
+       mean_revision_distance, max_revision_distance,
+       punctuation_flight_mean, punctuation_letter_ratio,
        device_type, user_agent, hour_of_day, day_of_week
-    ) VALUES (${Array(69).fill('?').join(', ')})
+    ) VALUES (${Array(80).fill('?').join(', ')})
   `).run(
     s.questionId, s.firstKeystrokeMs, s.totalDurationMs,
     s.totalCharsTyped, s.finalCharCount, s.commitmentRatio,
@@ -1528,6 +1619,12 @@ export function saveSessionSummary(s: SessionSummaryInput): void {
     s.negativeFlightTimeCount,
     s.ikiSkewness, s.ikiKurtosis,
     s.errorDetectionLatencyMean, s.terminalVelocity,
+    s.cursorDistanceDuringPauses, s.cursorFidgetRatio,
+    s.cursorStillnessDuringPauses, s.driftToSubmitCount,
+    s.cursorPauseSampleCount,
+    s.deletionExecutionSpeedMean, s.postcorrectionLatencyMean,
+    s.meanRevisionDistance, s.maxRevisionDistance,
+    s.punctuationFlightMean, s.punctuationLetterRatio,
     s.deviceType, s.userAgent, s.hourOfDay, s.dayOfWeek
   );
 }
@@ -3126,6 +3223,12 @@ export interface MotorSignalRow {
   tempo_drift: number | null;
   iki_compression_ratio: number | null;
   digraph_latency_json: string | null;
+  // Phase 2 expansion (2026-04-18)
+  ex_gaussian_tau: number | null;
+  ex_gaussian_mu: number | null;
+  ex_gaussian_sigma: number | null;
+  tau_proportion: number | null;
+  adjacent_hold_time_cov: number | null;
 }
 
 export function saveMotorSignals(questionId: number, s: Omit<MotorSignalRow, 'motor_signal_id' | 'question_id'>): number {
@@ -3133,12 +3236,16 @@ export function saveMotorSignals(questionId: number, s: Omit<MotorSignalRow, 'mo
     INSERT OR IGNORE INTO tb_motor_signals (
        question_id, sample_entropy, iki_autocorrelation_json,
        motor_jerk, lapse_rate, tempo_drift,
-       iki_compression_ratio, digraph_latency_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       iki_compression_ratio, digraph_latency_json,
+       ex_gaussian_tau, ex_gaussian_mu, ex_gaussian_sigma,
+       tau_proportion, adjacent_hold_time_cov
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     questionId, s.sample_entropy, s.iki_autocorrelation_json,
     s.motor_jerk, s.lapse_rate, s.tempo_drift,
-    s.iki_compression_ratio, s.digraph_latency_json
+    s.iki_compression_ratio, s.digraph_latency_json,
+    s.ex_gaussian_tau, s.ex_gaussian_mu, s.ex_gaussian_sigma,
+    s.tau_proportion, s.adjacent_hold_time_cov
   );
   return Number(result.lastInsertRowid);
 }

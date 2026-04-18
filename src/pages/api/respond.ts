@@ -141,6 +141,21 @@ export const POST: APIRoute = async ({ request }) => {
         ikiKurtosis: sessionSummary.ikiKurtosis ?? null,
         errorDetectionLatencyMean: sessionSummary.errorDetectionLatencyMean ?? null,
         terminalVelocity: sessionSummary.terminalVelocity ?? null,
+        // Mouse/cursor trajectory (BioCatch, Phase 2 expansion)
+        cursorDistanceDuringPauses: sessionSummary.cursorDistanceDuringPauses ?? null,
+        cursorFidgetRatio: sessionSummary.cursorFidgetRatio ?? null,
+        cursorStillnessDuringPauses: sessionSummary.cursorStillnessDuringPauses ?? null,
+        driftToSubmitCount: sessionSummary.driftToSubmitCount ?? null,
+        cursorPauseSampleCount: sessionSummary.cursorPauseSampleCount ?? null,
+        // Precorrection/postcorrection latency (Springer 2021)
+        deletionExecutionSpeedMean: sessionSummary.deletionExecutionSpeedMean ?? null,
+        postcorrectionLatencyMean: sessionSummary.postcorrectionLatencyMean ?? null,
+        // Revision distance (ScriptLog)
+        meanRevisionDistance: sessionSummary.meanRevisionDistance ?? null,
+        maxRevisionDistance: sessionSummary.maxRevisionDistance ?? null,
+        // Punctuation key latency (Plank 2016)
+        punctuationFlightMean: sessionSummary.punctuationFlightMean ?? null,
+        punctuationLetterRatio: sessionSummary.punctuationLetterRatio ?? null,
         deviceType: sessionSummary.deviceType ?? null,
         userAgent: sessionSummary.userAgent ?? null,
         hourOfDay: sessionSummary.hourOfDay ?? null,
