@@ -39,6 +39,7 @@ const responseId = parseInt(id ?? '', 10);
         <h1>Entry · response {responseId}</h1>
         <nav>
           <a href="/observatory">overview</a>
+          <a href="/observatory/trajectory">trajectory</a>
           <a href="/observatory/coupling">coupling</a>
           <a href="/">→ alice</a>
         </nav>
@@ -224,14 +225,36 @@ const responseId = parseInt(id ?? '', 10);
         `;
 
         const ds = dynamicalSignals;
+        function dfaRegime(a) {
+          if (a == null) return '';
+          if (a < 0.6) return 'white noise';
+          if (a < 0.85) return 'pink (1/f)';
+          if (a < 1.1) return 'pink-brown';
+          return 'brown noise';
+        }
+        function peRegime(pe) {
+          if (pe == null) return '';
+          if (pe > 0.9) return 'exploratory';
+          if (pe > 0.75) return 'varied';
+          if (pe > 0.6) return 'patterned';
+          return 'formulaic';
+        }
+        function lamRegime(lam) {
+          if (lam == null) return '';
+          const pct = lam * 100;
+          if (pct < 15) return 'fluid';
+          if (pct < 35) return 'moderate';
+          if (pct < 55) return 'sticky';
+          return 'trapped';
+        }
         const dynamicalPanel = ds ? `
           <section class="panel">
             <h2>Dynamical signals · nonlinear keystroke analysis</h2>
             <div class="stat-grid">
-              <div><div class="k">permutation entropy</div><div class="v">${ds.permutationEntropy != null ? ds.permutationEntropy.toFixed(3) + ' (norm)' : '—'}</div></div>
-              <div><div class="k">DFA alpha</div><div class="v">${ds.dfaAlpha != null ? ds.dfaAlpha.toFixed(3) : '—'}</div></div>
+              <div><div class="k">permutation entropy</div><div class="v">${ds.permutationEntropy != null ? ds.permutationEntropy.toFixed(3) + ' · ' + peRegime(ds.permutationEntropy) : '—'}</div></div>
+              <div><div class="k">DFA alpha</div><div class="v">${ds.dfaAlpha != null ? ds.dfaAlpha.toFixed(3) + ' · ' + dfaRegime(ds.dfaAlpha) : '—'}</div></div>
               <div><div class="k">RQA determinism</div><div class="v">${ds.rqaDeterminism != null ? (ds.rqaDeterminism * 100).toFixed(1) + '%' : '—'}</div></div>
-              <div><div class="k">RQA laminarity</div><div class="v">${ds.rqaLaminarity != null ? (ds.rqaLaminarity * 100).toFixed(1) + '%' : '—'}</div></div>
+              <div><div class="k">RQA laminarity</div><div class="v">${ds.rqaLaminarity != null ? (ds.rqaLaminarity * 100).toFixed(1) + '% · ' + lamRegime(ds.rqaLaminarity) : '—'}</div></div>
               <div><div class="k">RQA trapping time</div><div class="v">${ds.rqaTrappingTime != null ? ds.rqaTrappingTime.toFixed(1) : '—'}</div></div>
               <div><div class="k">RQA recurrence rate</div><div class="v">${ds.rqaRecurrenceRate != null ? (ds.rqaRecurrenceRate * 100).toFixed(1) + '%' : '—'}</div></div>
               <div><div class="k">TE hold→flight</div><div class="v">${ds.teHoldToFlight != null ? ds.teHoldToFlight.toFixed(4) + ' bits' : '—'}</div></div>

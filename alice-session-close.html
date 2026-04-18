@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Alice — Session Close</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,200..900;1,9..144,200..900&family=JetBrains+Mono:wght@100..800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --void: #05060a;
+    --void-2: #0a0c14;
+    --ink: #e8e4d9;
+    --ink-dim: #86806f;
+    --ink-faint: #3d3a32;
+    --ember: #ff5b2e;
+    --ember-deep: #8a2112;
+    --gold: #d4a84b;
+    --violet: #6b4fb8;
+    --cyan: #4dd0e1;
+    --crimson: #c41e3a;
+    --line: rgba(232, 228, 217, 0.08);
+    --line-bright: rgba(232, 228, 217, 0.22);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    background: var(--void);
+    color: var(--ink);
+    font-family: 'Fraunces', serif;
+    font-weight: 300;
+    overflow-x: hidden;
+    min-height: 100vh;
+    cursor: default;
+  }
+
+  /* ambient star/dust layer */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      radial-gradient(1px 1px at 12% 18%, rgba(232,228,217,.7), transparent),
+      radial-gradient(1px 1px at 83% 42%, rgba(232,228,217,.5), transparent),
+      radial-gradient(1px 1px at 27% 73%, rgba(232,228,217,.6), transparent),
+      radial-gradient(1px 1px at 67% 88%, rgba(232,228,217,.4), transparent),
+      radial-gradient(1px 1px at 45% 25%, rgba(255,91,46,.4), transparent),
+      radial-gradient(1px 1px at 91% 67%, rgba(212,168,75,.3), transparent),
+      radial-gradient(2px 2px at 8% 58%, rgba(232,228,217,.3), transparent),
+      radial-gradient(1px 1px at 56% 12%, rgba(232,228,217,.5), transparent);
+    background-size: 100% 100%;
+    pointer-events: none;
+    opacity: .6;
+    z-index: 0;
+  }
+
+  /* grain */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E");
+    opacity: 0.4;
+    pointer-events: none;
+    z-index: 1;
+    mix-blend-mode: overlay;
+  }
+
+  .stage {
+    position: relative;
+    z-index: 2;
+    min-height: 100vh;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    padding: 28px 48px;
+  }
+
+  /* ── HEADER ─────────────────────────────── */
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 18px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+  }
+  header .mark {
+    font-family: 'Fraunces', serif;
+    font-weight: 200;
+    font-style: italic;
+    font-size: 22px;
+    letter-spacing: 0.02em;
+    color: var(--ink);
+    text-transform: none;
+  }
+  header .mark span {
+    color: var(--ember);
+    font-style: normal;
+    font-weight: 300;
+  }
+  header .coords { display: flex; gap: 32px; }
+  header .coords div { display: flex; gap: 8px; }
+  header .coords .v { color: var(--ink); }
+
+  /* ── MAIN ───────────────────────────────── */
+  main {
+    display: grid;
+    grid-template-columns: 1fr 1.4fr 1fr;
+    align-items: center;
+    gap: 40px;
+    padding: 40px 0;
+    position: relative;
+  }
+
+  /* side rails ─ signal readouts */
+  .rail {
+    display: flex;
+    flex-direction: column;
+    gap: 34px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .rail.left { text-align: right; }
+  .rail.right { text-align: left; }
+
+  .signal {
+    opacity: 0;
+    animation: rise 1.4s cubic-bezier(.2,.7,.2,1) forwards;
+  }
+  .signal:nth-child(1) { animation-delay: 1.2s; }
+  .signal:nth-child(2) { animation-delay: 1.5s; }
+  .signal:nth-child(3) { animation-delay: 1.8s; }
+  .signal:nth-child(4) { animation-delay: 2.1s; }
+  .signal:nth-child(5) { animation-delay: 2.4s; }
+
+  .signal .label {
+    font-size: 9px;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    margin-bottom: 6px;
+  }
+  .signal .value {
+    font-family: 'Fraunces', serif;
+    font-size: 36px;
+    font-weight: 200;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    color: var(--ink);
+  }
+  .signal .value .sign { color: var(--ember); font-weight: 300; }
+  .signal .value .sub { color: var(--ink-dim); font-size: 14px; letter-spacing: 0.02em; }
+  .signal .delta {
+    margin-top: 6px;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: var(--ink-faint);
+    text-transform: uppercase;
+  }
+  .signal .delta.hot { color: var(--ember); }
+  .signal .delta.cold { color: var(--cyan); }
+
+  /* ── GLYPH STAGE ────────────────────────── */
+  .glyph-stage {
+    position: relative;
+    aspect-ratio: 1;
+    max-width: 620px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .glyph-stage svg {
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+  }
+
+  /* concentric orbit rings */
+  .ring {
+    fill: none;
+    stroke: var(--line);
+    stroke-width: 0.5;
+    transform-origin: center;
+  }
+  .ring.r1 { animation: spin 180s linear infinite; }
+  .ring.r2 { animation: spin 240s linear infinite reverse; }
+  .ring.r3 { animation: spin 320s linear infinite; }
+
+  /* event horizon — the bright rim */
+  .horizon {
+    fill: none;
+    stroke: var(--ember);
+    stroke-width: 1.2;
+    filter: drop-shadow(0 0 18px rgba(255,91,46,.65)) drop-shadow(0 0 36px rgba(255,91,46,.35));
+    opacity: 0;
+    animation: emerge 2.2s cubic-bezier(.2,.7,.2,1) .4s forwards;
+  }
+
+  /* accretion — the fingerprint curve that IS the session */
+  .accretion {
+    fill: none;
+    stroke: var(--ink);
+    stroke-width: 1.1;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    opacity: 0;
+    filter: drop-shadow(0 0 6px rgba(232,228,217,.4));
+    animation: draw 3.5s cubic-bezier(.3,.8,.3,1) .8s forwards;
+    stroke-dasharray: 3000;
+    stroke-dashoffset: 3000;
+  }
+
+  .accretion.shadow {
+    stroke: var(--ember);
+    stroke-width: 0.6;
+    opacity: 0;
+    filter: drop-shadow(0 0 12px rgba(255,91,46,.6));
+    animation: draw-shadow 3.5s cubic-bezier(.3,.8,.3,1) .9s forwards;
+    stroke-dasharray: 3000;
+    stroke-dashoffset: 3000;
+  }
+
+  /* singularity — the dark core */
+  .singularity {
+    fill: var(--void);
+    filter: drop-shadow(0 0 40px var(--void));
+  }
+  .singularity-glow {
+    fill: url(#core-glow);
+    opacity: 0;
+    animation: pulse 4s ease-in-out 2s infinite;
+  }
+
+  /* burst markers — each real P-burst as a tick on the horizon */
+  .burst-tick {
+    stroke: var(--gold);
+    stroke-width: 1.5;
+    opacity: 0;
+    animation: tick-in .6s ease-out forwards;
+  }
+
+  /* deletion flares */
+  .flare {
+    fill: var(--crimson);
+    opacity: 0;
+    animation: flare-in 1s ease-out forwards;
+  }
+
+  /* ── CENTER OBSERVATION ────────────────── */
+  .observation {
+    position: absolute;
+    bottom: -80px;
+    left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+    width: 90%;
+    max-width: 640px;
+    opacity: 0;
+    animation: rise 2s cubic-bezier(.2,.7,.2,1) 3.2s forwards;
+  }
+  .observation .tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.4em;
+    text-transform: uppercase;
+    color: var(--ember);
+    margin-bottom: 18px;
+  }
+  .observation .line {
+    font-family: 'Fraunces', serif;
+    font-weight: 200;
+    font-size: clamp(22px, 3vw, 34px);
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+    font-style: italic;
+    color: var(--ink);
+  }
+  .observation .line em {
+    color: var(--ember);
+    font-style: italic;
+    font-weight: 300;
+  }
+  .observation .line strong {
+    color: var(--ink);
+    font-weight: 400;
+    font-style: normal;
+  }
+
+  /* ── FOOTER ─────────────────────────────── */
+  footer {
+    margin-top: 140px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    border-top: 1px solid var(--line);
+    padding-top: 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+  }
+  footer .context {
+    display: flex;
+    gap: 22px;
+    opacity: 0;
+    animation: rise 1.4s ease-out 3.8s forwards;
+  }
+  footer .context span {
+    padding: 4px 10px;
+    border: 1px solid var(--line-bright);
+    border-radius: 1px;
+  }
+  footer .context span.hot { border-color: var(--ember); color: var(--ember); }
+  footer .action {
+    display: flex;
+    gap: 28px;
+    opacity: 0;
+    animation: rise 1.4s ease-out 4s forwards;
+  }
+  footer .action a {
+    color: var(--ink-dim);
+    text-decoration: none;
+    transition: color .3s;
+    cursor: pointer;
+  }
+  footer .action a:hover { color: var(--ember); }
+  footer .action a.primary {
+    color: var(--ink);
+    border-bottom: 1px solid var(--ember);
+    padding-bottom: 2px;
+  }
+
+  /* ── ANIMATIONS ─────────────────────────── */
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes emerge {
+    0% { opacity: 0; stroke-width: 0; }
+    100% { opacity: 1; stroke-width: 1.2; }
+  }
+  @keyframes draw { to { opacity: 1; stroke-dashoffset: 0; } }
+  @keyframes draw-shadow { to { opacity: .7; stroke-dashoffset: 0; } }
+  @keyframes pulse {
+    0%, 100% { opacity: 0.3; transform: scale(1); transform-origin: center; }
+    50% { opacity: 0.7; transform: scale(1.15); transform-origin: center; }
+  }
+  @keyframes rise {
+    0% { opacity: 0; transform: translateY(14px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+  .observation { transform: translateX(-50%); }
+  @keyframes tick-in { to { opacity: .85; } }
+  @keyframes flare-in { to { opacity: .55; } }
+
+  /* breathing */
+  .glyph-stage svg > g.core {
+    animation: breathe 6s ease-in-out infinite;
+    transform-origin: center;
+    transform-box: fill-box;
+  }
+  @keyframes breathe {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.015); }
+  }
+
+  @media (max-width: 900px) {
+    .stage { padding: 20px; }
+    main { grid-template-columns: 1fr; gap: 20px; }
+    .rail { flex-direction: row; flex-wrap: wrap; justify-content: center; text-align: center !important; }
+    .rail.left { order: 2; }
+    .rail.right { order: 3; }
+    .glyph-stage { order: 1; }
+    .observation { position: static; transform: none; margin-top: 40px; width: 100%; }
+    footer { margin-top: 60px; flex-direction: column; gap: 20px; align-items: flex-start; }
+  }
+</style>
+</head>
+<body>
+  <div class="stage">
+    <header>
+      <div class="mark">alice<span>.</span></div>
+      <div class="coords">
+        <div><span>session</span><span class="v">№ 0342</span></div>
+        <div><span>22:47</span></div>
+        <div><span>tue · 17 apr</span></div>
+      </div>
+    </header>
+
+    <main>
+      <!-- LEFT RAIL: behavioral signals -->
+      <div class="rail left">
+        <div class="signal">
+          <div class="label">fluency</div>
+          <div class="value"><span class="sign">−</span>1.8<span class="sub">σ</span></div>
+          <div class="delta cold">bursts shortened</div>
+        </div>
+        <div class="signal">
+          <div class="label">deliberation</div>
+          <div class="value"><span class="sign">+</span>2.3<span class="sub">σ</span></div>
+          <div class="delta hot">above baseline</div>
+        </div>
+        <div class="signal">
+          <div class="label">thermal</div>
+          <div class="value"><span class="sign">+</span>1.4<span class="sub">σ</span></div>
+          <div class="delta hot">late-stage revision</div>
+        </div>
+      </div>
+
+      <!-- CENTER: the glyph -->
+      <div class="glyph-stage">
+        <svg viewBox="-320 -320 640 640" preserveAspectRatio="xMidYMid meet" aria-label="Session glyph">
+          <defs>
+            <radialGradient id="core-glow" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#ff5b2e" stop-opacity="0.9"/>
+              <stop offset="30%" stop-color="#8a2112" stop-opacity="0.6"/>
+              <stop offset="70%" stop-color="#6b4fb8" stop-opacity="0.2"/>
+              <stop offset="100%" stop-color="#05060a" stop-opacity="0"/>
+            </radialGradient>
+            <radialGradient id="halo" cx="50%" cy="50%" r="50%">
+              <stop offset="60%" stop-color="transparent"/>
+              <stop offset="85%" stop-color="rgba(255,91,46,0.12)"/>
+              <stop offset="100%" stop-color="transparent"/>
+            </radialGradient>
+            <filter id="soft-glow">
+              <feGaussianBlur stdDeviation="2"/>
+            </filter>
+          </defs>
+
+          <!-- halo field -->
+          <circle cx="0" cy="0" r="300" fill="url(#halo)"/>
+
+          <!-- orbit rings -->
+          <g>
+            <circle class="ring r1" cx="0" cy="0" r="260"/>
+            <circle class="ring r2" cx="0" cy="0" r="220"/>
+            <circle class="ring r3" cx="0" cy="0" r="180"/>
+          </g>
+
+          <!-- tick marks: degree markers -->
+          <g opacity="0.35">
+            <!-- generated cardinal and minor ticks -->
+            <g id="ticks"></g>
+          </g>
+
+          <g class="core">
+            <!-- event horizon -->
+            <circle class="horizon" cx="0" cy="0" r="140"/>
+
+            <!-- burst ticks on horizon: each real P-burst -->
+            <g id="bursts"></g>
+
+            <!-- accretion curve: the fingerprint -->
+            <path class="accretion shadow" id="glyph-shadow"/>
+            <path class="accretion" id="glyph-main"/>
+
+            <!-- deletion flares -->
+            <g id="flares"></g>
+
+            <!-- singularity glow -->
+            <circle class="singularity-glow" cx="0" cy="0" r="100"/>
+
+            <!-- singularity core -->
+            <circle class="singularity" cx="0" cy="0" r="42"/>
+
+            <!-- center crosshair -->
+            <line x1="-8" y1="0" x2="8" y2="0" stroke="rgba(232,228,217,0.4)" stroke-width="0.5"/>
+            <line x1="0" y1="-8" x2="0" y2="8" stroke="rgba(232,228,217,0.4)" stroke-width="0.5"/>
+          </g>
+        </svg>
+
+        <div class="observation">
+          <div class="tag">⟡ observation</div>
+          <div class="line">
+            You wrote about the meeting <em>like it was fine</em>.<br>
+            Your hands wrote <strong>like it wasn't</strong>.
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT RAIL: dynamical signals -->
+      <div class="rail right">
+        <div class="signal">
+          <div class="label">dfa α</div>
+          <div class="value">1.06<span class="sub"></span></div>
+          <div class="delta hot">locked drift ↑</div>
+        </div>
+        <div class="signal">
+          <div class="label">perm entropy</div>
+          <div class="value">0.71<span class="sub"></span></div>
+          <div class="delta cold">rhythm narrowing</div>
+        </div>
+        <div class="signal">
+          <div class="label">te dominance</div>
+          <div class="value">0.62<span class="sub"></span></div>
+          <div class="delta">cognitive → motor</div>
+        </div>
+      </div>
+    </main>
+
+    <footer>
+      <div class="context">
+        <span>sleep · poor</span>
+        <span class="hot">stress · high</span>
+        <span>social · conflict</span>
+        <span>exercise · skipped</span>
+      </div>
+      <div class="action">
+        <a>↳ deeper</a>
+        <a>↳ arc</a>
+        <a class="primary">close session →</a>
+      </div>
+    </footer>
+  </div>
+
+<script>
+// ── generate the glyph procedurally from "session state" ────────────────
+// This is the part that would be real in production — the shape is a
+// function of the actual signals. Here I'm faking the signal set for
+// a high-thermal, low-fluency, high-deliberation session.
+
+const state = {
+  fluency: -1.8,
+  deliberation: +2.3,
+  revision: +1.9,
+  commitment: -0.8,
+  thermal: +1.4,
+  presence: -1.2,
+  volatility: +1.6,
+  dfa: 1.06,
+  permEntropy: 0.71,
+  teDominance: 0.62,
+  pBursts: 23,
+  largeDeletions: 7,
+  sessionMinutes: 14
+};
+
+// ── accretion curve: superposition of harmonics modulated by state ────
+// fluency: amplitude   | deliberation: frequency content
+// revision: radial jitter | thermal: late-session chaos
+// dfa: long-range correlation | permEntropy: smoothness
+function makeGlyph(phaseOffset = 0) {
+  const pts = [];
+  const N = 720;
+  const baseR = 170;
+  for (let i = 0; i < N; i++) {
+    const t = i / N;
+    const θ = t * Math.PI * 2 + phaseOffset;
+
+    // harmonics — shaped by signals
+    const h1 = Math.sin(θ * 3 + state.deliberation) * (12 + state.deliberation * 4);
+    const h2 = Math.cos(θ * 5 - state.revision * 0.5) * (8 + state.revision * 3);
+    const h3 = Math.sin(θ * 7 + state.thermal) * (5 + state.thermal * 2);
+    const h4 = Math.cos(θ * 11) * (3 * (2 - state.permEntropy));
+
+    // thermal: more chaos in second half of session
+    const lateChaos = (t > 0.5) ? (t - 0.5) * 2 * state.thermal * 6 * Math.sin(θ * 23) : 0;
+
+    // fluency: pinched (negative) or full (positive)
+    const fluencyMod = state.fluency < 0
+      ? -Math.abs(state.fluency) * 10 * Math.sin(θ * 2)
+      : state.fluency * 8 * Math.cos(θ * 2);
+
+    // dfa locked-drift: slow wobble when α > 1
+    const drift = (state.dfa - 1) > 0 ? Math.sin(θ + 1.2) * (state.dfa - 1) * 40 : 0;
+
+    const r = baseR + h1 + h2 + h3 + h4 + lateChaos + fluencyMod + drift;
+
+    pts.push([Math.cos(θ) * r, Math.sin(θ) * r]);
+  }
+  // close loop
+  pts.push(pts[0]);
+
+  // smooth with Catmull-Rom → cubic bezier
+  let d = `M ${pts[0][0].toFixed(2)} ${pts[0][1].toFixed(2)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i === 0 ? pts.length - 2 : i - 1];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[i + 2 < pts.length ? i + 2 : 1];
+    const cp1x = p1[0] + (p2[0] - p0[0]) / 6;
+    const cp1y = p1[1] + (p2[1] - p0[1]) / 6;
+    const cp2x = p2[0] - (p3[0] - p1[0]) / 6;
+    const cp2y = p2[1] - (p3[1] - p1[1]) / 6;
+    d += ` C ${cp1x.toFixed(2)} ${cp1y.toFixed(2)}, ${cp2x.toFixed(2)} ${cp2y.toFixed(2)}, ${p2[0].toFixed(2)} ${p2[1].toFixed(2)}`;
+  }
+  return d;
+}
+
+document.getElementById('glyph-main').setAttribute('d', makeGlyph(0));
+document.getElementById('glyph-shadow').setAttribute('d', makeGlyph(0.08));
+
+// ── burst ticks on event horizon ────────────────────────────────────
+const burstsG = document.getElementById('bursts');
+for (let i = 0; i < state.pBursts; i++) {
+  const angle = (i / state.pBursts) * Math.PI * 2 - Math.PI / 2;
+  // burst length shorter than usual → shorter ticks
+  const len = 6 + Math.random() * 10 * (state.fluency > 0 ? 1.4 : 0.6);
+  const x1 = Math.cos(angle) * 140;
+  const y1 = Math.sin(angle) * 140;
+  const x2 = Math.cos(angle) * (140 + len);
+  const y2 = Math.sin(angle) * (140 + len);
+  const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  line.setAttribute('x1', x1.toFixed(2));
+  line.setAttribute('y1', y1.toFixed(2));
+  line.setAttribute('x2', x2.toFixed(2));
+  line.setAttribute('y2', y2.toFixed(2));
+  line.setAttribute('class', 'burst-tick');
+  line.style.animationDelay = `${1.2 + i * 0.04}s`;
+  burstsG.appendChild(line);
+}
+
+// ── deletion flares (large deletions as red dots at their timestamp) ─
+const flaresG = document.getElementById('flares');
+const deletionTimes = [0.12, 0.18, 0.23, 0.58, 0.67, 0.74, 0.88]; // normalized
+deletionTimes.forEach((t, i) => {
+  const angle = t * Math.PI * 2 - Math.PI / 2;
+  const r = 155 + Math.random() * 30;
+  const x = Math.cos(angle) * r;
+  const y = Math.sin(angle) * r;
+  const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+  c.setAttribute('cx', x.toFixed(2));
+  c.setAttribute('cy', y.toFixed(2));
+  c.setAttribute('r', (2 + Math.random() * 2).toFixed(2));
+  c.setAttribute('class', 'flare');
+  c.style.animationDelay = `${2.5 + i * 0.15}s`;
+  flaresG.appendChild(c);
+});
+
+// ── outer tick marks (degree ring) ──────────────────────────────────
+const ticksG = document.getElementById('ticks');
+for (let i = 0; i < 72; i++) {
+  const angle = (i / 72) * Math.PI * 2;
+  const major = i % 18 === 0;
+  const r1 = 280;
+  const r2 = major ? 292 : 286;
+  const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  line.setAttribute('x1', (Math.cos(angle) * r1).toFixed(2));
+  line.setAttribute('y1', (Math.sin(angle) * r1).toFixed(2));
+  line.setAttribute('x2', (Math.cos(angle) * r2).toFixed(2));
+  line.setAttribute('y2', (Math.sin(angle) * r2).toFixed(2));
+  line.setAttribute('stroke', 'rgba(232,228,217,0.25)');
+  line.setAttribute('stroke-width', major ? '1' : '0.5');
+  ticksG.appendChild(line);
+}
+</script>
+</body>
+</html>
