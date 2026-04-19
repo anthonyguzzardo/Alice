@@ -11,8 +11,7 @@ const { active = '' } = Astro.props;
     <a href="/landing" class:list={[{ active: active === 'home' }]}>Home</a>
     <a href="/about" class:list={[{ active: active === 'about' }]}>About</a>
     <a href="/papers" class:list={[{ active: active === 'papers' }]}>Research</a>
-    <a href="/auth/login" class="nav-login">Log in</a>
-    <a href="/auth/signup" class="nav-cta">Get started</a>
+    <a href="/auth/login" class="nav-login">Enter</a>
   </div>
   <button class="nav-mobile-toggle" aria-label="Toggle menu">
     <span></span><span></span><span></span>
@@ -21,6 +20,10 @@ const { active = '' } = Astro.props;
 
 <style is:global>
   .public-nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--bg);
     display: flex;
     align-items: center;
     justify-content: space-between;

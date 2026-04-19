@@ -2,243 +2,85 @@
 import PublicLayout from '../layouts/PublicLayout.astro';
 ---
 
-<PublicLayout title="Alice" active="home">
+<PublicLayout title="Alice" active="home" minimal>
 
-  <!-- Hero -->
-  <section class="hero">
-    <h1 class="hero-headline">One question per day.<br/>Nothing else.</h1>
-    <p class="hero-sub">
-      Alice is a writing instrument that measures how you think,
-      not what you say. No likes. No streaks. No feed. Just a question,
-      a blank page, and whatever you bring to it.
-    </p>
-    <div class="hero-actions">
-      <a href="/auth/signup" class="btn-primary">Start writing</a>
-      <a href="/about" class="btn-secondary">How it works</a>
-    </div>
-  </section>
+  <div class="landing">
 
-  <!-- What it is -->
-  <section class="section">
-    <div class="section-grid">
-      <div class="card">
-        <span class="card-label">The question</span>
-        <p>Each day, Alice asks you one question. Not a prompt engineered for engagement. A question chosen because of what your previous writing revealed, whether you noticed it or not.</p>
-      </div>
-      <div class="card">
-        <span class="card-label">The writing</span>
-        <p>You write. However long or short. Alice watches how you write, not just what. The pauses. The deletions. The moments you almost said something and didn't. The texture of your thinking.</p>
-      </div>
-      <div class="card">
-        <span class="card-label">The witness</span>
-        <p>Your behavioral signature becomes a form. Not a chart or a score. A three-dimensional object that changes shape as your patterns change. A mirror that doesn't use language.</p>
-      </div>
-    </div>
-  </section>
+    <section class="breath opening">
+      <p>Alice asks you one question per day.</p>
+    </section>
 
-  <!-- What it isn't -->
-  <section class="section">
-    <h2 class="section-title">What Alice is not</h2>
-    <div class="negations">
-      <div class="negation">
-        <span class="neg-marker">Not a journal app.</span>
-        There is no archive you scroll through. No word counts. No daily summaries. Your entries go in and do not come back out.
-      </div>
-      <div class="negation">
-        <span class="neg-marker">Not a therapist.</span>
-        Alice does not interpret, diagnose, or advise. It measures. The meaning is yours to find.
-      </div>
-      <div class="negation">
-        <span class="neg-marker">Not a product.</span>
-        There is nothing to optimize. No premium tier. No social features. No reason to write more than you want to.
-      </div>
-    </div>
-  </section>
+    <section class="breath">
+      <p>You write.</p>
+    </section>
 
-  <!-- Research -->
-  <section class="section">
-    <h2 class="section-title">Built on research, not engagement metrics</h2>
-    <p class="section-prose">
-      Alice's measurement layer draws from keystroke dynamics (Chenoweth &amp; Hayes, BiAffect),
-      writing process research (Deane, Faigley &amp; Witte), computational linguistics (Coh-Metrix, LIWC),
-      and nonlinear dynamical systems analysis. Every signal is deterministic. No AI in the measurement pipeline.
-    </p>
-    <a href="/papers" class="section-link">Read the research &rarr;</a>
-  </section>
+    <section class="breath">
+      <p>That's it.</p>
+    </section>
 
-  <!-- CTA -->
-  <section class="section cta-section">
-    <h2 class="cta-headline">Depth takes time.<br/>Start today.</h2>
-    <a href="/auth/signup" class="btn-primary">Get started</a>
-  </section>
+    <section class="breath">
+      <p>Your entries go in and do not come back out.</p>
+    </section>
+
+    <section class="breath">
+      <p>Over time, a form emerges. A shape that is yours.</p>
+    </section>
+
+    <section class="breath closing">
+      <a href="/auth/login" class="enter">Enter</a>
+    </section>
+
+  </div>
 
 </PublicLayout>
 
 <style is:global>
-  /* Hero */
-  .hero {
-    text-align: center;
-    padding: 6rem 0 4rem;
-    max-width: 700px;
+  .landing {
+    max-width: 520px;
     margin: 0 auto;
+    padding: 0 2rem;
   }
 
-  .hero-headline {
-    font-family: var(--serif-display);
-    font-weight: 300;
-    font-size: 3rem;
-    line-height: 1.2;
-    color: var(--text);
-    margin-bottom: 1.5rem;
-  }
-
-  .hero-sub {
-    font-family: var(--serif-body);
-    font-size: 1.2rem;
-    line-height: 1.7;
-    color: var(--text-muted);
-    max-width: 540px;
-    margin: 0 auto 2.5rem;
-  }
-
-  .hero-actions {
+  .breath {
+    min-height: 55vh;
     display: flex;
-    gap: 1rem;
+    align-items: center;
     justify-content: center;
   }
 
-  .btn-primary {
-    background: var(--text);
-    color: var(--bg);
-    padding: 0.75rem 2rem;
-    border-radius: 6px;
-    font-family: var(--sans);
-    font-size: 0.9375rem;
-    font-weight: 500;
-    text-decoration: none;
-    transition: opacity 0.2s;
-  }
-  .btn-primary:hover { opacity: 0.85; text-decoration: none; }
-
-  .btn-secondary {
-    border: 1px solid var(--border);
-    color: var(--text-muted);
-    padding: 0.75rem 2rem;
-    border-radius: 6px;
-    font-family: var(--sans);
-    font-size: 0.9375rem;
-    text-decoration: none;
-    transition: border-color 0.2s, color 0.2s;
-  }
-  .btn-secondary:hover {
-    border-color: var(--border-focus);
-    color: var(--text);
-    text-decoration: none;
+  .breath.opening {
+    min-height: 85vh;
   }
 
-  /* Sections */
-  .section {
-    padding: 3rem 0;
-    max-width: 800px;
-    margin: 0 auto;
+  .breath.closing {
+    min-height: 35vh;
+    padding-bottom: 8rem;
   }
 
-  .section-title {
-    font-family: var(--serif-display);
-    font-weight: 400;
-    font-size: 1.75rem;
-    margin-bottom: 1.5rem;
-    text-align: center;
-  }
-
-  .section-prose {
+  .breath p {
     font-family: var(--serif-body);
-    font-size: 1.1rem;
+    font-size: 1.2rem;
     line-height: 1.8;
     color: var(--text-muted);
     text-align: center;
-    max-width: 600px;
-    margin: 0 auto;
+    max-width: 400px;
   }
 
-  .section-link {
-    display: block;
-    text-align: center;
-    margin-top: 1rem;
-    font-size: 0.9375rem;
-  }
-
-  /* Cards */
-  .section-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 1.5rem;
-  }
-
-  .card {
-    background: var(--bg-panel);
-    border-radius: 8px;
-    padding: 1.75rem;
-  }
-
-  .card-label {
-    display: block;
-    font-family: var(--sans);
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--text-faint);
-    margin-bottom: 0.75rem;
-  }
-
-  .card p {
+  .enter {
     font-family: var(--serif-body);
     font-size: 1rem;
-    line-height: 1.65;
+    color: var(--text-faint);
+    text-decoration: none;
+  }
+
+  .enter:hover {
     color: var(--text-muted);
-  }
-
-  /* Negations */
-  .negations {
-    display: flex;
-    flex-direction: column;
-    gap: 1.25rem;
-    max-width: 600px;
-    margin: 0 auto;
-  }
-
-  .negation {
-    font-family: var(--serif-body);
-    font-size: 1.05rem;
-    line-height: 1.7;
-    color: var(--text-muted);
-  }
-
-  .neg-marker {
-    color: var(--text);
-    font-weight: 500;
-    display: inline;
-  }
-
-  /* CTA */
-  .cta-section {
-    text-align: center;
-    padding: 4rem 0 2rem;
-  }
-
-  .cta-headline {
-    font-family: var(--serif-display);
-    font-weight: 300;
-    font-size: 2.25rem;
-    line-height: 1.3;
-    margin-bottom: 1.5rem;
+    text-decoration: none;
   }
 
   @media (max-width: 768px) {
-    .hero { padding: 3rem 0 2rem; }
-    .hero-headline { font-size: 2rem; }
-    .hero-sub { font-size: 1.05rem; }
-    .hero-actions { flex-direction: column; align-items: center; }
-    .section-grid { grid-template-columns: 1fr; }
+    .breath { min-height: 40vh; }
+    .breath.opening { min-height: 60vh; }
+    .breath p { font-size: 1.1rem; }
   }
 </style>
