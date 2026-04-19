@@ -2,20 +2,20 @@
 title: "A Closing Window: The Demographic Confound in Keystroke-Based Cognitive Biomarkers and the AI-Mediation Threat to the Paradigm That Would Replace It"
 slug: closing-window
 author: Anthony Guzzardo
-date: 2026-04-17
+date: 2026-04-19
 status: published
-version: 1
+version: 2
 abstract: "Keystroke dynamics have emerged as a promising modality for passive cognitive assessment, but the keystroke-cognition studies targeting neurodegeneration identified in this review have drawn their participants from a population that largely did not achieve the typing automaticity required for keystroke timing to reflect cognitive processes rather than motor execution."
 ---
 
 # A Closing Window: The Demographic Confound in Keystroke-Based Cognitive Biomarkers and the AI-Mediation Threat to the Paradigm That Would Replace It
 
 **Anthony Guzzardo**
-April 2026
+April 2026 (v2, updated April 19)
 
 ---
 
-*Author's note: The author is developing a longitudinal journaling system (Alice) that implements several of the design constraints discussed in Sections 7 and 8. Readers should apply additional scrutiny to those sections, where the instrument-gap analysis overlaps with design decisions already being made in that system. The arguments in Sections 2 through 6  -  the automaticity threshold, the demographic confound, the self-resolving timeline, the clock-drawing precedent, and the paradigm shift to self-referential baselines  -  do not depend on any specific implementation and should be evaluated on their own terms.*
+*Author's note: The author is developing a longitudinal journaling system (Alice) that implements the design constraints discussed in Sections 7 and 8. As of v2, Alice captures keystroke dynamics at microsecond precision, computes nonlinear dynamical signals (permutation entropy, DFA, recurrence quantification analysis, transfer entropy) and motor biometric signals (ex-Gaussian decomposition, sample entropy, adjacent hold-time covariance) via a compiled Rust engine, performs linguistic content analysis across 11 semantic dimensions, and maintains longitudinal self-referential baselines with same-day calibration deltas. Readers should apply additional scrutiny to those sections, where the instrument-gap analysis overlaps with design decisions already implemented in that system. The arguments in Sections 2 through 6  -  the automaticity threshold, the demographic confound, the self-resolving timeline, the clock-drawing precedent, and the paradigm shift to self-referential baselines  -  do not depend on any specific implementation and should be evaluated on their own terms.*
 
 ---
 
@@ -173,7 +173,7 @@ The longitudinal paradigm is a research program, not a ready-made solution. Its 
 
 The shift from population-normed cross-sectional assessment to self-referential longitudinal tracking changes which signals are worth capturing. Several NLP-derived features that appear frequently in the large-feature-set dementia-language classifiers of Fraser, Meltzer, and Rudzicz (2016) and similar work are poorly suited to a longitudinal, self-referential, short-text framework. Honoré's Statistic is mathematically unstable on short journal entries (Tweedie and Baayen 1998) and has not demonstrated incremental discriminant power beyond the Moving-Average Type-Token Ratio (Covington and McFall 2010). Mean Dependency Distance is theoretically motivated by Gibson's dependency locality theory (2000) but empirically unvalidated as a standalone predictor, and its dependence on parsing quality introduces a noise source hard to distinguish from the cognitive signal. Noun/verb ratios are topic-dependent in freeform text and, outside of specific aphasic syndromes, do not survive feature selection against lexical diversity and syntactic complexity measures. An expanded discussion of these evaluations is provided in Appendix A.
 
-The signals that hold up for longitudinal self-referential tracking share a common property: they measure process rather than product, and they generate stable within-person baselines against which deviation can be detected.
+The signals that hold up for longitudinal self-referential tracking share a common property: they measure process rather than product, and they generate stable within-person baselines against which deviation can be detected. *v2 note: All signals described in this section are now implemented and computing in Alice's signal pipeline. Keystroke dynamics and motor-cognitive decomposition are computed via a compiled Rust engine (napi-rs) at sub-2ms latency on 500-keystroke streams. Linguistic signals are computed server-side. Calibration deltas are computed on days with both calibration and journal sessions.*
 
 **Keystroke dynamics** (hold time, flight time, inter-key interval, keystroke entropy) capture the temporal microstructure of typing. Critically, these metrics are captured during the act of writing, not derived from the finished text. They reflect real-time processing demands.
 
@@ -193,7 +193,7 @@ One additional metric is a candidate for future investigation. Propositional den
 
 ## 8. The Instrument Gap
 
-No existing tool combines keystroke dynamics, linguistic content analysis, and longitudinal self-referential tracking in a single instrument.
+At the time of v1 publication (April 17, 2026), no existing tool combined keystroke dynamics, linguistic content analysis, and longitudinal self-referential tracking in a single instrument. As of v2, a working prototype (Alice) satisfies each of the design constraints enumerated below, though it remains at n=1 with fewer than ten fully instrumented sessions. The instrument gap as described here has been narrowed in implementation but remains open as a validated research paradigm.
 
 The current landscape is fragmented into two silos. Keystroke dynamics researchers capture timing data but ignore the content of what is typed. Computational linguistics researchers analyze transcribed text but have no access to the temporal process that produced it. Studies in the first silo can tell you that a person's flight time is elevated but not whether they were struggling to retrieve a specific word or planning a complex sentence. Studies in the second silo can tell you that a person's vocabulary diversity is declining but not whether the decline reflects retrieval difficulty (long pauses before low-frequency words) or avoidance (choosing simpler words without hesitation).
 
@@ -217,9 +217,11 @@ The instrument needed for this paradigm must satisfy several design constraints:
 
 **Calibration.** Neutral writing prompts, administered alongside substantive prompts, provide a within-person baseline that controls for day-to-day variation in motor performance, fatigue, and environmental factors.
 
-No commercial or academic tool currently satisfies all of these constraints. Winterlight Labs (now Cambridge Cognition) captures spoken language but not written-process data. DementiaBank provides transcribed speech samples but no keystroke data. Neurokeys (used by Kim et al. 2024) captures smartphone keystroke dynamics but does not analyze linguistic content. Research prototypes built on DementiaBank analyze text features but have no longitudinal component.
+No commercial or academic tool currently satisfies all of these constraints at validated scale. Winterlight Labs (now Cambridge Cognition) captures spoken language but not written-process data. DementiaBank provides transcribed speech samples but no keystroke data. Neurokeys (used by Kim et al. 2024) captures smartphone keystroke dynamics but does not analyze linguistic content. Research prototypes built on DementiaBank analyze text features but have no longitudinal component.
 
 The instrument gap is not a software engineering problem. It is a design philosophy problem. The tool must be built for depth rather than throughput, for sustained daily use rather than clinical efficiency, and for individual trajectories rather than population screening. It must be built now, while unassisted writing is still common enough to establish baselines, so that longitudinal records are already accumulating when those records become clinically relevant.
+
+*v2 note: Alice now satisfies all seven constraints enumerated above. Process capture records every keystroke event at microsecond precision via `performance.now()`, storing complete keystroke streams and event logs for post-hoc analysis. Content analysis computes 11 semantic dimensions (syntactic complexity, self-focus, uncertainty, cognitive processing, six NRC emotion densities, sentiment, abstraction) alongside 13 dynamical signals, 12 motor signals, and 9 process signals per session. Longitudinal architecture stores all raw data in PostgreSQL with pgvector-indexed embeddings for semantic similarity search across the full journal history. Calibration sessions use neutral prompts to establish same-day behavioral baselines, and calibration deltas isolate cognitive effort from motor state. AI-mediation detection flags paste events with character counts. The system is single-user, local-first, and has been accumulating data since April 2026. It remains n=1 and unvalidated. The gap between "implemented" and "validated" is the work that remains.*
 
 ---
 
@@ -249,7 +251,7 @@ The demographic shift described in this paper is real in the sense that its unde
 
 The keystroke-cognition literature is caught between two forces operating on different timescales. The demographic confound that distorts current studies is resolving slowly, on the timescale of generational turnover. The AI-mediation of writing is contaminating the signal quickly, on the timescale of product adoption. The window between the two  -  in which a sufficient population of lifelong fluent typists is still producing unassisted text at the ages where cognitive decline becomes clinically relevant  -  is narrower than the demographic projection alone suggests. It may not be as wide as a decade. It may already be narrowing in ways current instruments cannot detect.
 
-That narrow window is where the opportunity lies, and it is closing. The instruments that could exploit it  -  combining process capture, content analysis, longitudinal self-referential architecture, and modality awareness  -  do not yet exist. Building them now, establishing personal baselines in the population most likely to retain unassisted writing as a habit, and designing with awareness that the input modality carrying the signal will eventually change, is the work the field needs to begin. Waiting for the demographic timeline to play out on its own assumes a stability of writing behavior that can no longer be taken for granted.
+That narrow window is where the opportunity lies, and it is closing. The instruments that could exploit it  -  combining process capture, content analysis, longitudinal self-referential architecture, and modality awareness  -  are beginning to be built, but none have been validated beyond prototype stage. The work that remains is not primarily engineering. It is empirical: establishing whether intra-individual keystroke baselines are stable enough to detect meaningful drift, determining the minimum data density required for reliable personal baselines, and validating that the signals described in Section 7 produce clinically meaningful trajectory markers in a longitudinal context. Waiting for the demographic timeline to play out on its own assumes a stability of writing behavior that can no longer be taken for granted. The baselines need to be accumulating now, so that when the validation studies become possible, the longitudinal records already exist.
 
 ---
 

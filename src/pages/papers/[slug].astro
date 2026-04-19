@@ -9,7 +9,7 @@ if (!paper) {
   return Astro.redirect('/papers');
 }
 
-const comments = getCommentsForPaper(slug!);
+const comments = await getCommentsForPaper(slug!);
 ---
 
 <html lang="en">

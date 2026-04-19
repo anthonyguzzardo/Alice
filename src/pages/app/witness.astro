@@ -1,0 +1,70 @@
+---
+import AppLayout from '../../layouts/AppLayout.astro';
+---
+
+<AppLayout title="Witness - Alice" active="witness">
+  <div class="witness-page">
+    <div class="witness-viewport" id="witness-viewport">
+      <p class="witness-empty">Your witness form appears after your first few entries.</p>
+    </div>
+    <div class="witness-meta">
+      <span class="witness-label">Current form</span>
+      <span class="witness-count" id="entry-count">0 entries</span>
+    </div>
+  </div>
+</AppLayout>
+
+<style is:global>
+  .witness-page {
+    padding-top: 2rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .witness-viewport {
+    width: 100%;
+    aspect-ratio: 1;
+    max-width: 600px;
+    max-height: 600px;
+    background: var(--bg-dim);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .witness-empty {
+    font-family: var(--serif-body);
+    font-style: italic;
+    color: var(--text-faint);
+    font-size: 1rem;
+    text-align: center;
+    padding: 2rem;
+  }
+
+  .witness-meta {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    max-width: 600px;
+    margin-top: 1rem;
+    padding: 0 0.25rem;
+  }
+
+  .witness-label {
+    font-family: var(--sans);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-faint);
+  }
+
+  .witness-count {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--text-faint);
+  }
+</style>

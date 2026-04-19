@@ -1,0 +1,175 @@
+---
+import AppLayout from '../../layouts/AppLayout.astro';
+
+// TODO: pull from user's session, not global single-user db
+// For now, wire to existing question/response system
+import { getTodaysQuestion } from '../../lib/db.ts';
+
+let question = null;
+try {
+  question = await getTodaysQuestion();
+} catch {
+  // db not available or no question scheduled
+}
+
+const today = new Date().toLocaleDateString('en-US', {
+  weekday: 'long',
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+});
+---
+
+<AppLayout title="Journal - Alice" active="journal">
+  <div class="journal">
+    <time class="journal-date">{today}</time>
+
+    {question ? (
+      <p class="journal-question">{question.text}</p>
+    ) : (
+      <p class="journal-question journal-question-empty">No question today. Check back tomorrow.</p>
+    )}
+
+    <div class="journal-writing" id="writing-area">
+      <textarea
+        id="response"
+        class="journal-textarea"
+        placeholder="Begin writing..."
+        rows={1}
+        autofocus
+      ></textarea>
+    </div>
+
+    <div class="journal-actions" id="actions">
+      <button class="journal-submit" id="submit-btn" disabled>Submit</button>
+    </div>
+
+    <div class="journal-submitted" id="submitted" hidden>
+      <p>Received. See you tomorrow.</p>
+    </div>
+  </div>
+</AppLayout>
+
+<script is:inline>
+  (function() {
+    const textarea = document.getElementById('response');
+    const submitBtn = document.getElementById('submit-btn');
+    const actions = document.getElementById('actions');
+    const submitted = document.getElementById('submitted');
+
+    if (!textarea || !submitBtn) return;
+
+    // Auto-resize
+    function resize() {
+      textarea.style.height = 'auto';
+      textarea.style.height = textarea.scrollHeight + 'px';
+    }
+    textarea.addEventListener('input', function() {
+      resize();
+      submitBtn.disabled = textarea.value.trim().length === 0;
+    });
+
+    // Submit
+    submitBtn.addEventListener('click', function() {
+      if (textarea.value.trim().length === 0) return;
+      // TODO: wire to real submission with keystroke capture
+      actions.hidden = true;
+      textarea.disabled = true;
+      textarea.classList.add('submitted');
+      submitted.hidden = false;
+    });
+  })();
+</script>
+
+<style is:global>
+  .journal {
+    padding-top: 4rem;
+    max-width: 640px;
+    margin: 0 auto;
+  }
+
+  .journal-date {
+    display: block;
+    font-family: var(--sans);
+    font-size: 0.8125rem;
+    color: var(--text-faint);
+    letter-spacing: 0.02em;
+    margin-bottom: 2rem;
+  }
+
+  .journal-question {
+    font-family: var(--serif-display);
+    font-style: italic;
+    font-weight: 300;
+    font-size: 1.5rem;
+    line-height: 1.5;
+    color: var(--text);
+    margin-bottom: 3rem;
+  }
+
+  .journal-question-empty {
+    color: var(--text-faint);
+  }
+
+  .journal-writing {
+    margin-bottom: 2rem;
+  }
+
+  .journal-textarea {
+    width: 100%;
+    border: none;
+    outline: none;
+    resize: none;
+    background: transparent;
+    font-family: var(--serif-body);
+    font-size: 1.125rem;
+    line-height: 1.8;
+    color: var(--text);
+    padding: 0;
+    overflow: hidden;
+    min-height: 200px;
+  }
+  .journal-textarea::placeholder {
+    color: var(--text-faint);
+    font-style: italic;
+  }
+  .journal-textarea.submitted {
+    opacity: 0.4;
+  }
+
+  .journal-actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .journal-submit {
+    padding: 0.5rem 1.5rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-muted);
+    font-family: var(--sans);
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s, opacity 0.2s;
+  }
+  .journal-submit:hover:not(:disabled) {
+    border-color: var(--border-focus);
+    color: var(--text);
+  }
+  .journal-submit:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+
+  .journal-submitted {
+    text-align: center;
+    padding: 2rem 0;
+  }
+  .journal-submitted p {
+    font-family: var(--serif-body);
+    font-style: italic;
+    color: var(--text-faint);
+    font-size: 1rem;
+  }
+</style>

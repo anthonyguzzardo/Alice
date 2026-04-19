@@ -1,0 +1,83 @@
+---
+import AppLayout from '../../layouts/AppLayout.astro';
+---
+
+<AppLayout title="Gallery - Alice" active="gallery">
+  <div class="gallery-page">
+    <div class="gallery-header">
+      <h1 class="gallery-title">Gallery</h1>
+      <p class="gallery-sub">Every entry produces a form. This is the archive.</p>
+    </div>
+
+    <div class="gallery-grid" id="gallery-grid">
+      <div class="gallery-empty">
+        <p>Forms will appear here as you write.</p>
+      </div>
+    </div>
+  </div>
+</AppLayout>
+
+<style is:global>
+  .gallery-page {
+    padding-top: 2rem;
+  }
+
+  .gallery-header {
+    margin-bottom: 2rem;
+  }
+
+  .gallery-title {
+    font-family: var(--serif-display);
+    font-weight: 400;
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .gallery-sub {
+    font-family: var(--serif-body);
+    color: var(--text-muted);
+    font-size: 0.9375rem;
+  }
+
+  .gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+  }
+
+  .gallery-empty {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 4rem 2rem;
+    background: var(--bg-dim);
+    border-radius: 8px;
+  }
+
+  .gallery-empty p {
+    font-family: var(--serif-body);
+    font-style: italic;
+    color: var(--text-faint);
+  }
+
+  .gallery-item {
+    aspect-ratio: 1;
+    background: var(--bg-dim);
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+    cursor: pointer;
+    transition: transform 0.2s;
+  }
+  .gallery-item:hover {
+    transform: scale(1.02);
+  }
+
+  .gallery-item-date {
+    position: absolute;
+    bottom: 0.5rem;
+    left: 0.5rem;
+    font-family: var(--mono);
+    font-size: 0.6875rem;
+    color: var(--text-faint);
+  }
+</style>

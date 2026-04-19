@@ -1,0 +1,95 @@
+---
+interface Props {
+  minimal?: boolean;
+}
+const { minimal = false } = Astro.props;
+---
+
+<footer class:list={['site-footer', { minimal }]}>
+  {!minimal && (
+    <div class="footer-inner">
+      <div class="footer-col">
+        <span class="footer-wordmark">Alice</span>
+        <p class="footer-tagline">Depth over speed.</p>
+      </div>
+      <div class="footer-col">
+        <span class="footer-heading">Product</span>
+        <a href="/about">About</a>
+        <a href="/papers">Research</a>
+      </div>
+      <div class="footer-col">
+        <span class="footer-heading">Account</span>
+        <a href="/auth/login">Log in</a>
+        <a href="/auth/signup">Sign up</a>
+      </div>
+    </div>
+  )}
+  <div class="footer-bottom">
+    <span>&copy; {new Date().getFullYear()} Mr. Fox, LLC</span>
+  </div>
+</footer>
+
+<style is:global>
+  .site-footer {
+    border-top: 1px solid var(--border);
+    padding: 3rem 2rem 1.5rem;
+    margin-top: 4rem;
+    max-width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .site-footer.minimal {
+    padding: 1.5rem 2rem;
+    margin-top: 2rem;
+  }
+
+  .footer-inner {
+    display: flex;
+    gap: 4rem;
+    margin-bottom: 2rem;
+  }
+
+  .footer-wordmark {
+    font-family: var(--serif-display);
+    font-size: 1.25rem;
+    font-style: italic;
+    color: var(--text);
+  }
+
+  .footer-tagline {
+    color: var(--text-faint);
+    font-size: 0.875rem;
+    margin-top: 0.5rem;
+  }
+
+  .footer-col {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .footer-heading {
+    font-family: var(--sans);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    margin-bottom: 0.25rem;
+  }
+
+  .footer-col a {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+  }
+  .footer-col a:hover { color: var(--text); }
+
+  .footer-bottom {
+    font-size: 0.75rem;
+    color: var(--text-faint);
+  }
+
+  @media (max-width: 768px) {
+    .footer-inner { flex-direction: column; gap: 2rem; }
+    .site-footer { padding: 2rem 1.25rem 1rem; }
+  }
+</style>

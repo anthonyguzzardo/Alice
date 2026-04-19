@@ -1,0 +1,131 @@
+---
+interface Props {
+  active?: string;
+}
+const { active = '' } = Astro.props;
+---
+
+<nav class="app-nav">
+  <a href="/app" class="app-wordmark">Alice</a>
+  <div class="app-nav-links">
+    <a href="/app" class:list={['app-nav-link', { active: active === 'journal' }]}>Journal</a>
+    <a href="/app/witness" class:list={['app-nav-link', { active: active === 'witness' }]}>Witness</a>
+    <a href="/app/gallery" class:list={['app-nav-link', { active: active === 'gallery' }]}>Gallery</a>
+    <a href="/app/settings" class:list={['app-nav-link', { active: active === 'settings' }]}>Settings</a>
+  </div>
+  <div class="app-nav-right">
+    <a href="/" class="app-escape" title="Back to your Alice">&larr; My Alice</a>
+    <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme"></button>
+  </div>
+</nav>
+
+<script is:inline>
+  (function() {
+    const btn = document.getElementById('theme-toggle');
+    if (!btn) return;
+    function update() {
+      const theme = document.documentElement.getAttribute('data-theme');
+      btn.textContent = theme === 'dark' ? '\u2600' : '\u263E';
+    }
+    update();
+    btn.addEventListener('click', () => {
+      const current = document.documentElement.getAttribute('data-theme');
+      const next = current === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem('alice-theme', next);
+      update();
+    });
+  })();
+</script>
+
+<style is:global>
+  .app-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 2rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .app-wordmark {
+    font-family: var(--serif-display);
+    font-size: 1.25rem;
+    font-weight: 400;
+    font-style: italic;
+    color: var(--text);
+    text-decoration: none;
+  }
+  .app-wordmark:hover { text-decoration: none; opacity: 0.7; }
+
+  .app-nav-links {
+    display: flex;
+    gap: 1.5rem;
+  }
+
+  .app-nav-link {
+    font-family: var(--sans);
+    font-size: 0.8125rem;
+    color: var(--text-faint);
+    text-decoration: none;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 0.25rem 0;
+    border-bottom: 2px solid transparent;
+    transition: color 0.2s, border-color 0.2s;
+  }
+  .app-nav-link:hover {
+    color: var(--text-muted);
+    text-decoration: none;
+  }
+  .app-nav-link.active {
+    color: var(--text);
+    border-bottom-color: var(--accent);
+  }
+
+  .app-nav-right {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .app-escape {
+    font-family: var(--sans);
+    font-size: 0.75rem;
+    color: var(--text-faint);
+    text-decoration: none;
+    letter-spacing: 0.02em;
+    transition: color 0.2s;
+  }
+  .app-escape:hover {
+    color: var(--text-muted);
+    text-decoration: none;
+  }
+
+  .theme-toggle {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    cursor: pointer;
+    font-size: 14px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 0.2s;
+  }
+  .theme-toggle:hover {
+    border-color: var(--border-focus);
+  }
+
+  @media (max-width: 768px) {
+    .app-nav { padding: 0.75rem 1.25rem; }
+    .app-nav-links { gap: 1rem; }
+    .app-nav-link { font-size: 0.75rem; }
+  }
+</style>
