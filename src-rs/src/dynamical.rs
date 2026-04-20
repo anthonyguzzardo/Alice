@@ -437,8 +437,8 @@ pub fn compute(stream: &[KeystrokeEvent]) -> DynamicalResult {
     let alpha = dfa_alpha(&ikis).ok();
     let rqa_result = rqa(&ikis).ok();
 
-    let holds = &hf.holds[..aligned];
-    let flights = &hf.flights[..aligned];
+    let holds = &hf.holds()[..aligned];
+    let flights = &hf.flights()[..aligned];
     let te_hf = transfer_entropy(holds, flights, 1).ok();
     let te_fh = transfer_entropy(flights, holds, 1).ok();
 

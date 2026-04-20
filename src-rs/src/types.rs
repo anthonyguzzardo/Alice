@@ -109,11 +109,19 @@ impl Deref for FlightTimes {
 
 /// Paired hold and flight time series extracted from a keystroke stream.
 pub struct HoldFlight {
-    pub holds: Vec<f64>,
-    pub flights: FlightTimes,
+    holds: Vec<f64>,
+    flights: FlightTimes,
 }
 
 impl HoldFlight {
+    pub fn holds(&self) -> &[f64] {
+        &self.holds
+    }
+
+    pub fn flights(&self) -> &[f64] {
+        &self.flights
+    }
+
     pub fn from_stream(stream: &[KeystrokeEvent]) -> Self {
         let mut holds = Vec::with_capacity(stream.len());
         let mut flights = Vec::with_capacity(stream.len());
