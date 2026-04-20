@@ -28,6 +28,7 @@ import {
 import type { KeystrokeEvent } from './libSignalsNative.ts';
 import { computeSemanticSignals } from './libSemanticSignals.ts';
 import { computeCrossSessionSignals } from './libCrossSessionSignals.ts';
+import { updateProfile } from './libProfile.ts';
 import { logError } from './utlErrorLog.ts';
 
 async function getKeystrokeStream(questionId: number): Promise<KeystrokeEvent[] | null> {
@@ -194,5 +195,12 @@ export async function computeAndPersistDerivedSignals(questionId: number): Promi
     } catch (err) {
       logError('signal-pipeline.crossSession', err, { questionId });
     }
+  }
+
+  // ── Personal profile (rolling aggregate, depends on all signals above) ──
+  try {
+    await updateProfile(questionId);
+  } catch (err) {
+    logError('signal-pipeline.profile', err, { questionId });
   }
 }

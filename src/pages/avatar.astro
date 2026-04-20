@@ -1,0 +1,375 @@
+---
+import PublicLayout from '../layouts/layPublic.astro';
+---
+
+<PublicLayout title="Alice -- Avatar" active="avatar" description="Writing process reconstruction from behavioral profile.">
+
+<article class="avatar-page">
+
+  <header class="av-hero">
+    <h1>Avatar</h1>
+    <p class="av-lead">Markov chain text generation from your corpus, replayed with your keystroke timing profile. No LLM. Pure math.</p>
+  </header>
+
+  <section class="av-section">
+    <form class="av-form" id="avatar-form">
+      <input type="text" id="topic-input" class="av-input" placeholder="Enter a topic..." required />
+      <button type="submit" class="av-btn" id="generate-btn">Generate</button>
+    </form>
+
+    <div class="av-meta" id="meta" hidden>
+      <span id="meta-corpus"></span>
+      <span id="meta-order"></span>
+      <span id="meta-sessions"></span>
+    </div>
+  </section>
+
+  <section class="av-section">
+    <div class="av-stage" id="stage">
+      <div class="av-textarea" id="output"></div>
+      <div class="av-cursor" id="cursor" hidden></div>
+    </div>
+
+    <div class="av-signals" id="signals" hidden>
+      <div class="av-signal">
+        <span class="av-signal-label">chars</span>
+        <span class="av-signal-value" id="sig-chars">0</span>
+      </div>
+      <div class="av-signal">
+        <span class="av-signal-label">bursts</span>
+        <span class="av-signal-value" id="sig-bursts">0</span>
+      </div>
+      <div class="av-signal">
+        <span class="av-signal-label">pauses</span>
+        <span class="av-signal-value" id="sig-pauses">0</span>
+      </div>
+      <div class="av-signal">
+        <span class="av-signal-label">avg iki</span>
+        <span class="av-signal-value" id="sig-iki">0ms</span>
+      </div>
+      <div class="av-signal">
+        <span class="av-signal-label">elapsed</span>
+        <span class="av-signal-value" id="sig-elapsed">0s</span>
+      </div>
+    </div>
+  </section>
+
+</article>
+
+</PublicLayout>
+
+<script is:inline>
+(function () {
+  var form = document.getElementById('avatar-form');
+  var input = document.getElementById('topic-input');
+  var btn = document.getElementById('generate-btn');
+  var output = document.getElementById('output');
+  var cursor = document.getElementById('cursor');
+  var meta = document.getElementById('meta');
+  var signals = document.getElementById('signals');
+  var sigChars = document.getElementById('sig-chars');
+  var sigBursts = document.getElementById('sig-bursts');
+  var sigPauses = document.getElementById('sig-pauses');
+  var sigIki = document.getElementById('sig-iki');
+  var sigElapsed = document.getElementById('sig-elapsed');
+
+  if (!form || !input || !output) return;
+
+  // Timing comes from Rust. Client just replays the pre-computed delays.
+  var PAUSE_THRESHOLD = 500; // ms — delays above this count as pauses
+  var BURST_THRESHOLD = 2000; // ms — delays above this count as burst boundaries
+
+  var cancelReplay = null;
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var topic = input.value.trim();
+    if (!topic) return;
+
+    // Cancel any running replay
+    if (cancelReplay) cancelReplay();
+
+    btn.disabled = true;
+    btn.textContent = 'Generating...';
+    output.textContent = '';
+    cursor.hidden = false;
+    meta.hidden = true;
+    signals.hidden = true;
+    var oldDone = document.querySelector('.av-done');
+    if (oldDone) oldDone.remove();
+
+    fetch('/api/avatar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topic: topic }),
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        btn.disabled = false;
+        btn.textContent = 'Generate';
+
+        if (data.error) {
+          output.textContent = data.error;
+          cursor.hidden = true;
+          return;
+        }
+
+        // Show meta
+        document.getElementById('meta-corpus').textContent = data.corpusSize + ' entries';
+        document.getElementById('meta-order').textContent = 'order-' + data.markovOrder + ' markov';
+        document.getElementById('meta-sessions').textContent = data.sessionCount + ' sessions profiled';
+        meta.hidden = false;
+        signals.hidden = false;
+
+        // Replay using Rust-computed delays
+        var text = data.text;
+        var delays = data.delays || [];
+        var chars = Array.from(text);
+        var i = 0;
+        var charCount = 0;
+        var burstCount = 1;
+        var pauseCount = 0;
+        var totalIki = 0;
+        var ikiCount = 0;
+        var startTime = performance.now();
+        var cancelled = false;
+
+        cancelReplay = function () { cancelled = true; };
+
+        function typeNext() {
+          if (cancelled || i >= chars.length) {
+            cursor.hidden = true;
+            cancelReplay = null;
+            // Show done state
+            var elapsed = (performance.now() - startTime) / 1000;
+            sigElapsed.textContent = elapsed.toFixed(1) + 's';
+            var done = document.createElement('div');
+            done.className = 'av-done';
+            done.textContent = charCount + ' chars in ' + elapsed.toFixed(1) + 's';
+            output.parentNode.appendChild(done);
+            return;
+          }
+
+          output.textContent += chars[i];
+          charCount++;
+
+          var delay = i < delays.length ? delays[i] : 120;
+
+          // Classify delay for signal display
+          if (delay >= BURST_THRESHOLD) {
+            burstCount++;
+            pauseCount++;
+          } else if (delay >= PAUSE_THRESHOLD) {
+            pauseCount++;
+          }
+
+          totalIki += delay;
+          ikiCount++;
+
+          // Update live signals
+          sigChars.textContent = charCount;
+          var elapsed = (performance.now() - startTime) / 1000;
+          sigElapsed.textContent = elapsed.toFixed(1) + 's';
+          sigBursts.textContent = burstCount;
+          sigPauses.textContent = pauseCount;
+          sigIki.textContent = Math.round(totalIki / ikiCount) + 'ms';
+
+          output.scrollTop = output.scrollHeight;
+          i++;
+
+          setTimeout(typeNext, delay);
+        }
+
+        // First delay is the first keystroke latency (already in delays[0])
+        var firstDelay = delays.length > 0 ? delays[0] : 3000;
+        setTimeout(typeNext, firstDelay);
+      })
+      .catch(function () {
+        btn.disabled = false;
+        btn.textContent = 'Generate';
+        output.textContent = 'Failed to generate.';
+        cursor.hidden = true;
+      });
+  });
+})();
+</script>
+
+<style is:global>
+  .avatar-page {
+    padding-bottom: 4rem;
+  }
+
+  .av-hero {
+    padding: 5rem 0 2rem;
+    max-width: 720px;
+  }
+
+  .av-hero h1 {
+    font-family: var(--serif-display);
+    font-size: 2.2rem;
+    font-weight: 400;
+    color: var(--text);
+    margin-bottom: 0.75rem;
+  }
+
+  .av-lead {
+    font-family: var(--serif-body);
+    font-size: 1rem;
+    color: var(--text-muted);
+    line-height: 1.6;
+  }
+
+  .av-section {
+    padding: 1.5rem 0;
+    border-top: 1px solid var(--border);
+  }
+
+  /* --- Form --- */
+  .av-form {
+    display: flex;
+    gap: 0.75rem;
+    max-width: 540px;
+  }
+
+  .av-input {
+    flex: 1;
+    padding: 0.7rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-panel);
+    color: var(--text);
+    font-family: var(--serif-body);
+    font-size: 1rem;
+    outline: none;
+    transition: border-color 0.2s ease;
+  }
+
+  .av-input:focus {
+    border-color: var(--border-focus);
+  }
+
+  .av-input::placeholder {
+    color: var(--text-faint);
+    font-style: italic;
+  }
+
+  .av-btn {
+    padding: 0.7rem 1.5rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-muted);
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    transition: border-color 0.2s ease, color 0.2s ease;
+    white-space: nowrap;
+  }
+
+  .av-btn:hover:not(:disabled) {
+    border-color: var(--border-focus);
+    color: var(--text);
+  }
+
+  .av-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  /* --- Meta --- */
+  .av-meta {
+    display: flex;
+    gap: 1.5rem;
+    margin-top: 1rem;
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-faint);
+  }
+
+  /* --- Stage (where the typing happens) --- */
+  .av-stage {
+    position: relative;
+    min-height: 200px;
+    max-height: 400px;
+    overflow-y: auto;
+    padding: 1.5rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-panel);
+  }
+
+  .av-textarea {
+    font-family: var(--serif-body);
+    font-size: 1.1rem;
+    line-height: 1.8;
+    color: var(--text);
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+
+  .av-cursor {
+    display: inline-block;
+    width: 2px;
+    height: 1.2em;
+    background: var(--accent);
+    margin-left: 1px;
+    animation: blink 1s step-end infinite;
+    vertical-align: text-bottom;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+
+  /* --- Live signals --- */
+  .av-signals {
+    display: flex;
+    gap: 2rem;
+    margin-top: 1rem;
+    padding: 1rem 0;
+  }
+
+  .av-signal {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+
+  .av-signal-label {
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-faint);
+  }
+
+  .av-signal-value {
+    font-family: var(--mono);
+    font-size: 1.1rem;
+    color: var(--text);
+    letter-spacing: -0.02em;
+  }
+
+  .av-done {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-faint);
+    text-align: center;
+    padding: 1rem 0;
+  }
+
+  @media (max-width: 768px) {
+    .av-hero { padding: 4rem 0 1.5rem; }
+    .av-hero h1 { font-size: 1.6rem; }
+    .av-form { flex-direction: column; }
+    .av-signals { flex-wrap: wrap; gap: 1rem; }
+    .av-meta { flex-wrap: wrap; gap: 0.75rem; }
+  }
+</style>

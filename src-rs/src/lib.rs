@@ -11,6 +11,7 @@
 // napi entry points are called from JS, not Rust; #[must_use] is meaningless.
 #![allow(clippy::must_use_candidate)]
 
+mod avatar;
 mod dynamical;
 mod motor;
 mod process;
@@ -145,5 +146,47 @@ pub fn compute_process_signals(event_log_json: String) -> ProcessSignals {
         vocab_expansion_rate: r.vocab_expansion_rate,
         phase_transition_point: r.phase_transition_point,
         strategy_shift_count: r.strategy_shift_count,
+    }
+}
+
+// ─── Avatar (text generation + timing synthesis) ────────────────
+
+#[napi(object)]
+#[derive(Serialize, Default)]
+pub struct AvatarOutput {
+    /// Generated text from Markov chain
+    pub text: String,
+    /// Per-character delay in ms
+    pub delays: Vec<f64>,
+    /// Word count of generated text
+    pub word_count: i32,
+    /// Markov order used (1 or 2)
+    pub order: i32,
+    /// Number of unique states in the chain
+    pub chain_size: i32,
+}
+
+/// Generate text from a personal corpus Markov chain with timing from a motor profile.
+///
+/// `corpus_json`: JSON array of response text strings
+/// `topic`: seed topic for generation
+/// `profile_json`: JSON object with timing profile fields (digraph, mu, sigma, tau, etc.)
+/// `max_words`: maximum words to generate
+#[napi]
+#[allow(clippy::needless_pass_by_value)]
+pub fn generate_avatar(
+    corpus_json: String,
+    topic: String,
+    profile_json: String,
+    max_words: i32,
+) -> AvatarOutput {
+    let r = avatar::compute(&corpus_json, &topic, &profile_json, max_words.max(10) as usize);
+
+    AvatarOutput {
+        text: r.text,
+        delays: r.delays,
+        word_count: i32::try_from(r.word_count).unwrap_or(i32::MAX),
+        order: i32::try_from(r.order).unwrap_or(0),
+        chain_size: i32::try_from(r.chain_size).unwrap_or(0),
     }
 }
