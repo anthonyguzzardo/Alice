@@ -82,6 +82,7 @@ export async function computeAndPersistDerivedSignals(questionId: number): Promi
         hold_flight_count: ds.holdFlightCount,
         permutation_entropy: ds.permutationEntropy,
         permutation_entropy_raw: ds.permutationEntropyRaw,
+        pe_spectrum: ds.peSpectrum ? JSON.stringify(ds.peSpectrum) : null,
         dfa_alpha: ds.dfaAlpha,
         rqa_determinism: ds.rqaDeterminism,
         rqa_laminarity: ds.rqaLaminarity,

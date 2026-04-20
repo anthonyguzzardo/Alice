@@ -137,11 +137,16 @@ import PublicLayout from '../layouts/layPublic.astro';
       </div>
       <div class="r-timeline-row">
         <span class="r-timeline-label">1995-2010</span>
-        <span class="r-timeline-detail">Birth (native)</span>
+        <span class="r-timeline-detail">Birth (keyboard native)</span>
         <div class="r-bar-container"><div class="r-bar" style="width: 8%"><span class="r-bar-text">Minimal</span></div></div>
       </div>
+      <div class="r-timeline-row r-timeline-row-rising">
+        <span class="r-timeline-label">2010+</span>
+        <span class="r-timeline-detail">Touchscreen-first</span>
+        <div class="r-bar-container"><div class="r-bar r-bar-rising" style="width: 45%"><span class="r-bar-text">Rising</span></div></div>
+      </div>
     </div>
-    <p class="r-caption">Schematic model of generational typing proficiency. Proficiency labels are editorial estimates informed by cohort-level data (<a class="r-cite" href="https://doi.org/10.1093/jamiaopen/ooac099" target="_blank" rel="noopener">Cramer-Petersen et al. 2022</a>, <a class="r-cite" href="https://doi.org/10.1145/3173574.3174220" target="_blank" rel="noopener">Dhakal et al. 2018</a>, <a class="r-cite" href="https://www.pewresearch.org/short-reads/2019/09/09/us-generations-technology-use/" target="_blank" rel="noopener">Pew Research 2019</a>), not individually validated assessments.</p>
+    <p class="r-caption">Schematic model of generational typing proficiency. Proficiency labels are editorial estimates informed by cohort-level data (<a class="r-cite" href="https://doi.org/10.1093/jamiaopen/ooac099" target="_blank" rel="noopener">Cramer-Petersen et al. 2022</a>, <a class="r-cite" href="https://doi.org/10.1145/3173574.3174220" target="_blank" rel="noopener">Dhakal et al. 2018</a>, <a class="r-cite" href="https://www.pewresearch.org/short-reads/2019/09/09/us-generations-technology-use/" target="_blank" rel="noopener">Pew Research 2019</a>), not individually validated assessments. The 2010+ estimate is based on early reports of declining keyboard proficiency in touchscreen-native cohorts, not validated studies.</p>
 
     <p>The people currently old enough to be at risk for cognitive decline are the wrong people to study this way. Motor inexperience masquerades as cognitive slowing. Fluent elderly typists are unrepresentative. And typing proficiency correlates with cognitive reserve, confounding the very construct the instrument is supposed to isolate.</p>
   </section>
@@ -1067,6 +1072,24 @@ import PublicLayout from '../layouts/layPublic.astro';
     color: var(--bg);
     letter-spacing: 0.04em;
     white-space: nowrap;
+  }
+
+  .r-timeline-row-rising {
+    border-top: 1px dashed var(--border);
+    margin-top: 0.25rem;
+    padding-top: 0.75rem;
+  }
+
+  .r-bar-rising {
+    background: var(--negative);
+    opacity: 0.45;
+    background-image: repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 4px,
+      rgba(255,255,255,0.15) 4px,
+      rgba(255,255,255,0.15) 8px
+    );
   }
 
   /* --- Callout --- */

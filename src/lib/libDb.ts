@@ -1902,6 +1902,7 @@ export interface DynamicalSignalRow {
   hold_flight_count: number | null;
   permutation_entropy: number | null;
   permutation_entropy_raw: number | null;
+  pe_spectrum: string | null;
   dfa_alpha: number | null;
   rqa_determinism: number | null;
   rqa_laminarity: number | null;
@@ -1916,12 +1917,12 @@ export async function saveDynamicalSignals(questionId: number, s: Omit<Dynamical
   const [row] = await sql`
     INSERT INTO tb_dynamical_signals (
        question_id, iki_count, hold_flight_count,
-       permutation_entropy, permutation_entropy_raw, dfa_alpha,
+       permutation_entropy, permutation_entropy_raw, pe_spectrum, dfa_alpha,
        rqa_determinism, rqa_laminarity, rqa_trapping_time, rqa_recurrence_rate,
        te_hold_to_flight, te_flight_to_hold, te_dominance
     ) VALUES (
       ${questionId}, ${s.iki_count}, ${s.hold_flight_count},
-      ${s.permutation_entropy}, ${s.permutation_entropy_raw}, ${s.dfa_alpha},
+      ${s.permutation_entropy}, ${s.permutation_entropy_raw}, ${s.pe_spectrum}, ${s.dfa_alpha},
       ${s.rqa_determinism}, ${s.rqa_laminarity}, ${s.rqa_trapping_time}, ${s.rqa_recurrence_rate},
       ${s.te_hold_to_flight}, ${s.te_flight_to_hold}, ${s.te_dominance}
     )
@@ -1933,7 +1934,13 @@ export async function saveDynamicalSignals(questionId: number, s: Omit<Dynamical
 
 export async function getDynamicalSignals(questionId: number): Promise<DynamicalSignalRow | null> {
   const rows = await sql`SELECT * FROM tb_dynamical_signals WHERE question_id = ${questionId}`;
-  return (rows[0] as DynamicalSignalRow) ?? null;
+  if (!rows[0]) return null;
+  const row = rows[0] as Record<string, unknown>;
+  // JSONB columns auto-parsed by postgres driver; callers expect strings
+  return {
+    ...row,
+    pe_spectrum: row.pe_spectrum == null ? null : (typeof row.pe_spectrum === 'object' ? JSON.stringify(row.pe_spectrum) : row.pe_spectrum as string),
+  } as DynamicalSignalRow;
 }
 
 // ----------------------------------------------------------------------------

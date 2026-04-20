@@ -31,6 +31,7 @@ interface NativeModule {
     holdFlightCount: number;
     permutationEntropy: number | null;
     permutationEntropyRaw: number | null;
+    peSpectrum: number[] | null;
     dfaAlpha: number | null;
     rqaDeterminism: number | null;
     rqaLaminarity: number | null;
@@ -93,6 +94,7 @@ export function computeDynamicalSignals(stream: KeystrokeEvent[]): DynamicalSign
       holdFlightCount: result.holdFlightCount ?? 0,
       permutationEntropy: n(result.permutationEntropy),
       permutationEntropyRaw: n(result.permutationEntropyRaw),
+      peSpectrum: na(result.peSpectrum),
       dfaAlpha: n(result.dfaAlpha),
       rqaDeterminism: n(result.rqaDeterminism),
       rqaLaminarity: n(result.rqaLaminarity),

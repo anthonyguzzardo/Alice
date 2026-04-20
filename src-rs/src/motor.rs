@@ -256,7 +256,60 @@ fn digraph_latency_profile(stream: &[KeystrokeEvent]) -> Option<String> {
     serde_json::to_string(&profile).ok()
 }
 
-// ─── Ex-Gaussian Fit (BiAffect / Zulueta 2018) ───────────────────
+// ─── Ex-Gaussian Fit (MLE via EM, Lacouture & Cousineau 2008) ────
+//
+// The ex-Gaussian is a convolution of a Gaussian (mu, sigma) with an
+// exponential (rate = 1/tau). MLE produces better estimates than method
+// of moments, especially for small samples and heavy tails.
+//
+// EM algorithm:
+//   E-step: posterior weight w_i = P(exponential component | x_i, theta)
+//   M-step: update mu, sigma from weighted Gaussian, tau from weighted exponential
+//
+// Falls back to method of moments if EM fails to converge.
+
+/// Log-PDF of the ex-Gaussian distribution.
+/// ln f(x | mu, sigma, tau) = -ln(tau) + (mu - x)/tau + sigma²/(2*tau²) + ln erfc(z/√2)
+/// where z = (mu + sigma²/tau - x) / sigma
+fn exgauss_log_pdf(x: f64, mu: f64, sigma: f64, tau: f64) -> f64 {
+    let z = (mu + sigma * sigma / tau - x) / sigma;
+    let erfc_val = erfc(z / std::f64::consts::SQRT_2);
+    if erfc_val <= 0.0 {
+        return f64::NEG_INFINITY;
+    }
+    -(tau.ln()) + (mu - x) / tau + (sigma * sigma) / (2.0 * tau * tau) + erfc_val.ln()
+}
+
+/// Method of moments initial estimates (used as EM seed and fallback).
+fn mom_estimates(data: &[f64]) -> SignalResult<(f64, f64, f64)> {
+    let m = mean(data);
+    let s = std_dev(data, Some(m));
+    if s <= 0.0 {
+        return Err(SignalError::ZeroVariance { len: data.len() });
+    }
+
+    let n = data.len() as f64;
+    let m3: f64 = data.iter().map(|v| ((v - m) / s).powi(3)).sum::<f64>() / n;
+
+    // If skewness is non-positive, can't decompose into Gaussian + exponential
+    if m3 <= 0.0 {
+        return Err(SignalError::DegenerateValue("non-positive skewness"));
+    }
+
+    let tau = s * (m3 / 2.0).cbrt();
+    let gaussian_var = s * s - tau * tau;
+    if gaussian_var <= 0.0 {
+        return Err(SignalError::DegenerateValue("negative gaussian variance"));
+    }
+    let sigma = gaussian_var.sqrt();
+    let mu = m - tau;
+
+    if mu <= 0.0 || sigma <= 0.0 || tau <= 0.0 {
+        return Err(SignalError::DegenerateValue("non-positive MoM parameter"));
+    }
+
+    Ok((mu, sigma, tau))
+}
 
 fn ex_gaussian_fit(flight_times: &[f64]) -> SignalResult<ExGaussianValues> {
     if flight_times.len() < 50 {
@@ -282,41 +335,103 @@ fn ex_gaussian_fit(flight_times: &[f64]) -> SignalResult<ExGaussianValues> {
         });
     }
 
-    let m = mean(&filtered);
-    let s = std_dev(&filtered, Some(m));
-    if s <= 0.0 {
-        return Err(SignalError::ZeroVariance {
-            len: filtered.len(),
-        });
+    let (mom_mu, mom_sigma, mom_tau) = mom_estimates(&filtered)?;
+    let data_mean = mean(&filtered);
+
+    // ── EM iteration ──
+    let mut mu = mom_mu;
+    let mut sigma = mom_sigma;
+    let mut tau = mom_tau;
+
+    const MAX_ITER: usize = 200;
+    const TOL: f64 = 1e-6;
+
+    for _ in 0..MAX_ITER {
+        let prev_mu = mu;
+        let prev_sigma = sigma;
+        let prev_tau = tau;
+
+        // E-step: compute posterior weight of exponential component for each point
+        // w_i = proportion attributable to the exponential tail
+        let mut weights = Vec::with_capacity(filtered.len());
+        for &x in &filtered {
+            // z = (mu + sigma²/tau - x) / sigma
+            let z = (mu + sigma * sigma / tau - x) / sigma;
+            let z_scaled = z / std::f64::consts::SQRT_2;
+            // The posterior mean of the exponential component:
+            // E[S|x] = tau - sigma*z * phi(z)/Phi(-z) where we use the erfc formulation
+            // Simpler: E[S|x] = tau + mu + sigma²/tau - x + sigma * mills_ratio(-z)
+            // Mills ratio R(a) = phi(a)/Phi(a) ≈ via erfc
+            let erfc_val = erfc(z_scaled);
+            if erfc_val <= 0.0 || !erfc_val.is_finite() {
+                // Degenerate point, assign zero exponential weight
+                weights.push(0.0);
+                continue;
+            }
+            // E[exponential part | x_i] = sigma²/tau + mu - x + sigma * R(z)
+            // where R(z) = sqrt(2/pi) * exp(-z²/2) / erfc(z/sqrt(2))
+            let r = std::f64::consts::FRAC_2_SQRT_PI / std::f64::consts::SQRT_2
+                * (-z * z / 2.0).exp()
+                / erfc_val;
+            let exp_part = sigma * sigma / tau + mu - x + sigma * r;
+            weights.push(exp_part.max(0.0));
+        }
+
+        // M-step: update tau from mean of exponential components
+        let w_sum: f64 = weights.iter().sum();
+        let n = filtered.len() as f64;
+        if w_sum <= 0.0 {
+            break; // Degenerate, keep previous estimates
+        }
+        tau = w_sum / n;
+
+        // Update mu and sigma from the Gaussian component
+        // The Gaussian component of each observation is x_i - w_i
+        let gauss_parts: Vec<f64> = filtered
+            .iter()
+            .zip(weights.iter())
+            .map(|(&x, &w)| x - w)
+            .collect();
+        mu = mean(&gauss_parts);
+        let var: f64 = gauss_parts.iter().map(|&g| (g - mu).powi(2)).sum::<f64>() / n;
+        sigma = var.sqrt();
+
+        // Guard against degenerate parameters
+        if sigma <= 0.0 || tau <= 0.0 || mu <= 0.0 {
+            // Revert to MoM
+            mu = mom_mu;
+            sigma = mom_sigma;
+            tau = mom_tau;
+            break;
+        }
+
+        // Convergence check
+        let d_mu = (mu - prev_mu).abs();
+        let d_sigma = (sigma - prev_sigma).abs();
+        let d_tau = (tau - prev_tau).abs();
+        if d_mu < TOL && d_sigma < TOL && d_tau < TOL {
+            break;
+        }
     }
 
-    // Skewness (third standardized moment)
-    let n = filtered.len() as f64;
-    let m3: f64 = filtered.iter().map(|v| ((v - m) / s).powi(3)).sum::<f64>() / n;
+    // Validate final log-likelihood is better than MoM
+    let mle_ll: f64 = filtered
+        .iter()
+        .map(|&x| exgauss_log_pdf(x, mu, sigma, tau))
+        .sum();
+    let mom_ll: f64 = filtered
+        .iter()
+        .map(|&x| exgauss_log_pdf(x, mom_mu, mom_sigma, mom_tau))
+        .sum();
 
-    if m3 <= 0.0 {
-        return Err(SignalError::DegenerateValue("non-positive skewness"));
+    if !mle_ll.is_finite() || mle_ll < mom_ll {
+        // MLE didn't improve; use MoM
+        mu = mom_mu;
+        sigma = mom_sigma;
+        tau = mom_tau;
     }
 
-    // Method of moments: tau = std * (skewness/2)^(1/3)
-    let tau = s * (m3 / 2.0).cbrt();
-    let variance = s * s;
-    let tau_sq = tau * tau;
-
-    let gaussian_var = variance - tau_sq;
-    if gaussian_var <= 0.0 {
-        return Err(SignalError::DegenerateValue("negative gaussian variance"));
-    }
-
-    let sigma = gaussian_var.sqrt();
-    let mu = m - tau;
-
-    if mu <= 0.0 {
-        return Err(SignalError::DegenerateValue("non-positive mu"));
-    }
-
-    // m > 0 guaranteed (flight times are positive after filtering)
-    let tau_proportion = tau / m;
+    let tau_proportion = tau / data_mean;
 
     Ok(ExGaussianValues {
         tau,
@@ -440,6 +555,58 @@ mod tests {
         let data: Vec<f64> = (0..50).map(|i| ((i as f64) * 0.3).sin() * 100.0).collect();
         let acf = iki_autocorrelation(&data, 5).unwrap();
         assert_eq!(acf.len(), 5);
+    }
+
+    #[test]
+    fn ex_gaussian_mle_converges() {
+        // Right-skewed flight times: bulk around 80ms with exponential tail
+        // Simulates typical keystroke flight time distribution
+        let mut data: Vec<f64> = Vec::new();
+        for i in 0..200 {
+            // Base Gaussian component ~80ms
+            let gauss = 80.0 + 12.0 * ((i as f64 * 0.31).sin());
+            // Exponential tail: some fraction of points get large additions
+            let exp_tail = if i % 3 == 0 {
+                40.0 * ((i as f64 * 0.07).sin().abs() + 0.5)
+            } else {
+                5.0 * ((i as f64 * 0.13).sin().abs())
+            };
+            data.push(gauss + exp_tail);
+        }
+        let result = ex_gaussian_fit(&data).unwrap();
+        assert!(result.mu > 0.0, "mu should be positive, got {}", result.mu);
+        assert!(
+            result.sigma > 0.0,
+            "sigma should be positive, got {}",
+            result.sigma
+        );
+        assert!(
+            result.tau > 0.0,
+            "tau should be positive, got {}",
+            result.tau
+        );
+        assert!(
+            result.tau_proportion > 0.0 && result.tau_proportion < 1.0,
+            "tau_proportion should be in (0,1), got {}",
+            result.tau_proportion
+        );
+    }
+
+    #[test]
+    fn ex_gaussian_insufficient_data() {
+        let short = vec![100.0; 30];
+        assert!(matches!(
+            ex_gaussian_fit(&short),
+            Err(SignalError::InsufficientData { .. })
+        ));
+    }
+
+    #[test]
+    fn ex_gaussian_log_pdf_finite() {
+        // Sanity: log-PDF should be finite for reasonable parameters
+        let lp = exgauss_log_pdf(100.0, 80.0, 15.0, 30.0);
+        assert!(lp.is_finite(), "log-PDF should be finite, got {lp}");
+        assert!(lp < 0.0, "log-PDF should be negative, got {lp}");
     }
 
     #[test]

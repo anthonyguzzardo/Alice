@@ -640,6 +640,7 @@ CREATE TABLE IF NOT EXISTS tb_dynamical_signals (
   ,hold_flight_count            INT
   ,permutation_entropy          DOUBLE PRECISION
   ,permutation_entropy_raw      DOUBLE PRECISION
+  ,pe_spectrum                  JSONB
   ,dfa_alpha                    DOUBLE PRECISION
   ,rqa_determinism              DOUBLE PRECISION
   ,rqa_laminarity               DOUBLE PRECISION

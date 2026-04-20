@@ -32,6 +32,7 @@ export interface DynamicalSignals {
   // Permutation entropy (Bandt & Pompe 2002)
   permutationEntropy: number | null;       // 0–1 normalized
   permutationEntropyRaw: number | null;    // bits
+  peSpectrum: number[] | null;             // orders 3-7, each normalized [0,1]
 
   // DFA (Peng et al. 1994)
   dfaAlpha: number | null;                 // fractal scaling exponent
@@ -347,6 +348,18 @@ export function computeDynamicalSignals(stream: KeystrokeEvent[]): DynamicalSign
   // Permutation entropy
   const pe = permutationEntropy(ikis, 3);
 
+  // Multi-scale PE (orders 3-7)
+  let peSpectrum: number[] | null = null;
+  {
+    const spectrum: number[] = [];
+    for (let order = 3; order <= 7; order++) {
+      const result = permutationEntropy(ikis, order);
+      if (!result) break;
+      spectrum.push(result.normalized);
+    }
+    if (spectrum.length === 5) peSpectrum = spectrum;
+  }
+
   // DFA
   const alpha = dfaAlpha(ikis);
 
@@ -371,6 +384,7 @@ export function computeDynamicalSignals(stream: KeystrokeEvent[]): DynamicalSign
 
     permutationEntropy: pe?.normalized ?? null,
     permutationEntropyRaw: pe?.raw ?? null,
+    peSpectrum,
 
     dfaAlpha: alpha,
 

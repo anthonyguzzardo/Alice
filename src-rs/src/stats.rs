@@ -87,7 +87,7 @@ pub fn digamma(mut x: f64) -> f64 {
 /// Abramowitz & Stegun 7.1.26 rational approximation (|ε| < 1.5×10⁻⁷).
 #[inline]
 pub fn erfc(x: f64) -> f64 {
-    let t = 1.0 / 1.0f64.mul_add(0.3275911, x.abs());
+    let t = 1.0 / 0.3275911f64.mul_add(x.abs(), 1.0);
     let poly = t * (0.254829592f64
         + t * (-0.284496736f64
             + t * (1.421413741f64 + t * (-1.453152027f64 + t * 1.061405429f64))));

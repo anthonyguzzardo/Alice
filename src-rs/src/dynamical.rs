@@ -27,6 +27,9 @@ pub struct DynamicalResult {
     pub hold_flight_count: usize,
     pub permutation_entropy: Option<f64>,
     pub permutation_entropy_raw: Option<f64>,
+    /// PE at orders 3-7: complexity spectrum revealing structure at multiple scales.
+    /// Index 0 = order 3, index 4 = order 7. Each value is normalized [0,1].
+    pub pe_spectrum: Option<Vec<f64>>,
     pub dfa_alpha: Option<f64>,
     pub rqa: Option<RqaResult>,
     pub te_hold_to_flight: Option<f64>,
@@ -409,6 +412,27 @@ pub fn compute(stream: &[KeystrokeEvent]) -> DynamicalResult {
     let aligned = hf.aligned_len();
 
     let pe = permutation_entropy(&ikis, 3).ok();
+
+    // Multi-scale PE: orders 3-7
+    let pe_spectrum = {
+        let mut spectrum = Vec::with_capacity(5);
+        let mut all_ok = true;
+        for order in 3..=7 {
+            match permutation_entropy(&ikis, order) {
+                Ok((normalized, _)) => spectrum.push(normalized),
+                Err(_) => {
+                    all_ok = false;
+                    break;
+                }
+            }
+        }
+        if all_ok && spectrum.len() == 5 {
+            Some(spectrum)
+        } else {
+            None
+        }
+    };
+
     let alpha = dfa_alpha(&ikis).ok();
     let rqa_result = rqa(&ikis).ok();
 
@@ -435,6 +459,7 @@ pub fn compute(stream: &[KeystrokeEvent]) -> DynamicalResult {
         hold_flight_count: aligned,
         permutation_entropy: pe.map(|(n, _)| n),
         permutation_entropy_raw: pe.map(|(_, r)| r),
+        pe_spectrum,
         dfa_alpha: alpha,
         rqa: rqa_result,
         te_hold_to_flight: te_hf,
@@ -535,6 +560,36 @@ mod tests {
         let a: Vec<f64> = (0..50).map(|i| ((i as f64) * 0.2).sin()).collect();
         let te = transfer_entropy(&a, &a, 1).unwrap();
         assert!(te >= 0.0);
+    }
+
+    #[test]
+    fn pe_spectrum_length_and_bounds() {
+        // Need enough data for order 7: at least 7 + 10 = 17 points
+        let data: Vec<f64> = (0..200)
+            .map(|i| ((i as f64) * 0.7).sin() * 100.0 + 50.0)
+            .collect();
+        let spectrum = {
+            let mut s = Vec::new();
+            for order in 3..=7 {
+                let (norm, _) = permutation_entropy(&data, order).unwrap();
+                s.push(norm);
+            }
+            s
+        };
+        assert_eq!(spectrum.len(), 5);
+        for (i, &pe) in spectrum.iter().enumerate() {
+            assert!(
+                (0.0..=1.0).contains(&pe),
+                "PE spectrum[{i}] should be in [0,1], got {pe}"
+            );
+        }
+    }
+
+    #[test]
+    fn pe_spectrum_none_for_short_series() {
+        // Order 7 needs >= 17 points; 15 should fail
+        let data: Vec<f64> = (0..15).map(|i| i as f64).collect();
+        assert!(permutation_entropy(&data, 7).is_err());
     }
 
     #[test]
