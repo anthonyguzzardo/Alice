@@ -1,0 +1,142 @@
+---
+import PublicLayout from '../../layouts/layPublic.astro';
+import { listLogEntries } from '../../lib/libLog.ts';
+
+const entries = listLogEntries('published');
+---
+
+<PublicLayout title="Alice -- Log" active="log" description="Build notes, measurement insights, and engineering decisions from the Alice instrument.">
+
+<article class="log-index">
+
+  <header class="lg-hero">
+    <h1>Log</h1>
+    <p class="lg-lead">Build notes, measurement insights, and engineering decisions. A running record of the instrument taking shape.</p>
+  </header>
+
+  {entries.length > 0 ? (
+    <ul class="lg-list">
+      {entries.map(entry => (
+        <li class="lg-item">
+          <a href={`/log/${entry.slug}`}>
+            <time class="lg-date">{entry.date}</time>
+            {entry.tags.length > 0 && (
+              <span class="lg-tags">{entry.tags.join(' / ')}</span>
+            )}
+            <h2 class="lg-title">{entry.title}</h2>
+            <p class="lg-excerpt">{entry.excerpt}</p>
+          </a>
+        </li>
+      ))}
+    </ul>
+  ) : (
+    <p class="lg-empty">Nothing here yet.</p>
+  )}
+
+</article>
+
+</PublicLayout>
+
+<style is:global>
+  .log-index {
+    padding-bottom: 4rem;
+  }
+
+  .lg-hero {
+    padding: 5rem 0 3rem;
+    max-width: 720px;
+  }
+
+  .lg-hero h1 {
+    font-family: var(--serif-display);
+    font-size: 2.2rem;
+    font-weight: 400;
+    line-height: 1.35;
+    color: var(--text);
+    margin-bottom: 1rem;
+  }
+
+  .lg-lead {
+    font-family: var(--serif-body);
+    font-size: 1.1rem;
+    line-height: 1.75;
+    color: var(--text-muted);
+  }
+
+  .lg-list {
+    list-style: none;
+    padding: 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .lg-item {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .lg-item a {
+    display: block;
+    padding: 1.75rem 0;
+    text-decoration: none;
+    color: inherit;
+    transition: background 0.2s ease;
+  }
+
+  .lg-item a:hover {
+    background: var(--bg-dim);
+    margin: 0 -1.5rem;
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+    border-radius: 6px;
+  }
+
+  .lg-date {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    color: var(--text-faint);
+    text-transform: uppercase;
+  }
+
+  .lg-tags {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.06em;
+    color: var(--text-faint);
+    margin-left: 0.75rem;
+    text-transform: lowercase;
+  }
+
+  .lg-title {
+    font-family: var(--serif-display);
+    font-size: 1.4rem;
+    font-weight: 400;
+    line-height: 1.4;
+    color: var(--text);
+    margin-top: 0.5rem;
+    margin-bottom: 0.4rem;
+  }
+
+  .lg-excerpt {
+    font-family: var(--serif-body);
+    font-size: 0.95rem;
+    line-height: 1.6;
+    color: var(--text-muted);
+    max-width: 640px;
+  }
+
+  .lg-empty {
+    font-family: var(--serif-body);
+    font-size: 1.1rem;
+    font-style: italic;
+    color: var(--text-faint);
+    padding: 3rem 0;
+    border-top: 1px solid var(--border);
+  }
+
+  @media (max-width: 768px) {
+    .lg-hero { padding: 4rem 0 2rem; }
+    .lg-hero h1 { font-size: 1.6rem; }
+    .lg-item a:hover { margin: 0; padding-left: 0; padding-right: 0; }
+  }
+</style>

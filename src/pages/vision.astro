@@ -123,6 +123,15 @@ import PublicLayout from '../layouts/layPublic.astro';
   <!-- ===== CLOSING ===== -->
   <section class="v-section v-close">
     <p>The window for capturing unmediated cognitive baselines is closing. Alice is the instrument designed to collect them while they still exist.</p>
+
+    <div class="v-subscribe">
+      <form class="v-subscribe-form" id="subscribe-form" data-source="vision">
+        <input type="email" placeholder="Get notified when enrollment opens" required class="v-subscribe-input" id="subscribe-email" />
+        <button type="submit" class="v-subscribe-btn">Notify me</button>
+      </form>
+      <p class="v-subscribe-success" id="subscribe-success" hidden>You're on the list.</p>
+    </div>
+
     <div class="v-close-links">
       <a href="/research">Read the science</a>
       <a href="/instrument">See the architecture</a>
@@ -356,6 +365,66 @@ import PublicLayout from '../layouts/layPublic.astro';
     text-decoration: none;
   }
 
+  /* --- Subscribe form --- */
+  .v-subscribe {
+    margin: 2rem 0;
+  }
+
+  .v-subscribe-form {
+    display: flex;
+    gap: 0.75rem;
+    max-width: 480px;
+  }
+
+  .v-subscribe-input {
+    flex: 1;
+    padding: 0.6rem 0.9rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-panel);
+    color: var(--text);
+    font-family: var(--serif-body);
+    font-size: 0.95rem;
+    outline: none;
+    transition: border-color 0.2s ease;
+  }
+
+  .v-subscribe-input:focus {
+    border-color: var(--border-focus);
+  }
+
+  .v-subscribe-input::placeholder {
+    color: var(--text-faint);
+    font-style: italic;
+  }
+
+  .v-subscribe-btn {
+    padding: 0.6rem 1.25rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-muted);
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    transition: border-color 0.2s ease, color 0.2s ease;
+    white-space: nowrap;
+  }
+
+  .v-subscribe-btn:hover {
+    border-color: var(--border-focus);
+    color: var(--text);
+  }
+
+  .v-subscribe-success {
+    font-family: var(--serif-body);
+    font-size: 0.95rem;
+    font-style: italic;
+    color: var(--text-muted);
+  }
+
   /* --- Mobile --- */
   @media (max-width: 768px) {
     .v-hero { padding: 4rem 0 2rem; }
@@ -368,5 +437,42 @@ import PublicLayout from '../layouts/layPublic.astro';
       gap: 0.35rem;
     }
     .v-close-links { flex-direction: column; gap: 1rem; }
+    .v-subscribe-form { flex-direction: column; }
   }
 </style>
+
+<script is:inline>
+  (function () {
+    var form = document.getElementById('subscribe-form');
+    var input = document.getElementById('subscribe-email');
+    var success = document.getElementById('subscribe-success');
+    if (!form || !input || !success) return;
+
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var email = input.value.trim();
+      if (!email) return;
+
+      var btn = form.querySelector('button');
+      if (btn) btn.disabled = true;
+
+      fetch('/api/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email, source: form.dataset.source }),
+      })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          if (data.ok || data.existing) {
+            form.hidden = true;
+            success.hidden = false;
+          } else {
+            if (btn) btn.disabled = false;
+          }
+        })
+        .catch(function () {
+          if (btn) btn.disabled = false;
+        });
+    });
+  })();
+</script>

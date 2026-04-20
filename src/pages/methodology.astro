@@ -1,0 +1,743 @@
+---
+/**
+ * Methodology / Instrument Card page.
+ *
+ * Genre: "system card" (Anthropic transparency model). Every signal the
+ * instrument computes, what it measures, the research citation, and
+ * the validation status. The page that makes a research lab say
+ * "these people are serious."
+ */
+import PublicLayout from '../layouts/layPublic.astro';
+---
+
+<PublicLayout title="Alice -- Methodology" active="methodology" description="Every signal Alice computes, what it measures, the research basis, and the validation status.">
+
+<article class="methodology">
+
+  <header class="mt-hero">
+    <h1>What Alice measures and how.</h1>
+    <p class="mt-lead">Six signal families computed from every writing session. Each signal has a research basis, a defined failure mode, and an honest validation status. This page is the instrument card.</p>
+  </header>
+
+  <!-- ===== STATUS KEY ===== -->
+  <section class="mt-section">
+    <h2>Validation tiers</h2>
+    <div class="mt-tiers">
+      <div class="mt-tier">
+        <span class="mt-badge mt-badge-validated">Validated</span>
+        <p>Published method, replicated across multiple studies. Applied as described in the source literature.</p>
+      </div>
+      <div class="mt-tier">
+        <span class="mt-badge mt-badge-adapted">Adapted</span>
+        <p>Published method applied to a new context (keystroke timing from ecological writing rather than lab tasks). The method is sound; the application is novel.</p>
+      </div>
+      <div class="mt-tier">
+        <span class="mt-badge mt-badge-experimental">Experimental</span>
+        <p>Novel to Alice. Informed by literature but not a direct implementation of a published method. Treated as hypothesis, not established measurement.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== DYNAMICAL SIGNALS ===== -->
+  <section class="mt-section">
+    <h2>Dynamical signals</h2>
+    <p>Nonlinear complexity and structure of the keystroke timing series. Treats the inter-keystroke interval (IKI) sequence as output of a complex adaptive system.</p>
+    <p class="mt-engine">Computed in: Rust native engine (dynamical.rs)</p>
+
+    <div class="mt-signal-list">
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Permutation entropy spectrum</span>
+          <span class="mt-badge mt-badge-validated">Validated</span>
+        </div>
+        <p>Complexity of the IKI series at multiple temporal scales (orders 3-7). High PE = unpredictable rhythm. The spectrum separates local complexity from global structure.</p>
+        <span class="mt-cite">Bandt &amp; Pompe 2002</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">DFA alpha</span>
+          <span class="mt-badge mt-badge-validated">Validated</span>
+        </div>
+        <p>Detrended fluctuation analysis. Self-affine scaling exponent of the IKI series. Alpha near 0.5 = white noise (no temporal memory). Alpha > 1 = long-range correlations (persistent rhythm).</p>
+        <span class="mt-cite">Peng et al. 1994</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Recurrence quantification analysis</span>
+          <span class="mt-badge mt-badge-validated">Validated</span>
+        </div>
+        <p>Four metrics from reconstructed phase-space attractor: determinism (repeatable patterns), laminarity (laminar states), trapping time (average diagonal length), recurrence rate (overall self-similarity).</p>
+        <span class="mt-cite">Webber &amp; Zbilut 2005</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Transfer entropy</span>
+          <span class="mt-badge mt-badge-adapted">Adapted</span>
+        </div>
+        <p>Information flow between hold times and flight times using the KSG estimator. Measures causal coupling between motor execution (hold) and cognitive planning (flight). Dominance indicates which channel drives the other.</p>
+        <span class="mt-cite">Schreiber 2000; Kraskov et al. 2004</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== MOTOR SIGNALS ===== -->
+  <section class="mt-section">
+    <h2>Motor signals</h2>
+    <p>Statistical shape of the keystroke timing distribution. How the motor system executes the physical act of typing, independent of what is being written.</p>
+    <p class="mt-engine">Computed in: Rust native engine (motor.rs)</p>
+
+    <div class="mt-signal-list">
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Ex-Gaussian parameters (mu, sigma, tau)</span>
+          <span class="mt-badge mt-badge-validated">Validated</span>
+        </div>
+        <p>IKI distribution decomposed into Gaussian (mu, sigma) and exponential tail (tau) via MLE/EM. Tau captures attentional lapses. Tau proportion = tau / (mu + tau).</p>
+        <span class="mt-cite">Lacouture &amp; Cousineau 2008; Zulueta et al. 2018 (BiAffect)</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Sample entropy</span>
+          <span class="mt-badge mt-badge-validated">Validated</span>
+        </div>
+        <p>Regularity measure of the IKI series. Low = rhythmic, metronomic. High = chaotic, irregular. More robust than approximate entropy for short series.</p>
+        <span class="mt-cite">Richman &amp; Moorman 2000</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Motor jerk</span>
+          <span class="mt-badge mt-badge-adapted">Adapted</span>
+        </div>
+        <p>Third derivative of the IKI position series. Measures smoothness of the temporal trajectory. High jerk = abrupt rhythm changes.</p>
+        <span class="mt-cite">Flash &amp; Hogan 1985 (minimum jerk model)</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Lapse rate</span>
+          <span class="mt-badge mt-badge-adapted">Adapted</span>
+        </div>
+        <p>Proportion of IKIs exceeding mu + 3 sigma. Captures attentional lapses as statistical outliers in the timing distribution.</p>
+        <span class="mt-cite">Derived from psychomotor vigilance task methodology</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Tempo drift</span>
+          <span class="mt-badge mt-badge-experimental">Experimental</span>
+        </div>
+        <p>Linear trend in IKI over session duration. Negative = speeding up (warming up). Positive = slowing down (fatigue).</p>
+        <span class="mt-cite">Novel; informed by fatigue literature</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Digraph latency profile</span>
+          <span class="mt-badge mt-badge-validated">Validated</span>
+        </div>
+        <p>Hold and flight times per bigram (key pair). Biometrically stable across sessions. Used for motor fingerprint stability tracking.</p>
+        <span class="mt-cite">Monrose &amp; Rubin 2000; keystroke biometrics literature</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">IKI compression ratio</span>
+          <span class="mt-badge mt-badge-adapted">Adapted</span>
+        </div>
+        <p>Lempel-Ziv complexity of the quantized IKI series. Low = repetitive rhythm. High = complex temporal structure.</p>
+        <span class="mt-cite">Lempel &amp; Ziv 1976</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Adjacent hold-time covariance</span>
+          <span class="mt-badge mt-badge-adapted">Adapted</span>
+        </div>
+        <p>Correlation between consecutive hold times. Captures finger coordination and motor planning continuity.</p>
+        <span class="mt-cite">Kim et al. 2024</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== PROCESS SIGNALS ===== -->
+  <section class="mt-section">
+    <h2>Process signals</h2>
+    <p>Structural shape of the writing session from event log replay. How the text was produced, revised, and structured over time.</p>
+    <p class="mt-engine">Computed in: Rust native engine (process.rs)</p>
+
+    <div class="mt-signal-list">
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Pause classification</span>
+          <span class="mt-badge mt-badge-validated">Validated</span>
+        </div>
+        <p>Pauses categorized by location: within-word (lexical retrieval), between-word (local planning), between-sentence (high-level planning). Distribution reveals cognitive load allocation.</p>
+        <span class="mt-cite">Wengelin 2006; Deane 2015</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">R-burst / I-burst classification</span>
+          <span class="mt-badge mt-badge-validated">Validated</span>
+        </div>
+        <p>Revision bursts (ending in deletion) vs inscription bursts (ending in new text). High R-burst ratio = revision-heavy process. Captures writing strategy independent of output quality.</p>
+        <span class="mt-cite">Chenoweth &amp; Hayes 2001; Baaijen et al. 2012</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Abandoned thought count</span>
+          <span class="mt-badge mt-badge-experimental">Experimental</span>
+        </div>
+        <p>Deletions of entire thoughts (heuristic: large deletions at paragraph boundaries). Genuine cognitive revision, not typo correction.</p>
+        <span class="mt-cite">Informed by Faigley &amp; Witte 1981 revision taxonomy</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Phase transition point</span>
+          <span class="mt-badge mt-badge-experimental">Experimental</span>
+        </div>
+        <p>Normalized session time when deletions overtake insertions. Early transition = early commitment. Late = extended exploration before settling.</p>
+        <span class="mt-cite">Novel; informed by Hayes &amp; Flower 1980 process model</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Strategy shift count</span>
+          <span class="mt-badge mt-badge-experimental">Experimental</span>
+        </div>
+        <p>Detected changes in typing style (IKI distribution shift) within a session. Multiple shifts suggest exploration across approaches.</p>
+        <span class="mt-cite">Novel</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SEMANTIC SIGNALS ===== -->
+  <section class="mt-section">
+    <h2>Semantic signals</h2>
+    <p>Text-level linguistic analysis of the submitted response. What was written, independent of how it was typed.</p>
+    <p class="mt-engine">Computed in: TypeScript (libSemanticSignals.ts)</p>
+
+    <div class="mt-signal-list">
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Idea density</span>
+          <span class="mt-badge mt-badge-validated">Validated</span>
+        </div>
+        <p>Propositions per word. The original Nun Study biomarker: low idea density in early writing predicted Alzheimer's decades later.</p>
+        <span class="mt-cite">Snowdon et al. 1996</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Lexical sophistication</span>
+          <span class="mt-badge mt-badge-validated">Validated</span>
+        </div>
+        <p>Inverse mean word frequency rank. Higher = rarer vocabulary. Proxy for active vocabulary breadth.</p>
+        <span class="mt-cite">Kyle &amp; Crossley 2015 (TAALES)</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Epistemic stance</span>
+          <span class="mt-badge mt-badge-adapted">Adapted</span>
+        </div>
+        <p>Booster / (booster + hedge) ratio. High = assertive, certain. Low = tentative, hedging. Captures confidence independent of content.</p>
+        <span class="mt-cite">Hyland 2005</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Integrative complexity</span>
+          <span class="mt-badge mt-badge-adapted">Adapted</span>
+        </div>
+        <p>Contrastive + integrative connective density. Higher = more differentiation and integration of competing perspectives.</p>
+        <span class="mt-cite">Suedfeld &amp; Tetlock 1977</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Deep cohesion</span>
+          <span class="mt-badge mt-badge-validated">Validated</span>
+        </div>
+        <p>Causal, temporal, and intentional connective density. Measures how explicitly the text links ideas across sentences.</p>
+        <span class="mt-cite">McNamara et al. 2014 (Coh-Metrix)</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Text compression ratio</span>
+          <span class="mt-badge mt-badge-validated">Validated</span>
+        </div>
+        <p>Gzip compression ratio as Kolmogorov complexity proxy. High = more information per character. Low = repetitive or formulaic.</p>
+        <span class="mt-cite">Cilibrasi &amp; Vitanyi 2005</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== CROSS-SESSION SIGNALS ===== -->
+  <section class="mt-section">
+    <h2>Cross-session signals</h2>
+    <p>Longitudinal measures comparing the current entry to prior entries. Novelty, cognitive trajectory, and stability over time.</p>
+    <p class="mt-engine">Computed in: TypeScript (libCrossSessionSignals.ts)</p>
+
+    <div class="mt-signal-list">
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Self-perplexity</span>
+          <span class="mt-badge mt-badge-adapted">Adapted</span>
+        </div>
+        <p>Character trigram model trained on all prior entries, scored against today's text. Higher = more novel language relative to personal history.</p>
+        <span class="mt-cite">Adapted from language modeling perplexity</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">NCD trajectory (lags 1, 3, 7, 30)</span>
+          <span class="mt-badge mt-badge-validated">Validated</span>
+        </div>
+        <p>Normalized compression distance between today's text and entries at various time lags. Measures semantic distance over time. High NCD = divergent content.</p>
+        <span class="mt-cite">Cilibrasi &amp; Vitanyi 2005</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Digraph stability</span>
+          <span class="mt-badge mt-badge-adapted">Adapted</span>
+        </div>
+        <p>Cosine similarity of today's digraph latency profile to rolling baseline. Motor fingerprint stability. Low = something changed physically.</p>
+        <span class="mt-cite">Adapted from keystroke biometrics (Monrose &amp; Rubin 2000)</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Text network density</span>
+          <span class="mt-badge mt-badge-adapted">Adapted</span>
+        </div>
+        <p>Co-occurrence graph density from sliding window analysis. Higher density = more interconnected concept network in the response.</p>
+        <span class="mt-cite">Adapted from InfraNodus methodology (Paranyushkin 2019)</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Vocabulary recurrence decay</span>
+          <span class="mt-badge mt-badge-experimental">Experimental</span>
+        </div>
+        <p>Exponential decay rate of Jaccard vocabulary similarity across time lags. Fast decay = rapidly diversifying vocabulary. Slow = stable lexicon.</p>
+        <span class="mt-cite">Novel</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== BEHAVIORAL STATE ENGINE ===== -->
+  <section class="mt-section">
+    <h2>Behavioral state engine</h2>
+    <p>7-dimensional behavioral state computed per session from the signals above. Each dimension is z-scored against personal history. No AI. Pure math.</p>
+    <p class="mt-engine">Computed in: TypeScript (libStateEngine.ts)</p>
+
+    <div class="mt-signal-list">
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Fluency</span>
+          <span class="mt-badge mt-badge-adapted">Adapted</span>
+        </div>
+        <p>DFA alpha (long-range correlation) + P-burst length (sustained production) + tempo drift. Captures whether the writing flowed or fragmented.</p>
+        <span class="mt-cite">Baaijen et al. 2012; Deane 2015</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Deliberation</span>
+          <span class="mt-badge mt-badge-adapted">Adapted</span>
+        </div>
+        <p>Permutation entropy + first keystroke latency + between-sentence pause density. High = effortful, exploratory thinking before and during writing.</p>
+        <span class="mt-cite">Baaijen et al. 2012; Deane 2015</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Revision</span>
+          <span class="mt-badge mt-badge-adapted">Adapted</span>
+        </div>
+        <p>Abandoned thought count + R-burst/I-burst ratio + inverse commitment. How much the writer restructured after committing text.</p>
+        <span class="mt-cite">Faigley &amp; Witte 1981; Chenoweth &amp; Hayes 2001</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Commitment</span>
+          <span class="mt-badge mt-badge-experimental">Experimental</span>
+        </div>
+        <p>Final/typed ratio + phase transition point + inverse strategy shift count. Whether the writer stuck with a direction or explored multiple approaches.</p>
+        <span class="mt-cite">Novel composite</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Volatility</span>
+          <span class="mt-badge mt-badge-experimental">Experimental</span>
+        </div>
+        <p>Euclidean distance from previous entry in 4D subspace. How behaviorally different this session was from the last.</p>
+        <span class="mt-cite">Novel; informed by PersDyn variability construct (Sosnowska et al. 2019)</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Thermal</span>
+          <span class="mt-badge mt-badge-adapted">Adapted</span>
+        </div>
+        <p>Ex-Gaussian tau (attentional lapses) + lapse rate + correction rate. Cognitive-motor disruption, editing heat.</p>
+        <span class="mt-cite">Zulueta et al. 2018 (BiAffect)</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Presence</span>
+          <span class="mt-badge mt-badge-adapted">Adapted</span>
+        </div>
+        <p>RQA determinism + transfer entropy dominance + inverse tab-away rate. Sustained coherent engagement with the writing task.</p>
+        <span class="mt-cite">Webber &amp; Zbilut 2005; Schreiber 2000</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== DYNAMICS ===== -->
+  <section class="mt-section">
+    <h2>Dynamics layer</h2>
+    <p>Per-dimension trait dynamics computed from the accumulating state history. Baseline, variability, attractor force, and empirical coupling between dimensions.</p>
+    <p class="mt-engine">Computed in: TypeScript (libDynamics.ts)</p>
+
+    <div class="mt-dynamics-grid">
+      <div class="mt-dyn-item">
+        <span class="mt-dyn-label">Baseline</span>
+        <p>Rolling mean of each dimension. The stable set point the person returns to.</p>
+      </div>
+      <div class="mt-dyn-item">
+        <span class="mt-dyn-label">Variability</span>
+        <p>Rolling standard deviation. How much the dimension fluctuates session to session.</p>
+      </div>
+      <div class="mt-dyn-item">
+        <span class="mt-dyn-label">Attractor force</span>
+        <p>Ornstein-Uhlenbeck mean-reversion from lag-1 autocorrelation of deviations. High = rigid (snaps back). Low = malleable (shifts persist).</p>
+      </div>
+      <div class="mt-dyn-item">
+        <span class="mt-dyn-label">Coupling matrix</span>
+        <p>Signed lagged cross-correlations between all dimension pairs. Discovers which dimensions causally influence each other for this specific person.</p>
+      </div>
+    </div>
+    <p class="mt-cite-block">PersDyn model: Sosnowska, Kuppens, De Fruyt &amp; Hofmans (KU Leuven, 2019). Attractor dynamics: Kuppens, Oravecz &amp; Tuerlinckx 2010. Coupling: Critcher (Berkeley xLab).</p>
+  </section>
+
+  <!-- ===== LIMITATIONS ===== -->
+  <section class="mt-section mt-close">
+    <h2>Known limitations</h2>
+
+    <div class="mt-limitations">
+      <div class="mt-limitation">
+        <span class="mt-lim-label">Sample size</span>
+        <p>n=1. All baselines, dynamics, and coupling are intra-individual. No between-person generalization is possible at current scale.</p>
+      </div>
+      <div class="mt-limitation">
+        <span class="mt-lim-label">Signal-to-construct mapping</span>
+        <p>The mapping between keystroke features and cognitive constructs is hypothesized from psycholinguistic literature, not validated in a longitudinal ecological context.</p>
+      </div>
+      <div class="mt-limitation">
+        <span class="mt-lim-label">Linguistic analysis depth</span>
+        <p>Semantic signals use word-list-based heuristics, not parsed syntax trees. Idea density is approximated via verb/preposition ratios, not full propositional analysis.</p>
+      </div>
+      <div class="mt-limitation">
+        <span class="mt-lim-label">Question confound</span>
+        <p>Different questions elicit different writing behaviors. The question itself is an intervention. Calibration sessions (neutral prompts) partially control for this but do not eliminate it.</p>
+      </div>
+      <div class="mt-limitation">
+        <span class="mt-lim-label">Device sensitivity</span>
+        <p>Keystroke dynamics are device-specific. Switching keyboards changes the motor baseline. Device type is recorded and calibration is device-scoped, but cross-device comparison is unreliable.</p>
+      </div>
+    </div>
+
+    <div class="mt-close-links">
+      <a href="/research">Why this instrument needs to exist</a>
+      <a href="/instrument">Architecture overview</a>
+      <a href="/papers">Read the papers</a>
+    </div>
+  </section>
+
+</article>
+
+</PublicLayout>
+
+<style is:global>
+  .methodology {
+    padding-bottom: 4rem;
+  }
+
+  .mt-hero {
+    padding: 5rem 0 3rem;
+    max-width: 720px;
+  }
+
+  .mt-hero h1 {
+    font-family: var(--serif-display);
+    font-size: 2.2rem;
+    font-weight: 400;
+    line-height: 1.35;
+    color: var(--text);
+    margin-bottom: 1.5rem;
+  }
+
+  .mt-lead {
+    font-family: var(--serif-body);
+    font-size: 1.1rem;
+    line-height: 1.75;
+    color: var(--text-muted);
+  }
+
+  .mt-section {
+    padding: 3rem 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .mt-section h2 {
+    font-family: var(--serif-display);
+    font-size: 1.5rem;
+    font-weight: 400;
+    color: var(--text);
+    margin-bottom: 1rem;
+  }
+
+  .mt-section > p {
+    font-family: var(--serif-body);
+    font-size: 1.05rem;
+    line-height: 1.75;
+    color: var(--text);
+    max-width: 720px;
+    margin-bottom: 0.75rem;
+  }
+
+  .mt-engine {
+    font-family: var(--mono) !important;
+    font-size: 0.7rem !important;
+    color: var(--text-faint) !important;
+    letter-spacing: 0.04em;
+    margin-bottom: 1.5rem !important;
+  }
+
+  /* --- Validation tiers --- */
+  .mt-tiers {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1.25rem;
+    margin: 1.5rem 0;
+  }
+
+  .mt-tier {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.25rem;
+  }
+
+  .mt-tier p {
+    font-family: var(--serif-body);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: var(--text-muted);
+    margin-top: 0.75rem;
+  }
+
+  /* --- Badges --- */
+  .mt-badge {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.25rem 0.6rem;
+    border-radius: 3px;
+    border: 1px solid;
+  }
+
+  .mt-badge-validated {
+    color: var(--positive);
+    border-color: var(--positive);
+  }
+
+  .mt-badge-adapted {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+
+  .mt-badge-experimental {
+    color: var(--text-muted);
+    border-color: var(--border);
+  }
+
+  /* --- Signal list --- */
+  .mt-signal-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    margin: 1.5rem 0;
+  }
+
+  .mt-signal {
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .mt-signal:last-child {
+    border-bottom: none;
+  }
+
+  .mt-signal-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .mt-signal-name {
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    color: var(--text);
+    letter-spacing: 0.02em;
+  }
+
+  .mt-signal p {
+    font-family: var(--serif-body);
+    font-size: 0.95rem;
+    line-height: 1.6;
+    color: var(--text);
+    margin-bottom: 0.35rem;
+  }
+
+  .mt-cite {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--text-faint);
+    letter-spacing: 0.03em;
+  }
+
+  .mt-cite-block {
+    font-family: var(--mono) !important;
+    font-size: 0.7rem !important;
+    color: var(--text-faint) !important;
+    letter-spacing: 0.03em;
+    line-height: 1.5 !important;
+    margin-top: 1rem !important;
+  }
+
+  /* --- Dynamics grid --- */
+  .mt-dynamics-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.25rem;
+    margin: 1.5rem 0;
+  }
+
+  .mt-dyn-item {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.25rem;
+  }
+
+  .mt-dyn-label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    margin-bottom: 0.5rem;
+  }
+
+  .mt-dyn-item p {
+    font-family: var(--serif-body);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: var(--text);
+  }
+
+  /* --- Limitations --- */
+  .mt-limitations {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    margin: 1.5rem 0;
+  }
+
+  .mt-limitation {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: 160px 1fr;
+    gap: 1rem;
+    align-items: baseline;
+  }
+
+  .mt-limitation:last-child {
+    border-bottom: none;
+  }
+
+  .mt-lim-label {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text);
+  }
+
+  .mt-limitation p {
+    font-family: var(--serif-body);
+    font-size: 0.95rem;
+    line-height: 1.6;
+    color: var(--text-muted);
+  }
+
+  .mt-close-links {
+    display: flex;
+    gap: 2rem;
+    margin-top: 2.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .mt-close-links a {
+    font-family: var(--serif-body);
+    font-size: 1rem;
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.15rem;
+    transition: border-color 0.2s ease;
+  }
+
+  .mt-close-links a:hover {
+    border-color: var(--accent);
+  }
+
+  /* --- Mobile --- */
+  @media (max-width: 768px) {
+    .mt-hero { padding: 4rem 0 2rem; }
+    .mt-hero h1 { font-size: 1.6rem; }
+    .mt-tiers { grid-template-columns: 1fr; }
+    .mt-dynamics-grid { grid-template-columns: 1fr; }
+    .mt-limitation {
+      grid-template-columns: 1fr;
+      gap: 0.25rem;
+    }
+    .mt-close-links { flex-direction: column; gap: 1rem; }
+  }
+</style>

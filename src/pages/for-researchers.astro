@@ -1,0 +1,511 @@
+---
+/**
+ * Researcher landing page.
+ *
+ * The page you link in a cold email. Not in the nav. Direct-link only.
+ * A researcher needs to see, in 60 seconds: what data this instrument
+ * captures, whether it's rigorous, and what the next step is.
+ */
+import PublicLayout from '../layouts/layPublic.astro';
+---
+
+<PublicLayout title="Alice -- For Researchers" description="Longitudinal keystroke-cognition data from ecological daily writing. No existing instrument produces it.">
+
+<article class="researchers">
+
+  <header class="fr-hero">
+    <h1>Longitudinal keystroke-cognition data from ecological daily writing.</h1>
+    <p class="fr-lead">Alice is a running measurement instrument that captures dual-channel process data (keystroke timing + linguistic content) from daily naturalistic writing, with intra-individual baselines, same-day calibration, and participant-blind measurement. No existing instrument produces this dataset. We are looking for research partners to help validate it.</p>
+  </header>
+
+  <!-- ===== WHAT THE INSTRUMENT CAPTURES ===== -->
+  <section class="fr-section">
+    <h2>What the instrument captures</h2>
+
+    <div class="fr-channels">
+      <div class="fr-channel">
+        <span class="fr-channel-label">Process channel</span>
+        <p>Key-down and key-up timestamps at millisecond precision. Full temporal microstructure: inter-key intervals, hold durations, flight times, pause architecture, deletion sequences, burst segmentation. Captured from unmediated character-by-character input. No autocomplete, no predictive text.</p>
+      </div>
+      <div class="fr-channel">
+        <span class="fr-channel-label">Content channel</span>
+        <p>Final submitted text. Linguistic analysis: idea density, lexical sophistication, epistemic stance, integrative complexity, cohesion, emotional valence, text compression ratio. NRC emotion word densities. MATTR vocabulary diversity.</p>
+      </div>
+    </div>
+
+    <p>The two channels are analyzed jointly. A decline in lexical diversity with stable production fluency means vocabulary contraction. The same decline with slowed production means retrieval difficulty. You need both to distinguish them.</p>
+  </section>
+
+  <!-- ===== SIGNAL PIPELINE ===== -->
+  <section class="fr-section">
+    <h2>Signal pipeline</h2>
+
+    <p>Six signal families computed per session. Native Rust engine for numerical estimation. All methods cited with validation status documented on the <a href="/methodology">methodology page</a>.</p>
+
+    <div class="fr-families">
+      <div class="fr-family">
+        <span class="fr-family-name">Dynamical</span>
+        <span class="fr-family-detail">Permutation entropy spectrum (orders 3-7), DFA alpha, RQA (determinism, laminarity, trapping time, recurrence rate), transfer entropy (KSG)</span>
+      </div>
+      <div class="fr-family">
+        <span class="fr-family-name">Motor</span>
+        <span class="fr-family-detail">Ex-Gaussian parameters (MLE/EM), sample entropy, motor jerk, lapse rate, tempo drift, digraph latency profile, IKI compression ratio</span>
+      </div>
+      <div class="fr-family">
+        <span class="fr-family-name">Process</span>
+        <span class="fr-family-detail">Pause classification (within-word, between-word, between-sentence), R/I burst segmentation, abandoned thought detection, phase transition point</span>
+      </div>
+      <div class="fr-family">
+        <span class="fr-family-name">Semantic</span>
+        <span class="fr-family-detail">Idea density, lexical sophistication, epistemic stance, integrative complexity, deep cohesion, emotional valence arc, text compression ratio</span>
+      </div>
+      <div class="fr-family">
+        <span class="fr-family-name">Cross-session</span>
+        <span class="fr-family-detail">Self-perplexity (personal trigram model), NCD trajectory (lags 1/3/7/30), vocabulary recurrence decay, digraph stability, text network density</span>
+      </div>
+      <div class="fr-family">
+        <span class="fr-family-name">Behavioral state</span>
+        <span class="fr-family-detail">7D state vector (fluency, deliberation, revision, commitment, volatility, thermal, presence), PersDyn dynamics (baseline, variability, attractor force), empirical coupling matrix</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== CURRENT STATE ===== -->
+  <section class="fr-section">
+    <h2>Current state</h2>
+
+    <div class="fr-state">
+      <div class="fr-state-row">
+        <span class="fr-state-label">Scale</span>
+        <span class="fr-state-value">n=1 since April 2026. Single-user prototype. Multi-user architecture in development.</span>
+      </div>
+      <div class="fr-state-row">
+        <span class="fr-state-label">Database</span>
+        <span class="fr-state-value">PostgreSQL 17 + pgvector. 32 tables. 120+ metrics per session. 512-dimensional embeddings (Voyage AI, HNSW-indexed).</span>
+      </div>
+      <div class="fr-state-row">
+        <span class="fr-state-label">Signal engine</span>
+        <span class="fr-state-value">Native Rust via napi-rs. Single source of truth. Typed error variants (InsufficientData, ZeroVariance, DegenerateValue).</span>
+      </div>
+      <div class="fr-state-row">
+        <span class="fr-state-label">Calibration</span>
+        <span class="fr-state-value">Same-day within-person controls. Neutral writing prompts. Calibration-relative deviation for all metrics. Life context extraction (sleep, stress, physical state).</span>
+      </div>
+      <div class="fr-state-row">
+        <span class="fr-state-label">Papers</span>
+        <span class="fr-state-value">2 published preprints. 3 in progress. Establishing the problem space, not yet reporting longitudinal results.</span>
+      </div>
+      <div class="fr-state-row">
+        <span class="fr-state-label">Validation</span>
+        <span class="fr-state-value">Not yet possible at n=1. The instrument is designed to produce the data that would enable validation.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== WHAT PARTNERSHIP LOOKS LIKE ===== -->
+  <section class="fr-section">
+    <h2>What partnership looks like</h2>
+
+    <div class="fr-partnership">
+      <div class="fr-part-item">
+        <span class="fr-part-label">Data access</span>
+        <p>Anonymized longitudinal process + content data under data sharing agreement. Full signal pipeline output. Raw keystroke streams available for custom feature extraction.</p>
+      </div>
+      <div class="fr-part-item">
+        <span class="fr-part-label">Custom signal extraction</span>
+        <p>If your research requires specific features not in the current pipeline, we can implement them. The architecture is designed for extensibility. Rust for numerical estimation, TypeScript for linguistic analysis.</p>
+      </div>
+      <div class="fr-part-item">
+        <span class="fr-part-label">Protocol adaptation</span>
+        <p>The question schedule, calibration protocol, and session structure can be adapted for specific research populations or research questions.</p>
+      </div>
+      <div class="fr-part-item">
+        <span class="fr-part-label">Joint publication</span>
+        <p>We are interested in co-authoring with domain experts. The instrument produces the data. You bring the clinical or theoretical framework. The validation comes from the collaboration.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== CLOSE ===== -->
+  <section class="fr-section fr-close">
+    <p>The gap between "running" and "validated" is the work that remains. If your research could use longitudinal keystroke-cognition data that no other instrument produces, let's talk.</p>
+
+    <div class="fr-contact">
+      <a href="mailto:anthony@mrfoxco.com" class="fr-email">anthony@mrfoxco.com</a>
+    </div>
+
+    <div class="fr-subscribe">
+      <form class="fr-subscribe-form" id="subscribe-form" data-source="for-researchers">
+        <input type="email" placeholder="Or leave your email for updates" required class="fr-subscribe-input" id="subscribe-email" />
+        <button type="submit" class="fr-subscribe-btn">Notify me</button>
+      </form>
+      <p class="fr-subscribe-success" id="subscribe-success" hidden>You're on the list.</p>
+    </div>
+
+    <div class="fr-close-links">
+      <a href="/methodology">Full signal methodology</a>
+      <a href="/research">The scientific case</a>
+      <a href="/papers">Published papers</a>
+    </div>
+  </section>
+
+</article>
+
+</PublicLayout>
+
+<script is:inline>
+  (function () {
+    var form = document.getElementById('subscribe-form');
+    var input = document.getElementById('subscribe-email');
+    var success = document.getElementById('subscribe-success');
+    if (!form || !input || !success) return;
+
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var email = input.value.trim();
+      if (!email) return;
+
+      var btn = form.querySelector('button');
+      if (btn) btn.disabled = true;
+
+      fetch('/api/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email, source: form.dataset.source }),
+      })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          if (data.ok || data.existing) {
+            form.hidden = true;
+            success.hidden = false;
+          } else {
+            if (btn) btn.disabled = false;
+          }
+        })
+        .catch(function () {
+          if (btn) btn.disabled = false;
+        });
+    });
+  })();
+</script>
+
+<style is:global>
+  .researchers {
+    padding-bottom: 4rem;
+  }
+
+  .fr-hero {
+    padding: 5rem 0 3rem;
+    max-width: 720px;
+  }
+
+  .fr-hero h1 {
+    font-family: var(--serif-display);
+    font-size: 2.2rem;
+    font-weight: 400;
+    line-height: 1.35;
+    color: var(--text);
+    margin-bottom: 1.5rem;
+  }
+
+  .fr-lead {
+    font-family: var(--serif-body);
+    font-size: 1.1rem;
+    line-height: 1.75;
+    color: var(--text-muted);
+  }
+
+  .fr-section {
+    padding: 3rem 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .fr-section h2 {
+    font-family: var(--serif-display);
+    font-size: 1.5rem;
+    font-weight: 400;
+    color: var(--text);
+    margin-bottom: 1.25rem;
+  }
+
+  .fr-section > p {
+    font-family: var(--serif-body);
+    font-size: 1.05rem;
+    line-height: 1.75;
+    color: var(--text);
+    max-width: 720px;
+    margin-bottom: 1.25rem;
+  }
+
+  .fr-section > p a {
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid var(--border);
+    transition: border-color 0.15s ease;
+  }
+
+  .fr-section > p a:hover {
+    border-bottom-color: var(--accent);
+  }
+
+  /* --- Channels --- */
+  .fr-channels {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin: 2rem 0;
+  }
+
+  .fr-channel {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.5rem;
+  }
+
+  .fr-channel-label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    margin-bottom: 0.75rem;
+  }
+
+  .fr-channel p {
+    font-family: var(--serif-body);
+    font-size: 0.95rem;
+    line-height: 1.6;
+    color: var(--text);
+  }
+
+  /* --- Signal families --- */
+  .fr-families {
+    margin: 1.5rem 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .fr-family {
+    display: grid;
+    grid-template-columns: 130px 1fr;
+    gap: 1.5rem;
+    padding: 0.85rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    align-items: baseline;
+  }
+
+  .fr-family:last-child {
+    border-bottom: none;
+  }
+
+  .fr-family-name {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text);
+  }
+
+  .fr-family-detail {
+    font-family: var(--serif-body);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: var(--text-muted);
+  }
+
+  /* --- Current state --- */
+  .fr-state {
+    margin: 1.5rem 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .fr-state-row {
+    display: grid;
+    grid-template-columns: 130px 1fr;
+    gap: 1.5rem;
+    padding: 0.85rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    align-items: baseline;
+  }
+
+  .fr-state-row:last-child {
+    border-bottom: none;
+  }
+
+  .fr-state-label {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-faint);
+  }
+
+  .fr-state-value {
+    font-family: var(--serif-body);
+    font-size: 0.95rem;
+    line-height: 1.5;
+    color: var(--text);
+  }
+
+  /* --- Partnership --- */
+  .fr-partnership {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.25rem;
+    margin: 1.5rem 0;
+  }
+
+  .fr-part-item {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.5rem;
+  }
+
+  .fr-part-label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    margin-bottom: 0.75rem;
+  }
+
+  .fr-part-item p {
+    font-family: var(--serif-body);
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: var(--text);
+  }
+
+  /* --- Close --- */
+  .fr-close > p {
+    font-family: var(--serif-display);
+    font-size: 1.3rem;
+    font-weight: 400;
+    line-height: 1.5;
+    color: var(--text);
+    max-width: 600px;
+  }
+
+  .fr-contact {
+    margin: 1.5rem 0;
+  }
+
+  .fr-email {
+    font-family: var(--mono);
+    font-size: 1rem;
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.15rem;
+    transition: border-color 0.2s ease;
+  }
+
+  .fr-email:hover {
+    border-color: var(--accent);
+  }
+
+  .fr-subscribe {
+    margin: 1.5rem 0;
+  }
+
+  .fr-subscribe-form {
+    display: flex;
+    gap: 0.75rem;
+    max-width: 440px;
+  }
+
+  .fr-subscribe-input {
+    flex: 1;
+    padding: 0.6rem 0.9rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-panel);
+    color: var(--text);
+    font-family: var(--serif-body);
+    font-size: 0.95rem;
+    outline: none;
+    transition: border-color 0.2s ease;
+  }
+
+  .fr-subscribe-input:focus {
+    border-color: var(--border-focus);
+  }
+
+  .fr-subscribe-input::placeholder {
+    color: var(--text-faint);
+    font-style: italic;
+  }
+
+  .fr-subscribe-btn {
+    padding: 0.6rem 1.25rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-muted);
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    transition: border-color 0.2s ease, color 0.2s ease;
+    white-space: nowrap;
+  }
+
+  .fr-subscribe-btn:hover {
+    border-color: var(--border-focus);
+    color: var(--text);
+  }
+
+  .fr-subscribe-success {
+    font-family: var(--serif-body);
+    font-size: 0.95rem;
+    font-style: italic;
+    color: var(--text-muted);
+  }
+
+  .fr-close-links {
+    display: flex;
+    gap: 2rem;
+    margin-top: 2.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .fr-close-links a {
+    font-family: var(--serif-body);
+    font-size: 1rem;
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.15rem;
+    transition: border-color 0.2s ease;
+  }
+
+  .fr-close-links a:hover {
+    border-color: var(--accent);
+  }
+
+  /* --- Mobile --- */
+  @media (max-width: 768px) {
+    .fr-hero { padding: 4rem 0 2rem; }
+    .fr-hero h1 { font-size: 1.6rem; }
+    .fr-channels { grid-template-columns: 1fr; }
+    .fr-family {
+      grid-template-columns: 1fr;
+      gap: 0.25rem;
+    }
+    .fr-state-row {
+      grid-template-columns: 1fr;
+      gap: 0.25rem;
+    }
+    .fr-partnership { grid-template-columns: 1fr; }
+    .fr-subscribe-form { flex-direction: column; }
+    .fr-close-links { flex-direction: column; gap: 1rem; }
+  }
+</style>

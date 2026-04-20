@@ -119,6 +119,16 @@ import PublicLayout from '../layouts/layPublic.astro';
     <div class="co-contact">
       <a href="mailto:anthony@mrfoxco.com" class="co-email">anthony@mrfoxco.com</a>
     </div>
+
+    <div class="co-subscribe">
+      <p class="co-subscribe-label">Or leave your email to be notified when enrollment opens.</p>
+      <form class="co-subscribe-form" id="subscribe-form" data-source="collaborate">
+        <input type="email" placeholder="you@example.com" required class="co-subscribe-input" id="subscribe-email" />
+        <button type="submit" class="co-subscribe-btn">Notify me</button>
+      </form>
+      <p class="co-subscribe-success" id="subscribe-success" hidden>You're on the list.</p>
+    </div>
+
     <div class="co-close-links">
       <a href="/research">Read the scientific case</a>
       <a href="/instrument">See the architecture</a>
@@ -331,6 +341,74 @@ import PublicLayout from '../layouts/layPublic.astro';
     text-decoration: none;
   }
 
+  /* --- Subscribe form --- */
+  .co-subscribe {
+    margin: 2rem 0;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .co-subscribe-label {
+    font-family: var(--serif-body);
+    font-size: 0.95rem;
+    color: var(--text-muted);
+    margin-bottom: 0.75rem;
+  }
+
+  .co-subscribe-form {
+    display: flex;
+    gap: 0.75rem;
+    max-width: 440px;
+  }
+
+  .co-subscribe-input {
+    flex: 1;
+    padding: 0.6rem 0.9rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-panel);
+    color: var(--text);
+    font-family: var(--serif-body);
+    font-size: 0.95rem;
+    outline: none;
+    transition: border-color 0.2s ease;
+  }
+
+  .co-subscribe-input:focus {
+    border-color: var(--border-focus);
+  }
+
+  .co-subscribe-input::placeholder {
+    color: var(--text-faint);
+  }
+
+  .co-subscribe-btn {
+    padding: 0.6rem 1.25rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-muted);
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    transition: border-color 0.2s ease, color 0.2s ease;
+    white-space: nowrap;
+  }
+
+  .co-subscribe-btn:hover {
+    border-color: var(--border-focus);
+    color: var(--text);
+  }
+
+  .co-subscribe-success {
+    font-family: var(--serif-body);
+    font-size: 0.95rem;
+    font-style: italic;
+    color: var(--text-muted);
+  }
+
   /* --- Mobile --- */
   @media (max-width: 768px) {
     .co-hero { padding: 4rem 0 2rem; }
@@ -342,5 +420,42 @@ import PublicLayout from '../layouts/layPublic.astro';
       gap: 0.25rem;
     }
     .co-close-links { flex-direction: column; gap: 1rem; }
+    .co-subscribe-form { flex-direction: column; }
   }
 </style>
+
+<script is:inline>
+  (function () {
+    var form = document.getElementById('subscribe-form');
+    var input = document.getElementById('subscribe-email');
+    var success = document.getElementById('subscribe-success');
+    if (!form || !input || !success) return;
+
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var email = input.value.trim();
+      if (!email) return;
+
+      var btn = form.querySelector('button');
+      if (btn) btn.disabled = true;
+
+      fetch('/api/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email, source: form.dataset.source }),
+      })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          if (data.ok || data.existing) {
+            form.hidden = true;
+            success.hidden = false;
+          } else {
+            if (btn) btn.disabled = false;
+          }
+        })
+        .catch(function () {
+          if (btn) btn.disabled = false;
+        });
+    });
+  })();
+</script>
