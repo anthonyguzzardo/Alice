@@ -80,7 +80,7 @@ See `src/lib/libDb.ts` -- `getCalibrationSessionsWithText()` for the canonical m
 - **Enum tables** get explicit INSERT with fixed IDs
 - Do NOT use ALTER TABLE -- rewrite the CREATE TABLE in `db/sql/dbAlice_Tables.sql`
 - Do NOT hard-code proper nouns into column names
-- **JSONB columns**: event_log_json, keystroke_stream_json, traits_json, signals_json, deletion_events_json, iki_autocorrelation_json, digraph_latency_json, prompt trace ID arrays
+- **JSONB columns**: event_log_json, keystroke_stream_json, traits_json, signals_json, deletion_events_json, iki_autocorrelation_json, digraph_latency_json, pe_spectrum, prompt trace ID arrays
 - **Embeddings**: stored as `vector(512)` on `tb_embeddings` via pgvector with HNSW index
 
 ---
@@ -168,7 +168,15 @@ src-rs/             # Rust native signal engine
 
 ## Rust Signal Engine (`src-rs/`)
 
-The Rust crate is not a TypeScript port. It is a native signal engine that must be written to Rust's standards, not JavaScript's.
+The Rust crate is a measurement instrument, not a computation library. The distinction matters: every signal it produces is a quantitative claim about a person's cognitive state derived from keystroke dynamics. Measurement instruments have stricter requirements than application code.
+
+**What this means in practice:**
+- **Estimation quality over convenience.** The ex-Gaussian fit uses MLE via EM (Lacouture & Cousineau 2008), not method of moments, because tau is the signal and MoM is unreliable on small samples. If MLE fails to improve over MoM, it falls back honestly rather than returning bad estimates. Every signal function must make this kind of decision: produce a trustworthy number or produce nothing.
+- **Multi-scale over single-point.** Permutation entropy is computed at orders 3-7 (pe_spectrum), not just order 3. A single PE value collapses temporal structure across scales. The spectrum separates local complexity from global structure, which is the difference between deliberation and volatility. When adding a new signal, ask whether a single number is actually sufficient or whether the measurement needs multiple scales.
+- **The napi boundary is not an API.** It is a measurement interface. `Option::None` means "this session did not produce enough data for a reliable measurement," not "something went wrong." The `SignalError` enum (`InsufficientData`, `ZeroVariance`, `DegenerateValue`) preserves why a measurement could not be made. This information matters for downstream interpretation: a missing signal due to a 15-keystroke session means something different than a missing signal due to zero variance.
+- **Numerical functions must be cited.** `erfc` uses Abramowitz & Stegun 7.1.26. KSG transfer entropy uses Kraskov et al. 2004. DFA uses Peng et al. 1994. If you add a statistical function, cite the source and approximation error bound. This is a measurement tool; provenance matters.
+
+The Rust crate must be written to Rust's standards, not JavaScript's.
 
 ### Type Discipline
 
@@ -212,9 +220,9 @@ The Rust crate is not a TypeScript port. It is a native signal engine that must 
 src-rs/src/
 ├── lib.rs          # napi boundary: structs + entry points (no logic)
 ├── types.rs        # SignalError, KeystrokeEvent, newtypes, utf16 conversion
-├── stats.rs        # mean, std_dev, extract_iki, linreg_slope (#[inline])
-├── dynamical.rs    # PE, DFA, RQA, transfer entropy
-├── motor.rs        # sample entropy, autocorrelation, ex-Gaussian, compression
+├── stats.rs        # mean, std_dev, erfc, digamma, extract_iki, linreg_slope (#[inline])
+├── dynamical.rs    # PE (single + multi-scale spectrum), DFA, RQA, KSG transfer entropy
+├── motor.rs        # sample entropy, autocorrelation, ex-Gaussian (MLE/EM), compression
 └── process.rs      # text reconstruction, pause/burst analysis
 ```
 
