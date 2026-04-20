@@ -18,7 +18,7 @@ use crate::stats;
 /// preserving the variant enables tests to assert on failure mode
 /// and diagnostics to explain which signals are missing and why.
 #[derive(Debug)]
-pub enum SignalError {
+pub(crate) enum SignalError {
     /// Not enough data points to compute the signal.
     InsufficientData { needed: usize, got: usize },
     /// Series has zero variance (constant values).
@@ -45,33 +45,33 @@ impl std::fmt::Display for SignalError {
 
 impl std::error::Error for SignalError {}
 
-pub type SignalResult<T> = Result<T, SignalError>;
+pub(crate) type SignalResult<T> = Result<T, SignalError>;
 
 // ─── Input types ──────────────────────────────────────────────────
 
 #[derive(Deserialize)]
-pub struct KeystrokeEvent {
+pub(crate) struct KeystrokeEvent {
     #[serde(rename = "c")]
-    pub character: String,
+    pub(crate) character: String,
     #[serde(rename = "d")]
-    pub key_down_ms: f64,
+    pub(crate) key_down_ms: f64,
     #[serde(rename = "u")]
-    pub key_up_ms: f64,
+    pub(crate) key_up_ms: f64,
 }
 
 // ─── Domain newtypes ──────────────────────────────────────────────
 
 /// Inter-key intervals in milliseconds, filtered to (0, 5000).
-pub struct IkiSeries(Vec<f64>);
+pub(crate) struct IkiSeries(Vec<f64>);
 
 impl IkiSeries {
-    pub fn from_stream(stream: &[KeystrokeEvent]) -> Self {
+    pub(crate) fn from_stream(stream: &[KeystrokeEvent]) -> Self {
         let downs: Vec<f64> = stream.iter().map(|e| e.key_down_ms).collect();
         Self(stats::extract_iki(&downs))
     }
 
     #[cfg(test)]
-    pub fn from_raw(data: Vec<f64>) -> Self {
+    pub(crate) fn from_raw(data: Vec<f64>) -> Self {
         Self(data)
     }
 }
@@ -85,10 +85,10 @@ impl Deref for IkiSeries {
 
 
 /// Inter-key flight times (next_down - prev_up) in milliseconds.
-pub struct FlightTimes(Vec<f64>);
+pub(crate) struct FlightTimes(Vec<f64>);
 
 impl FlightTimes {
-    pub fn from_stream(stream: &[KeystrokeEvent]) -> Self {
+    pub(crate) fn from_stream(stream: &[KeystrokeEvent]) -> Self {
         let mut flights = Vec::with_capacity(stream.len());
         for i in 1..stream.len() {
             let ft = stream[i].key_down_ms - stream[i - 1].key_up_ms;
@@ -108,21 +108,21 @@ impl Deref for FlightTimes {
 }
 
 /// Paired hold and flight time series extracted from a keystroke stream.
-pub struct HoldFlight {
+pub(crate) struct HoldFlight {
     holds: Vec<f64>,
     flights: FlightTimes,
 }
 
 impl HoldFlight {
-    pub fn holds(&self) -> &[f64] {
+    pub(crate) fn holds(&self) -> &[f64] {
         &self.holds
     }
 
-    pub fn flights(&self) -> &[f64] {
+    pub(crate) fn flights(&self) -> &[f64] {
         &self.flights
     }
 
-    pub fn from_stream(stream: &[KeystrokeEvent]) -> Self {
+    pub(crate) fn from_stream(stream: &[KeystrokeEvent]) -> Self {
         let mut holds = Vec::with_capacity(stream.len());
         let mut flights = Vec::with_capacity(stream.len());
 
@@ -146,7 +146,7 @@ impl HoldFlight {
     }
 
     /// Length of the shorter series (for aligned operations like transfer entropy).
-    pub fn aligned_len(&self) -> usize {
+    pub(crate) fn aligned_len(&self) -> usize {
         self.holds.len().min(self.flights.len())
     }
 }
@@ -160,7 +160,7 @@ impl HoldFlight {
 /// An emoji like U+1F600 is 2 UTF-16 units but 4 UTF-8 bytes.
 ///
 /// Returns `text.len()` if the offset is past the end.
-pub fn utf16_to_byte_offset(text: &str, utf16_offset: usize) -> usize {
+pub(crate) fn utf16_to_byte_offset(text: &str, utf16_offset: usize) -> usize {
     let mut utf16_count = 0;
     for (byte_idx, ch) in text.char_indices() {
         if utf16_count >= utf16_offset {

@@ -2,7 +2,7 @@
 
 /// Arithmetic mean. Returns 0.0 for empty slices.
 #[inline]
-pub fn mean(arr: &[f64]) -> f64 {
+pub(crate) fn mean(arr: &[f64]) -> f64 {
     if arr.is_empty() {
         return 0.0;
     }
@@ -11,7 +11,7 @@ pub fn mean(arr: &[f64]) -> f64 {
 
 /// Population standard deviation. Returns 0.0 for empty slices.
 #[inline]
-pub fn std_dev(arr: &[f64], mu: Option<f64>) -> f64 {
+pub(crate) fn std_dev(arr: &[f64], mu: Option<f64>) -> f64 {
     if arr.is_empty() {
         return 0.0;
     }
@@ -23,7 +23,7 @@ pub fn std_dev(arr: &[f64], mu: Option<f64>) -> f64 {
 /// Extract inter-key intervals from keystroke down-times.
 /// Filters to 0 < gap < 5000 ms.
 #[inline]
-pub fn extract_iki(downs: &[f64]) -> Vec<f64> {
+pub(crate) fn extract_iki(downs: &[f64]) -> Vec<f64> {
     let mut ikis = Vec::with_capacity(downs.len().saturating_sub(1));
     for i in 1..downs.len() {
         let gap = downs[i] - downs[i - 1];
@@ -36,7 +36,7 @@ pub fn extract_iki(downs: &[f64]) -> Vec<f64> {
 
 /// Ordinary least-squares slope.
 #[inline]
-pub fn linreg_slope(x: &[f64], y: &[f64]) -> Option<f64> {
+pub(crate) fn linreg_slope(x: &[f64], y: &[f64]) -> Option<f64> {
     let n = x.len().min(y.len());
     if n < 2 {
         return None;
@@ -69,7 +69,7 @@ pub fn linreg_slope(x: &[f64], y: &[f64]) -> Option<f64> {
 /// Digamma (psi) function. Used by KSG transfer entropy estimator.
 /// Asymptotic expansion with recurrence for small arguments.
 #[inline]
-pub fn digamma(mut x: f64) -> f64 {
+pub(crate) fn digamma(mut x: f64) -> f64 {
     let mut result = 0.0;
     // Shift x up to >= 6 for accurate asymptotic expansion
     while x < 6.0 {
@@ -86,7 +86,7 @@ pub fn digamma(mut x: f64) -> f64 {
 /// Complementary error function erfc(x) = 1 - erf(x).
 /// Abramowitz & Stegun 7.1.26 rational approximation (|ε| < 1.5×10⁻⁷).
 #[inline]
-pub fn erfc(x: f64) -> f64 {
+pub(crate) fn erfc(x: f64) -> f64 {
     let t = 1.0 / 0.3275911f64.mul_add(x.abs(), 1.0);
     let poly = t * (0.254829592f64
         + t * (-0.284496736f64
@@ -102,7 +102,7 @@ pub fn erfc(x: f64) -> f64 {
 /// Normalize a series to zero mean, unit variance.
 /// Returns the original values if variance is zero.
 #[inline]
-pub fn normalize(arr: &[f64]) -> Vec<f64> {
+pub(crate) fn normalize(arr: &[f64]) -> Vec<f64> {
     let mu = mean(arr);
     let sd = std_dev(arr, Some(mu));
     if sd < 1e-12 {

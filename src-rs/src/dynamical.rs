@@ -15,26 +15,26 @@ use crate::types::{HoldFlight, IkiSeries, KeystrokeEvent, SignalError, SignalRes
 
 // ─── Result types ─────────────────────────────────────────────────
 
-pub struct RqaResult {
-    pub determinism: f64,
-    pub laminarity: f64,
-    pub trapping_time: f64,
-    pub recurrence_rate: f64,
+pub(crate) struct RqaResult {
+    pub(crate) determinism: f64,
+    pub(crate) laminarity: f64,
+    pub(crate) trapping_time: f64,
+    pub(crate) recurrence_rate: f64,
 }
 
-pub struct DynamicalResult {
-    pub iki_count: usize,
-    pub hold_flight_count: usize,
-    pub permutation_entropy: Option<f64>,
-    pub permutation_entropy_raw: Option<f64>,
+pub(crate) struct DynamicalResult {
+    pub(crate) iki_count: usize,
+    pub(crate) hold_flight_count: usize,
+    pub(crate) permutation_entropy: Option<f64>,
+    pub(crate) permutation_entropy_raw: Option<f64>,
     /// PE at orders 3-7: complexity spectrum revealing structure at multiple scales.
     /// Index 0 = order 3, index 4 = order 7. Each value is normalized [0,1].
-    pub pe_spectrum: Option<Vec<f64>>,
-    pub dfa_alpha: Option<f64>,
-    pub rqa: Option<RqaResult>,
-    pub te_hold_to_flight: Option<f64>,
-    pub te_flight_to_hold: Option<f64>,
-    pub te_dominance: Option<f64>,
+    pub(crate) pe_spectrum: Option<Vec<f64>>,
+    pub(crate) dfa_alpha: Option<f64>,
+    pub(crate) rqa: Option<RqaResult>,
+    pub(crate) te_hold_to_flight: Option<f64>,
+    pub(crate) te_flight_to_hold: Option<f64>,
+    pub(crate) te_dominance: Option<f64>,
 }
 
 // ─── Permutation Entropy (Bandt & Pompe 2002) ─────────────────────
@@ -407,7 +407,7 @@ fn transfer_entropy(source: &[f64], target: &[f64], lag: usize) -> SignalResult<
 
 // ─── Public API ───────────────────────────────────────────────────
 
-pub fn compute(stream: &[KeystrokeEvent]) -> DynamicalResult {
+pub(crate) fn compute(stream: &[KeystrokeEvent]) -> DynamicalResult {
     let ikis = IkiSeries::from_stream(stream);
     let hf = HoldFlight::from_stream(stream);
     let aligned = hf.aligned_len();

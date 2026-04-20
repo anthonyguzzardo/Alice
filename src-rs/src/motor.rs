@@ -16,23 +16,23 @@ use crate::types::{FlightTimes, IkiSeries, KeystrokeEvent, SignalError, SignalRe
 
 // ─── Result types ─────────────────────────────────────────────────
 
-pub struct ExGaussianValues {
-    pub tau: f64,
-    pub mu: f64,
-    pub sigma: f64,
-    pub tau_proportion: f64,
+pub(crate) struct ExGaussianValues {
+    pub(crate) tau: f64,
+    pub(crate) mu: f64,
+    pub(crate) sigma: f64,
+    pub(crate) tau_proportion: f64,
 }
 
-pub struct MotorResult {
-    pub sample_entropy: Option<f64>,
-    pub iki_autocorrelation: Option<Vec<f64>>,
-    pub motor_jerk: Option<f64>,
-    pub lapse_rate: Option<f64>,
-    pub tempo_drift: Option<f64>,
-    pub iki_compression_ratio: Option<f64>,
-    pub digraph_latency_profile: Option<String>,
-    pub ex_gaussian: Option<ExGaussianValues>,
-    pub adjacent_hold_time_cov: Option<f64>,
+pub(crate) struct MotorResult {
+    pub(crate) sample_entropy: Option<f64>,
+    pub(crate) iki_autocorrelation: Option<Vec<f64>>,
+    pub(crate) motor_jerk: Option<f64>,
+    pub(crate) lapse_rate: Option<f64>,
+    pub(crate) tempo_drift: Option<f64>,
+    pub(crate) iki_compression_ratio: Option<f64>,
+    pub(crate) digraph_latency_profile: Option<String>,
+    pub(crate) ex_gaussian: Option<ExGaussianValues>,
+    pub(crate) adjacent_hold_time_cov: Option<f64>,
 }
 
 // ─── Sample Entropy helpers ───────────────────────────────────────
@@ -489,7 +489,7 @@ fn adjacent_hold_time_cov(stream: &[KeystrokeEvent]) -> SignalResult<f64> {
 
 // ─── Public API ───────────────────────────────────────────────────
 
-pub fn compute(stream: &[KeystrokeEvent], total_duration_ms: f64) -> MotorResult {
+pub(crate) fn compute(stream: &[KeystrokeEvent], total_duration_ms: f64) -> MotorResult {
     let ikis = IkiSeries::from_stream(stream);
     let flights = FlightTimes::from_stream(stream);
 

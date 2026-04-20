@@ -21,16 +21,16 @@ use crate::types::{utf16_to_byte_offset, SignalError, SignalResult};
 #[derive(serde::Deserialize)]
 struct EventTuple(f64, usize, usize, String);
 
-pub struct ProcessResult {
-    pub pause_within_word: Option<i32>,
-    pub pause_between_word: Option<i32>,
-    pub pause_between_sentence: Option<i32>,
-    pub abandoned_thought_count: Option<i32>,
-    pub r_burst_count: Option<i32>,
-    pub i_burst_count: Option<i32>,
-    pub vocab_expansion_rate: Option<f64>,
-    pub phase_transition_point: Option<f64>,
-    pub strategy_shift_count: Option<i32>,
+pub(crate) struct ProcessResult {
+    pub(crate) pause_within_word: Option<i32>,
+    pub(crate) pause_between_word: Option<i32>,
+    pub(crate) pause_between_sentence: Option<i32>,
+    pub(crate) abandoned_thought_count: Option<i32>,
+    pub(crate) r_burst_count: Option<i32>,
+    pub(crate) i_burst_count: Option<i32>,
+    pub(crate) vocab_expansion_rate: Option<f64>,
+    pub(crate) phase_transition_point: Option<f64>,
+    pub(crate) strategy_shift_count: Option<i32>,
 }
 
 // ─── Text Reconstruction (UTF-8 safe) ────────────────────────────
@@ -381,7 +381,7 @@ fn strategy_shift_count(events: &[EventTuple], burst_threshold_ms: f64) -> Optio
 
 // ─── Public API ──────────────────────────────────────────────────
 
-pub fn compute(event_log_json: &str) -> ProcessResult {
+pub(crate) fn compute(event_log_json: &str) -> ProcessResult {
     let null_result = ProcessResult {
         pause_within_word: None,
         pause_between_word: None,
