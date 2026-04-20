@@ -129,6 +129,27 @@ src/lib/db-sqlite.ts               -- dead SQLite module (2274 lines)
 6. **Rust files NOT prefixed** -- already namespaced in src-rs/, snake_case per language convention
 7. **`lib` prefix for domain logic, `utl` for utilities** -- 3 utility files (date, error-log, word-lists), everything else is lib
 
+## Post-audit cleanup (same session)
+
+Full audit checklist passed. Then data integrity review uncovered post-mortem artifacts:
+
+### Data cleanup
+- Deleted 1 orphaned test row in `tb_session_summaries` (question_id=99999, migration test data from April 18)
+- Deleted 20 calibration response embeddings from `tb_embeddings` (pre-pivot artifacts, calibration content was polluting RAG retrieval pool)
+- Deleted 3 observation embeddings from `tb_embeddings` (observation pipeline was removed on April 16)
+- Final embedding state: 7 seed-question response embeddings, all correct
+
+### Code cleanup
+- Removed `embedObservation()` and `embedReflection()` from `libEmbeddings.ts` (dead since April 16 pivot)
+- Removed `getUnembeddedObservations()` and `getUnembeddedReflections()` from `libDb.ts`
+- Stripped observation/reflection backfill loops from `backfillEmbeddings()`
+- Added `question_source_id != 3` filter to `getUnembeddedResponses()` so calibration responses are excluded from embedding, including via backfill
+
+### Pipeline status
+- All 5 signal families (dynamical, motor, process, semantic, cross-session) computing on every new entry
+- Embeddings correctly scoped: only seed/generated question responses get embedded, calibration responses do not
+- Verified with live calibration submission (question 76, response 51): all signals computed, no embedding created
+
 ## Known pre-existing issues (not caused by this session)
 
 - `scripts/backfill-slice3-history.ts` and `scripts/reinterpret.ts` have missing `await` calls on async functions (pre-existing TypeScript errors)
