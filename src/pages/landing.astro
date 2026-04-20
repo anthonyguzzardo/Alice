@@ -79,8 +79,9 @@ import PublicLayout from '../layouts/PublicLayout.astro';
     </section>
 
     <section class="breath closing">
-      <a href="/auth/login" class="enter-orb" aria-label="Enter Alice">
+      <a href="/auth/login" class="enter-orb" id="enter-orb" aria-label="Enter Alice">
         <span class="enter-ring"></span>
+        <span class="enter-ripple"></span>
         <span class="enter-text">Enter</span>
       </a>
     </section>
@@ -128,8 +129,8 @@ import PublicLayout from '../layouts/PublicLayout.astro';
     // --- Generate neuron positions ---
     // Clustered distribution: several nuclei with gaussian scatter,
     // mimicking cortical column organization rather than uniform noise.
-    var NUM_NEURONS = 280;
-    var NUM_CLUSTERS = 8;
+    var NUM_NEURONS = 160;
+    var NUM_CLUSTERS = 6;
 
     var clusters = [];
     for (var c = 0; c < NUM_CLUSTERS; c++) {
@@ -152,6 +153,17 @@ import PublicLayout from '../layouts/PublicLayout.astro';
       var nx = cl.x + gaussRand() * cl.spread;
       var ny = cl.y + gaussRand() * cl.spread;
       // Neuron size varies: some large soma, mostly small
+      // Clear zone around Enter button (center of viewport)
+      // Push neurons outward if they land too close
+      var orbCx = 0.5, orbCy = 0.58;
+      var orbR = 0.14; // exclusion radius in normalized coords
+      var ddx = nx - orbCx, ddy = ny - orbCy;
+      var dd = Math.sqrt(ddx * ddx + ddy * ddy);
+      if (dd < orbR && dd > 0.001) {
+        // Push to just outside the exclusion zone
+        nx = orbCx + (ddx / dd) * (orbR + rand() * 0.03);
+        ny = orbCy + (ddy / dd) * (orbR + rand() * 0.03);
+      }
       var size = rand() < 0.1 ? rand() * 4 + 3 : rand() * 2 + 1;
       neurons.push({ x: nx, y: ny, size: size });
     }
@@ -159,7 +171,7 @@ import PublicLayout from '../layouts/PublicLayout.astro';
     // --- Pre-compute connections (edges) ---
     // Connect neurons within a distance threshold, sorted by distance
     // so shorter connections appear first as scroll increases.
-    var MAX_DIST = 0.18;
+    var MAX_DIST = 0.14;
     var edges = [];
     for (var i = 0; i < neurons.length; i++) {
       for (var j = i + 1; j < neurons.length; j++) {
@@ -167,6 +179,11 @@ import PublicLayout from '../layouts/PublicLayout.astro';
         var dy = neurons[i].y - neurons[j].y;
         var d = Math.sqrt(dx * dx + dy * dy);
         if (d < MAX_DIST) {
+          // Skip edges whose midpoint falls inside the Enter button zone
+          var mx = (neurons[i].x + neurons[j].x) / 2;
+          var my = (neurons[i].y + neurons[j].y) / 2;
+          var mdx = mx - 0.5, mdy = my - 0.58;
+          if (Math.sqrt(mdx * mdx + mdy * mdy) < 0.11) continue;
           edges.push({ a: i, b: j, dist: d });
         }
       }
@@ -343,12 +360,16 @@ import PublicLayout from '../layouts/PublicLayout.astro';
     // at the alpha levels we need for subtlety.
     function getColor() {
       var style = getComputedStyle(document.documentElement);
-      var hex = style.getPropertyValue('--text-muted').trim() || '#6b6560';
-      if (hex[0] === '#') {
-        var r = parseInt(hex.slice(1, 3), 16) / 255;
-        var g = parseInt(hex.slice(3, 5), 16) / 255;
-        var b = parseInt(hex.slice(5, 7), 16) / 255;
+      var val = style.getPropertyValue('--text-muted').trim() || '#6b6560';
+      if (val[0] === '#') {
+        var r = parseInt(val.slice(1, 3), 16) / 255;
+        var g = parseInt(val.slice(3, 5), 16) / 255;
+        var b = parseInt(val.slice(5, 7), 16) / 255;
         return [r, g, b];
+      }
+      var m = val.match(/(\d+)/g);
+      if (m && m.length >= 3) {
+        return [parseInt(m[0]) / 255, parseInt(m[1]) / 255, parseInt(m[2]) / 255];
       }
       return [0.42, 0.4, 0.38];
     }
@@ -402,7 +423,7 @@ import PublicLayout from '../layouts/PublicLayout.astro';
           lineVerts[i * 4 + 2] = neurons[e.b].x;
           lineVerts[i * 4 + 3] = neurons[e.b].y;
           // Closer connections are more visible, farther ones are ghostly
-          var alpha = (1 - e.dist / MAX_DIST) * 0.35;
+          var alpha = (1 - e.dist / MAX_DIST) * 0.22;
           lineAlphas[i * 2] = alpha;
           lineAlphas[i * 2 + 1] = alpha;
           lineSizes[i * 2] = 1.0;
@@ -509,10 +530,7 @@ import PublicLayout from '../layouts/PublicLayout.astro';
         gl.enableVertexAttribArray(pLocs.alpha);
         gl.vertexAttribPointer(pLocs.alpha, 1, gl.FLOAT, false, 0, 0);
 
-        // Use additive blending for impulses so they glow
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
         gl.drawArrays(gl.POINTS, 0, impulses.length);
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
         gl.deleteBuffer(impPosBuf);
         gl.deleteBuffer(impSizeBuf);
@@ -541,6 +559,49 @@ import PublicLayout from '../layouts/PublicLayout.astro';
     window.addEventListener('scroll', onScroll, { passive: true });
     onScroll();
     loop();
+  })();
+</script>
+
+<script is:inline>
+  (function () {
+    var orb = document.getElementById('enter-orb');
+    if (!orb) return;
+
+    var threshold = 3 + Math.floor(Math.random() * 3); // 3, 4, or 5
+    var clicks = 0;
+    var reactions = ['ripple', 'recoil', 'spin', 'fracture', 'bloom'];
+    var busy = false;
+
+    orb.addEventListener('click', function (e) {
+      clicks++;
+      if (clicks >= threshold) return; // let the link navigate
+      e.preventDefault();
+
+      if (busy) return;
+      busy = true;
+
+      var reaction = reactions[(clicks - 1) % reactions.length];
+
+      // Clear previous reaction classes
+      for (var i = 0; i < reactions.length; i++) {
+        orb.classList.remove('react-' + reactions[i]);
+      }
+
+      // Force reflow so re-adding the same class restarts the animation
+      void orb.offsetWidth;
+      orb.classList.add('react-' + reaction);
+
+      // Remove class after animation ends
+      function done() {
+        orb.classList.remove('react-' + reaction);
+        busy = false;
+        orb.removeEventListener('animationend', done);
+      }
+      orb.addEventListener('animationend', done);
+
+      // Safety fallback in case animationend doesn't fire
+      setTimeout(function () { busy = false; }, 1200);
+    });
   })();
 </script>
 
@@ -613,8 +674,8 @@ import PublicLayout from '../layouts/PublicLayout.astro';
     position: absolute;
     inset: 0;
     border-radius: 50%;
-    border: 1px solid var(--text-faint);
-    opacity: 0.5;
+    border: 1px solid var(--text-muted);
+    opacity: 0.8;
     transition: opacity 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease;
     animation: orb-breathe 4s ease-in-out infinite;
   }
@@ -635,7 +696,7 @@ import PublicLayout from '../layouts/PublicLayout.astro';
     font-style: italic;
     font-weight: 300;
     letter-spacing: 0.08em;
-    color: var(--text-faint);
+    color: var(--text-muted);
     transition: color 0.4s ease;
   }
 
@@ -644,8 +705,85 @@ import PublicLayout from '../layouts/PublicLayout.astro';
   }
 
   @keyframes orb-breathe {
-    0%, 100% { transform: scale(1); opacity: 0.4; }
-    50% { transform: scale(1.04); opacity: 0.6; }
+    0%, 100% { transform: scale(1); opacity: 0.7; }
+    50% { transform: scale(1.04); opacity: 0.9; }
+  }
+
+  /* Ripple element (used by ripple reaction) */
+  .enter-ripple {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 1px solid var(--text-faint);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* --- Reaction 1: Ripple --- ring expands outward and fades */
+  .react-ripple .enter-ripple {
+    animation: ripple-out 0.8s ease-out forwards;
+  }
+  @keyframes ripple-out {
+    0% { transform: scale(1); opacity: 0.6; }
+    100% { transform: scale(2.2); opacity: 0; }
+  }
+
+  /* --- Reaction 2: Recoil --- orb flinches away then drifts back */
+  .react-recoil {
+    animation: recoil 0.7s ease-in-out forwards;
+  }
+  @keyframes recoil {
+    0% { transform: scale(1); }
+    20% { transform: scale(0.7); }
+    60% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+  }
+
+  /* --- Reaction 3: Spin --- text rotates once */
+  .react-spin .enter-text {
+    animation: spin-once 0.6s ease-in-out;
+  }
+  @keyframes spin-once {
+    0% { transform: rotate(0deg); opacity: 1; }
+    50% { transform: rotate(180deg); opacity: 0.3; }
+    100% { transform: rotate(360deg); opacity: 1; }
+  }
+
+  /* --- Reaction 4: Fracture --- ring becomes dashed then reforms */
+  .react-fracture .enter-ring {
+    animation: fracture 0.8s ease-in-out forwards;
+  }
+  @keyframes fracture {
+    0% { border-style: solid; opacity: 0.5; transform: scale(1); }
+    30% { border-style: dashed; opacity: 0.8; transform: scale(1.1) rotate(15deg); }
+    70% { border-style: dashed; opacity: 0.6; transform: scale(1.05) rotate(-10deg); }
+    100% { border-style: solid; opacity: 0.5; transform: scale(1) rotate(0deg); }
+  }
+
+  /* --- Reaction 5: Bloom --- orb swells with glow then settles */
+  .react-bloom {
+    animation: bloom-scale 0.9s ease-in-out;
+  }
+  .react-bloom .enter-ring {
+    animation: bloom-glow 0.9s ease-in-out;
+  }
+  @keyframes bloom-scale {
+    0% { transform: scale(1); }
+    40% { transform: scale(1.35); }
+    100% { transform: scale(1); }
+  }
+  @keyframes bloom-glow {
+    0% { box-shadow: none; opacity: 0.5; }
+    40% { box-shadow: 0 0 50px rgba(154, 149, 144, 0.3), inset 0 0 30px rgba(154, 149, 144, 0.1); opacity: 1; }
+    100% { box-shadow: none; opacity: 0.5; }
+  }
+  [data-theme="dark"] .react-bloom .enter-ring {
+    animation: bloom-glow-dark 0.9s ease-in-out;
+  }
+  @keyframes bloom-glow-dark {
+    0% { box-shadow: none; opacity: 0.5; }
+    40% { box-shadow: 0 0 60px rgba(200, 195, 190, 0.2), inset 0 0 40px rgba(200, 195, 190, 0.06); opacity: 1; }
+    100% { box-shadow: none; opacity: 0.5; }
   }
 
   /*
