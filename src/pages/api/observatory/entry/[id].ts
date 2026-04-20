@@ -149,8 +149,26 @@ export const GET: APIRoute = async ({ params }) => {
     const replayRow = replayRows[0] as any;
 
     // Read persisted dynamical signals; fall back to on-demand compute
-    let dynamicalSignals: any = await getDynamicalSignals(entryState.question_id);
-    if (!dynamicalSignals && replayRow?.keystroke_stream_json) {
+    let dynamicalSignals: any = null;
+    const dsRow = await getDynamicalSignals(entryState.question_id);
+    if (dsRow) {
+      // Normalize DB snake_case to camelCase for frontend
+      dynamicalSignals = {
+        ikiCount: dsRow.iki_count,
+        holdFlightCount: dsRow.hold_flight_count,
+        permutationEntropy: dsRow.permutation_entropy,
+        permutationEntropyRaw: dsRow.permutation_entropy_raw,
+        peSpectrum: dsRow.pe_spectrum ? JSON.parse(dsRow.pe_spectrum) : null,
+        dfaAlpha: dsRow.dfa_alpha,
+        rqaDeterminism: dsRow.rqa_determinism,
+        rqaLaminarity: dsRow.rqa_laminarity,
+        rqaTrappingTime: dsRow.rqa_trapping_time,
+        rqaRecurrenceRate: dsRow.rqa_recurrence_rate,
+        teHoldToFlight: dsRow.te_hold_to_flight,
+        teFlightToHold: dsRow.te_flight_to_hold,
+        teDominance: dsRow.te_dominance,
+      };
+    } else if (replayRow?.keystroke_stream_json) {
       try {
         const stream: KeystrokeEvent[] = JSON.parse(replayRow.keystroke_stream_json);
         if (stream.length > 0) {
