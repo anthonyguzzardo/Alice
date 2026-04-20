@@ -175,4 +175,71 @@ mod tests {
         assert_eq!(ikis.len(), 3);
         assert!((ikis[0] - 100.0).abs() < 1e-10);
     }
+
+    #[test]
+    fn digamma_known_values() {
+        // ψ(1) = -γ (Euler-Mascheroni constant)
+        let euler_mascheroni = 0.5772156649015329;
+        assert!(
+            (digamma(1.0) - (-euler_mascheroni)).abs() < 1e-8,
+            "ψ(1) should be -γ, got {}",
+            digamma(1.0)
+        );
+        // ψ(2) = 1 - γ
+        assert!(
+            (digamma(2.0) - (1.0 - euler_mascheroni)).abs() < 1e-8,
+            "ψ(2) should be 1-γ, got {}",
+            digamma(2.0)
+        );
+        // ψ(0.5) = -γ - 2*ln(2) ≈ -1.9635100260214235
+        let expected_half = -euler_mascheroni - 2.0 * 2.0_f64.ln();
+        assert!(
+            (digamma(0.5) - expected_half).abs() < 1e-6,
+            "ψ(0.5) should be -γ-2ln2, got {}",
+            digamma(0.5)
+        );
+    }
+
+    #[test]
+    fn digamma_large_argument() {
+        // For large x: ψ(x) ≈ ln(x) - 1/(2x)
+        // ψ(100) ≈ 4.60016 (known to high precision: 4.600161852738087)
+        let expected = 4.600161852738087;
+        assert!(
+            (digamma(100.0) - expected).abs() < 1e-6,
+            "ψ(100) should be ~4.6002, got {}",
+            digamma(100.0)
+        );
+    }
+
+    #[test]
+    fn normalize_zero_mean_unit_variance() {
+        let data = vec![2.0, 4.0, 6.0, 8.0, 10.0];
+        let normed = normalize(&data);
+
+        // Mean should be ~0
+        let m = mean(&normed);
+        assert!(m.abs() < 1e-10, "normalized mean should be 0, got {m}");
+
+        // Std should be ~1
+        let sd = std_dev(&normed, None);
+        assert!((sd - 1.0).abs() < 1e-10, "normalized std should be 1, got {sd}");
+    }
+
+    #[test]
+    fn normalize_constant_returns_original() {
+        let data = vec![5.0, 5.0, 5.0];
+        let normed = normalize(&data);
+        // Zero variance: returns original values unchanged
+        assert_eq!(normed, data);
+    }
+
+    #[test]
+    fn normalize_preserves_relative_order() {
+        let data = vec![10.0, 20.0, 30.0, 40.0];
+        let normed = normalize(&data);
+        for i in 1..normed.len() {
+            assert!(normed[i] > normed[i - 1], "normalization should preserve order");
+        }
+    }
 }

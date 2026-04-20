@@ -522,6 +522,50 @@ mod tests {
     }
 
     #[test]
+    fn dfa_white_noise_alpha_near_half() {
+        // White noise (uncorrelated) → DFA α ≈ 0.5 (Peng et al. 1994)
+        // Use deterministic pseudo-random via simple LCG for reproducibility
+        let mut rng: u64 = 12345;
+        let white_noise: Vec<f64> = (0..1000)
+            .map(|_| {
+                // LCG: x_{n+1} = (a*x_n + c) mod m
+                rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1);
+                // Map to [-1, 1]
+                (rng as f64 / u64::MAX as f64) * 2.0 - 1.0
+            })
+            .collect();
+
+        let alpha = dfa_alpha(&white_noise).unwrap();
+        // White noise α should be ~0.5 (tolerance ±0.15 for finite sample)
+        assert!(
+            (alpha - 0.5).abs() < 0.15,
+            "DFA of white noise should be ~0.5, got {alpha}"
+        );
+    }
+
+    #[test]
+    fn dfa_random_walk_alpha_near_1_5() {
+        // Random walk (cumulative sum of white noise) → DFA α ≈ 1.5
+        let mut rng: u64 = 67890;
+        let mut cumsum = 0.0;
+        let random_walk: Vec<f64> = (0..1000)
+            .map(|_| {
+                rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1);
+                let step = (rng as f64 / u64::MAX as f64) * 2.0 - 1.0;
+                cumsum += step;
+                cumsum
+            })
+            .collect();
+
+        let alpha = dfa_alpha(&random_walk).unwrap();
+        // Random walk α should be ~1.5 (tolerance ±0.2 for finite sample)
+        assert!(
+            (alpha - 1.5).abs() < 0.2,
+            "DFA of random walk should be ~1.5, got {alpha}"
+        );
+    }
+
+    #[test]
     fn rqa_zero_variance_fails() {
         let constant = vec![42.0; 50];
         assert!(matches!(rqa(&constant), Err(SignalError::ZeroVariance { .. })));
