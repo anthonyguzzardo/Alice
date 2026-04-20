@@ -14,7 +14,7 @@
 use std::collections::HashSet;
 
 use crate::stats::mean;
-use crate::types::utf16_to_byte_offset;
+use crate::types::{utf16_to_byte_offset, SignalError, SignalResult};
 
 // ─── Types ────────────────────────────────────────────────────────
 
@@ -135,15 +135,16 @@ fn abandoned_thought_count(events: &[EventTuple], pause_threshold_ms: f64) -> Op
             continue;
         }
 
-        let inserted_chars = events[i].3.len();
-        if !(3..=50).contains(&inserted_chars) {
+        // Count in UTF-16 code units to match deletedCount from JS
+        let inserted_units: usize = events[i].3.chars().map(|c| c.len_utf16()).sum();
+        if !(3..=50).contains(&inserted_units) {
             continue;
         }
 
         let mut deleted_total = 0usize;
         let mut followed_by_new_text = false;
         let look_ahead = events.len().min(i + 8);
-        let threshold = (inserted_chars as f64 * 0.7) as usize;
+        let threshold = (inserted_units as f64 * 0.7) as usize;
 
         for j in (i + 1)..look_ahead {
             let time_delta = events[j].0 - events[i].0;
@@ -175,7 +176,11 @@ struct BurstResult {
     i_bursts: i32,
 }
 
-fn burst_classification(events: &[EventTuple], burst_threshold_ms: f64) -> Option<BurstResult> {
+fn burst_classification(
+    events: &[EventTuple],
+    text_states: &[String],
+    burst_threshold_ms: f64,
+) -> Option<BurstResult> {
     if events.len() < 10 {
         return None;
     }
@@ -210,9 +215,24 @@ fn burst_classification(events: &[EventTuple], burst_threshold_ms: f64) -> Optio
             continue;
         }
 
-        let first = &events[burst[0]];
-        if !first.3.is_empty() && first.1 < first.1 + first.3.len().saturating_sub(2) {
-            i_bursts += 1;
+        // I-burst (Deane 2015): insertion *within* existing text, not appending at end.
+        // Compare cursor position (UTF-16 units) against text length (UTF-16 units)
+        // at the state just before the burst starts.
+        let first_idx = burst[0];
+        let first = &events[first_idx];
+        if !first.3.is_empty() {
+            // Text state before this event: use previous state (or empty for first event)
+            let empty = String::new();
+            let text_before = if first_idx > 0 {
+                &text_states[first_idx - 1]
+            } else {
+                &empty
+            };
+            let text_len_utf16: usize = text_before.chars().map(|c| c.len_utf16()).sum();
+            // Cursor is within existing text (not at end) → I-burst
+            if first.1 < text_len_utf16 {
+                i_bursts += 1;
+            }
         }
     }
 
@@ -221,9 +241,12 @@ fn burst_classification(events: &[EventTuple], burst_threshold_ms: f64) -> Optio
 
 // ─── Vocabulary Expansion Rate (Heaps' Law) ──────────────────────
 
-fn vocab_expansion_rate(text_states: &[String]) -> Option<f64> {
+fn vocab_expansion_rate(text_states: &[String]) -> SignalResult<f64> {
     if text_states.len() < 10 {
-        return None;
+        return Err(SignalError::InsufficientData {
+            needed: 10,
+            got: text_states.len(),
+        });
     }
 
     let samples = 10;
@@ -242,7 +265,10 @@ fn vocab_expansion_rate(text_states: &[String]) -> Option<f64> {
     }
 
     if points.len() < 3 {
-        return None;
+        return Err(SignalError::InsufficientData {
+            needed: 3,
+            got: points.len(),
+        });
     }
 
     let log_points: Vec<(f64, f64)> = points
@@ -252,25 +278,32 @@ fn vocab_expansion_rate(text_states: &[String]) -> Option<f64> {
         .collect();
 
     if log_points.len() < 3 {
-        return None;
+        return Err(SignalError::InsufficientData {
+            needed: 3,
+            got: log_points.len(),
+        });
     }
 
     let x: Vec<f64> = log_points.iter().map(|(lx, _)| *lx).collect();
     let y: Vec<f64> = log_points.iter().map(|(_, ly)| *ly).collect();
 
     crate::stats::linreg_slope(&x, &y)
+        .ok_or(SignalError::DegenerateValue("degenerate regression in vocab expansion"))
 }
 
 // ─── Phase Transition Point ──────────────────────────────────────
 
-fn phase_transition_point(events: &[EventTuple]) -> Option<f64> {
+fn phase_transition_point(events: &[EventTuple]) -> SignalResult<Option<f64>> {
     if events.len() < 20 {
-        return None;
+        return Err(SignalError::InsufficientData {
+            needed: 20,
+            got: events.len(),
+        });
     }
 
-    let total_duration = events.last()?.0 - events[0].0;
+    let total_duration = events.last().unwrap().0 - events[0].0;
     if total_duration <= 0.0 {
-        return None;
+        return Err(SignalError::DegenerateValue("zero duration in phase transition"));
     }
 
     let window_size = (events.len() / 10).max(5);
@@ -290,7 +323,8 @@ fn phase_transition_point(events: &[EventTuple]) -> Option<f64> {
         }
     }
 
-    transition_idx.map(|idx| (events[idx].0 - events[0].0) / total_duration)
+    // No transition found is a valid result (not an error)
+    Ok(transition_idx.map(|idx| (events[idx].0 - events[0].0) / total_duration))
 }
 
 // ─── Strategy Shift Detection ────────────────────────────────────
@@ -372,9 +406,9 @@ pub fn compute(event_log_json: &str) -> ProcessResult {
     let text_states = reconstruct_text(&events);
     let pause_profile = pause_location_profile(&events, &text_states, 2000.0);
     let abandoned = abandoned_thought_count(&events, 2000.0);
-    let bursts = burst_classification(&events, 2000.0);
-    let heaps = vocab_expansion_rate(&text_states);
-    let phase = phase_transition_point(&events);
+    let bursts = burst_classification(&events, &text_states, 2000.0);
+    let heaps = vocab_expansion_rate(&text_states).ok();
+    let phase = phase_transition_point(&events).ok().flatten();
     let shifts = strategy_shift_count(&events, 2000.0);
 
     ProcessResult {
@@ -458,5 +492,216 @@ mod tests {
     fn invalid_json_returns_nulls() {
         let result = compute("not json");
         assert!(result.pause_within_word.is_none());
+    }
+
+    // ─── Pause Profile Tests ─────────────────────────────────────────
+
+    #[test]
+    fn pause_profile_classifies_locations() {
+        // Build a stream: type "Hello world. Bye", with pauses at known locations.
+        // State after initial typing: "Hello world. Bye"
+        // We insert pauses (>2000ms) before specific characters.
+        let mut events = Vec::new();
+        let mut t = 0.0;
+
+        // Type "Hello" rapidly (no pauses)
+        for (i, ch) in "Hello".chars().enumerate() {
+            events.push(EventTuple(t, i, 0, ch.to_string()));
+            t += 100.0;
+        }
+        // Pause > 2000ms, then insert " " at pos 5 (between-word pause triggers on char after space)
+        t += 3000.0;
+        events.push(EventTuple(t, 5, 0, " ".to_string()));
+        t += 100.0;
+
+        // Type "world." rapidly
+        for (i, ch) in "world.".chars().enumerate() {
+            events.push(EventTuple(t, 6 + i, 0, ch.to_string()));
+            t += 100.0;
+        }
+
+        // Pause > 2000ms, then insert after "." (between-sentence)
+        t += 3000.0;
+        events.push(EventTuple(t, 12, 0, " ".to_string()));
+        t += 100.0;
+
+        // Type "B" rapidly
+        events.push(EventTuple(t, 13, 0, "B".to_string()));
+        t += 100.0;
+
+        // Pause > 2000ms, then insert within word (after "B")
+        t += 3000.0;
+        events.push(EventTuple(t, 14, 0, "ye".to_string()));
+
+        let text_states = reconstruct_text(&events);
+        let profile = pause_location_profile(&events, &text_states, 2000.0).unwrap();
+
+        // First pause: cursor at pos 5, text is "Hello", char before cursor is 'o' → within-word
+        // Second pause: cursor at pos 12, text is "Hello world.", char before is '.' → between-sentence
+        // Third pause: cursor at pos 14, text is "Hello world. B", char before is 'B' → within-word
+        assert!(profile.within_word >= 1, "expected within_word >= 1, got {}", profile.within_word);
+        assert!(profile.between_sentence >= 1, "expected between_sentence >= 1, got {}", profile.between_sentence);
+    }
+
+    // ─── Burst Classification Tests ──────────────────────────────────
+
+    #[test]
+    fn r_burst_detected_when_burst_ends_with_deletion() {
+        // A burst that ends with a deletion → R-burst
+        let mut events = Vec::new();
+        let mut t = 0.0;
+
+        // Initial text typed with pauses to make >10 events
+        for i in 0..8 {
+            events.push(EventTuple(t, i, 0, "a".to_string()));
+            t += 100.0;
+        }
+        // Long pause to start new burst
+        t += 3000.0;
+        // Burst: type then delete
+        events.push(EventTuple(t, 8, 0, "x".to_string()));
+        t += 100.0;
+        events.push(EventTuple(t, 9, 0, "y".to_string()));
+        t += 100.0;
+        events.push(EventTuple(t, 9, 2, "".to_string())); // delete 2 chars → ends with deletion
+
+        let text_states = reconstruct_text(&events);
+        let result = burst_classification(&events, &text_states, 2000.0).unwrap();
+        assert!(result.r_bursts >= 1, "expected r_burst >= 1, got {}", result.r_bursts);
+    }
+
+    #[test]
+    fn i_burst_detected_when_inserting_mid_text() {
+        // A burst where the first event inserts within existing text → I-burst
+        let mut events = Vec::new();
+        let mut t = 0.0;
+
+        // Type "Hello world" first
+        events.push(EventTuple(t, 0, 0, "Hello world".to_string()));
+        t += 100.0;
+
+        // More events to reach minimum of 10
+        for _ in 0..9 {
+            events.push(EventTuple(t, 11, 0, ".".to_string()));
+            t += 100.0;
+        }
+
+        // Long pause, then insert at position 5 (within "Hello world...........")
+        // Text is now "Hello world........." (20 chars), cursor at 5 = mid-text
+        t += 3000.0;
+        events.push(EventTuple(t, 5, 0, " beautiful".to_string()));
+        t += 100.0;
+        events.push(EventTuple(t, 15, 0, ",".to_string()));
+
+        let text_states = reconstruct_text(&events);
+        let result = burst_classification(&events, &text_states, 2000.0).unwrap();
+        assert!(result.i_bursts >= 1, "expected i_burst >= 1, got {}", result.i_bursts);
+    }
+
+    #[test]
+    fn append_at_end_is_not_i_burst() {
+        // A burst where insertion is at end of text → NOT an I-burst
+        let mut events = Vec::new();
+        let mut t = 0.0;
+
+        // Type initial text
+        events.push(EventTuple(t, 0, 0, "Hello".to_string()));
+        t += 100.0;
+
+        // Padding events
+        for i in 0..9 {
+            events.push(EventTuple(t, 5 + i, 0, ".".to_string()));
+            t += 100.0;
+        }
+
+        // Long pause, then append at end (pos 14 = text length in UTF-16)
+        t += 3000.0;
+        events.push(EventTuple(t, 14, 0, " world".to_string()));
+        t += 100.0;
+        events.push(EventTuple(t, 20, 0, "!".to_string()));
+
+        let text_states = reconstruct_text(&events);
+        let result = burst_classification(&events, &text_states, 2000.0).unwrap();
+        assert_eq!(result.i_bursts, 0, "append at end should not be I-burst");
+    }
+
+    // ─── Abandoned Thought Tests ─────────────────────────────────────
+
+    #[test]
+    fn abandoned_thought_detected() {
+        // Pattern: pause → insert 10 chars → quickly delete most → insert new text
+        let mut events = Vec::new();
+        let mut t = 0.0;
+
+        // Initial padding events
+        for i in 0..8 {
+            events.push(EventTuple(t, i, 0, "x".to_string()));
+            t += 100.0;
+        }
+
+        // Long pause
+        t += 3000.0;
+        // Insert "abcdefghij" (10 chars, within 3..=50 range)
+        events.push(EventTuple(t, 8, 0, "abcdefghij".to_string()));
+        t += 500.0;
+        // Delete 8 chars (>= 70% of 10 = 7)
+        events.push(EventTuple(t, 10, 8, "".to_string()));
+        t += 200.0;
+        // Insert new text (followed_by_new_text = true)
+        events.push(EventTuple(t, 10, 0, "newstuff".to_string()));
+
+        let count = abandoned_thought_count(&events, 2000.0);
+        assert_eq!(count, Some(1), "expected 1 abandoned thought, got {:?}", count);
+    }
+
+    // ─── Vocab Expansion Rate Tests ──────────────────────────────────
+
+    #[test]
+    fn vocab_expansion_with_growing_text() {
+        // Build text states that grow with new words
+        let words = ["the", "quick", "brown", "fox", "jumps", "over", "lazy", "dog",
+                     "and", "then", "runs", "away", "fast", "into", "woods"];
+        let mut states = Vec::new();
+        let mut text = String::new();
+        for w in &words {
+            if !text.is_empty() {
+                text.push(' ');
+            }
+            text.push_str(w);
+            states.push(text.clone());
+        }
+
+        let rate = vocab_expansion_rate(&states);
+        // Heaps' exponent for pure unique-word growth should be near 1.0
+        assert!(rate.is_ok(), "expected Ok rate");
+        let r = rate.unwrap();
+        assert!(r > 0.0, "vocab expansion rate should be positive, got {r}");
+        assert!(r <= 1.5, "vocab expansion rate should be <= 1.5 for unique words, got {r}");
+    }
+
+    // ─── Strategy Shift Tests ────────────────────────────────────────
+
+    #[test]
+    fn strategy_shift_detects_change_in_burst_length() {
+        // First half: short bursts (1-2 chars each). Second half: long bursts (10+ chars).
+        let mut events = Vec::new();
+        let mut t = 0.0;
+
+        // 20 short bursts: 2 chars then pause
+        for _ in 0..20 {
+            events.push(EventTuple(t, 0, 0, "ab".to_string()));
+            t += 100.0;
+            t += 3000.0; // pause
+        }
+        // 20 long bursts: 15 chars then pause
+        for _ in 0..20 {
+            events.push(EventTuple(t, 0, 0, "abcdefghijklmno".to_string()));
+            t += 100.0;
+            t += 3000.0; // pause
+        }
+
+        let count = strategy_shift_count(&events, 2000.0);
+        assert!(count.is_some(), "expected Some shift count");
+        assert!(count.unwrap() >= 1, "expected at least 1 strategy shift, got {:?}", count);
     }
 }

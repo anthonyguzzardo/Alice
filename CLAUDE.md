@@ -178,9 +178,11 @@ The Rust crate is a measurement instrument, not a computation library. The disti
 
 The Rust crate must be written to Rust's standards, not JavaScript's.
 
+**Two kinds of signals.** `dynamical.rs` and `motor.rs` contain *estimators*: numerical computations of quantities defined in cited literature, with known approximation error bounds. `process.rs` contains *structural descriptions*: heuristic counters and pattern classifiers that describe the shape of a writing session without estimating any single quantity. The standards differ. Estimators require citation, error bounds, and typed error variants distinguishing failure modes. Structural descriptions require tested logic, documented heuristics, and honest naming (a count named `i_burst_count` must actually count I-bursts as defined, not a superset).
+
 ### Type Discipline
 
-- **Newtypes for domain separation**: `IkiSeries`, `HoldTimes`, `FlightTimes` are distinct types via newtype wrappers with `Deref<Target=[f64]>`. Never pass raw `&[f64]` where a typed series is expected. If you add a new series kind, wrap it.
+- **Newtypes for domain separation**: `IkiSeries` and `FlightTimes` are distinct types via newtype wrappers with `Deref<Target=[f64]>`. Never pass raw `&[f64]` where a typed series is expected. If you add a new series kind, wrap it. **Newtypes earn their keep by flowing**: a newtype is justified when it is constructed in one place, used in another, and the wrapper prevents a specific category of mistake at the use site. A newtype constructed and consumed in the same struct with no independent constructor is ceremony -- either give it a `from_*` constructor or inline the field.
 - **`SignalError` enum over `Option`**: Internal signal functions return `SignalResult<T>`. The error variant (`InsufficientData`, `ZeroVariance`, `DegenerateValue`) preserves *why* a computation failed. Convert to `Option` with `.ok()` only at the napi boundary in `lib.rs`.
 - **Structs get methods**: If a struct has a derived property (e.g. `HoldFlight::aligned_len()`), put it on the struct. Don't compute it inline at the call site.
 - **`KeystrokeEvent` uses `#[serde(rename)]`**: Wire format is `{c, d, u}`. Rust-side fields are `character`, `key_down_ms`, `key_up_ms`. Always use the readable names in Rust code.
@@ -188,6 +190,7 @@ The Rust crate must be written to Rust's standards, not JavaScript's.
 ### UTF-8 Safety
 
 - **JavaScript cursor positions are UTF-16 code units. Rust strings are UTF-8.** Any code that receives a cursor position or delete count from JS MUST convert through `types::utf16_to_byte_offset()` before indexing into a Rust string. Indexing raw bytes at a UTF-16 offset will panic on any non-ASCII character (curly quotes, accented letters, emoji).
+- **Count comparisons are also unit-typed.** When comparing a Rust-side character or byte count against a JS-sourced count (like `deletedCount`), convert both sides to the same unit -- typically UTF-16 code units via `.chars().map(|c| c.len_utf16()).sum::<usize>()`. Byte length (`.len()`) and character count (`.chars().count()`) are both wrong when the other side of the comparison is UTF-16.
 - **Never use `text.as_bytes()[pos]` with JS-sourced positions.** Use `text[..byte_offset].chars().next_back()` for character inspection.
 
 ### napi Boundary (`lib.rs`)

@@ -78,6 +78,13 @@ fn sample_entropy(series: &[f64], m: usize, r_factor: f64) -> SignalResult<f64> 
             "zero template matches at length m",
         ));
     }
+    if a == 0 {
+        // Zero matches at m+1 means maximum complexity — ratio is 0, ln(0) = -inf.
+        // Rather than producing infinity, report as a boundary condition.
+        return Err(SignalError::DegenerateValue(
+            "zero template matches at length m+1 (maximum complexity boundary)",
+        ));
+    }
 
     Ok(-(a as f64 / b as f64).ln())
 }

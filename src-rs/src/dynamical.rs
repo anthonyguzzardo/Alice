@@ -190,7 +190,8 @@ fn dfa_alpha(series: &[f64]) -> SignalResult<f64> {
 // Since the recurrence matrix is exactly symmetric (|x_i - x_j| == |x_j - x_i|),
 // full-matrix recurrence count = 2 * upper-triangle count. Laminarity divides
 // vertical_points (full matrix) by total_recurrences * 2 to normalize both
-// measures to the same basis. Cap at 500 points for O(n^2) feasibility.
+// measures to the same basis. Cap at 5000 points for O(n^2) feasibility
+// (~25M iterations — fine for nightly batch, not real-time).
 
 fn rqa(series: &[f64]) -> SignalResult<RqaResult> {
     let n = series.len();

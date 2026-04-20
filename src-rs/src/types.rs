@@ -83,15 +83,6 @@ impl Deref for IkiSeries {
     }
 }
 
-/// Key hold durations (key_up - key_down) in milliseconds.
-pub struct HoldTimes(Vec<f64>);
-
-impl Deref for HoldTimes {
-    type Target = [f64];
-    fn deref(&self) -> &[f64] {
-        &self.0
-    }
-}
 
 /// Inter-key flight times (next_down - prev_up) in milliseconds.
 pub struct FlightTimes(Vec<f64>);
@@ -118,7 +109,7 @@ impl Deref for FlightTimes {
 
 /// Paired hold and flight time series extracted from a keystroke stream.
 pub struct HoldFlight {
-    pub holds: HoldTimes,
+    pub holds: Vec<f64>,
     pub flights: FlightTimes,
 }
 
@@ -141,7 +132,7 @@ impl HoldFlight {
         }
 
         Self {
-            holds: HoldTimes(holds),
+            holds,
             flights: FlightTimes(flights),
         }
     }
