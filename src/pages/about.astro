@@ -1,14 +1,11 @@
 ---
 /**
  * About page.
- *
- * Who built this and why. First-person, honest, nonlinear.
- * The story of how Alice came about, told the way it actually happened.
  */
 import PublicLayout from '../layouts/layPublic.astro';
 ---
 
-<PublicLayout title="Alice -- About" active="about" description="Who built Alice, why, and how it came about.">
+<PublicLayout title="Alice -- About" active="about" description="Who built Alice and how it came about.">
 
 <article class="about">
 
@@ -18,51 +15,21 @@ import PublicLayout from '../layouts/layPublic.astro';
   </header>
 
   <section class="ab-section">
-    <p>I am a software engineer. I haven't written a line of code by hand in the last four months. I interact with AI daily, it's how I spend most of the day. I can see how it's shaping my thinking process. Turning more ideas into apps regularly. Working on paid work and side projects concurrently. I like to write and read, don't read much anymore, and have always been a fluent typist.</p>
+    <p>I'm a software engineer who hasn't written a line of code by hand in four months. I work with AI all day. I can feel it changing how I think and honestly that's part of what got me here, but not in the way you'd expect.</p>
 
-    <p>This has nothing to do with what led me to Alice but it will help me to say that once I've explained how Alice came about.</p>
-  </section>
+    <p>This started as a science forum. I wanted to build a place where researchers could collaborate on new theories and maybe get funding. A Reddit for STEM with actual money attached. Physics and math primarily, which is funny because I'm genuinely bad at math. It's one of my insecurities. I'll never be good enough to do the work myself but I like to follow it and that's enough to keep me near it. So I built a site that pulls from arXiv and NASA every night and ranks what's trending. Black holes, quantum gravity, that sort of thing. A cron job runs and I let it ride.</p>
 
-  <section class="ab-section">
-    <h2>How this started</h2>
+    <p>Then I got a different idea. What if you could build a system where someone journals with deep questions every day and the system eventually starts generating its own theories? Like an Einstein machine. You write and write, it listens, it doesn't bias you, and at some point something clicks and it produces a genuine breakthrough. I built that. Added predictions, suppressed questions, behavioral signals. The whole thing.</p>
 
-    <p>Initially I wanted to create a co-op science forum that would bring together scientists to discover new theories and perhaps get funding. Mainstream collaborative science into an online portal that could support it. A Reddit-meets-seed-money working data treasure trove for STEM fields, primarily physics and mathematics.</p>
+    <p>It was broken. Circular loop that graded itself. LLMs can reason but they can't generate what doesn't exist yet. I was proud of the architecture and the architecture was fundamentally flawed. That was a rough few days.</p>
 
-    <p>It's not obvious why that interests me. I am quite poor at math, and it's one of my insecurities. I can never be and will never be good enough at it and it would be a waste of time for me to try and study complex systems, as I would spend too much time to get not even very good. But I still like to follow it and that drives me to exist near it.</p>
+    <p>But in tearing it apart I found something I wasn't looking for. If you strip away the genius-machine ambition what you're left with is a system that measures how someone thinks through how they type. Not what they say. How the keystrokes land. The pauses, the deletions, the rhythm, the revision patterns. And if you do that every day for long enough against the person's own baseline you have something that doesn't exist anywhere in the research literature. A longitudinal cognitive instrument embedded in a daily practice that someone actually wants to do.</p>
 
-    <p>Eventually a website was created which I still look at here and there. One page in particular I kept focusing on. It's essentially pulling from archival websites daily. arXiv, NASA, a few other places, and ranking the most relevant trending things in science. Black holes, quantum gravity, Dyson spheres, solar sails. That sort of thing. A cron job runs every night and I kind of let that one ride.</p>
-  </section>
+    <p>I started reading the research and found out why nobody had built this. The people who study keystroke dynamics for cognitive assessment are measuring elderly populations who learned to type in their 40s. They're hen-pecking. The motor noise drowns out the cognitive signal. But there's a generation coming into the screening window who've been typing fluently since childhood. That's the population this instrument is designed for. And that window is closing because every input modality is being contaminated by AI assistance. Autocomplete, predictive text, copilots. The cognitive process being measured is being replaced by a different process that looks identical on the surface.</p>
 
-  <section class="ab-section">
-    <h2>Then a different project</h2>
+    <p>So now it's a race. Build the instrument, start collecting clean data, accumulate baselines before the unmediated input disappears. I'm testing on myself because someone has to go first. I built the entire pipeline. Rust for the signal math, Postgres for the storage, six families of signals computed every session. I'm the engineer and the only participant which is a real confound and I'll say that plainly. The instrument needs people who didn't build it. That's the next step and it requires collaborators I don't have yet.</p>
 
-    <p>A new idea came to mind. An Einstein-esque platform that a smart individual could use to unlock parts of their brain, perhaps contribute new theories. The idea was to journal, journal, journal with deep questions, and in doing so the system would start to be able to theorize on its own. Valid contributions to science. It would generate novel questions. I called them suppressed questions. Then I added a prediction layer. All LLM-generated, based on input and initially a few small behavioral signals. The input would listen and listen and not bias the experimenter until at some point something clicked and it could develop a breakthrough.</p>
-
-    <p>Then I learned the system was flawed. It was a circular loop and self-graded. Moreover, LLMs are good at reasoning and logic but cannot generate genuinely novel questions. So I shifted into a mathematical approach only, which started to morph the project into a different idea entirely.</p>
-  </section>
-
-  <section class="ab-section">
-    <h2>What it became</h2>
-
-    <p>Less about creating a super genius to contribute to science. More about something that could map a person's cognitive thinking capacity through context and input signaling, measured very precisely. This could lead to the most robust longitudinal study of a person as their own control group. Unforeseen. Lots of value to analyze out of that.</p>
-
-    <p>Then I started to dig into the research and realized partly why it hadn't been done before. The aging population typically measured for behavioral signals is studied to detect MCI, not much else, and they weren't typing fluent. They were hen-pecking. Then it occurred to me there would be a window approaching of typing-fluent people we could start to track, and over the course of 20 years the amassment of data would be invaluable.</p>
-
-    <p>Somewhere in between I started to research signal-to-noise and how AI, autocomplete, and other assistive tools have started to affect how we process information. Every modality people interact with via input typically uses these noise-introducing features. It's all gamified and very gratifying. So it seemed more and more important that we could create a repository of clean data.</p>
-  </section>
-
-  <section class="ab-section">
-    <h2>Where it is now</h2>
-
-    <p>I continue to test it out on myself and hope that the results are significant enough to map to existing population baselines. Back to my typing. I have always been a good typist, so this is probably one of the best modalities to analyze me through. I acknowledge the need for modality-agnostic instruments, but that comes later.</p>
-
-    <p>I built the entire signal pipeline. Native Rust for the numerical estimation. PostgreSQL for the longitudinal storage. Six signal families, 120+ metrics per session, same-day calibration, personal baselines, empirical coupling discovery. I am both the engineer and the sole participant. That's a methodological confound and I name it openly. The instrument is designed to produce the data that would enable validation. The validation requires participants who did not build it. That's the next step.</p>
-  </section>
-
-  <section class="ab-section">
-    <h2>What I need</h2>
-
-    <p>Domain expertise. I can build the instrument. I cannot validate it alone. Cognitive scientists, digital biomarker researchers, psycholinguists who can evaluate whether the signals this instrument computes correspond to the constructs they are intended to measure. The engineering is ahead of the science by design. The science needs to catch up. That requires collaboration.</p>
+    <p>I've always been a good typist so at least the modality fits. And honestly at the very least this whole thing got me writing again. I built it because it's what I love to do and because I think it should exist.</p>
   </section>
 
   <section class="ab-section ab-close">
@@ -113,24 +80,19 @@ import PublicLayout from '../layouts/layPublic.astro';
     border-top: 1px solid var(--border);
   }
 
-  .ab-section h2 {
-    font-family: var(--serif-display);
-    font-size: 1.5rem;
-    font-weight: 400;
-    color: var(--text);
-    margin-bottom: 1.25rem;
-  }
-
   .ab-section > p {
     font-family: var(--serif-body);
     font-size: 1.05rem;
-    line-height: 1.75;
+    line-height: 1.8;
     color: var(--text);
     max-width: 720px;
-    margin-bottom: 1.25rem;
+    margin-bottom: 1.5rem;
   }
 
-  /* --- Contact / Close --- */
+  .ab-section > p:last-child {
+    margin-bottom: 0;
+  }
+
   .ab-contact {
     margin-bottom: 2rem;
   }
@@ -170,7 +132,6 @@ import PublicLayout from '../layouts/layPublic.astro';
     border-color: var(--accent);
   }
 
-  /* --- Mobile --- */
   @media (max-width: 768px) {
     .ab-hero { padding: 4rem 0 2rem; }
     .ab-hero h1 { font-size: 1.8rem; }
