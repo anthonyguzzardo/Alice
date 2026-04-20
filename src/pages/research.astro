@@ -19,7 +19,7 @@ import PublicLayout from '../layouts/layPublic.astro';
 <header class="r-hero">
   <div class="r-hero-text">
     <h1>The behavioral sciences have a data problem they haven't named yet.</h1>
-    <p class="r-subtitle">AI is changing human behavior faster than the fields that measure it can adapt. The window for capturing unmediated cognitive baselines is closing. This page explains why that matters and what it takes to build an instrument that survives the shift.</p>
+    <p class="r-subtitle">AI is changing human behavior faster than the fields that measure it can adapt. The window for capturing unmediated cognitive baselines is closing, and the instruments that would detect the loss do not exist yet.</p>
   </div>
   <div class="r-hero-viz">
     <canvas id="window-viz" width="480" height="360" aria-hidden="true"></canvas>
@@ -71,12 +71,12 @@ import PublicLayout from '../layouts/layPublic.astro';
       <div class="r-stat">
         <span class="r-stat-number">0.918</span>
         <span class="r-stat-label">AUC for Alzheimer's screening via writing-process biomarkers</span>
-        <span class="r-stat-source">Li et al. 2025</span>
+        <span class="r-stat-source"><a href="https://doi.org/10.3389/fncom.2025.1564932" target="_blank" rel="noopener">Li et al. 2025</a></span>
       </div>
       <div class="r-stat">
         <span class="r-stat-number">0.997</span>
         <span class="r-stat-label">AUC for MCI discrimination from smartphone keystroke timing</span>
-        <span class="r-stat-source">Kim et al. 2024</span>
+        <span class="r-stat-source"><a href="https://doi.org/10.2196/59247" target="_blank" rel="noopener">Kim et al. 2024</a></span>
       </div>
     </div>
 
@@ -93,9 +93,9 @@ import PublicLayout from '../layouts/layPublic.astro';
       </div>
     </div>
 
-    <p>Li et al. (2025) computed their AUC on the same 72-person sample used to fit a stepwise logistic regression. Kim et al. (2024) used 99 participants without cross-validation; a correction notice followed. The closest published study to what a modern keystroke-cognition instrument would actually capture (Meulemans, Van Waes, and Leijten 2022) was cross-sectional with n&nbsp;=&nbsp;30.</p>
+    <p><a class="r-cite" href="https://doi.org/10.3389/fncom.2025.1564932" target="_blank" rel="noopener">Li et al. (2025)</a> computed their AUC on the same 72-person sample used to fit a stepwise logistic regression. <a class="r-cite" href="https://doi.org/10.2196/59247" target="_blank" rel="noopener">Kim et al. (2024)</a> used 99 participants without cross-validation; a correction notice followed. The closest published study to what a modern keystroke-cognition instrument would actually capture (<a class="r-cite" href="https://doi.org/10.3389/fpsyg.2022.878312" target="_blank" rel="noopener">Meulemans, Van Waes, and Leijten 2022</a>) was cross-sectional with n&nbsp;=&nbsp;30.</p>
 
-    <p>The modality is real. The results are suggestive. But the field is drawing field-level conclusions from samples that would not survive a single replication attempt.</p>
+    <p>The modality is real. The results are suggestive. But the field is drawing broad conclusions from samples that would not survive a single replication attempt.</p>
   </section>
 
 
@@ -105,7 +105,7 @@ import PublicLayout from '../layouts/layPublic.astro';
 
     <p>Keystroke timing can only reflect cognitive processes when typing is automatic. Below roughly 40 words per minute, variation in flight time is dominated by motor search and planning, not cognitive state. The cognitive signal is buried under motor variance that has nothing to do with neurodegeneration.</p>
 
-    <p>Pinet et al. (2022) documented two qualitatively different processing architectures in typists. In novices, each keystroke requires conscious key location, finger selection, and movement execution. In experts, the motor layer is automated and the keystroke signal becomes transparent to cognitive processes: word retrieval, syntactic planning, coherence monitoring.</p>
+    <p><a class="r-cite" href="https://doi.org/10.1186/s41235-022-00424-3" target="_blank" rel="noopener">Pinet et al. (2022)</a> documented two qualitatively different processing architectures in typists. In novices, each keystroke requires conscious key location, finger selection, and movement execution. In experts, the motor layer is automated and the keystroke signal becomes transparent to cognitive processes: word retrieval, syntactic planning, coherence monitoring.</p>
 
     <p>The population currently at risk for cognitive decline (ages 60-80, born 1944-1964) largely did not grow up typing.</p>
 
@@ -141,9 +141,9 @@ import PublicLayout from '../layouts/layPublic.astro';
         <div class="r-bar-container"><div class="r-bar" style="width: 8%"><span class="r-bar-text">Minimal</span></div></div>
       </div>
     </div>
-    <p class="r-caption">Schematic model of generational typing proficiency. Proficiency labels are editorial estimates informed by cohort-level data (Cramer-Petersen et al. 2022, Dhakal et al. 2018, Pew Research 2019), not individually validated assessments.</p>
+    <p class="r-caption">Schematic model of generational typing proficiency. Proficiency labels are editorial estimates informed by cohort-level data (<a class="r-cite" href="https://doi.org/10.1093/jamiaopen/ooac099" target="_blank" rel="noopener">Cramer-Petersen et al. 2022</a>, <a class="r-cite" href="https://doi.org/10.1145/3173574.3174220" target="_blank" rel="noopener">Dhakal et al. 2018</a>, <a class="r-cite" href="https://www.pewresearch.org/short-reads/2019/09/09/us-generations-technology-use/" target="_blank" rel="noopener">Pew Research 2019</a>), not individually validated assessments.</p>
 
-    <p>The people currently old enough to be at risk for cognitive decline are disproportionately the wrong people to study this way. This creates signal validity problems (motor inexperience masquerades as cognitive slowing), selection bias (fluent elderly typists are unrepresentative), and confounding (typing proficiency correlates with cognitive reserve).</p>
+    <p>The people currently old enough to be at risk for cognitive decline are the wrong people to study this way. Motor inexperience masquerades as cognitive slowing. Fluent elderly typists are unrepresentative. And typing proficiency correlates with cognitive reserve, confounding the very construct the instrument is supposed to isolate.</p>
   </section>
 
 
@@ -160,21 +160,6 @@ import PublicLayout from '../layouts/layPublic.astro';
     </div>
 
     <p>Autocomplete, predictive text, and AI-assisted drafting are not future threats. They are present features of how most people under 40 already write. The demographic shift that would have resolved the motor confound is being partially foreclosed by a technology shift operating on a faster timeline.</p>
-
-    <div class="r-window-diagram">
-      <div class="r-window-track">
-        <div class="r-window-label-left">Demographic resolution<br/><span class="r-muted">(motor noise declining)</span></div>
-        <div class="r-window-label-right">AI contamination<br/><span class="r-muted">(construct replacement rising)</span></div>
-        <div class="r-window-gap">
-          <span class="r-window-gap-label">The window</span>
-        </div>
-      </div>
-      <div class="r-window-arrow">
-        <span>2025</span>
-        <span class="r-window-arrow-line"></span>
-        <span>2055</span>
-      </div>
-    </div>
 
     <p>The cohort born 1980-1995 is the only generation in history that types fluently from childhood, remembers writing without AI assistance, and will enter the cognitive decline screening window (ages 55-75) between 2035 and 2070. If personal baselines are not started on this cohort within the next 10-15 years, the opportunity is permanently lost. There is no second cohort with this combination of properties.</p>
   </section>
@@ -206,7 +191,7 @@ import PublicLayout from '../layouts/layPublic.astro';
     <div class="r-evidence-stack">
       <div class="r-evidence">
         <span class="r-evidence-finding">Predictive text shifts production from generation to selection, reducing lexical variety independently of vocabulary size.</span>
-        <span class="r-evidence-source">Arnold, Chauncey, and Gajos 2020</span>
+        <span class="r-evidence-source"><a href="https://doi.org/10.1145/3377325.3377523" target="_blank" rel="noopener">Arnold, Chauncey, and Gajos 2020</a></span>
       </div>
       <div class="r-evidence">
         <span class="r-evidence-finding">Autocomplete shifts pause distributions from lexical-retrieval patterns to suggestion-evaluation patterns.</span>
@@ -218,15 +203,15 @@ import PublicLayout from '../layouts/layPublic.astro';
       </div>
       <div class="r-evidence">
         <span class="r-evidence-finding">AI-assisted writing enhances individual quality while reducing collective diversity. Different writers converge toward similar outputs.</span>
-        <span class="r-evidence-source">Doshi and Hauser 2024</span>
+        <span class="r-evidence-source"><a href="https://doi.org/10.1126/sciadv.adn5290" target="_blank" rel="noopener">Doshi and Hauser 2024</a></span>
       </div>
       <div class="r-evidence r-evidence-key">
         <span class="r-evidence-finding">After seven days of AI-assisted idea generation, creativity dropped and content homogeneity continued climbing even after the AI was removed. The "creative scar" persists beyond the mediation.</span>
-        <span class="r-evidence-source">Zhou and Liu 2025</span>
+        <span class="r-evidence-source"><a href="https://doi.org/10.1016/j.techsoc.2025.103087" target="_blank" rel="noopener">Zhou and Liu 2025</a></span>
       </div>
     </div>
 
-    <p>The contamination is invisible at the point of collection. No dataset records whether a word was typed or accepted from a suggestion. Detection is impossible post-hoc. The distinguishing information exists only in process-level data that standard behavioral datasets do not collect.</p>
+    <p>The contamination is invisible at the point of collection. No dataset records whether a word was typed or accepted from a suggestion. The distinguishing information exists only in process-level data that standard behavioral datasets do not collect.</p>
   </section>
 
 
@@ -237,10 +222,10 @@ import PublicLayout from '../layouts/layPublic.astro';
     <p>The clock-drawing test has been a standard neuropsychological screening tool for decades. Draw a clock face showing a specified time. It assesses visuospatial ability, executive function, and semantic memory in a single brief task.</p>
 
     <div class="r-callout">
-      <p>Vishnevsky, Fisher, and Specktor (2024) demonstrated that Gen Z adults underperform on the clock-drawing test not because of cognitive impairment but because of reduced familiarity with analog clock faces.</p>
+      <p><a class="r-cite" href="https://doi.org/10.1016/j.jns.2024.123289" target="_blank" rel="noopener">Vishnevsky, Fisher, and Specktor (2024)</a> demonstrated that Gen Z adults underperform on the clock-drawing test not because of cognitive impairment but because of reduced familiarity with analog clock faces.</p>
     </div>
 
-    <p>The assessment embedded a hidden cultural competency that is no longer universal. Any cognitive assessment tied to a specific artifact or input modality has a finite validity window. Keyboards will eventually be displaced. The instruments built on them need to be designed so the cognitive constructs being measured can migrate to new input modalities, not be permanently coupled to keystroke timing.</p>
+    <p>The assessment embedded a hidden cultural competency that is no longer universal. Keyboards will eventually be displaced the same way. The instruments built on them need to be designed so the cognitive constructs being measured can migrate to new input modalities, not be permanently coupled to keystroke timing.</p>
   </section>
 
 
@@ -283,9 +268,9 @@ import PublicLayout from '../layouts/layPublic.astro';
       </div>
     </div>
 
-    <p>This shift is not novel. It has a 30-year research tradition. Ecological Momentary Assessment (Shiffman, Stone, and Hufford 2008), Experience Sampling Methods (Csikszentmihalyi and Larson 1987), and idiographic approaches to behavioral science (Molenaar 2004) all argue that group-level averages obscure the individual-level dynamics that matter clinically. Molenaar's manifesto demonstrated formally that inter-individual variation and intra-individual variation are statistically non-ergodic: what is true of a population average is not necessarily true of any individual in that population. N-of-1 trial designs are now accepted by the FDA for rare disease contexts.</p>
+    <p>This shift is not novel. Ecological Momentary Assessment (<a class="r-cite" href="https://doi.org/10.1146/annurev.clinpsy.3.022806.091415" target="_blank" rel="noopener">Shiffman, Stone, and Hufford 2008</a>), Experience Sampling Methods (<a class="r-cite" href="https://doi.org/10.1097/00005053-198709000-00004" target="_blank" rel="noopener">Csikszentmihalyi and Larson 1987</a>), and idiographic approaches (<a class="r-cite" href="https://doi.org/10.1207/s15366359mea0204_1" target="_blank" rel="noopener">Molenaar 2004</a>) all argue that group-level averages obscure the individual-level dynamics that matter clinically. <a class="r-cite" href="https://doi.org/10.1207/s15366359mea0204_1" target="_blank" rel="noopener">Molenaar</a> demonstrated formally that inter-individual and intra-individual variation are statistically non-ergodic: what is true of a population average is not necessarily true of any individual in that population. N-of-1 trial designs are now accepted by the FDA for rare disease contexts.</p>
 
-    <p>What these traditions lack is a measurement instrument that can sustain daily ecological data collection over years in healthy populations. EMA studies typically last days to weeks. ESM relies on self-report prompted by random signals. Neither captures behavioral process data (keystrokes, pause architecture) at the temporal resolution needed for cognitive signal extraction. The paradigm exists. The instrument does not.</p>
+    <p>What these traditions lack is an instrument that can sustain daily ecological data collection over years in healthy populations. EMA studies typically last days to weeks. ESM relies on self-report prompted by random signals. Neither captures behavioral process data at the temporal resolution needed for cognitive signal extraction. The paradigm exists. The instrument does not.</p>
   </section>
 
 
@@ -311,34 +296,7 @@ import PublicLayout from '../layouts/layPublic.astro';
 
     <p>The combination is not additive. It is multiplicative. A decline in lexical diversity concurrent with a decline in production fluency means something clinically different from a decline in diversity with stable fluency. The first suggests retrieval difficulty under cognitive load. The second suggests vocabulary contraction independent of production. You need both signal channels to distinguish them.</p>
 
-    <p>No existing instrument at validated scale combines:</p>
-
-    <div class="r-requirements">
-      <div class="r-requirement">
-        <span class="r-req-label">Process capture</span>
-        <span class="r-req-detail">Keystroke-level temporal data during the act of writing</span>
-      </div>
-      <div class="r-requirement">
-        <span class="r-req-label">Content analysis</span>
-        <span class="r-req-detail">Linguistic features from the submitted text</span>
-      </div>
-      <div class="r-requirement">
-        <span class="r-req-label">Longitudinal architecture</span>
-        <span class="r-req-detail">Personal baselines over months and years</span>
-      </div>
-      <div class="r-requirement">
-        <span class="r-req-label">Calibration</span>
-        <span class="r-req-detail">Within-person same-day baselines via neutral prompts</span>
-      </div>
-      <div class="r-requirement">
-        <span class="r-req-label">Unmediated input</span>
-        <span class="r-req-detail">Writing conditions that prevent construct replacement</span>
-      </div>
-      <div class="r-requirement">
-        <span class="r-req-label">Modality awareness</span>
-        <span class="r-req-detail">Cognitive constructs not permanently coupled to keyboards</span>
-      </div>
-    </div>
+    <p>No existing instrument at validated scale combines process capture with content analysis, longitudinal self-referential baselines with same-day calibration, and unmediated input with modality-aware construct definitions. What each of these requires, and why satisfying five of six is not enough, is the subject of the remaining sections.</p>
   </section>
 
 
@@ -346,7 +304,7 @@ import PublicLayout from '../layouts/layPublic.astro';
   <section class="r-section" id="writing">
     <h2>Why writing is a uniquely rich cognitive channel</h2>
 
-    <p>The preceding sections establish that a longitudinal instrument is needed, that the window for building one is finite, and that no existing instrument fills the gap. But why should the instrument be built on writing? Why not speech, gait analysis, eye tracking, or any other behavioral modality?</p>
+    <p>Why writing? Why not speech, gait analysis, eye tracking, or any other behavioral modality?</p>
 
     <p>Writing is the only common daily behavior that simultaneously requires lexical retrieval, syntactic planning, coherence monitoring, semantic integration, and fine motor execution. No other modality loads this many cognitive systems at once during a single naturalistic act.</p>
 
@@ -357,7 +315,7 @@ import PublicLayout from '../layouts/layPublic.astro';
       </div>
       <div class="r-comparison-box">
         <h3>Gait / Motor</h3>
-        <p>Strong evidence for motor biomarkers of neurodegeneration (Buchman and Bennett 2011). But gait captures motor and postural control without linguistic content. It cannot distinguish cognitive slowing from physical deconditioning without a second signal channel.</p>
+        <p>Strong evidence for motor biomarkers of neurodegeneration (<a class="r-cite" href="https://doi.org/10.1586/ern.11.57" target="_blank" rel="noopener">Buchman and Bennett 2011</a>). But gait captures motor and postural control without linguistic content. It cannot distinguish cognitive slowing from physical deconditioning without a second signal channel.</p>
       </div>
     </div>
 
@@ -372,7 +330,7 @@ import PublicLayout from '../layouts/layPublic.astro';
       </div>
     </div>
 
-    <p>Kellogg (1996) and Hayes and Flower (1980) established that written composition recruits working memory, long-term memory retrieval, executive monitoring, and motor execution in a coordinated process. Pinet et al. (2022) demonstrated that in fluent typists, the motor layer becomes transparent to cognitive processes: keystroke timing variations reflect lexical retrieval difficulty, syntactic planning load, and coherence monitoring, not finger search. The typing is automatic. What remains in the signal is cognition.</p>
+    <p>Kellogg (1996) and Hayes and Flower (1980) established that written composition recruits working memory, long-term memory retrieval, executive monitoring, and motor execution in a coordinated process. <a class="r-cite" href="https://doi.org/10.1186/s41235-022-00424-3" target="_blank" rel="noopener">Pinet et al. (2022)</a> demonstrated that in fluent typists, the motor layer becomes transparent to cognitive processes: keystroke timing variations reflect lexical retrieval difficulty, syntactic planning load, and coherence monitoring, not finger search. The typing is automatic. What remains in the signal is cognition.</p>
 
     <p>Writing also has a property no other modality shares: the act itself is independently valuable. Pennebaker's 200+ studies establish that expressive writing produces measurable psychological and physiological benefits whether or not the output is kept or reviewed. People already write daily, in private, with no expectation of feedback. The measurement modality is also the retention mechanism. The instrument does not need to justify its existence to the participant through data display, because the practice justifies itself.</p>
   </section>
@@ -485,17 +443,13 @@ import PublicLayout from '../layouts/layPublic.astro';
 
     <p>The Hawthorne effect (Adair 1984; McCambridge, Witton, and Elbourne 2014) is well-established: participants who know they are being observed modify their behavior. In longitudinal behavioral measurement, this is not a minor confound. It is fatal to the construct. If a participant knows their writing speed is being measured, they write differently. If they know lexical diversity is being tracked, they reach for unusual words. The signal no longer reflects natural cognitive process. It reflects performance.</p>
 
-    <p>Surfacing computed signals to the participant creates a second, deeper problem: optimization. Goodhart's law applies directly. Once the participant sees a metric, they optimize for the metric rather than the state the metric was designed to detect. Etkin (2016, Journal of Consumer Research) demonstrated across six experiments that personal quantification increases behavioral output but reduces enjoyment and intrinsic motivation. The act of measuring changes the relationship to the measured activity.</p>
+    <p>Surfacing computed signals creates a second, deeper problem: optimization. Goodhart's law applies directly. Once the participant sees a metric, they optimize for the metric rather than the state the metric was designed to detect. Etkin (2016, Journal of Consumer Research) demonstrated across six experiments that personal quantification increases behavioral output but reduces enjoyment and intrinsic motivation. A participant who sees a decline in their processing speed metric becomes anxious, and the anxiety alters the very signals being measured. The instrument creates the condition it was designed to detect.</p>
 
-    <p>The clinical extreme is documented. Rosman et al. (2021, NIH-funded) reported a patient with atrial fibrillation who performed 916 smartwatch ECGs in one year after the device began surfacing cardiac data. Smartwatch notifications triggered escalating monitoring behavior: ambiguous readings ("inconclusive") produced the same behavioral response as actual arrhythmia detections. The patient developed illness anxiety disorder, made 12 unnecessary clinic and emergency department visits, and required cognitive behavioral therapy for remission. The authors note anecdotal reports from institutions nationwide, suggesting the case represents "the tip of an iceberg."</p>
+    <p>The clinical extreme is documented. Rosman et al. (2021, NIH-funded) reported a patient with atrial fibrillation who performed 916 smartwatch ECGs in one year after the device began surfacing cardiac data. Ambiguous readings ("inconclusive") produced the same behavioral response as actual arrhythmia detections. The patient developed illness anxiety disorder, made 12 unnecessary clinic and emergency department visits, and required cognitive behavioral therapy for remission. The authors note anecdotal reports from institutions nationwide, suggesting the case represents "the tip of an iceberg."</p>
 
-    <p>In a longitudinal cognitive instrument, this dynamic is not a side effect. It is a confound that accumulates over time. A participant who knows their lexical diversity is being measured reaches for unusual words. A participant who sees a decline in their processing speed metric becomes anxious, and the anxiety alters the very signals being measured. The instrument creates the condition it was designed to detect.</p>
+    <p>The problem compounds in clinical populations. Self-censorship in journaling is most acute in populations with PTSD, trauma histories, and anxiety disorders. The people who would produce the most clinically valuable writing data are the most likely to alter their writing when they know it is being analyzed. An instrument that surfaces its analysis guarantees that the participants who need it most will either censor themselves or stop using it.</p>
 
-    <p>A longitudinal cognitive instrument must therefore satisfy a paradox: it must accumulate behavioral data over years, learn from that data to improve measurement precision, and never show the participant what it has learned. The participant's relationship to the instrument must be with the surface (the question, the writing practice) while the measurement operates underneath, invisible.</p>
-
-    <p>The problem compounds in clinical populations. Self-censorship is documented across journaling communities and is most acute in populations with PTSD, trauma histories, and anxiety disorders. The people who would produce the most clinically valuable writing data are the most likely to alter their writing when they know it is being analyzed. An instrument that surfaces its analysis guarantees that the participants who need it most will either censor themselves or stop using it.</p>
-
-    <p>This is not paternalism. It is the same logic that prevents a scale from displaying weight during a body composition study, or a blood pressure cuff from showing readings during an ambulatory monitoring protocol. The measurement must not alter the measured state.</p>
+    <p>This is not paternalism. It is the same logic that prevents a blood pressure cuff from showing readings during an ambulatory monitoring protocol. The measurement must not alter the measured state. The participant's relationship to the instrument must be with the surface (the question, the writing practice) while the measurement operates underneath, invisible.</p>
   </section>
 
 
@@ -505,7 +459,7 @@ import PublicLayout from '../layouts/layPublic.astro';
 
     <p>The preceding analysis constrains the design. A valid instrument for longitudinal cognitive measurement through naturalistic writing must satisfy all of the following simultaneously. Satisfying five of six produces a flawed instrument, not a slightly less good one.</p>
 
-    <p>A question researchers will ask immediately: why build this as a product people choose to use, rather than a research tool distributed through clinics or universities? Because the sixth requirement demands it. Longitudinal studies that rely on institutional recruitment and scheduled lab visits cannot sustain daily participation over years. Retention in traditional EMA studies drops sharply after days to weeks. An instrument that produces valid longitudinal data must be something people want to use for its own sake, in their own lives, without researcher contact. Ecological validity and sustained retention are not product decisions. They are methodological requirements that happen to produce something that looks like a product.</p>
+    <p>Why build this as a product people choose to use, rather than a research tool distributed through clinics? Because longitudinal studies that rely on institutional recruitment cannot sustain daily participation over years. Retention in traditional EMA studies drops sharply after days to weeks. An instrument that produces valid longitudinal data must be something people want to use for its own sake. Ecological validity and sustained retention are not product decisions. They are methodological requirements that happen to produce something that looks like a product.</p>
 
     <div class="r-design-list">
       <div class="r-design-item">
@@ -546,15 +500,15 @@ import PublicLayout from '../layouts/layPublic.astro';
 
     <p>The construct replacement problem described in Section 4 is not specific to typing. AI mediation is simultaneously altering the cognitive processes underlying speech (voice assistants restructure how people formulate requests), spatial navigation (GPS replaces cognitive map formation), decision-making (recommendation engines replace evaluative reasoning), and writing. Each modality has its own research silo documenting the effects. None has named the common structure.</p>
 
-    <p>A theoretical framework paper in development argues that AI-mediated behavioral change is a modality-general problem requiring modality-general design constraints. Four constraints emerge consistently across modalities: unassisted input, process-level capture (temporal microstructure, not aggregate performance), longitudinal intra-individual baselines, and attachment to intrinsically motivated practices. The six instrument requirements derived on this page are a domain-specific instantiation of these four general constraints. The convergence suggests the problem and the solution are both deeper than any single behavioral channel.</p>
+    <p>A theoretical framework paper in development argues that AI-mediated behavioral change is a modality-general problem requiring modality-general design constraints. Four constraints emerge consistently across modalities: unassisted input, process-level capture (temporal microstructure, not aggregate performance), longitudinal intra-individual baselines, and attachment to intrinsically motivated practices. The six instrument requirements derived on this page are a domain-specific instantiation of these four general constraints.</p>
 
     <h3 class="r-subsection-heading">The process record</h3>
 
-    <p>The deepest version of this argument is not scientific but philosophical. Three levels of record exist for any cognitive act: the artifact (what was produced), the genome (the hardware blueprint of the producer), and the process record (the temporal trace of a mind producing the artifact in real time). The process record is asymmetrically more fundamental than the artifact: you can derive the artifact from the process, but not the process from the artifact. A finished essay contains none of the pauses, revisions, retrieval failures, and planning that produced it. The keystroke stream contains all of them.</p>
+    <p>Three levels of record exist for any cognitive act: the artifact (what was produced), the genome (the hardware blueprint of the producer), and the process record (the temporal trace of a mind producing the artifact in real time). The process record is asymmetrically more fundamental than the artifact: you can derive the artifact from the process, but not the process from the artifact. A finished essay contains none of the pauses, revisions, retrieval failures, and planning that produced it. The keystroke stream contains all of them.</p>
 
-    <p>AI mediation does not contaminate the process record. It replaces it. When a sentence is accepted from an autocomplete suggestion, no retrieval occurred, no syntactic planning happened, no coherence monitoring was needed. The process record for that sentence is not noisy. It is absent. We are in the first generation where the conditions for capturing unmediated process records at scale are becoming permanently unavailable. The closing window described on this page is, at its deepest level, a window for preserving a category of data about biological intelligence that will not be producible once the mediation is universal.</p>
+    <p>AI mediation does not contaminate the process record. It replaces it. When a sentence is accepted from an autocomplete suggestion, no retrieval occurred, no syntactic planning happened, no coherence monitoring was needed. The process record for that sentence is not noisy. It is absent. The closing window described on this page is, at its deepest level, a window for preserving a category of data about biological intelligence that will not be producible once the mediation is universal.</p>
 
-    <p>This is a speculative framework. It is included because it clarifies why the practical instrument design described above is not just a useful research tool but a response to an irreversible epistemic loss.</p>
+    <p>This is a speculative framework. It is included because it clarifies why the instrument design described above is not just a useful research tool but a response to an irreversible epistemic loss.</p>
   </section>
 
 
@@ -802,6 +756,9 @@ import PublicLayout from '../layouts/layPublic.astro';
 <style is:global>
   /* ===== Research page styles ===== */
 
+  /* Smooth anchor scrolling for nav links */
+  html { scroll-behavior: smooth; }
+
   /* --- Layout: hero full-width, then sidebar + content --- */
   .r-hero {
     display: grid;
@@ -904,6 +861,12 @@ import PublicLayout from '../layouts/layPublic.astro';
     border-left-color: var(--accent);
   }
 
+  .r-nav-link:focus-visible {
+    outline: 1.5px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
   /* --- Content area --- */
   .research {
     padding-bottom: 6rem;
@@ -915,6 +878,10 @@ import PublicLayout from '../layouts/layPublic.astro';
     padding: 3rem 0;
     border-top: 1px solid var(--border);
     scroll-margin-top: 5rem;
+  }
+
+  .r-section:first-child {
+    border-top: none;
   }
 
   .r-section h2 {
@@ -942,6 +909,37 @@ import PublicLayout from '../layouts/layPublic.astro';
     color: var(--text);
     margin-top: 2.5rem;
     margin-bottom: 1rem;
+  }
+
+  /* --- Citation links --- */
+  a.r-cite {
+    color: inherit;
+    text-decoration: none;
+    border-bottom: 1px dotted var(--text-muted);
+    transition: border-color 0.15s ease;
+  }
+
+  a.r-cite:hover {
+    border-bottom-color: var(--accent);
+  }
+
+  a.r-cite:focus-visible {
+    outline: 1.5px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  .r-stat-source a,
+  .r-evidence-source a {
+    color: inherit;
+    text-decoration: none;
+    border-bottom: 1px dotted var(--text-muted);
+    transition: border-color 0.15s ease;
+  }
+
+  .r-stat-source a:hover,
+  .r-evidence-source a:hover {
+    border-bottom-color: var(--accent);
   }
 
   .r-caption {
@@ -1093,76 +1091,6 @@ import PublicLayout from '../layouts/layPublic.astro';
     font-size: 1.4rem;
   }
 
-  /* --- Window diagram --- */
-  .r-window-diagram {
-    margin: 2.5rem 0;
-    padding: 2rem;
-    border: 1px solid var(--text-muted);
-    border-radius: 6px;
-  }
-
-  .r-window-track {
-    position: relative;
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 1.5rem;
-    min-height: 80px;
-  }
-
-  .r-window-label-left,
-  .r-window-label-right {
-    font-family: var(--mono);
-    font-size: 0.75rem;
-    color: var(--text);
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    width: 35%;
-    line-height: 1.5;
-  }
-
-  .r-window-label-left .r-muted,
-  .r-window-label-right .r-muted {
-    color: var(--text-muted);
-  }
-
-  .r-window-label-right {
-    text-align: right;
-  }
-
-  .r-window-gap {
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    border: 2px dashed var(--text);
-    border-radius: 4px;
-    padding: 0.5rem 1.5rem;
-    text-align: center;
-  }
-
-  .r-window-gap-label {
-    font-family: var(--serif-display);
-    font-size: 1.1rem;
-    font-style: italic;
-    color: var(--text);
-  }
-
-  .r-window-arrow {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    font-family: var(--mono);
-    font-size: 0.75rem;
-    color: var(--text);
-  }
-
-  .r-window-arrow-line {
-    flex: 1;
-    height: 2px;
-    background: linear-gradient(to right, var(--positive), var(--text-muted), var(--negative));
-  }
-
   /* --- Comparison boxes (noise vs replacement) --- */
   .r-comparison {
     display: grid;
@@ -1222,6 +1150,11 @@ import PublicLayout from '../layouts/layPublic.astro';
     gap: 0.25rem;
     padding: 1rem 1.25rem;
     border-left: 2px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .r-evidence:last-child {
+    border-bottom: none;
   }
 
   .r-evidence-key {
@@ -1351,44 +1284,6 @@ import PublicLayout from '../layouts/layPublic.astro';
     opacity: 0.6;
   }
 
-  /* --- Requirements list --- */
-  .r-requirements {
-    margin: 2rem 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    overflow: hidden;
-  }
-
-  .r-requirement {
-    display: grid;
-    grid-template-columns: 180px 1fr;
-    gap: 1rem;
-    padding: 0.85rem 1.25rem;
-    border-bottom: 1px solid var(--border);
-    align-items: baseline;
-  }
-
-  .r-requirement:last-child {
-    border-bottom: none;
-  }
-
-  .r-req-label {
-    font-family: var(--mono);
-    font-size: 0.75rem;
-    color: var(--text);
-    letter-spacing: 0.04em;
-  }
-
-  .r-req-detail {
-    font-family: var(--serif-body);
-    font-size: 0.9rem;
-    color: var(--text);
-    line-height: 1.5;
-  }
-
   /* --- Landscape cards --- */
   .r-landscape-grid {
     display: grid;
@@ -1404,6 +1299,12 @@ import PublicLayout from '../layouts/layPublic.astro';
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .r-landscape-card:hover {
+    border-color: var(--text-muted);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
   }
 
   .r-landscape-card h3 {
@@ -1418,7 +1319,7 @@ import PublicLayout from '../layouts/layPublic.astro';
   .r-landscape-names {
     font-family: var(--serif-body);
     font-size: 0.8rem;
-    color: var(--text-muted);
+    color: var(--text);
     font-style: italic;
   }
 
@@ -1465,12 +1366,12 @@ import PublicLayout from '../layouts/layPublic.astro';
     color: var(--negative);
   }
 
-  .r-landscape-failure {
-    font-family: var(--serif-body) !important;
-    font-size: 0.85rem !important;
-    line-height: 1.5 !important;
-    color: var(--text-muted) !important;
-    margin: 0 !important;
+  .r-landscape-card .r-landscape-failure {
+    font-family: var(--serif-body);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: var(--text);
+    margin: 0;
     padding-top: 0.5rem;
     border-top: 1px solid var(--border);
   }
@@ -1514,19 +1415,6 @@ import PublicLayout from '../layouts/layPublic.astro';
     line-height: 1.6;
   }
 
-  /* --- Close --- */
-  .r-close {
-    border-top: none;
-    padding-top: 1rem;
-  }
-
-  .r-close p {
-    font-family: var(--serif-display);
-    font-size: 1.15rem;
-    line-height: 1.6;
-    color: var(--text);
-  }
-
   .r-close-links {
     display: flex;
     gap: 2rem;
@@ -1546,6 +1434,12 @@ import PublicLayout from '../layouts/layPublic.astro';
   .r-close-links a:hover {
     border-color: var(--accent);
     text-decoration: none;
+  }
+
+  .r-close-links a:focus-visible {
+    outline: 1.5px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 2px;
   }
 
   /* --- Sources footer --- */
@@ -1660,7 +1554,6 @@ import PublicLayout from '../layouts/layPublic.astro';
     .r-paradigm-from { text-align: left; }
     .r-paradigm-arrow { width: 100%; }
 
-    .r-requirement,
     .r-design-item {
       grid-template-columns: 1fr;
       gap: 0.25rem;
@@ -1670,21 +1563,6 @@ import PublicLayout from '../layouts/layPublic.astro';
     .r-timeline-row {
       grid-template-columns: 80px 100px 1fr;
       gap: 0.5rem;
-    }
-
-    .r-window-track {
-      flex-direction: column;
-      gap: 1rem;
-      align-items: center;
-    }
-    .r-window-label-left,
-    .r-window-label-right {
-      width: 100%;
-      text-align: center;
-    }
-    .r-window-gap {
-      position: static;
-      transform: none;
     }
   }
 </style>

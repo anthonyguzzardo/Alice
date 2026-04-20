@@ -66,6 +66,35 @@ pub fn linreg_slope(x: &[f64], y: &[f64]) -> Option<f64> {
     Some(nf.mul_add(sxy, -(sx * sy)) / denom)
 }
 
+/// Digamma (psi) function. Used by KSG transfer entropy estimator.
+/// Asymptotic expansion with recurrence for small arguments.
+#[inline]
+pub fn digamma(mut x: f64) -> f64 {
+    let mut result = 0.0;
+    // Shift x up to >= 6 for accurate asymptotic expansion
+    while x < 6.0 {
+        result -= 1.0 / x;
+        x += 1.0;
+    }
+    // Abramowitz & Stegun 6.3.18
+    result += x.ln() - 0.5 / x;
+    let inv_x2 = 1.0 / (x * x);
+    result -= inv_x2 * (1.0 / 12.0 - inv_x2 * (1.0 / 120.0 - inv_x2 / 252.0));
+    result
+}
+
+/// Normalize a series to zero mean, unit variance.
+/// Returns the original values if variance is zero.
+#[inline]
+pub fn normalize(arr: &[f64]) -> Vec<f64> {
+    let mu = mean(arr);
+    let sd = std_dev(arr, Some(mu));
+    if sd < 1e-12 {
+        return arr.to_vec();
+    }
+    arr.iter().map(|&v| (v - mu) / sd).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

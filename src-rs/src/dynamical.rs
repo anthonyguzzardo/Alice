@@ -10,7 +10,7 @@
 
 use std::collections::HashMap;
 
-use crate::stats::{linreg_slope, mean, std_dev};
+use crate::stats::{digamma, linreg_slope, mean, normalize, std_dev};
 use crate::types::{HoldFlight, IkiSeries, KeystrokeEvent, SignalError, SignalResult};
 
 // ─── Result types ─────────────────────────────────────────────────
@@ -202,7 +202,7 @@ fn rqa(series: &[f64]) -> SignalResult<RqaResult> {
         return Err(SignalError::ZeroVariance { len: n });
     }
 
-    let m = n.min(500);
+    let m = n.min(5000);
 
     let mut total_recurrences: u64 = 0;
     let mut diagonal_points: u64 = 0;
@@ -287,85 +287,116 @@ fn rqa(series: &[f64]) -> SignalResult<RqaResult> {
     })
 }
 
-// ─── Transfer Entropy (Schreiber 2000) ────────────────────────────
-// Binned estimation: discretize into 3 levels (terciles).
+// ─── Transfer Entropy (KSG estimator, Kraskov et al. 2004) ────────
+//
+// Continuous estimation via k-nearest-neighbor distances in joint space.
+// Replaces the tercile-binned estimator which lost most of the information
+// by discretizing to 3 levels (27 possible joint states).
+//
+// TE(S->T) = CMI(T_future ; S_current | T_current)
+//          = psi(k) - <psi(n_xz+1)> - <psi(n_yz+1)> + <psi(n_z+1)>
+//
+// where X = T_future, Y = S_current, Z = T_current (conditioning variable),
+// and counts use Chebyshev (max-norm) distance balls.
 
-fn discretize(arr: &[f64]) -> Vec<u8> {
-    let mut sorted = arr.to_vec();
-    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    let t1 = sorted[sorted.len() / 3];
-    let t2 = sorted[2 * sorted.len() / 3];
-    arr.iter()
-        .map(|&v| {
-            if v <= t1 {
-                0
-            } else if v <= t2 {
-                1
-            } else {
-                2
-            }
-        })
-        .collect()
-}
+const KSG_K: usize = 4; // k-nearest neighbors; 4 is standard in the literature
 
-/// TE(source -> target): does knowing source's past reduce uncertainty
-/// about target's future, beyond what target's own past provides?
+/// TE(source -> target) via KSG conditional mutual information estimator.
 ///
-/// `TE(S->T) = sum p(t_fut, t_cur, s_cur) * log2[ p(t_fut|t_cur,s_cur) / p(t_fut|t_cur) ]`
+/// Normalizes both series to zero mean, unit variance so the Chebyshev
+/// distance treats both dimensions equally.
 fn transfer_entropy(source: &[f64], target: &[f64], lag: usize) -> SignalResult<f64> {
     let n = source.len().min(target.len());
     if n < 30 {
         return Err(SignalError::InsufficientData { needed: 30, got: n });
     }
 
-    let s = discretize(&source[..n]);
-    let t = discretize(&target[..n]);
-
-    let mut joint: HashMap<(u8, u8, u8), u32> = HashMap::new(); // (t_fut, t_cur, s_cur)
-    let mut count_t_cur: HashMap<u8, u32> = HashMap::new();
-    let mut count_t_cur_s_cur: HashMap<(u8, u8), u32> = HashMap::new();
-    let mut count_t_fut_t_cur: HashMap<(u8, u8), u32> = HashMap::new();
-    let mut total: u32 = 0;
-
-    for i in lag..n {
-        let t_cur = t[i - lag];
-        let s_cur = s[i - lag];
-        let t_fut = t[i];
-
-        *joint.entry((t_fut, t_cur, s_cur)).or_insert(0) += 1;
-        *count_t_cur.entry(t_cur).or_insert(0) += 1;
-        *count_t_cur_s_cur.entry((t_cur, s_cur)).or_insert(0) += 1;
-        *count_t_fut_t_cur.entry((t_fut, t_cur)).or_insert(0) += 1;
-        total += 1;
-    }
-
-    if total < 20 {
+    let effective_n = n - lag;
+    if effective_n < 20 {
         return Err(SignalError::InsufficientData {
-            needed: 20,
-            got: total as usize,
+            needed: 20 + lag,
+            got: n,
+        });
+    }
+    if effective_n <= KSG_K + 1 {
+        return Err(SignalError::InsufficientData {
+            needed: KSG_K + 2 + lag,
+            got: n,
         });
     }
 
-    let tf = f64::from(total);
-    let mut te = 0.0;
+    let s_norm = normalize(&source[..n]);
+    let t_norm = normalize(&target[..n]);
 
-    for (&(t_fut, t_cur, s_cur), &count) in &joint {
-        let p_joint = f64::from(count) / tf;
-        let p_ts =
-            f64::from(*count_t_cur_s_cur.get(&(t_cur, s_cur)).unwrap_or(&0)) / tf;
-        #[allow(clippy::similar_names)] // p_ts and p_tt are standard TE notation
-        let p_tt =
-            f64::from(*count_t_fut_t_cur.get(&(t_fut, t_cur)).unwrap_or(&0)) / tf;
-        let p_t = f64::from(*count_t_cur.get(&t_cur).unwrap_or(&0)) / tf;
+    // Joint vectors: X = T_future, Y = S_current, Z = T_current
+    let m = effective_n;
+    let mut x_vec = Vec::with_capacity(m);
+    let mut y_vec = Vec::with_capacity(m);
+    let mut z_vec = Vec::with_capacity(m);
 
-        if p_ts > 0.0 && p_t > 0.0 && p_tt > 0.0 {
-            let conditional = f64::from(count) / tf / p_ts;
-            let marginal = p_tt / p_t;
-            if conditional > 0.0 && marginal > 0.0 {
-                te += p_joint * (conditional / marginal).log2();
+    for i in 0..m {
+        x_vec.push(t_norm[i + lag]); // target future
+        y_vec.push(s_norm[i]); // source current
+        z_vec.push(t_norm[i]); // target current (conditioning)
+    }
+
+    let mut sum_psi_nxz = 0.0;
+    let mut sum_psi_nyz = 0.0;
+    let mut sum_psi_nz = 0.0;
+
+    // Reusable buffer for joint distances
+    let mut joint_dists: Vec<f64> = Vec::with_capacity(m);
+
+    for i in 0..m {
+        // Find k-th nearest neighbor distance in (X,Y,Z) joint space using max-norm
+        joint_dists.clear();
+        for j in 0..m {
+            if i == j {
+                continue;
+            }
+            let d = (x_vec[i] - x_vec[j])
+                .abs()
+                .max((y_vec[i] - y_vec[j]).abs())
+                .max((z_vec[i] - z_vec[j]).abs());
+            joint_dists.push(d);
+        }
+        // Partial sort to find k-th smallest (0-indexed: k-1)
+        joint_dists.select_nth_unstable_by(KSG_K - 1, |a, b| {
+            a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        let eps = joint_dists[KSG_K - 1];
+
+        // Count neighbors in marginal spaces (strict inequality per KSG)
+        let mut n_xz: u32 = 0;
+        let mut n_yz: u32 = 0;
+        let mut n_z: u32 = 0;
+
+        for j in 0..m {
+            if i == j {
+                continue;
+            }
+            let dz = (z_vec[i] - z_vec[j]).abs();
+            let dx = (x_vec[i] - x_vec[j]).abs();
+            let dy = (y_vec[i] - y_vec[j]).abs();
+
+            if dz < eps {
+                n_z += 1;
+            }
+            if dx.max(dz) < eps {
+                n_xz += 1;
+            }
+            if dy.max(dz) < eps {
+                n_yz += 1;
             }
         }
+
+        sum_psi_nxz += digamma(f64::from(n_xz) + 1.0);
+        sum_psi_nyz += digamma(f64::from(n_yz) + 1.0);
+        sum_psi_nz += digamma(f64::from(n_z) + 1.0);
     }
+
+    let mf = m as f64;
+    let te = digamma(KSG_K as f64) - sum_psi_nxz / mf - sum_psi_nyz / mf + sum_psi_nz / mf;
 
     Ok(te.max(0.0))
 }
