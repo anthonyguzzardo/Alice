@@ -11,9 +11,11 @@ const { active = '' } = Astro.props;
     <div class="nav-dropdown" id="nav-dropdown">
       <a href="/landing" class:list={[{ current: active === 'home' }]}>Home</a>
       <a href="/vision" class:list={[{ current: active === 'vision' }]}>Vision</a>
+      <a href="/questions" class:list={[{ current: active === 'questions' }]}>Questions</a>
       <a href="/research" class:list={[{ current: active === 'research' }]}>Research</a>
       <a href="/instrument" class:list={[{ current: active === 'instrument' }]}>Instrument</a>
       <a href="/papers" class:list={[{ current: active === 'papers' }]}>Papers</a>
+      <a href="/collaborate" class:list={[{ current: active === 'collaborate' }]}>Collaborate</a>
       <div class="nav-divider"></div>
       <a href="/">Journal</a>
       <a href="/observatory">Observatory</a>

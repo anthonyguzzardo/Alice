@@ -1,0 +1,346 @@
+---
+/**
+ * Research collaboration / partnership page.
+ *
+ * For someone who reads the papers or research page and thinks
+ * "I want to work with this." States what the dataset will enable,
+ * how different audiences can participate, and what the collaboration
+ * model looks like.
+ *
+ * Not a sales page. Not a pitch deck. A clear statement of what
+ * exists, what's being built, and how to be part of it.
+ */
+import PublicLayout from '../layouts/layPublic.astro';
+---
+
+<PublicLayout title="Alice -- Collaborate" active="collaborate" description="Research partnerships, data collaboration, and how to participate in building the longitudinal cognitive dataset.">
+
+<article class="collab">
+
+  <header class="co-hero">
+    <h1>The dataset does not exist yet. We are building it.</h1>
+    <p class="co-lead">Alice is accumulating a longitudinal keystroke-cognition dataset that no other instrument produces. The signal pipeline is running. The architecture satisfies the six validity constraints. What it needs now is participants, research partners, and time.</p>
+  </header>
+
+  <!-- ===== WHAT THE DATASET ENABLES ===== -->
+  <section class="co-section">
+    <h2>What the longitudinal record enables</h2>
+
+    <p>No existing dataset combines daily ecological writing, keystroke-level process capture, linguistic content analysis, and intra-individual baselines over months or years. Once this data exists at scale, it can answer questions that the field currently cannot ask:</p>
+
+    <div class="co-questions">
+      <div class="co-q">
+        <span class="co-q-domain">Cognitive aging</span>
+        <p>What is the natural within-person trajectory of processing speed, lexical retrieval, and executive function over years in healthy adults? When does "normal variability" become "early drift"?</p>
+      </div>
+      <div class="co-q">
+        <span class="co-q-domain">Digital biomarkers</span>
+        <p>Which keystroke-derived signals have sufficient test-retest reliability to serve as biomarkers? What is the minimum observation window for stable personal baselines?</p>
+      </div>
+      <div class="co-q">
+        <span class="co-q-domain">AI and cognition</span>
+        <p>Does routine AI mediation alter the cognitive processes visible in unmediated writing? Can you detect the "creative scar" (Zhou and Liu 2025) in keystroke dynamics?</p>
+      </div>
+      <div class="co-q">
+        <span class="co-q-domain">Psycholinguistics</span>
+        <p>How do pause distributions, burst structure, and revision patterns relate to linguistic output quality in naturalistic (non-lab) writing over time?</p>
+      </div>
+      <div class="co-q">
+        <span class="co-q-domain">Individual differences</span>
+        <p>Are Molenaar's non-ergodicity results confirmed in keystroke dynamics? How different are within-person dynamics from between-person averages in this modality?</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== HOW TO PARTICIPATE ===== -->
+  <section class="co-section">
+    <h2>How to participate</h2>
+
+    <div class="co-paths">
+      <div class="co-path">
+        <span class="co-path-label">As a researcher</span>
+        <p>If you work in cognitive aging, digital biomarkers, psycholinguistics, or AI-cognition interaction and want access to longitudinal process-level writing data, reach out. We are interested in research partnerships where Alice serves as the data collection instrument for studies designed by domain experts.</p>
+        <p class="co-path-detail">We can discuss: anonymized data sharing agreements, custom signal extraction for specific research questions, joint publications, and protocol adaptations for specific populations.</p>
+      </div>
+      <div class="co-path">
+        <span class="co-path-label">As a participant</span>
+        <p>Alice is currently at n=1. Multi-user architecture is in development. If you want to use Alice as a daily writing practice and contribute your longitudinal data to the research corpus, we will announce when enrollment opens.</p>
+        <p class="co-path-detail">Participation means: writing daily, unmediated, in response to one question. Your entries remain private. Signal computation is invisible. You experience a writing practice. The research happens underneath.</p>
+      </div>
+      <div class="co-path">
+        <span class="co-path-label">As an institution</span>
+        <p>If you represent a university research group, digital health organization, or clinical neuroscience lab interested in adopting the Alice protocol for longitudinal cognitive measurement, we are open to institutional partnerships.</p>
+        <p class="co-path-detail">The signal pipeline (Rust engine, PostgreSQL schema, embedding infrastructure) can be deployed independently. The protocol constraints are open. The implementation is the reference.</p>
+      </div>
+      <div class="co-path">
+        <span class="co-path-label">As a funder</span>
+        <p>This research requires sustained development time, infrastructure, and eventually multi-site deployment. If you fund cognitive health research, AI safety research, or longitudinal behavioral science, the instrument gap described in our papers is the problem we are solving.</p>
+        <p class="co-path-detail">We are not a startup seeking growth capital. We are a research instrument seeking the resources to validate itself at the scale required for the claims to be tested.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== WHAT EXISTS NOW ===== -->
+  <section class="co-section">
+    <h2>Current state</h2>
+
+    <div class="co-state">
+      <div class="co-state-row">
+        <span class="co-state-label">Signal engine</span>
+        <span class="co-state-value">Running. Native Rust, ~163 signals across 6 families (dynamical, motor, process, semantic, cross-session, state).</span>
+      </div>
+      <div class="co-state-row">
+        <span class="co-state-label">Database</span>
+        <span class="co-state-value">PostgreSQL 17 + pgvector. Full schema for longitudinal storage, embeddings, calibration, dynamics, coupling matrices.</span>
+      </div>
+      <div class="co-state-row">
+        <span class="co-state-label">Calibration protocol</span>
+        <span class="co-state-value">Implemented. Same-day within-person controls with context extraction and baseline drift detection.</span>
+      </div>
+      <div class="co-state-row">
+        <span class="co-state-label">Participants</span>
+        <span class="co-state-value">n=1 since April 2026. Multi-user architecture in development.</span>
+      </div>
+      <div class="co-state-row">
+        <span class="co-state-label">Papers</span>
+        <span class="co-state-value">2 published preprints, 3 in progress. Five-paper arc establishing the problem space.</span>
+      </div>
+      <div class="co-state-row">
+        <span class="co-state-label">Validation</span>
+        <span class="co-state-value">Not yet possible at n=1. The instrument is designed to produce the data that would enable validation. The validation must come from the data.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== CONTACT ===== -->
+  <section class="co-section co-close">
+    <h2>Get in touch</h2>
+    <p>If any of the above applies to you, reach out directly.</p>
+    <div class="co-contact">
+      <a href="mailto:anthony@mrfox.co" class="co-email">anthony@mrfox.co</a>
+    </div>
+    <div class="co-close-links">
+      <a href="/research">Read the scientific case</a>
+      <a href="/instrument">See the architecture</a>
+      <a href="/papers">Read the papers</a>
+    </div>
+  </section>
+
+</article>
+
+</PublicLayout>
+
+<style is:global>
+  .collab {
+    padding-bottom: 4rem;
+  }
+
+  .co-hero {
+    padding: 5rem 0 3rem;
+    max-width: 720px;
+  }
+
+  .co-hero h1 {
+    font-family: var(--serif-display);
+    font-size: 2.2rem;
+    font-weight: 400;
+    line-height: 1.35;
+    color: var(--text);
+    margin-bottom: 1.5rem;
+  }
+
+  .co-lead {
+    font-family: var(--serif-body);
+    font-size: 1.1rem;
+    line-height: 1.75;
+    color: var(--text-muted);
+  }
+
+  .co-section {
+    padding: 3rem 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .co-section h2 {
+    font-family: var(--serif-display);
+    font-size: 1.5rem;
+    font-weight: 400;
+    color: var(--text);
+    margin-bottom: 1.25rem;
+  }
+
+  .co-section > p {
+    font-family: var(--serif-body);
+    font-size: 1.05rem;
+    line-height: 1.75;
+    color: var(--text);
+    max-width: 720px;
+    margin-bottom: 1.25rem;
+  }
+
+  /* --- Research questions --- */
+  .co-questions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.25rem;
+    margin: 2rem 0;
+  }
+
+  .co-q {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.5rem;
+  }
+
+  .co-q-domain {
+    display: block;
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    margin-bottom: 0.75rem;
+  }
+
+  .co-q p {
+    font-family: var(--serif-body);
+    font-size: 0.95rem;
+    line-height: 1.6;
+    color: var(--text);
+  }
+
+  /* --- Participation paths --- */
+  .co-paths {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin: 1.5rem 0;
+  }
+
+  .co-path {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.5rem;
+  }
+
+  .co-path-label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    margin-bottom: 0.75rem;
+  }
+
+  .co-path p {
+    font-family: var(--serif-body);
+    font-size: 0.95rem;
+    line-height: 1.6;
+    color: var(--text);
+    margin-bottom: 0.75rem;
+  }
+
+  .co-path p:last-child {
+    margin-bottom: 0;
+  }
+
+  .co-path-detail {
+    font-size: 0.85rem !important;
+    color: var(--text-muted) !important;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border);
+  }
+
+  /* --- Current state --- */
+  .co-state {
+    margin: 1.5rem 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .co-state-row {
+    display: grid;
+    grid-template-columns: 160px 1fr;
+    gap: 1.5rem;
+    padding: 0.85rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    align-items: baseline;
+  }
+
+  .co-state-row:last-child {
+    border-bottom: none;
+  }
+
+  .co-state-label {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-faint);
+  }
+
+  .co-state-value {
+    font-family: var(--serif-body);
+    font-size: 0.95rem;
+    line-height: 1.5;
+    color: var(--text);
+  }
+
+  /* --- Contact / Close --- */
+  .co-contact {
+    margin: 1.5rem 0;
+  }
+
+  .co-email {
+    font-family: var(--mono);
+    font-size: 1rem;
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.15rem;
+    transition: border-color 0.2s ease;
+  }
+
+  .co-email:hover {
+    border-color: var(--accent);
+    text-decoration: none;
+  }
+
+  .co-close-links {
+    display: flex;
+    gap: 2rem;
+    margin-top: 2.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .co-close-links a {
+    font-family: var(--serif-body);
+    font-size: 1rem;
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.15rem;
+    transition: border-color 0.2s ease;
+  }
+
+  .co-close-links a:hover {
+    border-color: var(--accent);
+    text-decoration: none;
+  }
+
+  /* --- Mobile --- */
+  @media (max-width: 768px) {
+    .co-hero { padding: 4rem 0 2rem; }
+    .co-hero h1 { font-size: 1.6rem; }
+    .co-questions { grid-template-columns: 1fr; }
+    .co-paths { grid-template-columns: 1fr; }
+    .co-state-row {
+      grid-template-columns: 1fr;
+      gap: 0.25rem;
+    }
+    .co-close-links { flex-direction: column; gap: 1rem; }
+  }
+</style>

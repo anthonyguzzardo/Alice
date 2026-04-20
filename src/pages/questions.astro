@@ -1,0 +1,351 @@
+---
+/**
+ * Question evolution page.
+ *
+ * Demonstrates how Alice's questions improve with accumulated history.
+ * This is the user-facing moat made visible. The landing page says
+ * "Alice asks you one question per day." This page shows what that
+ * means in practice.
+ *
+ * Constraint: must not reveal actual user responses or future questions.
+ * Shows the STRUCTURE of question evolution (generic seed -> personalized)
+ * using illustrative examples, not real data.
+ *
+ * Audience: someone considering whether to use Alice. They need to
+ * understand why one question per day, asked well, is worth showing up for.
+ */
+import PublicLayout from '../layouts/layPublic.astro';
+---
+
+<PublicLayout title="Alice -- Questions" active="questions" description="How one question per day, asked with increasing precision, becomes the most valuable part of your day.">
+
+<article class="questions">
+
+  <header class="q-hero">
+    <h1>The question gets better every day you write.</h1>
+    <p class="q-lead">Alice asks one question per day. For the first thirty days, the questions come from a curated seed set. After that, each question is generated from everything you have written, how you wrote it, and what you have never been asked. The longer you write, the more precisely the question finds you.</p>
+  </header>
+
+  <!-- ===== THE SEED PERIOD ===== -->
+  <section class="q-section">
+    <h2>Days 1-30: the seed questions</h2>
+
+    <p>Before Alice knows anything about you, the questions are general-purpose. They are designed to be worth answering regardless of who you are, and to produce writing that teaches the system about your patterns.</p>
+
+    <div class="q-examples">
+      <div class="q-example q-example-seed">
+        <span class="q-example-day">Day 3</span>
+        <p class="q-example-text">What is something you believe now that you did not believe five years ago?</p>
+      </div>
+      <div class="q-example q-example-seed">
+        <span class="q-example-day">Day 11</span>
+        <p class="q-example-text">Describe a decision you made recently where you are not sure you chose correctly.</p>
+      </div>
+      <div class="q-example q-example-seed">
+        <span class="q-example-day">Day 22</span>
+        <p class="q-example-text">What would you do differently if no one would ever know?</p>
+      </div>
+    </div>
+
+    <p>These questions are good. They are not personal. They could be asked of anyone. Alice is listening, but it has not yet learned enough to speak to you specifically.</p>
+  </section>
+
+  <!-- ===== WHAT THE SYSTEM LEARNS ===== -->
+  <section class="q-section">
+    <h2>What accumulates underneath</h2>
+
+    <p>You never see any of this. But with each entry, Alice is building a model of your writing:</p>
+
+    <div class="q-layers">
+      <div class="q-layer">
+        <span class="q-layer-label">Semantic history</span>
+        <p>What you write about. Which themes recur. Which topics you return to. Which you avoid. What you said three months ago that connects to what you said yesterday.</p>
+      </div>
+      <div class="q-layer">
+        <span class="q-layer-label">Behavioral signature</span>
+        <p>How you write. Where your pauses fall. How your production speed changes with different kinds of questions. Whether you revise heavily or commit on first pass. Your keystroke rhythm is as individual as your handwriting.</p>
+      </div>
+      <div class="q-layer">
+        <span class="q-layer-label">Emotional landscape</span>
+        <p>Not what you say you feel. What your word choices and sentence structures reveal about how you process. Hedging language. Self-referential density. Cognitive processing words. These patterns are visible in the text whether or not you are aware of them.</p>
+      </div>
+      <div class="q-layer">
+        <span class="q-layer-label">Avoidance patterns</span>
+        <p>What you have never been asked. What kinds of questions produce short, guarded responses. Where the blind spots are. A good question sometimes goes exactly where you have not been looking.</p>
+      </div>
+      <div class="q-layer">
+        <span class="q-layer-label">Context</span>
+        <p>The calibration data tells Alice about your current state: sleep, stress, physical condition, daily rhythm. The question adjusts. A difficult abstract question on a morning when you slept badly is not depth. It is cruelty.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== AFTER THE SEED ===== -->
+  <section class="q-section">
+    <h2>After day 30: the questions find you</h2>
+
+    <p>Once personalization begins, the questions draw on your full history. The same person might receive very different questions depending on what they have written, what patterns are emerging, and what the system has never probed.</p>
+
+    <div class="q-examples">
+      <div class="q-example q-example-personal">
+        <span class="q-example-day">Day 47</span>
+        <span class="q-example-why">First question targeting an avoidance pattern</span>
+        <p class="q-example-text">You write frequently about decisions you need to make. You rarely write about decisions you have already made and regret. What is one?</p>
+      </div>
+      <div class="q-example q-example-personal">
+        <span class="q-example-day">Day 103</span>
+        <span class="q-example-why">Connecting two themes the writer has never connected</span>
+        <p class="q-example-text">You have written about your father and about your work as separate subjects. Is there a connection between them that you have not examined?</p>
+      </div>
+      <div class="q-example q-example-personal">
+        <span class="q-example-day">Day 241</span>
+        <span class="q-example-why">Context-aware: calibration indicated low energy, high stress</span>
+        <p class="q-example-text">What is one small, concrete thing that went right yesterday?</p>
+      </div>
+    </div>
+
+    <p>The illustrative questions above are fictional. Real questions are generated from real writing history and are never shown outside of the day they are asked. The point is the structure: the system learns what to ask and when to ask it from the accumulated record of how you write, not just what you write.</p>
+  </section>
+
+  <!-- ===== WHY THIS MATTERS ===== -->
+  <section class="q-section">
+    <h2>Why one question is enough</h2>
+
+    <div class="q-principles">
+      <div class="q-principle">
+        <span class="q-principle-label">Constraint produces depth</span>
+        <p>One question removes the problem of what to write about. The constraint is the gift. You do not stare at a blank page. You respond to a specific prompt that was chosen for you, today, based on everything that came before.</p>
+      </div>
+      <div class="q-principle">
+        <span class="q-principle-label">The question is the interface</span>
+        <p>Alice has no dashboard, no settings to tune, no metrics to review. The question is the only surface the system presents to you. All the intelligence, all the accumulated history, all the signal computation resolves into a single sentence that meets you where you are.</p>
+      </div>
+      <div class="q-principle">
+        <span class="q-principle-label">Switching cost is absolute</span>
+        <p>After a year of daily writing, no other tool can generate questions this informed. The history is the moat. A new app starts at day one. Alice is at day 365 and the questions show it.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== CLOSE ===== -->
+  <section class="q-section q-close">
+    <p>The question is what you experience. Everything else is invisible infrastructure designed to make that question worth answering.</p>
+    <div class="q-close-links">
+      <a href="/landing">Try it</a>
+      <a href="/instrument">How the measurement works</a>
+      <a href="/vision">The broader vision</a>
+    </div>
+  </section>
+
+</article>
+
+</PublicLayout>
+
+<style is:global>
+  .questions {
+    padding-bottom: 4rem;
+  }
+
+  .q-hero {
+    padding: 5rem 0 3rem;
+    max-width: 720px;
+  }
+
+  .q-hero h1 {
+    font-family: var(--serif-display);
+    font-size: 2.2rem;
+    font-weight: 400;
+    line-height: 1.35;
+    color: var(--text);
+    margin-bottom: 1.5rem;
+  }
+
+  .q-lead {
+    font-family: var(--serif-body);
+    font-size: 1.1rem;
+    line-height: 1.75;
+    color: var(--text-muted);
+  }
+
+  .q-section {
+    padding: 3rem 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .q-section h2 {
+    font-family: var(--serif-display);
+    font-size: 1.5rem;
+    font-weight: 400;
+    color: var(--text);
+    margin-bottom: 1.25rem;
+  }
+
+  .q-section > p {
+    font-family: var(--serif-body);
+    font-size: 1.05rem;
+    line-height: 1.75;
+    color: var(--text);
+    max-width: 720px;
+    margin-bottom: 1.25rem;
+  }
+
+  /* --- Question examples --- */
+  .q-examples {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin: 2rem 0;
+    max-width: 640px;
+  }
+
+  .q-example {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.5rem;
+  }
+
+  .q-example-day {
+    display: block;
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-faint);
+    margin-bottom: 0.5rem;
+  }
+
+  .q-example-why {
+    display: block;
+    font-family: var(--serif-body);
+    font-size: 0.8rem;
+    font-style: italic;
+    color: var(--text-muted);
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .q-example-text {
+    font-family: var(--serif-display);
+    font-size: 1.2rem;
+    font-weight: 400;
+    line-height: 1.5;
+    color: var(--text);
+    font-style: italic;
+  }
+
+  .q-example-seed {
+    border-left: 3px solid var(--border);
+  }
+
+  .q-example-personal {
+    border-left: 3px solid var(--accent);
+  }
+
+  /* --- Layers (what accumulates) --- */
+  .q-layers {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin: 2rem 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .q-layer {
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .q-layer:last-child {
+    border-bottom: none;
+  }
+
+  .q-layer-label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    margin-bottom: 0.5rem;
+  }
+
+  .q-layer p {
+    font-family: var(--serif-body);
+    font-size: 0.95rem;
+    line-height: 1.6;
+    color: var(--text);
+  }
+
+  /* --- Principles --- */
+  .q-principles {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1.5rem;
+    margin: 1.5rem 0;
+  }
+
+  .q-principle {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.5rem;
+  }
+
+  .q-principle-label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin-bottom: 0.75rem;
+  }
+
+  .q-principle p {
+    font-family: var(--serif-body);
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: var(--text);
+  }
+
+  /* --- Close --- */
+  .q-close > p {
+    font-family: var(--serif-display);
+    font-size: 1.3rem;
+    font-weight: 400;
+    line-height: 1.5;
+    color: var(--text);
+    max-width: 600px;
+  }
+
+  .q-close-links {
+    display: flex;
+    gap: 2rem;
+    margin-top: 2rem;
+  }
+
+  .q-close-links a {
+    font-family: var(--serif-body);
+    font-size: 1.05rem;
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.15rem;
+    transition: border-color 0.2s ease;
+  }
+
+  .q-close-links a:hover {
+    border-color: var(--accent);
+    text-decoration: none;
+  }
+
+  /* --- Mobile --- */
+  @media (max-width: 768px) {
+    .q-hero { padding: 4rem 0 2rem; }
+    .q-hero h1 { font-size: 1.6rem; }
+    .q-principles { grid-template-columns: 1fr; }
+    .q-close-links { flex-direction: column; gap: 1rem; }
+  }
+</style>
