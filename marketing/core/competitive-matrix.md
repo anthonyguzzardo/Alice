@@ -100,7 +100,7 @@ Alice is alone in the upper-right. Every product that learns from history shows 
 |---|---|
 | No streaks | Journal of Consumer Research: streaks become more important than the activity, breaking causes total abandonment |
 | No gamification | PMC: no significant relationship between gamification and adherence; depression associated with hyposensitivity to rewards, making gamification counterproductive |
-| No dashboard | 2025 survey (n=2,999): 91% of metric trackers experience tracking-related stress |
+| No dashboard | Etkin 2016 (JCR, 6 experiments): personal quantification reduces enjoyment by making activities feel like work; Rosman et al. 2021 (NIH-funded): transparent health monitoring triggered illness anxiety disorder |
 | One question/day | Pennebaker: daily emotional journaling can become rumination for brooders; single-question constraint prevents spiral |
 | Black box | Hawthorne effect: observer awareness contaminates behavioral data; hiding metrics eliminates gaming. Additionally, unmediated writing is a measurement validity requirement: AI-assisted input replaces the cognitive construct being measured, not just adds noise (see `scientific-foundation.md` Section 4) |
 | AI from history | University of Michigan Resonance Project: AI feedback increases self-reflection depth by 41% vs. unguided writing |

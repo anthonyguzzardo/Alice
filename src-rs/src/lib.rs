@@ -1,31 +1,31 @@
-//! Alice Signal Engine — napi-rs native module
+//! Alice Signal Engine -- napi-rs native module
 //!
 //! Ports the compute-heavy signal families from TypeScript to Rust.
 //! Dynamical signals (RQA, DFA, permutation entropy, transfer entropy),
 //! motor signals (sample entropy, ex-Gaussian, autocorrelation, etc.),
 //! and process signals (text reconstruction, pause/burst analysis).
 
+// All keystroke counts are bounded well below 2^52; usize->f64
+// precision loss is irrelevant for these magnitudes.
+#![allow(clippy::cast_precision_loss)]
+// napi entry points are called from JS, not Rust; #[must_use] is meaningless.
+#![allow(clippy::must_use_candidate)]
+
 mod dynamical;
 mod motor;
 mod process;
 mod stats;
+mod types;
 
 use napi_derive::napi;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
-// ─── Shared types ──────────────────────────────────────────────────
+use types::KeystrokeEvent;
 
-#[derive(Deserialize)]
-pub struct KeystrokeEvent {
-    pub c: String,
-    pub d: f64,
-    pub u: f64,
-}
-
-// ─── Dynamical signals ─────────────────────────────────────────────
+// ─── Dynamical signals ───────────────────────────────────────────
 
 #[napi(object)]
-#[derive(Serialize)]
+#[derive(Serialize, Default)]
 pub struct DynamicalSignals {
     pub iki_count: i32,
     pub hold_flight_count: i32,
@@ -42,34 +42,35 @@ pub struct DynamicalSignals {
 }
 
 #[napi]
+#[allow(clippy::needless_pass_by_value)] // napi-rs requires owned String at FFI boundary
 pub fn compute_dynamical_signals(stream_json: String) -> DynamicalSignals {
     let stream: Vec<KeystrokeEvent> = match serde_json::from_str(&stream_json) {
         Ok(s) => s,
-        Err(_) => {
-            return DynamicalSignals {
-                iki_count: 0,
-                hold_flight_count: 0,
-                permutation_entropy: None,
-                permutation_entropy_raw: None,
-                dfa_alpha: None,
-                rqa_determinism: None,
-                rqa_laminarity: None,
-                rqa_trapping_time: None,
-                rqa_recurrence_rate: None,
-                te_hold_to_flight: None,
-                te_flight_to_hold: None,
-                te_dominance: None,
-            };
-        }
+        Err(_) => return DynamicalSignals::default(),
     };
 
-    dynamical::compute(&stream)
+    let r = dynamical::compute(&stream);
+
+    DynamicalSignals {
+        iki_count: i32::try_from(r.iki_count).unwrap_or(i32::MAX),
+        hold_flight_count: i32::try_from(r.hold_flight_count).unwrap_or(i32::MAX),
+        permutation_entropy: r.permutation_entropy,
+        permutation_entropy_raw: r.permutation_entropy_raw,
+        dfa_alpha: r.dfa_alpha,
+        rqa_determinism: r.rqa.as_ref().map(|q| q.determinism),
+        rqa_laminarity: r.rqa.as_ref().map(|q| q.laminarity),
+        rqa_trapping_time: r.rqa.as_ref().map(|q| q.trapping_time),
+        rqa_recurrence_rate: r.rqa.as_ref().map(|q| q.recurrence_rate),
+        te_hold_to_flight: r.te_hold_to_flight,
+        te_flight_to_hold: r.te_flight_to_hold,
+        te_dominance: r.te_dominance,
+    }
 }
 
-// ─── Motor signals ─────────────────────────────────────────────────
+// ─── Motor signals ───────────────────────────────────────────────
 
 #[napi(object)]
-#[derive(Serialize)]
+#[derive(Serialize, Default)]
 pub struct MotorSignals {
     pub sample_entropy: Option<f64>,
     pub iki_autocorrelation: Option<Vec<f64>>,
@@ -77,7 +78,7 @@ pub struct MotorSignals {
     pub lapse_rate: Option<f64>,
     pub tempo_drift: Option<f64>,
     pub iki_compression_ratio: Option<f64>,
-    pub digraph_latency_profile: Option<String>, // JSON string of Record<string, number>
+    pub digraph_latency_profile: Option<String>, // JSON-serialized Record<string, number>
     pub ex_gaussian_tau: Option<f64>,
     pub ex_gaussian_mu: Option<f64>,
     pub ex_gaussian_sigma: Option<f64>,
@@ -86,34 +87,35 @@ pub struct MotorSignals {
 }
 
 #[napi]
+#[allow(clippy::needless_pass_by_value)]
 pub fn compute_motor_signals(stream_json: String, total_duration_ms: f64) -> MotorSignals {
     let stream: Vec<KeystrokeEvent> = match serde_json::from_str(&stream_json) {
         Ok(s) => s,
-        Err(_) => {
-            return MotorSignals {
-                sample_entropy: None,
-                iki_autocorrelation: None,
-                motor_jerk: None,
-                lapse_rate: None,
-                tempo_drift: None,
-                iki_compression_ratio: None,
-                digraph_latency_profile: None,
-                ex_gaussian_tau: None,
-                ex_gaussian_mu: None,
-                ex_gaussian_sigma: None,
-                tau_proportion: None,
-                adjacent_hold_time_cov: None,
-            };
-        }
+        Err(_) => return MotorSignals::default(),
     };
 
-    motor::compute(&stream, total_duration_ms)
+    let r = motor::compute(&stream, total_duration_ms);
+
+    MotorSignals {
+        sample_entropy: r.sample_entropy,
+        iki_autocorrelation: r.iki_autocorrelation,
+        motor_jerk: r.motor_jerk,
+        lapse_rate: r.lapse_rate,
+        tempo_drift: r.tempo_drift,
+        iki_compression_ratio: r.iki_compression_ratio,
+        digraph_latency_profile: r.digraph_latency_profile,
+        ex_gaussian_tau: r.ex_gaussian.as_ref().map(|e| e.tau),
+        ex_gaussian_mu: r.ex_gaussian.as_ref().map(|e| e.mu),
+        ex_gaussian_sigma: r.ex_gaussian.as_ref().map(|e| e.sigma),
+        tau_proportion: r.ex_gaussian.as_ref().map(|e| e.tau_proportion),
+        adjacent_hold_time_cov: r.adjacent_hold_time_cov,
+    }
 }
 
-// ─── Process signals ───────────────────────────────────────────────
+// ─── Process signals ─────────────────────────────────────────────
 
 #[napi(object)]
-#[derive(Serialize)]
+#[derive(Serialize, Default)]
 pub struct ProcessSignals {
     pub pause_within_word: Option<i32>,
     pub pause_between_word: Option<i32>,
@@ -127,6 +129,19 @@ pub struct ProcessSignals {
 }
 
 #[napi]
+#[allow(clippy::needless_pass_by_value)]
 pub fn compute_process_signals(event_log_json: String) -> ProcessSignals {
-    process::compute(&event_log_json)
+    let r = process::compute(&event_log_json);
+
+    ProcessSignals {
+        pause_within_word: r.pause_within_word,
+        pause_between_word: r.pause_between_word,
+        pause_between_sentence: r.pause_between_sentence,
+        abandoned_thought_count: r.abandoned_thought_count,
+        r_burst_count: r.r_burst_count,
+        i_burst_count: r.i_burst_count,
+        vocab_expansion_rate: r.vocab_expansion_rate,
+        phase_transition_point: r.phase_transition_point,
+        strategy_shift_count: r.strategy_shift_count,
+    }
 }

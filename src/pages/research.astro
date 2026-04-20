@@ -49,10 +49,11 @@ import PublicLayout from '../layouts/layPublic.astro';
     </div>
     <div class="r-nav-group">
       <span class="r-nav-group-label">The Instrument</span>
-      <a href="#demand" class="r-nav-link" data-section="demand">Data sources</a>
+      <a href="#writing" class="r-nav-link" data-section="writing">Why writing</a>
       <a href="#landscape" class="r-nav-link" data-section="landscape">Existing instruments</a>
       <a href="#observer" class="r-nav-link" data-section="observer">The observer effect</a>
       <a href="#design" class="r-nav-link" data-section="design">Validity requirements</a>
+      <a href="#extensions" class="r-nav-link" data-section="extensions">Theoretical extensions</a>
       <a href="#open" class="r-nav-link" data-section="open">Open questions</a>
     </div>
   </nav>
@@ -175,7 +176,7 @@ import PublicLayout from '../layouts/layPublic.astro';
       </div>
     </div>
 
-    <p>The instruments that could exploit this window need to be built now, while unassisted writing is still common enough to establish baselines.</p>
+    <p>The cohort born 1980-1995 is the only generation in history that types fluently from childhood, remembers writing without AI assistance, and will enter the cognitive decline screening window (ages 55-75) between 2035 and 2070. If personal baselines are not started on this cohort within the next 10-15 years, the opportunity is permanently lost. There is no second cohort with this combination of properties.</p>
   </section>
 
 
@@ -282,7 +283,9 @@ import PublicLayout from '../layouts/layPublic.astro';
       </div>
     </div>
 
-    <p>The metrics for this paradigm do not yet exist. You cannot develop intra-individual longitudinal baselines from a 45-minute lab session with 23 participants. You need dense, daily, fluent data from the same person over years. The population that can produce that data at the age where cognitive decline becomes clinically relevant does not yet exist. The window for building the instruments that will be ready when they do is now.</p>
+    <p>This shift is not novel. It has a 30-year research tradition. Ecological Momentary Assessment (Shiffman, Stone, and Hufford 2008), Experience Sampling Methods (Csikszentmihalyi and Larson 1987), and idiographic approaches to behavioral science (Molenaar 2004) all argue that group-level averages obscure the individual-level dynamics that matter clinically. Molenaar's manifesto demonstrated formally that inter-individual variation and intra-individual variation are statistically non-ergodic: what is true of a population average is not necessarily true of any individual in that population. N-of-1 trial designs are now accepted by the FDA for rare disease contexts.</p>
+
+    <p>What these traditions lack is a measurement instrument that can sustain daily ecological data collection over years in healthy populations. EMA studies typically last days to weeks. ESM relies on self-report prompted by random signals. Neither captures behavioral process data (keystrokes, pause architecture) at the temporal resolution needed for cognitive signal extraction. The paradigm exists. The instrument does not.</p>
   </section>
 
 
@@ -339,41 +342,39 @@ import PublicLayout from '../layouts/layPublic.astro';
   </section>
 
 
-  <!-- ===== SECTION 8: DATA SOURCES ===== -->
-  <section class="r-section" id="demand">
-    <h2>The data already exists. It is not being captured.</h2>
+  <!-- ===== SECTION 8: WHY WRITING ===== -->
+  <section class="r-section" id="writing">
+    <h2>Why writing is a uniquely rich cognitive channel</h2>
 
-    <p>Longitudinal cognitive research requires dense, daily, naturalistic writing from the same person over years. That data does not exist in any research corpus. But the writing behavior that would produce it is already happening at scale, outside any research context.</p>
+    <p>The preceding sections establish that a longitudinal instrument is needed, that the window for building one is finite, and that no existing instrument fills the gap. But why should the instrument be built on writing? Why not speech, gait analysis, eye tracking, or any other behavioral modality?</p>
 
-    <div class="r-demand-grid">
-      <div class="r-demand-card">
-        <h3>Expressive writing</h3>
-        <div class="r-demand-stat">200+ studies</div>
-        <p>Pennebaker's body of work establishes that the therapeutic benefit of emotional writing is identical whether the output is kept or destroyed. Millions are already writing daily with no expectation of re-reading. "Burn After Writing" sold 3 million copies.</p>
+    <p>Writing is the only common daily behavior that simultaneously requires lexical retrieval, syntactic planning, coherence monitoring, semantic integration, and fine motor execution. No other modality loads this many cognitive systems at once during a single naturalistic act.</p>
+
+    <div class="r-comparison">
+      <div class="r-comparison-box">
+        <h3>Speech</h3>
+        <p>Rich in prosody and lexical content but lacks the motor encoding channel. Articulatory planning is automated differently from keystroke execution. No character-level timing data. Harder to capture in private, ecologically valid contexts without introducing observer effects.</p>
       </div>
-      <div class="r-demand-card">
-        <h3>Unmediated contexts</h3>
-        <div class="r-demand-stat">Declining</div>
-        <p>Private journaling remains one of the last writing contexts where autocomplete, predictive text, and AI assistance are not the default. This is the writing environment where keystroke signals retain construct validity. It is shrinking.</p>
-      </div>
-      <div class="r-demand-card">
-        <h3>Self-tracking fatigue</h3>
-        <div class="r-demand-stat">91% report stress</div>
-        <p>91% of self-trackers experience tracking-related stress. One-third of wearable buyers abandon within six months. The population that has rejected visible quantification may be more willing to participate in measurement they do not see.</p>
-      </div>
-      <div class="r-demand-card">
-        <h3>Anonymized externalizing</h3>
-        <div class="r-demand-stat">6M+ participants</div>
-        <p>Communities like r/offmychest and r/UnsentLetters function as imperfect black boxes. People write to externalize without the writing coming back. The behavior pattern matches what a research instrument would ask of participants.</p>
-      </div>
-      <div class="r-demand-card">
-        <h3>Observer-effect sensitivity</h3>
-        <div class="r-demand-stat">Universal self-censorship</div>
-        <p>Documented across journaling communities and clinical populations. PTSD forums show the sharpest signal. People who would produce the most clinically valuable writing data are the most likely to censor themselves when they know they are being observed.</p>
+      <div class="r-comparison-box">
+        <h3>Gait / Motor</h3>
+        <p>Strong evidence for motor biomarkers of neurodegeneration (Buchman and Bennett 2011). But gait captures motor and postural control without linguistic content. It cannot distinguish cognitive slowing from physical deconditioning without a second signal channel.</p>
       </div>
     </div>
 
-    <p>The research problem is not participant recruitment. It is instrument design. People are already writing daily, in private, with no expectation of feedback. What is missing is an instrument that captures process-level data from that writing without disrupting the conditions that make it scientifically valuable.</p>
+    <div class="r-comparison">
+      <div class="r-comparison-box">
+        <h3>Eye tracking</h3>
+        <p>Captures attentional allocation and reading fluency but not production. Measures how someone processes existing text, not how they generate new text. The generative act is where retrieval difficulty, planning breakdown, and coherence failure become visible.</p>
+      </div>
+      <div class="r-comparison-box">
+        <h3>Typed writing</h3>
+        <p>Combines fine motor timing (keystroke dynamics), lexical production (word choice, vocabulary), syntactic structure (sentence complexity), semantic coherence (topic management), and temporal process data (pause architecture, revision patterns). All captured simultaneously from a single naturalistic act.</p>
+      </div>
+    </div>
+
+    <p>Kellogg (1996) and Hayes and Flower (1980) established that written composition recruits working memory, long-term memory retrieval, executive monitoring, and motor execution in a coordinated process. Pinet et al. (2022) demonstrated that in fluent typists, the motor layer becomes transparent to cognitive processes: keystroke timing variations reflect lexical retrieval difficulty, syntactic planning load, and coherence monitoring, not finger search. The typing is automatic. What remains in the signal is cognition.</p>
+
+    <p>Writing also has a property no other modality shares: the act itself is independently valuable. Pennebaker's 200+ studies establish that expressive writing produces measurable psychological and physiological benefits whether or not the output is kept or reviewed. People already write daily, in private, with no expectation of feedback. The measurement modality is also the retention mechanism. The instrument does not need to justify its existence to the participant through data display, because the practice justifies itself.</p>
   </section>
 
 
@@ -484,9 +485,15 @@ import PublicLayout from '../layouts/layPublic.astro';
 
     <p>The Hawthorne effect (Adair 1984; McCambridge, Witton, and Elbourne 2014) is well-established: participants who know they are being observed modify their behavior. In longitudinal behavioral measurement, this is not a minor confound. It is fatal to the construct. If a participant knows their writing speed is being measured, they write differently. If they know lexical diversity is being tracked, they reach for unusual words. The signal no longer reflects natural cognitive process. It reflects performance.</p>
 
-    <p>Surfacing computed signals to the participant creates a second, deeper problem: optimization. Goodhart's law applies directly. Once the participant sees a metric, they optimize for the metric rather than the state the metric was designed to detect. This is documented in self-tracking research: 91% of metric trackers report tracking-related stress; users of wearable devices modify behavior to improve scores rather than underlying health (Etkin 2016).</p>
+    <p>Surfacing computed signals to the participant creates a second, deeper problem: optimization. Goodhart's law applies directly. Once the participant sees a metric, they optimize for the metric rather than the state the metric was designed to detect. Etkin (2016, Journal of Consumer Research) demonstrated across six experiments that personal quantification increases behavioral output but reduces enjoyment and intrinsic motivation. The act of measuring changes the relationship to the measured activity.</p>
+
+    <p>The clinical extreme is documented. Rosman et al. (2021, NIH-funded) reported a patient with atrial fibrillation who performed 916 smartwatch ECGs in one year after the device began surfacing cardiac data. Smartwatch notifications triggered escalating monitoring behavior: ambiguous readings ("inconclusive") produced the same behavioral response as actual arrhythmia detections. The patient developed illness anxiety disorder, made 12 unnecessary clinic and emergency department visits, and required cognitive behavioral therapy for remission. The authors note anecdotal reports from institutions nationwide, suggesting the case represents "the tip of an iceberg."</p>
+
+    <p>In a longitudinal cognitive instrument, this dynamic is not a side effect. It is a confound that accumulates over time. A participant who knows their lexical diversity is being measured reaches for unusual words. A participant who sees a decline in their processing speed metric becomes anxious, and the anxiety alters the very signals being measured. The instrument creates the condition it was designed to detect.</p>
 
     <p>A longitudinal cognitive instrument must therefore satisfy a paradox: it must accumulate behavioral data over years, learn from that data to improve measurement precision, and never show the participant what it has learned. The participant's relationship to the instrument must be with the surface (the question, the writing practice) while the measurement operates underneath, invisible.</p>
+
+    <p>The problem compounds in clinical populations. Self-censorship is documented across journaling communities and is most acute in populations with PTSD, trauma histories, and anxiety disorders. The people who would produce the most clinically valuable writing data are the most likely to alter their writing when they know it is being analyzed. An instrument that surfaces its analysis guarantees that the participants who need it most will either censor themselves or stop using it.</p>
 
     <p>This is not paternalism. It is the same logic that prevents a scale from displaying weight during a body composition study, or a blood pressure cuff from showing readings during an ambulatory monitoring protocol. The measurement must not alter the measured state.</p>
   </section>
@@ -497,6 +504,8 @@ import PublicLayout from '../layouts/layPublic.astro';
     <h2>Requirements for instrument validity</h2>
 
     <p>The preceding analysis constrains the design. A valid instrument for longitudinal cognitive measurement through naturalistic writing must satisfy all of the following simultaneously. Satisfying five of six produces a flawed instrument, not a slightly less good one.</p>
+
+    <p>A question researchers will ask immediately: why build this as a product people choose to use, rather than a research tool distributed through clinics or universities? Because the sixth requirement demands it. Longitudinal studies that rely on institutional recruitment and scheduled lab visits cannot sustain daily participation over years. Retention in traditional EMA studies drops sharply after days to weeks. An instrument that produces valid longitudinal data must be something people want to use for its own sake, in their own lives, without researcher contact. Ecological validity and sustained retention are not product decisions. They are methodological requirements that happen to produce something that looks like a product.</p>
 
     <div class="r-design-list">
       <div class="r-design-item">
@@ -527,7 +536,29 @@ import PublicLayout from '../layouts/layPublic.astro';
   </section>
 
 
-  <!-- ===== SECTION 12: OPEN QUESTIONS ===== -->
+  <!-- ===== SECTION 12: THEORETICAL EXTENSIONS ===== -->
+  <section class="r-section" id="extensions">
+    <h2>Theoretical extensions (working frameworks, not published findings)</h2>
+
+    <p>The argument on this page addresses one modality (typed writing) and one measurement context (longitudinal cognitive assessment). Two broader frameworks are in development. Both are working papers, not peer-reviewed. They are included here to indicate where this thinking leads, not to claim results.</p>
+
+    <h3 class="r-subsection-heading">Construct replacement is modality-general</h3>
+
+    <p>The construct replacement problem described in Section 4 is not specific to typing. AI mediation is simultaneously altering the cognitive processes underlying speech (voice assistants restructure how people formulate requests), spatial navigation (GPS replaces cognitive map formation), decision-making (recommendation engines replace evaluative reasoning), and writing. Each modality has its own research silo documenting the effects. None has named the common structure.</p>
+
+    <p>A theoretical framework paper in development argues that AI-mediated behavioral change is a modality-general problem requiring modality-general design constraints. Four constraints emerge consistently across modalities: unassisted input, process-level capture (temporal microstructure, not aggregate performance), longitudinal intra-individual baselines, and attachment to intrinsically motivated practices. The six instrument requirements derived on this page are a domain-specific instantiation of these four general constraints. The convergence suggests the problem and the solution are both deeper than any single behavioral channel.</p>
+
+    <h3 class="r-subsection-heading">The process record</h3>
+
+    <p>The deepest version of this argument is not scientific but philosophical. Three levels of record exist for any cognitive act: the artifact (what was produced), the genome (the hardware blueprint of the producer), and the process record (the temporal trace of a mind producing the artifact in real time). The process record is asymmetrically more fundamental than the artifact: you can derive the artifact from the process, but not the process from the artifact. A finished essay contains none of the pauses, revisions, retrieval failures, and planning that produced it. The keystroke stream contains all of them.</p>
+
+    <p>AI mediation does not contaminate the process record. It replaces it. When a sentence is accepted from an autocomplete suggestion, no retrieval occurred, no syntactic planning happened, no coherence monitoring was needed. The process record for that sentence is not noisy. It is absent. We are in the first generation where the conditions for capturing unmediated process records at scale are becoming permanently unavailable. The closing window described on this page is, at its deepest level, a window for preserving a category of data about biological intelligence that will not be producible once the mediation is universal.</p>
+
+    <p>This is a speculative framework. It is included because it clarifies why the practical instrument design described above is not just a useful research tool but a response to an irreversible epistemic loss.</p>
+  </section>
+
+
+  <!-- ===== SECTION 13: OPEN QUESTIONS ===== -->
   <section class="r-section" id="open">
     <h2>Open questions and limitations</h2>
 
@@ -573,7 +604,7 @@ import PublicLayout from '../layouts/layPublic.astro';
       <li>Guzzardo, A. (2026). "A Closing Window: The Demographic Confound in Keystroke-Based Cognitive Biomarkers and the AI-Mediation Threat to the Paradigm That Would Replace It." Preprint, v2.</li>
       <li>Guzzardo, A. (2026). "Construct Replacement: When AI-Mediated Input Invalidates Behavioral Measurement." Preprint, v2.</li>
     </ul>
-    <p class="r-sources-note">Key citations: Arnold et al. 2020; Banovic et al. 2019; Buchman &amp; Bennett 2011; Buschek et al. 2021; Covington &amp; McFall 2010; Dhakal et al. 2018; Doshi &amp; Hauser 2024; Kim et al. 2024; Li et al. 2025; Meulemans et al. 2022; Pinet et al. 2022; Vishnevsky et al. 2024; Yamaguchi &amp; Logan 2014; Zhou &amp; Liu 2025.</p>
+    <p class="r-sources-note">Key citations: Adair 1984; Arnold et al. 2020; Banovic et al. 2019; Buchman &amp; Bennett 2011; Buschek et al. 2021; Covington &amp; McFall 2010; Csikszentmihalyi &amp; Larson 1987; Dhakal et al. 2018; Doshi &amp; Hauser 2024; Etkin 2016; Hayes &amp; Flower 1980; Kellogg 1996; Kim et al. 2024; Li et al. 2025; McCambridge, Witton &amp; Elbourne 2014; Meulemans et al. 2022; Molenaar 2004; Pennebaker 1997; Pinet et al. 2022; Rosman et al. 2021; Shiffman, Stone &amp; Hufford 2008; Vishnevsky et al. 2024; Yamaguchi &amp; Logan 2014; Zhou &amp; Liu 2025.</p>
   </footer>
 
   </article>
@@ -901,6 +932,16 @@ import PublicLayout from '../layouts/layPublic.astro';
     color: var(--text);
     margin-bottom: 1.25rem;
     max-width: 720px;
+  }
+
+  .r-subsection-heading {
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text);
+    margin-top: 2.5rem;
+    margin-bottom: 1rem;
   }
 
   .r-caption {
@@ -1434,50 +1475,6 @@ import PublicLayout from '../layouts/layPublic.astro';
     border-top: 1px solid var(--border);
   }
 
-  /* --- Demand cards --- */
-  .r-demand-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 1.25rem;
-    margin: 2rem 0;
-  }
-
-  .r-demand-card {
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 1.5rem;
-  }
-
-  .r-demand-card:nth-child(4),
-  .r-demand-card:nth-child(5) {
-    grid-column: auto;
-  }
-
-  .r-demand-card h3 {
-    font-family: var(--mono);
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text);
-    margin-bottom: 0.5rem;
-  }
-
-  .r-demand-stat {
-    font-family: var(--mono);
-    font-size: 1.3rem;
-    color: var(--text);
-    margin-bottom: 0.75rem;
-    letter-spacing: -0.01em;
-  }
-
-  .r-demand-card p {
-    font-family: var(--serif-body);
-    font-size: 0.9rem;
-    line-height: 1.6;
-    color: var(--text);
-    margin-bottom: 0;
-  }
-
   /* --- Design constraints list --- */
   .r-design-list {
     margin: 2rem 0;
@@ -1652,7 +1649,6 @@ import PublicLayout from '../layouts/layPublic.astro';
     .r-stat-row { grid-template-columns: 1fr; }
     .r-comparison { grid-template-columns: 1fr; }
     .r-landscape-grid { grid-template-columns: 1fr; }
-    .r-demand-grid { grid-template-columns: 1fr; }
 
     .r-silos { grid-template-columns: 1fr; }
     .r-silo-gap { padding: 0.5rem 0; }

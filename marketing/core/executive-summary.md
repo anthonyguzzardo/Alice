@@ -31,7 +31,7 @@ Five populations asking for Alice without knowing it.
 | Who | Size | What They Say | What They Need |
 |---|---|---|---|
 | **Journal Burners** | 3M+ books sold, 84.5M TikTok views | "I burned 90 journals and still journal daily" | The act without the artifact |
-| **Tracker Quitters** | 91% of trackers stressed, 33% abandon wearables in 6mo | "I stopped listening to my body" | Depth without metrics |
+| **Tracker Quitters** | 33% abandon wearables in 6mo; quantification reduces enjoyment (Etkin 2016, JCR) | "I stopped listening to my body" | Depth without metrics |
 | **Depth Seekers** | GlazingGate forced OpenAI rollback, Stanford in *Science* | "The most helpful AI disagrees with you" | Challenge, not validation |
 | **Privacy Refugees** | Universal in journaling communities | "I censor everything I write" | No discoverable record |
 | **Confession Posters** | 6M+ in confession subreddits | "I finally blurted out what I've been feeling" | Externalize without consequence |
@@ -81,7 +81,8 @@ Key property: **users can't game metrics they can't see**. This produces data un
 | Writing benefits identical whether kept or destroyed | Pennebaker, 200+ studies |
 | Measurement decreases enjoyment, reduces future engagement | Etkin, Duke, JCR Best Article 2019 |
 | AI affirms users 49% more than humans | Stanford, *Science*, March 2026 |
-| 91% of self-trackers experience tracking stress | 2025 survey, n=2,999 |
+| Personal quantification reduces enjoyment, undermines intrinsic motivation | Etkin 2016, JCR (6 experiments) |
+| Transparent health monitoring can trigger pathological self-monitoring | Rosman et al. 2021, NIH-funded |
 | Gamification counterproductive for depressed populations | PMC systematic review |
 | Streaks become more important than the activity | Journal of Consumer Research |
 | AI feedback increases reflection depth 41% vs unguided | U of Michigan Resonance Project, 2024 |

@@ -20,7 +20,7 @@ Research identified five convergent populations expressing the same unmet need (
 - 28-45, has used WHOOP, Oura, Apple Watch, Daylio, or similar
 - Abandoned after metrics became a source of anxiety rather than insight
 - Dan Ginn (quit Apple Watch after 7 years): *"I stopped listening to my body and became dependent on consumer technology."*
-- 91% of self-trackers report tracking-related stress
+- Personal quantification reduces enjoyment and intrinsic motivation (Etkin 2016, JCR); one-third of wearable buyers abandon within six months
 
 **3. The Depth Seeker**
 - Has tried 3+ journaling or wellness apps, abandoned all for shallowness
@@ -62,8 +62,8 @@ Explains the black box without calling it a black box. Reframes the absence of d
 **"The journal that forgets so you don't have to."**
 Emotional hook. Addresses the anxiety of re-reading old entries. Positions the black box as relief, not deprivation.
 
-**"91% of self-trackers report tracking-related stress. We track nothing you can see."**
-Evidence-based. Directly attacks the dashboard paradigm. The stat is real (2025 survey, n=2,999).
+**"Personal quantification reduces enjoyment (Etkin, JCR). We track nothing you can see."**
+Evidence-based. Directly attacks the dashboard paradigm. Cites peer-reviewed research (6 experiments).
 
 **"Depth, not data."**
 Two-word category rejection.

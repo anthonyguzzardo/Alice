@@ -29,7 +29,7 @@ Not unlimited entries. Not multi-modal check-ins. Not a blank page. One question
 No streaks. No badges. No scores. No progress bars. No leaderboards. Academic literature (Journal of Consumer Research, Frontiers in Psychology, PMC) demonstrates that gamification undermines intrinsic motivation, creates compliance anxiety, and is actively counterproductive for populations experiencing depression. Alice removed every engagement mechanic the industry relies on.
 
 ### 5. No Dashboard
-No mood graphs. No trend lines. No weekly summaries. No year-in-review. A 2025 survey found 91% of people who track personal metrics experience tracking-related stress. The absence of a dashboard is not a missing feature. It is the feature.
+No mood graphs. No trend lines. No weekly summaries. No year-in-review. Etkin (2016, Journal of Consumer Research) demonstrated across six experiments that personal quantification increases output but reduces enjoyment by making activities feel like work. Rosman et al. (2021, NIH-funded) documented how transparent health monitoring triggered pathological self-monitoring and illness anxiety disorder. The absence of a dashboard is not a missing feature. It is the feature.
 
 ## Why Unmediated Input Is Non-Negotiable
 
@@ -75,7 +75,7 @@ Alice's architecture is not speculative. Five distinct populations are already e
 | Population | Proxy Signal | What They're Asking For |
 |---|---|---|
 | **Journal Burners** | 3M+ copies of "Burn After Writing," 84.5M TikTok views | The act of writing without the burden of the artifact |
-| **Tracker Quitters** | 91% of self-trackers report tracking-related stress | Depth without self-surveillance |
+| **Tracker Quitters** | One-third abandon wearables in 6mo; quantification reduces enjoyment (Etkin 2016, JCR) | Depth without self-surveillance |
 | **Depth Seekers** | Stanford (Science, 2026): AI affirms 49% more than humans; GlazingGate forced OpenAI rollback | Questions that challenge rather than validate |
 | **Privacy Refugees** | Universal in journaling communities; PTSD forums document self-censorship | Guaranteed invisibility of what was written |
 | **Confession Posters** | 6M+ members in r/offmychest + r/TrueOffMyChest + r/UnsentLetters | Externalize without consequence |

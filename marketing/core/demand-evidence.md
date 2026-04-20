@@ -70,7 +70,8 @@ The Global Wellness Summit named **"The Over-Optimization Backlash" a top-10 def
 ### Hard Numbers
 
 - **One-third** of wearable buyers abandon within 6 months (Gartner)
-- **91%** of self-trackers experience tracking-related stress (2025 survey, n=2,999)
+- Personal quantification reduces enjoyment and intrinsic motivation (Etkin 2016, JCR, 6 experiments)
+- Transparent health monitoring can trigger pathological self-monitoring and illness anxiety disorder (Rosman et al. 2021, NIH-funded)
 - **73%** of eating disorder patients said calorie-tracking apps contributed to their disorder
 - **63.1%** of women let scale numbers affect their entire mood
 - **3-14%** of the population affected by orthosomnia (sleep anxiety from sleep trackers)
@@ -333,7 +334,7 @@ Five populations. One need. No product.
 |---|---|
 | Burn After Writing sales | 3,000,000+ copies |
 | #burnafterwriting TikTok views | 84,500,000 |
-| Self-trackers experiencing stress | 91% of all trackers |
+| Quantification reduces enjoyment | Etkin 2016, JCR (6 experiments) |
 | r/nosurf + r/digitalminimalism + r/simpleliving | 2,000,000+ members |
 | Digital detox market | $62.4 billion |
 | Gen Z reducing screen time | 86% |

@@ -10,62 +10,59 @@
 
 use std::collections::HashMap;
 
-use crate::stats::{self, mean, std_dev};
-use crate::{DynamicalSignals, KeystrokeEvent};
+use crate::stats::{linreg_slope, mean, std_dev};
+use crate::types::{HoldFlight, IkiSeries, KeystrokeEvent, SignalError, SignalResult};
 
-// ─── Extraction ────────────────────────────────────────────────────
+// ─── Result types ─────────────────────────────────────────────────
 
-fn extract_iki(stream: &[KeystrokeEvent]) -> Vec<f64> {
-    let downs: Vec<f64> = stream.iter().map(|e| e.d).collect();
-    stats::extract_iki(&downs)
+pub struct RqaResult {
+    pub determinism: f64,
+    pub laminarity: f64,
+    pub trapping_time: f64,
+    pub recurrence_rate: f64,
 }
 
-struct HoldFlight {
-    holds: Vec<f64>,
-    flights: Vec<f64>,
+pub struct DynamicalResult {
+    pub iki_count: usize,
+    pub hold_flight_count: usize,
+    pub permutation_entropy: Option<f64>,
+    pub permutation_entropy_raw: Option<f64>,
+    pub dfa_alpha: Option<f64>,
+    pub rqa: Option<RqaResult>,
+    pub te_hold_to_flight: Option<f64>,
+    pub te_flight_to_hold: Option<f64>,
+    pub te_dominance: Option<f64>,
 }
 
-fn extract_hold_flight(stream: &[KeystrokeEvent]) -> HoldFlight {
-    let mut holds = Vec::with_capacity(stream.len());
-    let mut flights = Vec::with_capacity(stream.len());
+// ─── Permutation Entropy (Bandt & Pompe 2002) ─────────────────────
 
-    for (i, evt) in stream.iter().enumerate() {
-        let ht = evt.u - evt.d;
-        if ht > 0.0 && ht < 2000.0 {
-            holds.push(ht);
-        }
-        if i > 0 {
-            let ft = evt.d - stream[i - 1].u;
-            if ft > 0.0 && ft < 5000.0 {
-                flights.push(ft);
-            }
-        }
-    }
-
-    HoldFlight { holds, flights }
-}
-
-// ─── Permutation Entropy (Bandt & Pompe 2002) ──────────────────────
-
-fn permutation_entropy(series: &[f64], order: usize) -> Option<(f64, f64)> {
-    if series.len() < order + 10 {
-        return None;
+fn permutation_entropy(series: &[f64], order: usize) -> SignalResult<(f64, f64)> {
+    let n = series.len();
+    if n < order + 10 {
+        return Err(SignalError::InsufficientData {
+            needed: order + 10,
+            got: n,
+        });
     }
 
     let mut pattern_counts: HashMap<Vec<usize>, u64> = HashMap::new();
-    let n = series.len() - order + 1;
+    let window_count = n - order + 1;
 
-    for i in 0..n {
+    for i in 0..window_count {
         let window = &series[i..i + order];
         let mut indices: Vec<usize> = (0..order).collect();
-        indices.sort_by(|&a, &b| window[a].partial_cmp(&window[b]).unwrap_or(std::cmp::Ordering::Equal));
+        indices.sort_by(|&a, &b| {
+            window[a]
+                .partial_cmp(&window[b])
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         *pattern_counts.entry(indices).or_insert(0) += 1;
     }
 
-    let nf = n as f64;
+    let total = window_count as f64;
     let mut entropy = 0.0;
     for &count in pattern_counts.values() {
-        let p = count as f64 / nf;
+        let p = count as f64 / total;
         if p > 0.0 {
             entropy -= p * p.log2();
         }
@@ -77,17 +74,21 @@ fn permutation_entropy(series: &[f64], order: usize) -> Option<(f64, f64)> {
         factorial *= i;
     }
     let max_entropy = (factorial as f64).log2();
+    let normalized = if max_entropy > 0.0 {
+        entropy / max_entropy
+    } else {
+        0.0
+    };
 
-    let normalized = if max_entropy > 0.0 { entropy / max_entropy } else { 0.0 };
-    Some((normalized, entropy))
+    Ok((normalized, entropy))
 }
 
-// ─── DFA (Peng et al. 1994) ────────────────────────────────────────
+// ─── DFA (Peng et al. 1994) ───────────────────────────────────────
 
-fn dfa_alpha(series: &[f64]) -> Option<f64> {
+fn dfa_alpha(series: &[f64]) -> SignalResult<f64> {
     let n = series.len();
     if n < 50 {
-        return None;
+        return Err(SignalError::InsufficientData { needed: 50, got: n });
     }
 
     let mu = mean(series);
@@ -102,18 +103,20 @@ fn dfa_alpha(series: &[f64]) -> Option<f64> {
     let min_box = 4usize;
     let max_box = n / 4;
     if max_box < min_box {
-        return None;
+        return Err(SignalError::InsufficientData { needed: 16, got: n });
     }
 
-    let mut log_sizes = Vec::new();
+    let mut log_sizes: Vec<usize> = Vec::new();
     let mut log_fluctuations = Vec::new();
 
     let num_sizes = 15.min(max_box - min_box + 1);
     let ratio = max_box as f64 / min_box as f64;
 
     for i in 0..num_sizes {
-        let box_size = (min_box as f64 * ratio.powf(i as f64 / (num_sizes - 1).max(1) as f64)).round() as usize;
-        if !log_sizes.is_empty() && box_size == *log_sizes.last().unwrap() {
+        let box_size =
+            (min_box as f64 * ratio.powf(i as f64 / (num_sizes - 1).max(1) as f64)).round()
+                as usize;
+        if log_sizes.last() == Some(&box_size) {
             continue;
         }
 
@@ -125,7 +128,6 @@ fn dfa_alpha(series: &[f64]) -> Option<f64> {
         let mut sum_fluctuation = 0.0;
         for b in 0..num_boxes {
             let start = b * box_size;
-            // Linear detrend within box
             let mut sx = 0.0f64;
             let mut sy = 0.0f64;
             let mut sxx = 0.0f64;
@@ -140,13 +142,20 @@ fn dfa_alpha(series: &[f64]) -> Option<f64> {
             }
 
             let bsf = box_size as f64;
-            let denom = bsf * sxx - sx * sx;
-            let slope = if denom != 0.0 { (bsf * sxy - sx * sy) / denom } else { 0.0 };
+            // OLS denominator: n*Sxx - (Sx)^2
+            #[allow(clippy::suspicious_operation_groupings)]
+            let denom = bsf.mul_add(sxx, -(sx * sx));
+            #[allow(clippy::suspicious_operation_groupings)]
+            let slope = if denom == 0.0 {
+                0.0
+            } else {
+                bsf.mul_add(sxy, -(sx * sy)) / denom
+            };
             let intercept = (sy - slope * sx) / bsf;
 
             let mut sum_sq = 0.0;
             for j in 0..box_size {
-                let trend = intercept + slope * j as f64;
+                let trend = slope.mul_add(j as f64, intercept);
                 sum_sq += (y[start + j] - trend).powi(2);
             }
             sum_fluctuation += (sum_sq / bsf).sqrt();
@@ -160,34 +169,37 @@ fn dfa_alpha(series: &[f64]) -> Option<f64> {
     }
 
     if log_sizes.len() < 4 {
-        return None;
+        return Err(SignalError::DegenerateValue(
+            "fewer than 4 valid box sizes in DFA",
+        ));
     }
 
     let log_x: Vec<f64> = log_sizes.iter().map(|&s| (s as f64).ln()).collect();
-    stats::linreg_slope(&log_x, &log_fluctuations)
+    linreg_slope(&log_x, &log_fluctuations)
+        .ok_or(SignalError::DegenerateValue("degenerate regression in DFA"))
 }
 
-// ─── RQA (Webber & Zbilut 2005) ────────────────────────────────────
-// Fixed threshold (20% of std), embedding dim=1. Cap at 500 points.
+// ─── RQA (Webber & Zbilut 2005) ──────────────────────────────────
+//
+// Diagonal lines are counted from the upper triangle only (k > 0).
+// Vertical lines are counted from the full matrix (minus LOI).
+//
+// Since the recurrence matrix is exactly symmetric (|x_i - x_j| == |x_j - x_i|),
+// full-matrix recurrence count = 2 * upper-triangle count. Laminarity divides
+// vertical_points (full matrix) by total_recurrences * 2 to normalize both
+// measures to the same basis. Cap at 500 points for O(n^2) feasibility.
 
-struct RqaResult {
-    determinism: f64,
-    laminarity: f64,
-    trapping_time: f64,
-    recurrence_rate: f64,
-}
-
-fn rqa(series: &[f64], threshold: Option<f64>) -> Option<RqaResult> {
+fn rqa(series: &[f64]) -> SignalResult<RqaResult> {
     let n = series.len();
     if n < 30 {
-        return None;
+        return Err(SignalError::InsufficientData { needed: 30, got: n });
     }
 
     let mu = mean(series);
     let s = std_dev(series, Some(mu));
-    let eps = threshold.unwrap_or(s * 0.2);
+    let eps = s * 0.2; // 20% of std as threshold
     if eps <= 0.0 {
-        return None;
+        return Err(SignalError::ZeroVariance { len: n });
     }
 
     let m = n.min(500);
@@ -198,7 +210,7 @@ fn rqa(series: &[f64], threshold: Option<f64>) -> Option<RqaResult> {
     let mut total_vertical_length: u64 = 0;
     let mut vertical_line_count: u64 = 0;
 
-    // Diagonal line detection: scan each diagonal
+    // Diagonal lines: upper triangle (k > 0)
     for k in 1..m {
         let mut line_len: u64 = 0;
         for i in 0..(m - k) {
@@ -218,7 +230,7 @@ fn rqa(series: &[f64], threshold: Option<f64>) -> Option<RqaResult> {
         }
     }
 
-    // Vertical line detection: for each column
+    // Vertical lines: full matrix (minus LOI)
     for j in 0..m {
         let mut line_len: u64 = 0;
         for i in 0..m {
@@ -254,6 +266,8 @@ fn rqa(series: &[f64], threshold: Option<f64>) -> Option<RqaResult> {
     } else {
         0.0
     };
+    // vertical_points is from the full matrix; total_recurrences * 2 normalizes
+    // upper-triangle count to full-matrix count (exact for symmetric R)
     let laminarity = if total_recurrences > 0 {
         vertical_points as f64 / (total_recurrences as f64 * 2.0)
     } else {
@@ -265,7 +279,7 @@ fn rqa(series: &[f64], threshold: Option<f64>) -> Option<RqaResult> {
         0.0
     };
 
-    Some(RqaResult {
+    Ok(RqaResult {
         determinism: determinism.min(1.0),
         laminarity: laminarity.min(1.0),
         trapping_time,
@@ -273,7 +287,7 @@ fn rqa(series: &[f64], threshold: Option<f64>) -> Option<RqaResult> {
     })
 }
 
-// ─── Transfer Entropy (Schreiber 2000) ─────────────────────────────
+// ─── Transfer Entropy (Schreiber 2000) ────────────────────────────
 // Binned estimation: discretize into 3 levels (terciles).
 
 fn discretize(arr: &[f64]) -> Vec<u8> {
@@ -282,85 +296,95 @@ fn discretize(arr: &[f64]) -> Vec<u8> {
     let t1 = sorted[sorted.len() / 3];
     let t2 = sorted[2 * sorted.len() / 3];
     arr.iter()
-        .map(|&v| if v <= t1 { 0 } else if v <= t2 { 1 } else { 2 })
+        .map(|&v| {
+            if v <= t1 {
+                0
+            } else if v <= t2 {
+                1
+            } else {
+                2
+            }
+        })
         .collect()
 }
 
-fn transfer_entropy(source: &[f64], target: &[f64], lag: usize) -> Option<f64> {
+/// TE(source -> target): does knowing source's past reduce uncertainty
+/// about target's future, beyond what target's own past provides?
+///
+/// `TE(S->T) = sum p(t_fut, t_cur, s_cur) * log2[ p(t_fut|t_cur,s_cur) / p(t_fut|t_cur) ]`
+fn transfer_entropy(source: &[f64], target: &[f64], lag: usize) -> SignalResult<f64> {
     let n = source.len().min(target.len());
     if n < 30 {
-        return None;
+        return Err(SignalError::InsufficientData { needed: 30, got: n });
     }
 
     let s = discretize(&source[..n]);
     let t = discretize(&target[..n]);
 
-    // Count joint and marginal probabilities
-    // TE(S->T) = sum p(t+1, t, s) * log2( p(t+1|t,s) / p(t+1|t) )
-    let mut counts: HashMap<(u8, u8, u8), u32> = HashMap::new();     // (tNext, tPrev, sPrev)
-    let mut count_t: HashMap<u8, u32> = HashMap::new();               // tPrev
-    let mut count_ts: HashMap<(u8, u8), u32> = HashMap::new();        // (tPrev, sPrev)
-    let mut count_tnext: HashMap<(u8, u8), u32> = HashMap::new();     // (tNext, tPrev)
+    let mut joint: HashMap<(u8, u8, u8), u32> = HashMap::new(); // (t_fut, t_cur, s_cur)
+    let mut count_t_cur: HashMap<u8, u32> = HashMap::new();
+    let mut count_t_cur_s_cur: HashMap<(u8, u8), u32> = HashMap::new();
+    let mut count_t_fut_t_cur: HashMap<(u8, u8), u32> = HashMap::new();
     let mut total: u32 = 0;
 
-    for i in lag..(n - 1) {
-        let t_prev = t[i - lag];
-        let s_prev = s[i - lag];
-        let t_next = t[i];
+    for i in lag..n {
+        let t_cur = t[i - lag];
+        let s_cur = s[i - lag];
+        let t_fut = t[i];
 
-        *counts.entry((t_next, t_prev, s_prev)).or_insert(0) += 1;
-        *count_t.entry(t_prev).or_insert(0) += 1;
-        *count_ts.entry((t_prev, s_prev)).or_insert(0) += 1;
-        *count_tnext.entry((t_next, t_prev)).or_insert(0) += 1;
+        *joint.entry((t_fut, t_cur, s_cur)).or_insert(0) += 1;
+        *count_t_cur.entry(t_cur).or_insert(0) += 1;
+        *count_t_cur_s_cur.entry((t_cur, s_cur)).or_insert(0) += 1;
+        *count_t_fut_t_cur.entry((t_fut, t_cur)).or_insert(0) += 1;
         total += 1;
     }
 
     if total < 20 {
-        return None;
+        return Err(SignalError::InsufficientData {
+            needed: 20,
+            got: total as usize,
+        });
     }
 
-    let tf = total as f64;
+    let tf = f64::from(total);
     let mut te = 0.0;
 
-    for (&(t_next, t_prev, s_prev), &count) in &counts {
-        let p_full = count as f64 / tf;
-        let p_ts = *count_ts.get(&(t_prev, s_prev)).unwrap_or(&0) as f64 / tf;
-        let p_tnext = *count_tnext.get(&(t_next, t_prev)).unwrap_or(&0) as f64 / tf;
-        let p_t = *count_t.get(&t_prev).unwrap_or(&0) as f64 / tf;
+    for (&(t_fut, t_cur, s_cur), &count) in &joint {
+        let p_joint = f64::from(count) / tf;
+        let p_ts =
+            f64::from(*count_t_cur_s_cur.get(&(t_cur, s_cur)).unwrap_or(&0)) / tf;
+        #[allow(clippy::similar_names)] // p_ts and p_tt are standard TE notation
+        let p_tt =
+            f64::from(*count_t_fut_t_cur.get(&(t_fut, t_cur)).unwrap_or(&0)) / tf;
+        let p_t = f64::from(*count_t_cur.get(&t_cur).unwrap_or(&0)) / tf;
 
-        if p_ts > 0.0 && p_t > 0.0 && p_tnext > 0.0 {
-            let conditional = (count as f64 / tf) / p_ts;
-            let marginal = p_tnext / p_t;
+        if p_ts > 0.0 && p_t > 0.0 && p_tt > 0.0 {
+            let conditional = f64::from(count) / tf / p_ts;
+            let marginal = p_tt / p_t;
             if conditional > 0.0 && marginal > 0.0 {
-                te += p_full * (conditional / marginal).log2();
+                te += p_joint * (conditional / marginal).log2();
             }
         }
     }
 
-    Some(te.max(0.0))
+    Ok(te.max(0.0))
 }
 
-// ─── Public API ────────────────────────────────────────────────────
+// ─── Public API ───────────────────────────────────────────────────
 
-pub fn compute(stream: &[KeystrokeEvent]) -> DynamicalSignals {
-    let ikis = extract_iki(stream);
-    let hf = extract_hold_flight(stream);
-    let min_len = hf.holds.len().min(hf.flights.len());
+pub fn compute(stream: &[KeystrokeEvent]) -> DynamicalResult {
+    let ikis = IkiSeries::from_stream(stream);
+    let hf = HoldFlight::from_stream(stream);
+    let aligned = hf.aligned_len();
 
-    // Permutation entropy
-    let pe = permutation_entropy(&ikis, 3);
+    let pe = permutation_entropy(&ikis, 3).ok();
+    let alpha = dfa_alpha(&ikis).ok();
+    let rqa_result = rqa(&ikis).ok();
 
-    // DFA
-    let alpha = dfa_alpha(&ikis);
-
-    // RQA
-    let rqa_result = rqa(&ikis, None);
-
-    // Transfer entropy (both directions)
-    let holds_aligned = &hf.holds[..min_len];
-    let flights_aligned = &hf.flights[..min_len];
-    let te_hf = transfer_entropy(holds_aligned, flights_aligned, 1);
-    let te_fh = transfer_entropy(flights_aligned, holds_aligned, 1);
+    let holds = &hf.holds[..aligned];
+    let flights = &hf.flights[..aligned];
+    let te_hf = transfer_entropy(holds, flights, 1).ok();
+    let te_fh = transfer_entropy(flights, holds, 1).ok();
 
     let te_dominance = match (te_hf, te_fh) {
         (Some(hf_val), Some(fh_val)) if (hf_val + fh_val) > 0.0 => {
@@ -375,18 +399,118 @@ pub fn compute(stream: &[KeystrokeEvent]) -> DynamicalSignals {
         _ => None,
     };
 
-    DynamicalSignals {
-        iki_count: ikis.len() as i32,
-        hold_flight_count: min_len as i32,
+    DynamicalResult {
+        iki_count: ikis.len(),
+        hold_flight_count: aligned,
         permutation_entropy: pe.map(|(n, _)| n),
         permutation_entropy_raw: pe.map(|(_, r)| r),
         dfa_alpha: alpha,
-        rqa_determinism: rqa_result.as_ref().map(|r| r.determinism),
-        rqa_laminarity: rqa_result.as_ref().map(|r| r.laminarity),
-        rqa_trapping_time: rqa_result.as_ref().map(|r| r.trapping_time),
-        rqa_recurrence_rate: rqa_result.as_ref().map(|r| r.recurrence_rate),
+        rqa: rqa_result,
         te_hold_to_flight: te_hf,
         te_flight_to_hold: te_fh,
         te_dominance,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn pe_sorted_is_zero() {
+        let sorted: Vec<f64> = (0..100).map(|i| i as f64).collect();
+        let (normalized, _raw) = permutation_entropy(&sorted, 3).unwrap();
+        assert!(
+            normalized.abs() < 1e-10,
+            "PE of sorted sequence should be 0, got {normalized}"
+        );
+    }
+
+    #[test]
+    fn pe_insufficient_data() {
+        let short = vec![1.0, 2.0, 3.0];
+        assert!(matches!(
+            permutation_entropy(&short, 3),
+            Err(SignalError::InsufficientData { .. })
+        ));
+    }
+
+    #[test]
+    fn pe_normalized_in_unit_interval() {
+        let data: Vec<f64> = (0..200)
+            .map(|i| ((i as f64) * 0.7).sin() * 100.0 + 50.0)
+            .collect();
+        let (normalized, _) = permutation_entropy(&data, 3).unwrap();
+        assert!(
+            (0.0..=1.0).contains(&normalized),
+            "PE should be in [0,1], got {normalized}"
+        );
+    }
+
+    #[test]
+    fn dfa_insufficient_data() {
+        let short = vec![1.0; 20];
+        assert!(matches!(
+            dfa_alpha(&short),
+            Err(SignalError::InsufficientData { .. })
+        ));
+    }
+
+    #[test]
+    fn dfa_positive_for_structured_series() {
+        let data: Vec<f64> = (0..200)
+            .map(|i| ((i as f64) * 0.1).sin() * 50.0 + 100.0)
+            .collect();
+        let alpha = dfa_alpha(&data).unwrap();
+        assert!(alpha > 0.0, "DFA alpha should be positive, got {alpha}");
+    }
+
+    #[test]
+    fn rqa_zero_variance_fails() {
+        let constant = vec![42.0; 50];
+        assert!(matches!(rqa(&constant), Err(SignalError::ZeroVariance { .. })));
+    }
+
+    #[test]
+    fn rqa_values_bounded() {
+        let data: Vec<f64> = (0..100)
+            .map(|i| ((i as f64) * 0.3).sin() * 50.0)
+            .collect();
+        let r = rqa(&data).unwrap();
+        assert!((0.0..=1.0).contains(&r.determinism));
+        assert!((0.0..=1.0).contains(&r.laminarity));
+        assert!((0.0..=1.0).contains(&r.recurrence_rate));
+        assert!(r.trapping_time >= 0.0);
+    }
+
+    #[test]
+    fn te_independent_series_near_zero() {
+        let a: Vec<f64> = (0..100).map(|i| ((i as f64) * 0.1).sin()).collect();
+        let b: Vec<f64> = (0..100).map(|i| ((i as f64) * 0.37 + 2.0).cos()).collect();
+        let te = transfer_entropy(&a, &b, 1).unwrap();
+        assert!(te < 0.5, "TE of independent series should be near 0, got {te}");
+    }
+
+    #[test]
+    fn te_full_range_covered() {
+        // With 30 points and lag 1, should use indices 1..30 (29 iterations)
+        let a: Vec<f64> = (0..30).map(|i| i as f64).collect();
+        let b: Vec<f64> = (0..30).map(|i| (i as f64) * 0.5).collect();
+        assert!(transfer_entropy(&a, &b, 1).is_ok());
+    }
+
+    #[test]
+    fn te_symmetric_zero() {
+        // TE of a series with itself should still be >= 0
+        let a: Vec<f64> = (0..50).map(|i| ((i as f64) * 0.2).sin()).collect();
+        let te = transfer_entropy(&a, &a, 1).unwrap();
+        assert!(te >= 0.0);
+    }
+
+    #[test]
+    fn compute_empty_stream() {
+        let result = compute(&[]);
+        assert_eq!(result.iki_count, 0);
+        assert_eq!(result.hold_flight_count, 0);
+        assert!(result.permutation_entropy.is_none());
     }
 }

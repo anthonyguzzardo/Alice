@@ -10,7 +10,7 @@ The backlash is real and growing:
 - The McMindfulness critique applies: companies offer meditation apps while maintaining the workload that causes burnout
 - Academic literature documents that corporate wellness programs shift health responsibility onto individuals while ignoring systemic causes
 - Calm's Trustpilot rating: 1.8/5. Headspace: 2.0/5. Dominant complaints are billing traps and streak anxiety.
-- 91% of self-trackers experience tracking-related stress (2025 survey, n=2,999)
+- Personal quantification reduces enjoyment and intrinsic motivation (Etkin 2016, JCR, 6 experiments); transparent health monitoring can trigger pathological self-monitoring (Rosman et al. 2021, NIH-funded)
 - The Global Wellness Summit named "The Over-Optimization Backlash" a top-10 trend for 2026
 
 The progressive HR leader knows this. They want employee cognitive wellbeing without the Panopticon. They want signal without surveillance.

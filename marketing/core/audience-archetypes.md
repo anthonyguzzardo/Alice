@@ -68,7 +68,7 @@ Self-surveillance replaced self-awareness. The number became more real than the 
 Nothing to track. No metrics visible. No streaks to maintain. No score to optimize. The signal engine runs underneath, but the user never sees it. The experience is answering one question, not managing a dashboard. Engagement is intrinsic (the question matters) not extrinsic (the streak is at stake).
 
 ### Scale Signal
-91% of self-trackers experience tracking stress. One-third of wearable buyers abandon within 6 months. 86% of Gen Z actively reducing screen time. The Global Wellness Summit named this a top-10 trend for 2026.
+Personal quantification reduces enjoyment and intrinsic motivation (Etkin 2016, JCR). One-third of wearable buyers abandon within 6 months. 86% of Gen Z actively reducing screen time. The Global Wellness Summit named this a top-10 trend for 2026.
 
 ---
 
@@ -201,7 +201,7 @@ All five archetypes share:
 | Archetype | Lead Message | Supporting Evidence |
 |---|---|---|
 | Journal Burners | "Your answers aren't for you to review. They're for better questions tomorrow." | Pennebaker: benefits identical whether kept or destroyed |
-| Tracker Quitters | "We track nothing you can see." | 91% tracking stress; Duke study on measurement harm |
+| Tracker Quitters | "We track nothing you can see." | Etkin 2016 (JCR): quantification reduces enjoyment; one-third abandon wearables in 6mo |
 | Depth Seekers | "One question. Every day. No score." | Stanford: AI affirms 49% more than humans |
 | Privacy Refugees | "The journal that forgets so you don't have to." | 3M+ Burn After Writing; PTSD self-censorship data |
 | Confession Posters | "Depth, not data." | 13 secrets per person; physical weight of secrets |

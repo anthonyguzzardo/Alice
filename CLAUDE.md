@@ -166,11 +166,67 @@ src-rs/             # Rust native signal engine
 
 ---
 
+## Rust Signal Engine (`src-rs/`)
+
+The Rust crate is not a TypeScript port. It is a native signal engine that must be written to Rust's standards, not JavaScript's.
+
+### Type Discipline
+
+- **Newtypes for domain separation**: `IkiSeries`, `HoldTimes`, `FlightTimes` are distinct types via newtype wrappers with `Deref<Target=[f64]>`. Never pass raw `&[f64]` where a typed series is expected. If you add a new series kind, wrap it.
+- **`SignalError` enum over `Option`**: Internal signal functions return `SignalResult<T>`. The error variant (`InsufficientData`, `ZeroVariance`, `DegenerateValue`) preserves *why* a computation failed. Convert to `Option` with `.ok()` only at the napi boundary in `lib.rs`.
+- **Structs get methods**: If a struct has a derived property (e.g. `HoldFlight::aligned_len()`), put it on the struct. Don't compute it inline at the call site.
+- **`KeystrokeEvent` uses `#[serde(rename)]`**: Wire format is `{c, d, u}`. Rust-side fields are `character`, `key_down_ms`, `key_up_ms`. Always use the readable names in Rust code.
+
+### UTF-8 Safety
+
+- **JavaScript cursor positions are UTF-16 code units. Rust strings are UTF-8.** Any code that receives a cursor position or delete count from JS MUST convert through `types::utf16_to_byte_offset()` before indexing into a Rust string. Indexing raw bytes at a UTF-16 offset will panic on any non-ASCII character (curly quotes, accented letters, emoji).
+- **Never use `text.as_bytes()[pos]` with JS-sourced positions.** Use `text[..byte_offset].chars().next_back()` for character inspection.
+
+### napi Boundary (`lib.rs`)
+
+- `lib.rs` is a thin mapping layer. It deserializes JSON, calls module `compute()` functions, and maps internal result types to flat `#[napi(object)]` structs. No signal logic belongs here.
+- napi entry points take `String` by value (required by FFI). Suppress `clippy::needless_pass_by_value` with `#[allow]`.
+- `usize` counts convert to `i32` via `i32::try_from(x).unwrap_or(i32::MAX)`. Never use `as i32`.
+- `Option::None` from Rust becomes `undefined` in JS. The TS integration layer (`libSignalsNative.ts`) coerces these to `null` for postgres.js compatibility.
+
+### Clippy & Linting
+
+- The crate uses `#![allow(clippy::cast_precision_loss)]` at the crate level because all values are bounded by keystroke count (realistically < 50K).
+- `#[allow]` on individual items requires a comment justifying why the lint is a false positive.
+- `clippy::suspicious_operation_groupings` must be suppressed on OLS formulas (`n*Sxx - Sx^2`) with a comment citing the formula.
+- Use `mul_add` where clippy suggests `suboptimal_flops`. It is both faster and more numerically stable.
+- Run `cargo clippy -- -W clippy::all` before committing Rust changes. Zero warnings on standard lints.
+
+### Testing
+
+- Every module has a `#[cfg(test)]` section. If you add a signal computation, add tests.
+- **Golden value tests**: known inputs with pre-computed expected outputs (e.g. PE of sorted sequence = 0).
+- **Invariant tests**: properties that must hold (e.g. entropy >= 0, recurrence_rate in [0,1]).
+- **Error variant tests**: `assert!(matches!(result, Err(SignalError::InsufficientData { .. })))`.
+- **UTF-8 safety tests**: any text reconstruction code must have a test with emoji and multibyte characters that proves it doesn't panic.
+- Run `cargo test` before committing.
+
+### Module Structure
+
+```
+src-rs/src/
+├── lib.rs          # napi boundary: structs + entry points (no logic)
+├── types.rs        # SignalError, KeystrokeEvent, newtypes, utf16 conversion
+├── stats.rs        # mean, std_dev, extract_iki, linreg_slope (#[inline])
+├── dynamical.rs    # PE, DFA, RQA, transfer entropy
+├── motor.rs        # sample entropy, autocorrelation, ex-Gaussian, compression
+└── process.rs      # text reconstruction, pause/burst analysis
+```
+
+Each compute module defines its own result struct (e.g. `DynamicalResult`, `MotorResult`). `lib.rs` maps these to the flat napi output structs.
+
+---
+
 ## Known Gotchas
 - **VoyageAI types in `libEmbeddings.ts`**: The `voyageai` package is imported via `createRequire` (CJS shim in ESM). TypeScript can't resolve types cleanly through this path. If type errors resurface on `VoyageAIClient` or `result` being `unknown`, the fix is: extract the module ref separately, use `InstanceType<typeof VoyageAIClient>` for the type alias, and cast embed responses to `{ data?: Array<{ embedding?: number[] }> }`.
 - **PostgreSQL camelCase aliases**: PG lowercases unquoted identifiers. Use double quotes for camelCase aliases in SQL: `SELECT col AS "camelCase"`.
 - **JSONB auto-parsing**: The postgres driver auto-parses JSONB columns into JS objects. Functions returning JSONB fields that callers expect as strings must re-stringify them.
-- **Rust native module**: Loaded via `createRequire` in `libSignalsNative.ts`. The `.node` file is platform-specific (`alice-signals.darwin-arm64.node`). If it fails to load, all three signal families fall back to TypeScript automatically. Rebuild with `npm run build:rust` after changing `src-rs/` code.
+- **Rust native module**: Loaded via `createRequire` in `libSignalsNative.ts`. The `.node` file is platform-specific (`alice-signals.darwin-arm64.node`). If it fails to load, all three signal families fall back to TypeScript automatically. Rebuild with `npm run build:rust` after changing `src-rs/` code. See **Rust Signal Engine** section above for coding standards.
 
 ---
 

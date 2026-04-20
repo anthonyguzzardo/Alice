@@ -62,7 +62,7 @@ Research covered 40+ products across six categories. Key findings:
 
 **Wellness Platforms** (Calm, Headspace, Woebot, Wysa): Meditation/CBT with journaling bolted on. Woebot had the best clinical evidence and still died (June 2025).
 
-**Quantified Self** (WHOOP, Oura, Exist.io, Gyroscope): Physiological signals, not cognitive. Complementary, not competitive. 91% of trackers experience tracking-related stress.
+**Quantified Self** (WHOOP, Oura, Exist.io, Gyroscope): Physiological signals, not cognitive. Complementary, not competitive. Personal quantification reduces enjoyment and intrinsic motivation (Etkin 2016, JCR).
 
 **Ephemeral/Minimalist** (Drift, Halka, Presently): Closest philosophical neighbors. Share anti-surfacing philosophy but don't learn from history.
 
@@ -75,7 +75,7 @@ Research identified five convergent populations expressing demand for Alice (see
 | Population | Scale Signal | Core Need |
 |---|---|---|
 | Journal Burners | 3M+ "Burn After Writing" copies, 84.5M TikTok views | The act without the artifact |
-| Tracker Quitters | 91% tracking stress, $62.4B digital detox market | Depth without self-surveillance |
+| Tracker Quitters | One-third abandon wearables in 6mo, $62.4B digital detox market | Depth without self-surveillance |
 | Depth Seekers | GlazingGate, Stanford *Science* paper on AI sycophancy | Challenge, not validation |
 | Privacy Refugees | Universal in journaling communities, PTSD self-censorship | Guaranteed invisibility |
 | Confession Posters | 6M+ members in confession subreddits | Externalize without consequence |
@@ -87,7 +87,8 @@ Conservative addressable estimate: **30-50M people globally** who would recogniz
 - Streaks are harmful (Journal of Consumer Research)
 - Gamification undermines intrinsic motivation (Frontiers in Psychology)
 - Gamification is counterproductive for depressed populations (PMC)
-- 91% of self-trackers experience tracking-related stress (2025 survey, n=2,999)
+- Personal quantification reduces enjoyment and intrinsic motivation (Etkin 2016, JCR, 6 experiments)
+- Transparent health monitoring can trigger pathological self-monitoring behavior (Rosman et al. 2021, NIH-funded)
 - Daily emotional journaling can become rumination (Pennebaker)
 - Writing benefits are identical whether kept or destroyed (Pennebaker, 200+ studies)
 - AI feedback increases self-reflection depth by 41% (University of Michigan, 2024)
