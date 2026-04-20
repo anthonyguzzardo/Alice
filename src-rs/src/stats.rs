@@ -83,6 +83,22 @@ pub fn digamma(mut x: f64) -> f64 {
     result
 }
 
+/// Complementary error function erfc(x) = 1 - erf(x).
+/// Abramowitz & Stegun 7.1.26 rational approximation (|ε| < 1.5×10⁻⁷).
+#[inline]
+pub fn erfc(x: f64) -> f64 {
+    let t = 1.0 / 1.0f64.mul_add(0.3275911, x.abs());
+    let poly = t * (0.254829592f64
+        + t * (-0.284496736f64
+            + t * (1.421413741f64 + t * (-1.453152027f64 + t * 1.061405429f64))));
+    let val = poly * (-x * x).exp();
+    if x >= 0.0 {
+        val
+    } else {
+        2.0 - val
+    }
+}
+
 /// Normalize a series to zero mean, unit variance.
 /// Returns the original values if variance is zero.
 #[inline]
@@ -137,6 +153,18 @@ mod tests {
     #[test]
     fn linreg_insufficient() {
         assert!(linreg_slope(&[1.0], &[2.0]).is_none());
+    }
+
+    #[test]
+    fn erfc_known_values() {
+        // erfc(0) = 1.0
+        assert!((erfc(0.0) - 1.0).abs() < 1e-6);
+        // erfc(∞) → 0
+        assert!(erfc(5.0) < 1e-10);
+        // erfc(-∞) → 2
+        assert!((erfc(-5.0) - 2.0).abs() < 1e-10);
+        // erfc(1) ≈ 0.1572992
+        assert!((erfc(1.0) - 0.1572992).abs() < 1e-5);
     }
 
     #[test]

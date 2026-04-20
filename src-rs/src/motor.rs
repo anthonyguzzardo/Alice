@@ -11,7 +11,7 @@ use std::io::Write;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 
-use crate::stats::{mean, std_dev};
+use crate::stats::{erfc, mean, std_dev};
 use crate::types::{FlightTimes, IkiSeries, KeystrokeEvent, SignalError, SignalResult};
 
 // ─── Result types ─────────────────────────────────────────────────
