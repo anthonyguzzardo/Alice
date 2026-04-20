@@ -4,7 +4,7 @@
  * Returns full per-entry detail: behavioral 7D state + semantic 11D state
  * + session summary + session metadata + replay availability + nav.
  *
- * Pulls from the live alice.db.
+ * Pulls from the live PostgreSQL database.
  */
 import type { APIRoute } from 'astro';
 import sql, { getDynamicalSignals, getMotorSignals } from '../../../../lib/db.ts';

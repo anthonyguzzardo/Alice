@@ -73,7 +73,7 @@ export async function retrieveSimilar(
     if (allowedSourceIds && !allowedSourceIds.has(c.embedding_source_id)) continue;
     if (c.source_date && excludeDateSet.has(c.source_date)) continue;
 
-    // sqlite-vec returns L2 distance — lower is more similar
+    // pgvector returns L2 distance — lower is more similar
     // Normalize to a 0-1 similarity score (approximate)
     const similarity = 1 / (1 + c.distance);
 

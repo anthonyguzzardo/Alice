@@ -1,5 +1,5 @@
 /**
- * Embedding pipeline — Voyage AI embeddings stored in sqlite-vec.
+ * Embedding pipeline — Voyage AI embeddings stored in PostgreSQL via pgvector.
  * All Voyage calls gracefully degrade: failures are logged, never fatal.
  */
 import 'dotenv/config';

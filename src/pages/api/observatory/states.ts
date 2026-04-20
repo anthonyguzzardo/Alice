@@ -4,7 +4,7 @@
  * Returns per-entry behavioral 7D + semantic 11D state vectors plus session
  * metadata, joined to question text and date. Designer-facing only.
  *
- * Pulls from the live alice.db (no more simulation hardcoding).
+ * Pulls from the live PostgreSQL database.
  */
 import type { APIRoute } from 'astro';
 import sql from '../../../lib/db.ts';

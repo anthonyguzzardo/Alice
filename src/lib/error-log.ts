@@ -6,8 +6,8 @@
  * and uses .catch(err => console.error(...)). Those errors go to the dev
  * server stdout and vanish when the terminal scrolls or the process restarts.
  * Result: silent pipeline failures (observations not written, entry_states
- * stuck, duplicate questions) that only surface when the user opens SQLite
- * and counts rows.
+ * stuck, duplicate questions) that only surface when the user queries the
+ * database and counts rows.
  *
  * This module appends structured error records to data/errors.log so there is
  * always a permanent, inspectable trail of what failed and when.

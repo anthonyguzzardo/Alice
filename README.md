@@ -268,7 +268,7 @@ Currently the function is not auto-invoked; it runs on demand until a designer-f
 
 ### Designer-Facing Observatory
 
-`/observatory/*` is the designer's instrument view. Never shown to the user. Reads from the live `data/alice.db`.
+`/observatory/*` is the designer's instrument view. Never shown to the user. Reads from the live PostgreSQL database.
 
 **`/observatory` — overview.** Plain-English insights computed from deterministic signals only:
 - *Right now* — notable deviations on the latest entry across both behavioral and semantic spaces (any dimension with |z| > 1).
@@ -330,7 +330,6 @@ There are no cron jobs, no scheduled tasks, no server dependencies. The system i
 
 - Single user, no auth
 - PostgreSQL 17 database (`alice`, connection via `ALICE_PG_URL` env var) with pgvector HNSW-indexed embeddings
-- SQLite backup preserved at `src/lib/db-sqlite.ts` and `data/alice.db`
 - Schema managed by `scripts/create-postgres-schema.sql` with proper PostgreSQL types: `DOUBLE PRECISION` for all timing and signal values, `BOOLEAN` for flags, `DATE` for calendar dates, `TIMESTAMPTZ` for event timestamps, `SMALLINT` for bounded integers with `CHECK` constraints, `JSONB` for structured data
 - Rust native signal engine (`src-rs/`) for compute-heavy algorithms (RQA O(n^2), sample entropy O(n^2*m), DFA, permutation entropy, transfer entropy, ex-Gaussian fitting, process signal replay). Automatic TypeScript fallback. Built via `npm run build:rust`, auto-built on `npm run dev`.
 - Microsecond-precision keystroke capture via `performance.now()` (~5 microsecond resolution). IEEE 754 float64 at every boundary: browser capture, JSON transport, Rust `f64` computation, PostgreSQL `DOUBLE PRECISION` storage. No conversion loss.

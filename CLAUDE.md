@@ -17,7 +17,6 @@ A personal, monastic daily thinking journal. One question per day. No gamificati
 - All db functions are async (return Promise)
 - Seed questions in `src/lib/seeds.ts`
 - Nightly script (`npm run generate`) generates tomorrow's question from past responses
-- SQLite backup preserved at `src/lib/db-sqlite.ts` and `data/alice.db`
 - Rust signal engine in `src-rs/` built via `npm run build:rust`
 - Signal pipeline (`src/lib/signals-native.ts`) loads Rust via napi-rs with automatic TS fallback
 - `npm run build` runs Rust build before Astro build
