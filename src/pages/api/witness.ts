@@ -9,10 +9,10 @@
  * (via the session completion pipeline).
  */
 import type { APIRoute } from 'astro';
-import type { WitnessState } from '../../lib/alice-negative/types.ts';
-import { DEFAULT_WITNESS } from '../../lib/alice-negative/types.ts';
-import { loadPersistedTraits } from '../../lib/alice-negative/interpreter.ts';
-import sql from '../../lib/db.ts';
+import type { WitnessState } from '../../lib/libAliceNegative/libTypes.ts';
+import { DEFAULT_WITNESS } from '../../lib/libAliceNegative/libTypes.ts';
+import { loadPersistedTraits } from '../../lib/libAliceNegative/libInterpreter.ts';
+import sql from '../../lib/libDb.ts';
 
 export const GET: APIRoute = async () => {
   try {
@@ -44,7 +44,7 @@ export const GET: APIRoute = async () => {
   }
 };
 
-async function computeMetadata(currentCount: number, traits: import('../../lib/alice-negative/types.ts').WitnessTraits): Promise<WitnessState> {
+async function computeMetadata(currentCount: number, traits: import('../../lib/libAliceNegative/libTypes.ts').WitnessTraits): Promise<WitnessState> {
   const mass = Math.min(1, Math.log(1 + currentCount) / Math.log(501));
 
   const lastEntryRows = await sql`

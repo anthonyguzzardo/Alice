@@ -7,7 +7,7 @@
  * Pulls from the live PostgreSQL database.
  */
 import type { APIRoute } from 'astro';
-import sql from '../../../lib/db.ts';
+import sql from '../../../lib/libDb.ts';
 
 export const GET: APIRoute = async () => {
   try {

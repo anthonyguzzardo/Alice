@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { getCommentsForPaper, saveComment } from '../../lib/db.ts';
+import { getCommentsForPaper, saveComment } from '../../lib/libDb.ts';
 
 export const GET: APIRoute = async ({ url }) => {
   const slug = url.searchParams.get('slug');

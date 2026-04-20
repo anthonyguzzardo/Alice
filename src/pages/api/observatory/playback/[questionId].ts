@@ -5,7 +5,7 @@
  * page can render the writing timeline at original tempo.
  */
 import type { APIRoute } from 'astro';
-import sql, { getSessionEvents } from '../../../../lib/db.ts';
+import sql, { getSessionEvents } from '../../../../lib/libDb.ts';
 
 export const GET: APIRoute = async ({ params }) => {
   try {

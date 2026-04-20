@@ -10,8 +10,8 @@
  * Run: npx tsx src/scripts/backfill-signals.ts
  */
 
-import { sql } from '../lib/db.ts';
-import { computeAndPersistDerivedSignals } from '../lib/signal-pipeline.ts';
+import { sql } from '../lib/libDb.ts';
+import { computeAndPersistDerivedSignals } from '../lib/libSignalPipeline.ts';
 
 async function main() {
   const questionIds = await sql`

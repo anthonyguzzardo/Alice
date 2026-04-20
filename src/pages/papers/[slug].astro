@@ -1,6 +1,6 @@
 ---
-import { getPaper } from '../../lib/papers.ts';
-import { getCommentsForPaper } from '../../lib/db.ts';
+import { getPaper } from '../../lib/libPapers.ts';
+import { getCommentsForPaper } from '../../lib/libDb.ts';
 
 const { slug } = Astro.params;
 const paper = getPaper(slug!);

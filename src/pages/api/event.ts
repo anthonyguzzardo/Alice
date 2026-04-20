@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { logInteractionEvent } from '../../lib/db.ts';
+import { logInteractionEvent } from '../../lib/libDb.ts';
 
 export const POST: APIRoute = async ({ request }) => {
   const body = await request.json();

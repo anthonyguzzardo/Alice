@@ -1,12 +1,12 @@
 import type { APIRoute } from 'astro';
-import { saveCalibrationSession, getUsedCalibrationPrompts, saveSessionEvents } from '../../lib/db.ts';
-import { CALIBRATION_PROMPTS } from '../../lib/calibration-prompts.ts';
-import { computeLinguisticDensities } from '../../lib/linguistic.ts';
-import { computeMATTR } from '../../lib/alice-negative/helpers.ts';
-import { runCalibrationExtraction } from '../../lib/calibration-extract.ts';
-import { snapshotCalibrationBaselinesAfterSubmit } from '../../lib/calibration-drift.ts';
-import { computeAndPersistDerivedSignals } from '../../lib/signal-pipeline.ts';
-import { logError } from '../../lib/error-log.ts';
+import { saveCalibrationSession, getUsedCalibrationPrompts, saveSessionEvents } from '../../lib/libDb.ts';
+import { CALIBRATION_PROMPTS } from '../../lib/libCalibrationPrompts.ts';
+import { computeLinguisticDensities } from '../../lib/libLinguistic.ts';
+import { computeMATTR } from '../../lib/libAliceNegative/libHelpers.ts';
+import { runCalibrationExtraction } from '../../lib/libCalibrationExtract.ts';
+import { snapshotCalibrationBaselinesAfterSubmit } from '../../lib/libCalibrationDrift.ts';
+import { computeAndPersistDerivedSignals } from '../../lib/libSignalPipeline.ts';
+import { logError } from '../../lib/utlErrorLog.ts';
 
 export const GET: APIRoute = async () => {
   const used = new Set(await getUsedCalibrationPrompts());

@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { saveQuestionFeedback } from '../../lib/db.ts';
+import { saveQuestionFeedback } from '../../lib/libDb.ts';
 
 export const POST: APIRoute = async ({ request }) => {
   const body = await request.json();

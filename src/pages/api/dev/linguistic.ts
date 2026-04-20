@@ -3,7 +3,7 @@
  * No DB, no persistence — just the math.
  */
 import type { APIRoute } from 'astro';
-import { computeLinguisticDensities } from '../../../lib/linguistic.ts';
+import { computeLinguisticDensities } from '../../../lib/libLinguistic.ts';
 
 export const POST: APIRoute = async ({ request }) => {
   const { text } = await request.json();

@@ -9,13 +9,13 @@
  *   Lexical diversity   — McCarthy & Jarvis (2010) MATTR
  */
 import type { APIRoute } from 'astro';
-import sql from '../../lib/db.ts';
-import type { AliceNegativeSignal, AliceNegativeSignalRaw } from '../../lib/alice-negative/types.ts';
+import sql from '../../lib/libDb.ts';
+import type { AliceNegativeSignal, AliceNegativeSignalRaw } from '../../lib/libAliceNegative/libTypes.ts';
 import {
   avg, variance, stddev, clamp, percentileRank,
   rescaleDelta, normVariance, computeMATTR,
   HEDGING_WORDS, FIRST_PERSON,
-} from '../../lib/alice-negative/helpers.ts';
+} from '../../lib/libAliceNegative/libHelpers.ts';
 
 const RECENT_WINDOW = 7;
 

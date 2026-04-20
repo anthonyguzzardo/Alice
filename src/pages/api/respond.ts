@@ -3,16 +3,16 @@ import sql, {
   saveResponse, getTodaysQuestion, getTodaysResponse,
   saveSessionSummary, saveBurstSequence, getResponseCount,
   updateDeletionEvents, saveSessionEvents, saveSessionMetadata, getBurstSequence,
-} from '../../lib/db.ts';
-import { runGeneration } from '../../lib/generate.ts';
-import { embedResponse } from '../../lib/embeddings.ts';
-import { logError } from '../../lib/error-log.ts';
-import { localDateStr } from '../../lib/date.ts';
-import { computeLinguisticDensities } from '../../lib/linguistic.ts';
-import { computeMATTR } from '../../lib/alice-negative/helpers.ts';
-import { renderWitnessState } from '../../lib/alice-negative/render-witness.ts';
-import { computeSessionMetadata } from '../../lib/session-metadata.ts';
-import { computeAndPersistDerivedSignals } from '../../lib/signal-pipeline.ts';
+} from '../../lib/libDb.ts';
+import { runGeneration } from '../../lib/libGenerate.ts';
+import { embedResponse } from '../../lib/libEmbeddings.ts';
+import { logError } from '../../lib/utlErrorLog.ts';
+import { localDateStr } from '../../lib/utlDate.ts';
+import { computeLinguisticDensities } from '../../lib/libLinguistic.ts';
+import { computeMATTR } from '../../lib/libAliceNegative/libHelpers.ts';
+import { renderWitnessState } from '../../lib/libAliceNegative/libRenderWitness.ts';
+import { computeSessionMetadata } from '../../lib/libSessionMetadata.ts';
+import { computeAndPersistDerivedSignals } from '../../lib/libSignalPipeline.ts';
 
 // Note: runObservation (three-frame + prediction + suppressed question) and
 // runReflection (weekly narrative) removed 2026-04-16 in interpretive-layer

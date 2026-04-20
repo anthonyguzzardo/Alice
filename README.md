@@ -330,10 +330,10 @@ There are no cron jobs, no scheduled tasks, no server dependencies. The system i
 
 - Single user, no auth
 - PostgreSQL 17 database (`alice`, connection via `ALICE_PG_URL` env var) with pgvector HNSW-indexed embeddings
-- Schema managed by `scripts/create-postgres-schema.sql` with proper PostgreSQL types: `DOUBLE PRECISION` for all timing and signal values, `BOOLEAN` for flags, `DATE` for calendar dates, `TIMESTAMPTZ` for event timestamps, `SMALLINT` for bounded integers with `CHECK` constraints, `JSONB` for structured data
+- Schema managed by `db/sql/dbAlice_Tables.sql` (schema `alice`) with proper PostgreSQL types: `DOUBLE PRECISION` for all timing and signal values, `BOOLEAN` for flags, `DATE` for calendar dates, `TIMESTAMPTZ` for event timestamps, `SMALLINT` for bounded integers with `CHECK` constraints, `JSONB` for structured data
 - Rust native signal engine (`src-rs/`) for compute-heavy algorithms (RQA O(n^2), sample entropy O(n^2*m), DFA, permutation entropy, transfer entropy, ex-Gaussian fitting, process signal replay). Automatic TypeScript fallback. Built via `npm run build:rust`, auto-built on `npm run dev`.
 - Microsecond-precision keystroke capture via `performance.now()` (~5 microsecond resolution). IEEE 754 float64 at every boundary: browser capture, JSON transport, Rust `f64` computation, PostgreSQL `DOUBLE PRECISION` storage. No conversion loss.
-- Seed questions in `src/lib/seeds.ts`
+- Seed questions in `src/lib/libSeeds.ts`
 - RAG-based memory: every entry is embedded and retrievable by semantic similarity with recency weighting
 - Contrarian retrieval: deliberately surfaces entries that are most *dissimilar* to current themes
 - Bounded prompt assembly: recent entries (verbatim) + RAG-retrieved older entries + contrarian entries + structured receipts
@@ -375,13 +375,13 @@ There are no cron jobs, no scheduled tasks, no server dependencies. The system i
 - **Per-keystroke event log** — client-side delta-encoded capture (`[offsetMs, cursorPos, deletedCount, insertedText]` tuples), persisted to `tb_session_events` for replay. No cap or decimation needed. Legacy snapshot-format sessions are detected and reconstructed automatically by the playback API.
 - **Calibration content extraction** — `src/lib/calibration-extract.ts`. Sonnet-based structured tag extraction from free-write text.
 - **Session-delta engine** — `src/lib/session-delta.ts`. Same-day journal-vs-calibration behavioral shift across 10 dimensions.
-- **Rust signal engine** -- `src-rs/src/{dynamical,motor,process}.rs`. napi-rs native module. All compute-heavy O(n^2) algorithms (RQA, sample entropy, DFA) run in Rust at ~200x TypeScript speed. `src/lib/signals-native.ts` loads the native module with automatic fallback. Built by `src-rs/build.sh` (auto-invoked by `npm run dev`; installs Rust toolchain if missing; skips rebuild if source unchanged).
+- **Rust signal engine** -- `src-rs/src/{dynamical,motor,process}.rs`. napi-rs native module. All compute-heavy O(n^2) algorithms (RQA, sample entropy, DFA) run in Rust at ~200x TypeScript speed. `src/lib/libSignalsNative.ts` loads the native module with automatic fallback. Built by `src-rs/build.sh` (auto-invoked by `npm run dev`; installs Rust toolchain if missing; skips rebuild if source unchanged).
 - **Signal pipeline** -- `src/lib/signal-pipeline.ts`. Orchestrates all 5 signal families (dynamical, motor, semantic, process, cross-session) as independent fire-and-forget computations after session submission.
 - **Observatory APIs** -- `src/pages/api/observatory/*`. `states`, `synthesis`, `coupling`, `entry/[id]`, `calibration-drift`, `playback/[questionId]`. All read from live PostgreSQL. No simulation hardcoding.
 
 ### Historical Data
 
-Prior schema state (pre-2026-04-16 interpretive layer, pre-slice-3 8D behavioral vectors) is preserved under `zz_archive_*` tables. Data is intact for later methodology work. The ARCHIVE INDEX at the top of `src/lib/db.ts` enumerates every archived table with its source-of-archival reason and migration script. The post-mortem at `notes/architectural-pivot-postmortem.md` explains the reasoning.
+Prior schema state (pre-2026-04-16 interpretive layer, pre-slice-3 8D behavioral vectors) is preserved under `zz_archive_*` tables. Data is intact for later methodology work. The ARCHIVE INDEX at the top of `src/lib/libDb.ts` enumerates every archived table with its source-of-archival reason and migration script. The post-mortem at `notes/architectural-pivot-postmortem.md` explains the reasoning.
 
 ## Commands
 

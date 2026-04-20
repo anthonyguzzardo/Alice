@@ -3,7 +3,7 @@
  * Run: npx tsx src/scripts/generate-question.ts
  */
 import 'dotenv/config';
-import { runGeneration } from '../lib/generate.ts';
+import { runGeneration } from '../lib/libGenerate.ts';
 
 runGeneration()
   .then(() => console.log('Generation complete.'))

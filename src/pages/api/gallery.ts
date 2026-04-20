@@ -6,8 +6,8 @@
  * Days after a witness state use the most recent witness at that point in time.
  */
 import type { APIRoute } from 'astro';
-import sql from '../../lib/db.ts';
-import { DEFAULT_WITNESS } from '../../lib/alice-negative/types.ts';
+import sql from '../../lib/libDb.ts';
+import { DEFAULT_WITNESS } from '../../lib/libAliceNegative/libTypes.ts';
 
 export const GET: APIRoute = async () => {
   // Get distinct session days (by scheduled_for) with real responses

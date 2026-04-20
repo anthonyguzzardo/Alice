@@ -5,7 +5,7 @@
  * cross-domain emotion→behavior coupling. Designer-facing only.
  */
 import type { APIRoute } from 'astro';
-import sql from '../../../lib/db.ts';
+import sql from '../../../lib/libDb.ts';
 
 export const GET: APIRoute = async () => {
   try {

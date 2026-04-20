@@ -1,9 +1,9 @@
 ---
-import AppLayout from '../../layouts/AppLayout.astro';
+import AppLayout from '../../layouts/layApp.astro';
 
 // TODO: pull from user's session, not global single-user db
 // For now, wire to existing question/response system
-import { getTodaysQuestion } from '../../lib/db.ts';
+import { getTodaysQuestion } from '../../lib/libDb.ts';
 
 let question = null;
 try {

@@ -6,7 +6,7 @@
  * reference frame has been stable or drifting over time.
  */
 import type { APIRoute } from 'astro';
-import { getCalibrationHistory } from '../../../lib/db.ts';
+import { getCalibrationHistory } from '../../../lib/libDb.ts';
 
 export const GET: APIRoute = async () => {
   try {

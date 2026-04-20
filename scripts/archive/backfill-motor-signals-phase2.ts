@@ -20,8 +20,8 @@
 
 import Database from 'better-sqlite3';
 import { resolve } from 'node:path';
-import { computeMotorSignals } from '../src/lib/motor-signals.ts';
-import type { KeystrokeEvent } from '../src/lib/dynamical-signals.ts';
+import { computeMotorSignals } from '../src/lib/libMotorSignals.ts';
+import type { KeystrokeEvent } from '../src/lib/libDynamicalSignals.ts';
 
 const DB_PATH = resolve(process.cwd(), 'data/alice.db');
 const db = new Database(DB_PATH);

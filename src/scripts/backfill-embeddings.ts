@@ -4,7 +4,7 @@
  * Run: npm run backfill
  */
 import 'dotenv/config';
-import { backfillEmbeddings } from '../lib/embeddings.ts';
+import { backfillEmbeddings } from '../lib/libEmbeddings.ts';
 
 backfillEmbeddings()
   .then(({ embedded, failed }) => {

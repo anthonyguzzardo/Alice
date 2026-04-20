@@ -10,7 +10,7 @@
  */
 
 import type { APIRoute } from 'astro';
-import { computeVariantTree, SIGNAL_FAMILIES } from '../../lib/signal-families.ts';
+import { computeVariantTree, SIGNAL_FAMILIES } from '../../lib/libSignalFamilies.ts';
 
 export const GET: APIRoute = async () => {
   try {

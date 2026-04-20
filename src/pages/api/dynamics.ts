@@ -12,8 +12,8 @@
  *   Entropy     — Rodriguez (2025) ECTO framework
  */
 import type { APIRoute } from 'astro';
-import { computeEntryStates } from '../../lib/alice-negative/state-engine.ts';
-import { computeDynamics } from '../../lib/alice-negative/dynamics.ts';
+import { computeEntryStates } from '../../lib/libAliceNegative/libStateEngine.ts';
+import { computeDynamics } from '../../lib/libAliceNegative/libDynamics.ts';
 
 export const GET: APIRoute = async () => {
   try {

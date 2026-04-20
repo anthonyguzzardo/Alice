@@ -12,9 +12,9 @@
  * surfaces only the count of recent errors and which jobs produced them.
  */
 import type { APIRoute } from 'astro';
-import sql from '../../lib/db.ts';
-import { localDateStr } from '../../lib/date.ts';
-import { readRecentErrors } from '../../lib/error-log.ts';
+import sql from '../../lib/libDb.ts';
+import { localDateStr } from '../../lib/utlDate.ts';
+import { readRecentErrors } from '../../lib/utlErrorLog.ts';
 
 interface PipelineCoverage {
   embedded: boolean;

@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
-import { getTodaysQuestion, getTodaysResponse } from '../../lib/db.ts';
-import { seedUpcomingQuestions } from '../../lib/schedule.ts';
+import { getTodaysQuestion, getTodaysResponse } from '../../lib/libDb.ts';
+import { seedUpcomingQuestions } from '../../lib/libSchedule.ts';
 
 export const GET: APIRoute = async () => {
   // Ensure questions are seeded

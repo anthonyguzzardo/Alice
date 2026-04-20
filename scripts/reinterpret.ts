@@ -12,17 +12,17 @@
  * Does NOT require the dev server.
  */
 import 'dotenv/config';
-import { sql } from '../src/lib/db.ts';
-import { computeEntryStates } from '../src/lib/alice-negative/state-engine.ts';
-import { computeDynamics, formatDynamicsForRenderer } from '../src/lib/alice-negative/dynamics.ts';
-import { computeEmotionAnalysis, formatEmotionForRenderer } from '../src/lib/alice-negative/emotion-profile.ts';
-import { renderTraits } from '../src/lib/alice-negative/interpreter.ts';
+import { sql } from '../src/lib/libDb.ts';
+import { computeEntryStates } from '../src/lib/libAliceNegative/libStateEngine.ts';
+import { computeDynamics, formatDynamicsForRenderer } from '../src/lib/libAliceNegative/libDynamics.ts';
+import { computeEmotionAnalysis, formatEmotionForRenderer } from '../src/lib/libAliceNegative/libEmotionProfile.ts';
+import { renderTraits } from '../src/lib/libAliceNegative/libInterpreter.ts';
 import {
   saveEntryState,
   saveTraitDynamics,
   saveCouplingMatrix,
   saveEmotionBehaviorCoupling,
-} from '../src/lib/db.ts';
+} from '../src/lib/libDb.ts';
 
 async function main() {
   const [countRow] = await sql`SELECT COUNT(*) as count FROM tb_session_summaries`;

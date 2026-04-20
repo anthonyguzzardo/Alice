@@ -14,13 +14,13 @@
  * zz_archive_*_20260416 tables but not referenced here.
  */
 import type { APIRoute } from 'astro';
-import sql from '../../../lib/db.ts';
+import sql from '../../../lib/libDb.ts';
 import {
   DIM_PLAIN, DIM_HIGH, DIM_LOW, EMO_PLAIN, TREND_VERB,
   CONVERGENCE_HIGH, CONVERGENCE_LOW, RARE_PREFIX,
   LOW_N_DEVIATIONS, LOW_N_TRENDS,
   MIN_N_DEVIATIONS, MIN_N_TRENDS,
-} from '../../../lib/observatory-vocabulary.ts';
+} from '../../../lib/libObservatoryVocabulary.ts';
 
 const BEHAVIORAL_DIMS = ['fluency', 'deliberation', 'revision', 'commitment', 'volatility', 'thermal', 'presence'] as const;
 const SEMANTIC_DIMS = [

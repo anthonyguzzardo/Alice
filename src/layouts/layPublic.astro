@@ -1,0 +1,35 @@
+---
+import BaseLayout from './layBase.astro';
+import PublicNav from '../components/cmpPublicNav.astro';
+import Footer from '../components/cmpFooter.astro';
+
+interface Props {
+  title?: string;
+  description?: string;
+  active?: string;
+  minimal?: boolean;
+}
+
+const { title, description, active = '', minimal = false } = Astro.props;
+---
+
+<BaseLayout title={title} description={description}>
+  <PublicNav active={active} />
+  <main class="public-main">
+    <slot />
+  </main>
+  <Footer minimal={minimal} />
+</BaseLayout>
+
+<style is:global>
+  .public-main {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 2rem;
+    padding-top: 1rem;
+  }
+
+  @media (max-width: 768px) {
+    .public-main { padding: 0 1.25rem; padding-top: 1rem; }
+  }
+</style>

@@ -17,7 +17,7 @@
  *
  * Usage: npx tsx scripts/backfill-slice3-history.ts
  */
-import { sql } from '../src/lib/db.ts';
+import { sql } from '../src/lib/libDb.ts';
 import {
   saveEntryState, getEntryStateCount,
   saveSemanticState, getSemanticStateCount,
@@ -26,13 +26,13 @@ import {
   saveEmotionBehaviorCoupling,
   saveSessionMetadata, getMetadataQuestionIdsAlreadyComputed,
   getBurstSequence,
-} from '../src/lib/db.ts';
-import { computeEntryStates } from '../src/lib/alice-negative/state-engine.ts';
-import { computeSemanticStates, SEMANTIC_DIMENSIONS } from '../src/lib/alice-negative/semantic-space.ts';
-import { computeDynamics } from '../src/lib/alice-negative/dynamics.ts';
-import { computeEmotionAnalysis } from '../src/lib/alice-negative/emotion-profile.ts';
-import { computeSessionMetadata } from '../src/lib/session-metadata.ts';
-import { snapshotCalibrationBaselinesAfterSubmit } from '../src/lib/calibration-drift.ts';
+} from '../src/lib/libDb.ts';
+import { computeEntryStates } from '../src/lib/libAliceNegative/libStateEngine.ts';
+import { computeSemanticStates, SEMANTIC_DIMENSIONS } from '../src/lib/libAliceNegative/libSemanticSpace.ts';
+import { computeDynamics } from '../src/lib/libAliceNegative/libDynamics.ts';
+import { computeEmotionAnalysis } from '../src/lib/libAliceNegative/libEmotionProfile.ts';
+import { computeSessionMetadata } from '../src/lib/libSessionMetadata.ts';
+import { snapshotCalibrationBaselinesAfterSubmit } from '../src/lib/libCalibrationDrift.ts';
 
 async function main() {
   console.log('Backfilling slice-3 architecture against existing history...\n');

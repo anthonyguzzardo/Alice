@@ -7,8 +7,8 @@
  * Pulls from the live PostgreSQL database.
  */
 import type { APIRoute } from 'astro';
-import sql, { getDynamicalSignals, getMotorSignals } from '../../../../lib/db.ts';
-import { computeDynamicalSignals, type KeystrokeEvent } from '../../../../lib/dynamical-signals.ts';
+import sql, { getDynamicalSignals, getMotorSignals } from '../../../../lib/libDb.ts';
+import { computeDynamicalSignals, type KeystrokeEvent } from '../../../../lib/libDynamicalSignals.ts';
 
 export const GET: APIRoute = async ({ params }) => {
   try {
