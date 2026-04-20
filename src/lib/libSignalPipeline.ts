@@ -25,7 +25,7 @@ import {
   computeMotorSignals,
   computeProcessSignals,
 } from './libSignalsNative.ts';
-import type { KeystrokeEvent } from './libDynamicalSignals.ts';
+import type { KeystrokeEvent } from './libSignalsNative.ts';
 import { computeSemanticSignals } from './libSemanticSignals.ts';
 import { computeCrossSessionSignals } from './libCrossSessionSignals.ts';
 import { logError } from './utlErrorLog.ts';
@@ -77,6 +77,7 @@ export async function computeAndPersistDerivedSignals(questionId: number): Promi
   if (stream && stream.length >= 10 && !(await getDynamicalSignals(questionId))) {
     try {
       const ds = computeDynamicalSignals(stream);
+      if (!ds) return; // Rust engine unavailable; skip dynamical signals
       await saveDynamicalSignals(questionId, {
         iki_count: ds.ikiCount,
         hold_flight_count: ds.holdFlightCount,
@@ -102,6 +103,7 @@ export async function computeAndPersistDerivedSignals(questionId: number): Promi
     try {
       const { totalDurationMs } = await getSessionInfo(questionId);
       const ms = computeMotorSignals(stream, totalDurationMs);
+      if (!ms) return; // Rust engine unavailable; skip motor signals
       await saveMotorSignals(questionId, {
         sample_entropy: ms.sampleEntropy,
         iki_autocorrelation_json: ms.ikiAutocorrelation ? JSON.stringify(ms.ikiAutocorrelation) : null,
@@ -152,6 +154,7 @@ export async function computeAndPersistDerivedSignals(questionId: number): Promi
       const eventLogJson = await getEventLogJson(questionId);
       if (eventLogJson) {
         const ps = computeProcessSignals(eventLogJson);
+        if (!ps) return; // Rust engine unavailable; skip process signals
         await saveProcessSignals(questionId, {
           pause_within_word: ps.pauseWithinWord,
           pause_between_word: ps.pauseBetweenWord,

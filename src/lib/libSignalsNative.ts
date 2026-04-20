@@ -1,25 +1,74 @@
 /**
  * Native Rust Signal Engine Bindings
  *
- * Loads the napi-rs native module and exposes typed functions
- * matching the TypeScript signal computation APIs. Falls back
- * to TypeScript implementations if the native module fails to load.
+ * Loads the napi-rs native module and exposes typed functions for signal
+ * computation. Rust is the single source of truth for all signal math.
+ * If the native module fails to load, signal computation returns null
+ * and the pipeline skips that family for the session.
  */
 
 import { createRequire } from 'node:module';
-import { computeDynamicalSignals as computeDynamicalTS, type KeystrokeEvent, type DynamicalSignals } from './libDynamicalSignals.ts';
-import { computeMotorSignals as computeMotorTS, type MotorSignals } from './libMotorSignals.ts';
-import { computeProcessSignals as computeProcessTS, type ProcessSignals } from './libProcessSignals.ts';
+import { logError } from './utlErrorLog.ts';
 
+// ─── Signal types (canonical definitions) ─────────────────────────
+
+export interface KeystrokeEvent {
+  c: string;   // key code
+  d: number;   // keydown offset ms
+  u: number;   // keyup offset ms
+}
+
+export interface DynamicalSignals {
+  ikiCount: number;
+  holdFlightCount: number;
+  permutationEntropy: number | null;
+  permutationEntropyRaw: number | null;
+  peSpectrum: number[] | null;
+  dfaAlpha: number | null;
+  rqaDeterminism: number | null;
+  rqaLaminarity: number | null;
+  rqaTrappingTime: number | null;
+  rqaRecurrenceRate: number | null;
+  teHoldToFlight: number | null;
+  teFlightToHold: number | null;
+  teDominance: number | null;
+}
+
+export interface MotorSignals {
+  sampleEntropy: number | null;
+  ikiAutocorrelation: number[] | null;
+  motorJerk: number | null;
+  lapseRate: number | null;
+  tempoDrift: number | null;
+  ikiCompressionRatio: number | null;
+  digraphLatencyProfile: Record<string, number> | null;
+  exGaussianTau: number | null;
+  exGaussianMu: number | null;
+  exGaussianSigma: number | null;
+  tauProportion: number | null;
+  adjacentHoldTimeCov: number | null;
+}
+
+export interface ProcessSignals {
+  pauseWithinWord: number | null;
+  pauseBetweenWord: number | null;
+  pauseBetweenSentence: number | null;
+  abandonedThoughtCount: number | null;
+  rBurstCount: number | null;
+  iBurstCount: number | null;
+  vocabExpansionRate: number | null;
+  phaseTransitionPoint: number | null;
+  strategyShiftCount: number | null;
+}
+
+// ─── Null coercion helpers ────────────────────────────────────────
 // napi-rs omits Rust Option::None fields entirely, producing undefined.
 // postgres.js rejects undefined values. Coerce to null.
+
 function n(v: number | null | undefined): number | null {
   return v ?? null;
 }
 function na(v: number[] | null | undefined): number[] | null {
-  return v ?? null;
-}
-function ns(v: string | null | undefined): string | null {
   return v ?? null;
 }
 
@@ -75,15 +124,15 @@ try {
   native = require('../../src-rs/alice-signals.darwin-arm64.node') as NativeModule;
   console.log('[signals] Rust engine loaded');
 } catch {
-  console.warn('[signals] Rust engine unavailable, using TypeScript fallback');
+  console.warn('[signals] Rust engine unavailable — signal computation disabled');
 }
 
 export const hasNativeEngine = native !== null;
 
 // ─── Dynamical signals ─────────────────────────────────────────────
 
-export function computeDynamicalSignals(stream: KeystrokeEvent[]): DynamicalSignals {
-  if (!native) return computeDynamicalTS(stream);
+export function computeDynamicalSignals(stream: KeystrokeEvent[]): DynamicalSignals | null {
+  if (!native) return null;
 
   try {
     const t0 = performance.now();
@@ -105,8 +154,8 @@ export function computeDynamicalSignals(stream: KeystrokeEvent[]): DynamicalSign
       teDominance: n(result.teDominance),
     };
   } catch (err) {
-    console.error('[signals] Rust dynamical failed, falling back to TS:', err);
-    return computeDynamicalTS(stream);
+    logError('signalsNative.dynamical', err, { eventCount: stream.length });
+    return null;
   }
 }
 
@@ -115,8 +164,8 @@ export function computeDynamicalSignals(stream: KeystrokeEvent[]): DynamicalSign
 export function computeMotorSignals(
   stream: KeystrokeEvent[],
   totalDurationMs: number,
-): MotorSignals {
-  if (!native) return computeMotorTS(stream, totalDurationMs);
+): MotorSignals | null {
+  if (!native) return null;
 
   try {
     const t0 = performance.now();
@@ -139,15 +188,15 @@ export function computeMotorSignals(
       adjacentHoldTimeCov: n(result.adjacentHoldTimeCov),
     };
   } catch (err) {
-    console.error('[signals] Rust motor failed, falling back to TS:', err);
-    return computeMotorTS(stream, totalDurationMs);
+    logError('signalsNative.motor', err, { eventCount: stream.length });
+    return null;
   }
 }
 
 // ─── Process signals ───────────────────────────────────────────────
 
-export function computeProcessSignals(eventLogJson: string): ProcessSignals {
-  if (!native) return computeProcessTS(eventLogJson);
+export function computeProcessSignals(eventLogJson: string): ProcessSignals | null {
+  if (!native) return null;
 
   try {
     const t0 = performance.now();
@@ -165,7 +214,7 @@ export function computeProcessSignals(eventLogJson: string): ProcessSignals {
       strategyShiftCount: n(result.strategyShiftCount),
     };
   } catch (err) {
-    console.error('[signals] Rust process failed, falling back to TS:', err);
-    return computeProcessTS(eventLogJson);
+    logError('signalsNative.process', err);
+    return null;
   }
 }

@@ -18,7 +18,7 @@ A personal, monastic daily thinking journal. One question per day. No gamificati
 - Seed questions in `src/lib/libSeeds.ts`
 - Nightly script (`npm run generate`) generates tomorrow's question from past responses
 - Rust signal engine in `src-rs/` built via `npm run build:rust`
-- Signal pipeline (`src/lib/libSignalsNative.ts`) loads Rust via napi-rs with automatic TS fallback
+- Signal pipeline (`src/lib/libSignalsNative.ts`) loads Rust via napi-rs. No TS fallback; if Rust is unavailable, signals are null for that session
 - `npm run build` runs Rust build before Astro build
 
 ---
@@ -189,7 +189,7 @@ src-rs/             # Rust native signal engine
 - If you add a new db function, it must be `async`.
 - API routes (`src/pages/api/*.ts`) are async handlers returning `Response` objects.
 - Background jobs (embed, observe, generate, signal computation) fire-and-forget after the HTTP response. Errors go to `data/errors.log` via `src/lib/utlErrorLog.ts`.
-- The signal pipeline runs Rust natively via napi-rs. If the native module fails to load, it falls back to TypeScript automatically. Both paths are async-compatible.
+- The signal pipeline runs Rust natively via napi-rs. Rust is the single source of truth for signal computation. If the native module fails to load, signal computation returns null and the pipeline skips that family for the session. The session still saves; derived signals are absent until `npm run build:rust` is run. The health endpoint exposes `hasNativeEngine` to surface this state.
 
 ---
 
@@ -260,12 +260,9 @@ src-rs/src/
 
 Each compute module defines its own result struct (e.g. `DynamicalResult`, `MotorResult`). `lib.rs` maps these to the flat napi output structs.
 
-### Rust / TS Semantic Drift Risk
+### Single Source of Truth
 
-The TS fallback can produce different values, not just different performance. The signal pipeline falls back to TypeScript when the native module is unavailable, with shape-equivalent return types. However, complex signal logic (I-burst detection, sampleEntropy caps, multi-scale permutation entropy) is implemented independently in both languages and can drift. When adding or modifying a signal, ensure:
-1. Both implementations use the same algorithm with the same parameters.
-2. A parity test compares Rust and TS output on a shared synthetic input.
-3. The health endpoint exposes `rustEngine: true/false` so operators can detect degraded mode.
+Rust is the only implementation of signal computation. There is no TypeScript fallback. A measurement instrument cannot have two implementations, because two implementations can disagree, and disagreement between sources of truth is indistinguishable from a bug. If the instrument is unavailable (native module not built), the measurement doesn't happen. The session saves; derived signals are absent until `npm run build:rust` restores the engine. The health endpoint exposes `rustEngine: true/false` so this state is visible.
 
 ---
 
@@ -273,7 +270,7 @@ The TS fallback can produce different values, not just different performance. Th
 - **VoyageAI types in `libEmbeddings.ts`**: The `voyageai` package is imported via `createRequire` (CJS shim in ESM). TypeScript can't resolve types cleanly through this path. If type errors resurface on `VoyageAIClient` or `result` being `unknown`, the fix is: extract the module ref separately, use `InstanceType<typeof VoyageAIClient>` for the type alias, and cast embed responses to `{ data?: Array<{ embedding?: number[] }> }`.
 - **PostgreSQL camelCase aliases**: PG lowercases unquoted identifiers. Use double quotes for camelCase aliases in SQL: `SELECT col AS "camelCase"`.
 - **JSONB auto-parsing**: The postgres driver auto-parses JSONB columns into JS objects. Functions returning JSONB fields that callers expect as strings must re-stringify them.
-- **Rust native module**: Loaded via `createRequire` in `libSignalsNative.ts`. The `.node` file is platform-specific (`alice-signals.darwin-arm64.node`). If it fails to load, all three signal families fall back to TypeScript automatically. Rebuild with `npm run build:rust` after changing `src-rs/` code. See **Rust Signal Engine** section above for coding standards.
+- **Rust native module**: Loaded via `createRequire` in `libSignalsNative.ts`. The `.node` file is platform-specific (`alice-signals.darwin-arm64.node`). If it fails to load, signal computation returns null and the pipeline skips the affected families. The health endpoint's `rustEngine: false` surfaces this state. Rebuild with `npm run build:rust` after changing `src-rs/` code. See **Rust Signal Engine** section above for coding standards.
 
 ---
 
@@ -285,3 +282,5 @@ The TS fallback can produce different values, not just different performance. Th
 
 ## Philosophy
 Every technical decision should serve depth over speed. If it optimizes for engagement or throughput, it's wrong. The design is the philosophy.
+
+**Single source of truth for measurements.** Every signal is computed by exactly one implementation (the Rust engine). A measurement instrument cannot have two implementations. If the instrument is unavailable, the measurement doesn't happen. A silent wrong answer is worse than no answer.

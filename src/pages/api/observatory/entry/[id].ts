@@ -9,7 +9,7 @@
 import type { APIRoute } from 'astro';
 import sql, { getDynamicalSignals, getMotorSignals } from '../../../../lib/libDb.ts';
 import { logError } from '../../../../lib/utlErrorLog.ts';
-import { computeDynamicalSignals, type KeystrokeEvent } from '../../../../lib/libDynamicalSignals.ts';
+import { computeDynamicalSignals, type KeystrokeEvent } from '../../../../lib/libSignalsNative.ts';
 
 export const GET: APIRoute = async ({ params }) => {
   try {
