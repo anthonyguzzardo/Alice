@@ -15,18 +15,54 @@ import PublicLayout from '../layouts/layPublic.astro';
 
 <PublicLayout title="Alice -- Research" active="research" description="The scientific case for a cognitive instrument built on unmediated writing.">
 
-<article class="research">
-
-  <!-- ===== HERO ===== -->
-  <header class="r-hero">
+<!-- ===== HERO ===== -->
+<header class="r-hero">
+  <div class="r-hero-text">
     <h1>The behavioral sciences have a data problem they haven't named yet.</h1>
     <p class="r-subtitle">AI is changing human behavior faster than the fields that measure it can adapt. The window for capturing unmediated cognitive baselines is closing. This page explains why that matters and what it takes to build an instrument that survives the shift.</p>
-  </header>
+  </div>
+  <div class="r-hero-viz">
+    <canvas id="window-viz" width="480" height="360" aria-hidden="true"></canvas>
+    <div class="r-hero-viz-caption">
+      <span class="r-viz-label-left">Motor noise declining</span>
+      <span class="r-viz-label-right">AI contamination rising</span>
+    </div>
+  </div>
+</header>
 
+<div class="r-layout">
+
+  <!-- ===== SIDEBAR NAV ===== -->
+  <nav class="r-nav" aria-label="Page sections">
+    <div class="r-nav-group">
+      <span class="r-nav-group-label">The Problem</span>
+      <a href="#evidence" class="r-nav-link" data-section="evidence">The evidence base</a>
+      <a href="#population" class="r-nav-link" data-section="population">The wrong population</a>
+      <a href="#window" class="r-nav-link" data-section="window">The closing window</a>
+      <a href="#construct" class="r-nav-link" data-section="construct">Construct replacement</a>
+    </div>
+    <div class="r-nav-group">
+      <span class="r-nav-group-label">The Shift</span>
+      <a href="#precedent" class="r-nav-link" data-section="precedent">Clock-drawing precedent</a>
+      <a href="#paradigm" class="r-nav-link" data-section="paradigm">Self-referential baselines</a>
+      <a href="#gap" class="r-nav-link" data-section="gap">The instrument gap</a>
+    </div>
+    <div class="r-nav-group">
+      <span class="r-nav-group-label">The Instrument</span>
+      <a href="#demand" class="r-nav-link" data-section="demand">Data sources</a>
+      <a href="#landscape" class="r-nav-link" data-section="landscape">Existing instruments</a>
+      <a href="#observer" class="r-nav-link" data-section="observer">The observer effect</a>
+      <a href="#design" class="r-nav-link" data-section="design">Validity requirements</a>
+      <a href="#open" class="r-nav-link" data-section="open">Open questions</a>
+    </div>
+  </nav>
+
+  <!-- ===== CONTENT ===== -->
+  <article class="research">
 
   <!-- ===== SECTION 1: THE EVIDENCE BASE IS THINNER THAN IT LOOKS ===== -->
-  <section class="r-section">
-    <h2>1. The evidence base is thinner than it looks</h2>
+  <section class="r-section" id="evidence">
+    <h2>The evidence base is thinner than it looks</h2>
 
     <p>Keystroke dynamics have emerged as one of the most promising modalities for passive cognitive assessment. Recent studies report impressive numbers:</p>
 
@@ -63,8 +99,8 @@ import PublicLayout from '../layouts/layPublic.astro';
 
 
   <!-- ===== SECTION 2: THE WRONG POPULATION ===== -->
-  <section class="r-section">
-    <h2>2. The studies are on the wrong population</h2>
+  <section class="r-section" id="population">
+    <h2>The studies are on the wrong population</h2>
 
     <p>Keystroke timing can only reflect cognitive processes when typing is automatic. Below roughly 40 words per minute, variation in flight time is dominated by motor search and planning, not cognitive state. The cognitive signal is buried under motor variance that has nothing to do with neurodegeneration.</p>
 
@@ -111,8 +147,8 @@ import PublicLayout from '../layouts/layPublic.astro';
 
 
   <!-- ===== SECTION 3: THE WINDOW ===== -->
-  <section class="r-section">
-    <h2>3. The window is opening. And closing.</h2>
+  <section class="r-section" id="window">
+    <h2>The window is opening. And closing.</h2>
 
     <p>The demographic confound is self-resolving. By 2045, the 60-80 age range will consist almost entirely of lifelong fluent typists. The motor noise floor drops with each decade. The automaticity threshold will be met by default.</p>
 
@@ -144,8 +180,8 @@ import PublicLayout from '../layouts/layPublic.astro';
 
 
   <!-- ===== SECTION 4: CONSTRUCT REPLACEMENT ===== -->
-  <section class="r-section">
-    <h2>4. AI mediation doesn't add noise. It replaces the construct.</h2>
+  <section class="r-section" id="construct">
+    <h2>AI mediation doesn't add noise. It replaces the construct.</h2>
 
     <p>This is the argument the field has not yet engaged with.</p>
 
@@ -194,8 +230,8 @@ import PublicLayout from '../layouts/layPublic.astro';
 
 
   <!-- ===== SECTION 5: THE PRECEDENT ===== -->
-  <section class="r-section">
-    <h2>5. This has happened before</h2>
+  <section class="r-section" id="precedent">
+    <h2>This has happened before</h2>
 
     <p>The clock-drawing test has been a standard neuropsychological screening tool for decades. Draw a clock face showing a specified time. It assesses visuospatial ability, executive function, and semantic memory in a single brief task.</p>
 
@@ -208,8 +244,8 @@ import PublicLayout from '../layouts/layPublic.astro';
 
 
   <!-- ===== SECTION 6: THE PARADIGM SHIFT ===== -->
-  <section class="r-section">
-    <h2>6. From "compared to healthy people" to "compared to yourself"</h2>
+  <section class="r-section" id="paradigm">
+    <h2>From "compared to healthy people" to "compared to yourself"</h2>
 
     <p>Every published keystroke-cognition study asks: does this person look impaired compared to a population norm? That is the only question available from a one-time lab visit.</p>
 
@@ -251,8 +287,8 @@ import PublicLayout from '../layouts/layPublic.astro';
 
 
   <!-- ===== SECTION 7: THE INSTRUMENT GAP ===== -->
-  <section class="r-section">
-    <h2>7. The instrument gap</h2>
+  <section class="r-section" id="gap">
+    <h2>The instrument gap</h2>
 
     <p>The current research landscape is fragmented into two silos that do not talk to each other.</p>
 
@@ -303,93 +339,228 @@ import PublicLayout from '../layouts/layPublic.astro';
   </section>
 
 
-  <!-- ===== SECTION 8: DEMAND ===== -->
-  <section class="r-section">
-    <h2>8. The market is already asking</h2>
+  <!-- ===== SECTION 8: DATA SOURCES ===== -->
+  <section class="r-section" id="demand">
+    <h2>The data already exists. It is not being captured.</h2>
 
-    <p>Five distinct populations are expressing the same unmet need without knowing they are describing the same product.</p>
+    <p>Longitudinal cognitive research requires dense, daily, naturalistic writing from the same person over years. That data does not exist in any research corpus. But the writing behavior that would produce it is already happening at scale, outside any research context.</p>
 
     <div class="r-demand-grid">
       <div class="r-demand-card">
-        <h3>Journal Burners</h3>
-        <div class="r-demand-stat">3M+ copies sold</div>
-        <p>"Burn After Writing" sold 3 million copies. 84.5 million TikTok views. Pennebaker's 200+ studies confirm: the therapeutic benefit of writing is identical whether the output is kept or destroyed.</p>
+        <h3>Expressive writing</h3>
+        <div class="r-demand-stat">200+ studies</div>
+        <p>Pennebaker's body of work establishes that the therapeutic benefit of emotional writing is identical whether the output is kept or destroyed. Millions are already writing daily with no expectation of re-reading. "Burn After Writing" sold 3 million copies.</p>
       </div>
       <div class="r-demand-card">
-        <h3>Tracker Quitters</h3>
+        <h3>Unmediated contexts</h3>
+        <div class="r-demand-stat">Declining</div>
+        <p>Private journaling remains one of the last writing contexts where autocomplete, predictive text, and AI assistance are not the default. This is the writing environment where keystroke signals retain construct validity. It is shrinking.</p>
+      </div>
+      <div class="r-demand-card">
+        <h3>Self-tracking fatigue</h3>
         <div class="r-demand-stat">91% report stress</div>
-        <p>91% of self-trackers experience tracking-related stress. One-third of wearable buyers abandon within six months. The Global Wellness Summit named anti-optimization a top-10 trend for 2026.</p>
+        <p>91% of self-trackers experience tracking-related stress. One-third of wearable buyers abandon within six months. The population that has rejected visible quantification may be more willing to participate in measurement they do not see.</p>
       </div>
       <div class="r-demand-card">
-        <h3>Depth Seekers</h3>
-        <div class="r-demand-stat">49% more affirmation</div>
-        <p>Stanford published in Science: AI chatbots affirm users 49% more than humans and endorse 47% of explicitly harmful actions. GlazingGate forced an OpenAI rollback.</p>
+        <h3>Anonymized externalizing</h3>
+        <div class="r-demand-stat">6M+ participants</div>
+        <p>Communities like r/offmychest and r/UnsentLetters function as imperfect black boxes. People write to externalize without the writing coming back. The behavior pattern matches what a research instrument would ask of participants.</p>
       </div>
       <div class="r-demand-card">
-        <h3>Privacy Refugees</h3>
+        <h3>Observer-effect sensitivity</h3>
         <div class="r-demand-stat">Universal self-censorship</div>
-        <p>Documented across journaling communities. PTSD forums show the sharpest signal: "I censor everything I write. Nowhere is safe and nothing is truly private."</p>
-      </div>
-      <div class="r-demand-card">
-        <h3>Confession Posters</h3>
-        <div class="r-demand-stat">6M+ members</div>
-        <p>r/offmychest, r/TrueOffMyChest, r/UnsentLetters serve as imperfect black boxes. People use them because they need to externalize something without it coming back.</p>
+        <p>Documented across journaling communities and clinical populations. PTSD forums show the sharpest signal. People who would produce the most clinically valuable writing data are the most likely to censor themselves when they know they are being observed.</p>
       </div>
     </div>
 
-    <div class="r-demand-total">
-      <span class="r-demand-total-number">30-50M</span>
-      <span class="r-demand-total-label">conservative global addressable market, overlap-adjusted</span>
-    </div>
+    <p>The research problem is not participant recruitment. It is instrument design. People are already writing daily, in private, with no expectation of feedback. What is missing is an instrument that captures process-level data from that writing without disrupting the conditions that make it scientifically valuable.</p>
   </section>
 
 
-  <!-- ===== SECTION 9: WHAT IT TAKES ===== -->
-  <section class="r-section">
-    <h2>9. What the instrument looks like</h2>
+  <!-- ===== SECTION 9: EXISTING INSTRUMENTS ===== -->
+  <section class="r-section" id="landscape">
+    <h2>Existing instruments and what they measure</h2>
 
-    <p>The science constrains the design. An instrument that survives the closing window must satisfy every requirement above. It must also solve the retention problem that kills every longitudinal study: participants have to actually use it, daily, for years.</p>
+    <p>Several approaches to longitudinal behavioral and cognitive measurement exist. Each captures some of the signal channels an instrument would need. None combines them. The gaps are structural, not accidental.</p>
 
-    <p>The design that satisfies all of these constraints simultaneously:</p>
+    <div class="r-landscape-grid">
+      <div class="r-landscape-card">
+        <h3>AI-assisted journaling</h3>
+        <div class="r-landscape-names">Rosebud, Reflection, Life Note, Mindsera</div>
+        <div class="r-landscape-has">
+          <span class="r-landscape-check">Learns from user history</span>
+          <span class="r-landscape-check">Content analysis</span>
+        </div>
+        <div class="r-landscape-lacks">
+          <span class="r-landscape-x">Surfaces analysis back to participant</span>
+          <span class="r-landscape-x">No keystroke-level process capture</span>
+          <span class="r-landscape-x">Feedback loop contaminates behavioral signal</span>
+        </div>
+        <p class="r-landscape-failure">Showing the participant what the system has learned creates a reflexive loop: the participant writes about the patterns they were shown, which the system detects as new patterns. The instrument alters the construct it measures.</p>
+      </div>
+
+      <div class="r-landscape-card">
+        <h3>Self-report mood tracking</h3>
+        <div class="r-landscape-names">Daylio, Bearable, How We Feel</div>
+        <div class="r-landscape-has">
+          <span class="r-landscape-check">Longitudinal architecture</span>
+        </div>
+        <div class="r-landscape-lacks">
+          <span class="r-landscape-x">Self-reported, not behavioral</span>
+          <span class="r-landscape-x">No process-level data</span>
+          <span class="r-landscape-x">Gamification introduces measurement artifacts</span>
+        </div>
+        <p class="r-landscape-failure">Captures what the participant reports feeling, not how they are processing. Self-report is subject to recall bias, social desirability effects, and alexithymia. Gamification mechanics (streaks, scores) create engagement patterns that confound the signal.</p>
+      </div>
+
+      <div class="r-landscape-card">
+        <h3>Physiological wearables</h3>
+        <div class="r-landscape-names">WHOOP, Oura, Apple Watch, Exist.io</div>
+        <div class="r-landscape-has">
+          <span class="r-landscape-check">Dense longitudinal data</span>
+          <span class="r-landscape-check">Personal baselines</span>
+        </div>
+        <div class="r-landscape-lacks">
+          <span class="r-landscape-x">Cardiovascular, not cognitive</span>
+          <span class="r-landscape-x">Surfaces all data to participant</span>
+          <span class="r-landscape-x">No writing-process signals</span>
+        </div>
+        <p class="r-landscape-failure">Measures autonomic readiness, not cognitive process. Transparent scoring creates optimization behavior: participants modify their behavior to improve the score rather than the underlying state. The instrument changes what it measures (Goodhart's law).</p>
+      </div>
+
+      <div class="r-landscape-card">
+        <h3>Clinical cognitive batteries</h3>
+        <div class="r-landscape-names">MoCA, MMSE, clock-drawing, computerized batteries</div>
+        <div class="r-landscape-has">
+          <span class="r-landscape-check">Validated constructs</span>
+          <span class="r-landscape-check">Clinical utility</span>
+        </div>
+        <div class="r-landscape-lacks">
+          <span class="r-landscape-x">Cross-sectional only</span>
+          <span class="r-landscape-x">Task-constrained, not ecological</span>
+          <span class="r-landscape-x">Cannot sustain daily administration</span>
+        </div>
+        <p class="r-landscape-failure">A 45-minute assessment every 12 months cannot detect gradual trajectory shifts. Practice effects accumulate with repeated administration. These instruments diagnose after clinical threshold. They were not designed for early detection of pre-clinical drift.</p>
+      </div>
+
+      <div class="r-landscape-card">
+        <h3>Digital therapeutics</h3>
+        <div class="r-landscape-names">Woebot (discontinued 2025), Wysa, Headspace, Calm</div>
+        <div class="r-landscape-has">
+          <span class="r-landscape-check">Daily engagement architecture</span>
+        </div>
+        <div class="r-landscape-lacks">
+          <span class="r-landscape-x">Journaling is a bolt-on, not the primary modality</span>
+          <span class="r-landscape-x">Scripted interactions, not generative</span>
+          <span class="r-landscape-x">No behavioral signal computation</span>
+        </div>
+        <p class="r-landscape-failure">Woebot had the strongest clinical evidence of any digital mental health tool and ceased operations in June 2025. Scripted content libraries depreciate. They do not accumulate participant-specific longitudinal records.</p>
+      </div>
+
+      <div class="r-landscape-card">
+        <h3>Ephemeral writing tools</h3>
+        <div class="r-landscape-names">Drift, Halka, Presently</div>
+        <div class="r-landscape-has">
+          <span class="r-landscape-check">No data surfaced to participant</span>
+        </div>
+        <div class="r-landscape-lacks">
+          <span class="r-landscape-x">No learning from accumulated history</span>
+          <span class="r-landscape-x">No signal computation</span>
+          <span class="r-landscape-x">No data retention</span>
+        </div>
+        <p class="r-landscape-failure">Closest to addressing the observer-effect problem. Entries fade or vanish, removing the feedback loop. But without data retention, no longitudinal analysis is possible. They solve the reactivity problem by abandoning the longitudinal one.</p>
+      </div>
+    </div>
+
+    <p>The structural pattern: every approach that accumulates participant data surfaces it back to the participant. Every approach that avoids the observer effect discards the data. No existing instrument combines longitudinal accumulation with participant-blind measurement. The combination is architecturally difficult because the standard model for justifying sustained participant engagement is showing them what you've learned. An instrument that learns but does not show must find a different mechanism for retention.</p>
+  </section>
+
+
+  <!-- ===== SECTION 10: THE OBSERVER EFFECT ===== -->
+  <section class="r-section" id="observer">
+    <h2>The observer effect is not a design preference. It is a validity requirement.</h2>
+
+    <p>This is the hardest design constraint to defend, and the most important to get right.</p>
+
+    <p>The Hawthorne effect (Adair 1984; McCambridge, Witton, and Elbourne 2014) is well-established: participants who know they are being observed modify their behavior. In longitudinal behavioral measurement, this is not a minor confound. It is fatal to the construct. If a participant knows their writing speed is being measured, they write differently. If they know lexical diversity is being tracked, they reach for unusual words. The signal no longer reflects natural cognitive process. It reflects performance.</p>
+
+    <p>Surfacing computed signals to the participant creates a second, deeper problem: optimization. Goodhart's law applies directly. Once the participant sees a metric, they optimize for the metric rather than the state the metric was designed to detect. This is documented in self-tracking research: 91% of metric trackers report tracking-related stress; users of wearable devices modify behavior to improve scores rather than underlying health (Etkin 2016).</p>
+
+    <p>A longitudinal cognitive instrument must therefore satisfy a paradox: it must accumulate behavioral data over years, learn from that data to improve measurement precision, and never show the participant what it has learned. The participant's relationship to the instrument must be with the surface (the question, the writing practice) while the measurement operates underneath, invisible.</p>
+
+    <p>This is not paternalism. It is the same logic that prevents a scale from displaying weight during a body composition study, or a blood pressure cuff from showing readings during an ambulatory monitoring protocol. The measurement must not alter the measured state.</p>
+  </section>
+
+
+  <!-- ===== SECTION 11: INSTRUMENT REQUIREMENTS ===== -->
+  <section class="r-section" id="design">
+    <h2>Requirements for instrument validity</h2>
+
+    <p>The preceding analysis constrains the design. A valid instrument for longitudinal cognitive measurement through naturalistic writing must satisfy all of the following simultaneously. Satisfying five of six produces a flawed instrument, not a slightly less good one.</p>
 
     <div class="r-design-list">
       <div class="r-design-item">
         <span class="r-design-constraint">Ecological validity</span>
-        <span class="r-design-solution">A daily journal question generated from the person's own response history. Not a lab task. Not a cognitive test. Something worth doing for its own sake.</span>
+        <span class="r-design-solution">The writing task must be intrinsically meaningful, not a lab exercise. Participants must want to do it for its own sake, daily, for years. A task perceived as "testing" triggers performance behavior and contaminates the signal.</span>
       </div>
       <div class="r-design-item">
         <span class="r-design-constraint">Unmediated input</span>
-        <span class="r-design-solution">No autocomplete. No predictive text. No AI assistance. The writing must be the person's own, or the signals measure something else.</span>
+        <span class="r-design-solution">No autocomplete, predictive text, or AI assistance during the writing task. Any mediation replaces the cognitive construct being measured (Section 4). The input environment must guarantee that every character reflects a discrete motor and cognitive act.</span>
       </div>
       <div class="r-design-item">
-        <span class="r-design-constraint">Process + content capture</span>
-        <span class="r-design-solution">Every keystroke event timestamped. The submitted text analyzed for linguistic features. Both signal channels, combined.</span>
+        <span class="r-design-constraint">Dual-channel capture</span>
+        <span class="r-design-solution">Both keystroke-level temporal data (process) and submitted text (content) must be captured and analyzed jointly. Neither channel alone can distinguish retrieval difficulty from vocabulary contraction, or cognitive slowing from motor fatigue (Section 7).</span>
       </div>
       <div class="r-design-item">
-        <span class="r-design-constraint">Self-referential baselines</span>
-        <span class="r-design-solution">Deviation from yourself, not from a population norm. Calibration sessions provide within-person same-day controls.</span>
+        <span class="r-design-constraint">Intra-individual baselines</span>
+        <span class="r-design-solution">Deviation must be measured against the participant's own history, not a population norm. Calibration sessions provide within-person same-day controls that account for transient state variation (fatigue, illness, mood).</span>
       </div>
       <div class="r-design-item">
-        <span class="r-design-constraint">Black box</span>
-        <span class="r-design-solution">The user never sees the signals. Not because the signals are secret, but because showing them would contaminate them. Observer effects are not a theoretical concern. They are the primary threat to longitudinal behavioral data.</span>
+        <span class="r-design-constraint">Participant-blind measurement</span>
+        <span class="r-design-solution">Computed signals must never be surfaced to the participant. Awareness of measurement alters the measured behavior (Hawthorne). Awareness of specific metrics triggers optimization (Goodhart). The instrument must learn from accumulated data without creating a feedback loop.</span>
       </div>
       <div class="r-design-item">
-        <span class="r-design-constraint">Sustained engagement</span>
-        <span class="r-design-solution">No streaks. No gamification. No dashboard. Question quality from accumulated history creates natural retention without engagement mechanics that produce the anxiety the instrument is trying to avoid measuring.</span>
+        <span class="r-design-constraint">Retention without gamification</span>
+        <span class="r-design-solution">Sustained daily engagement over years cannot rely on streaks, scores, or dashboards, as these are measurement artifacts. The instrument must generate sufficient intrinsic value through the practice itself. Improving question quality from accumulated response history is one mechanism.</span>
       </div>
     </div>
   </section>
 
 
-  <!-- ===== CLOSE ===== -->
-  <section class="r-section r-close">
-    <p>Alice satisfies all six constraints. It is a working prototype at n=1, accumulating data since April 2026. The gap between "implemented" and "validated" is the work that remains.</p>
+  <!-- ===== SECTION 12: OPEN QUESTIONS ===== -->
+  <section class="r-section" id="open">
+    <h2>Open questions and limitations</h2>
 
-    <p>The baselines need to be accumulating now, so that when the validation studies become possible, the longitudinal records already exist.</p>
+    <p>Alice is a prototype implementation of this instrument design, accumulating data at n=1 since April 2026. It satisfies the six requirements architecturally. Whether it satisfies them in practice is an empirical question that cannot be answered at current scale. The following problems remain open.</p>
+
+    <div class="r-design-list">
+      <div class="r-design-item">
+        <span class="r-design-constraint">Validation</span>
+        <span class="r-design-solution">No longitudinal keystroke-cognition study with validated outcomes exists at any sample size. The instrument is designed to produce the data that would enable such a study. The validation must come from the data, not precede it.</span>
+      </div>
+      <div class="r-design-item">
+        <span class="r-design-constraint">Signal-to-construct mapping</span>
+        <span class="r-design-solution">The mapping between keystroke timing features and cognitive constructs (lexical retrieval, executive function, processing speed) is hypothesized from the psycholinguistic literature, not validated in a longitudinal context. These mappings are candidates, not established biomarkers.</span>
+      </div>
+      <div class="r-design-item">
+        <span class="r-design-constraint">Retention</span>
+        <span class="r-design-solution">Whether question quality from accumulated history is sufficient to sustain daily engagement over years without gamification is unknown. n=1 cannot answer this. The mechanism is theoretically grounded (personalization increases perceived value) but empirically untested at scale.</span>
+      </div>
+      <div class="r-design-item">
+        <span class="r-design-constraint">Modality migration</span>
+        <span class="r-design-solution">If keyboard input is displaced by voice, gesture, or neural interfaces, the keystroke-specific signals become invalid. The cognitive constructs must be defined independently of the input modality so measurement can migrate. This is a design goal, not a solved problem.</span>
+      </div>
+      <div class="r-design-item">
+        <span class="r-design-constraint">Ethics of silent measurement</span>
+        <span class="r-design-solution">Participant-blind measurement requires informed consent about the existence of measurement without disclosure of specific metrics. The ethical framework for this exists in ambulatory monitoring research but has not been applied to keystroke-level cognitive assessment. The boundaries need explicit articulation.</span>
+      </div>
+    </div>
+
+    <p>The baselines need to be accumulating now, so that when the validation studies become possible, the longitudinal records already exist. The gap between "implemented" and "validated" is the work that remains.</p>
 
     <div class="r-close-links">
       <a href="/papers">Read the papers</a>
-      <a href="/landing">See Alice</a>
+      <a href="/landing">See the prototype</a>
     </div>
   </section>
 
@@ -405,27 +576,213 @@ import PublicLayout from '../layouts/layPublic.astro';
     <p class="r-sources-note">Key citations: Arnold et al. 2020; Banovic et al. 2019; Buchman &amp; Bennett 2011; Buschek et al. 2021; Covington &amp; McFall 2010; Dhakal et al. 2018; Doshi &amp; Hauser 2024; Kim et al. 2024; Li et al. 2025; Meulemans et al. 2022; Pinet et al. 2022; Vishnevsky et al. 2024; Yamaguchi &amp; Logan 2014; Zhou &amp; Liu 2025.</p>
   </footer>
 
-</article>
+  </article>
+
+</div><!-- .r-layout -->
 
 </PublicLayout>
+
+<script>
+  // Scroll-spy: highlight the active nav link based on scroll position
+  document.addEventListener('DOMContentLoaded', () => {
+    const nav = document.querySelector('.r-nav');
+    if (!nav) return;
+
+    const links = nav.querySelectorAll('.r-nav-link');
+    const sections = Array.from(links).map(link => {
+      const id = link.getAttribute('data-section');
+      return id ? document.getElementById(id) : null;
+    }).filter(Boolean) as HTMLElement[];
+
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          const id = entry.target.id;
+          links.forEach(link => {
+            link.classList.toggle('active', link.getAttribute('data-section') === id);
+          });
+        }
+      }
+    }, { rootMargin: '-20% 0px -60% 0px' });
+
+    sections.forEach(s => observer.observe(s));
+  });
+
+  // "Closing window" visualization: two curves converging
+  // Left curve: motor noise declining (demographic resolution)
+  // Right curve: AI contamination rising (construct replacement)
+  // The gap between them is the window.
+  (() => {
+    const canvas = document.getElementById('window-viz') as HTMLCanvasElement;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.width;
+    const h = canvas.height;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+    ctx.scale(dpr, dpr);
+
+    // Read CSS variables from computed style
+    const style = getComputedStyle(document.documentElement);
+    const textFaint = style.getPropertyValue('--text-faint').trim() || '#999';
+    const border = style.getPropertyValue('--border').trim() || '#ddd';
+    const accent = style.getPropertyValue('--accent').trim() || '#8b7355';
+    const negative = style.getPropertyValue('--negative').trim() || '#c44';
+
+    const pad = { top: 40, right: 30, bottom: 50, left: 30 };
+    const plotW = w - pad.left - pad.right;
+    const plotH = h - pad.top - pad.bottom;
+
+    // Axes
+    ctx.strokeStyle = border;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(pad.left, pad.top);
+    ctx.lineTo(pad.left, pad.top + plotH);
+    ctx.lineTo(pad.left + plotW, pad.top + plotH);
+    ctx.stroke();
+
+    // Year labels
+    ctx.fillStyle = textFaint;
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'center';
+    const years = [2025, 2030, 2035, 2040, 2045, 2050, 2055];
+    for (const yr of years) {
+      const x = pad.left + ((yr - 2025) / 30) * plotW;
+      ctx.fillText(String(yr), x, pad.top + plotH + 18);
+
+      // Tick
+      ctx.strokeStyle = border;
+      ctx.globalAlpha = 0.3;
+      ctx.beginPath();
+      ctx.moveTo(x, pad.top);
+      ctx.lineTo(x, pad.top + plotH);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    // Motor noise curve (declining sigmoid)
+    const motorNoise = (t: number) => 0.92 / (1 + Math.exp(4 * (t - 0.45))) + 0.05;
+    // AI contamination curve (rising sigmoid)
+    const aiContam = (t: number) => 0.88 / (1 + Math.exp(-5 * (t - 0.35))) + 0.08;
+
+    const steps = 200;
+
+    // Fill the gap between curves where motor < AI (the window region)
+    // Find where they cross
+    let crossT = 0;
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      if (motorNoise(t) < aiContam(t)) { crossT = t; break; }
+    }
+
+    // Shade the window region (where motor is still above AI)
+    ctx.fillStyle = accent;
+    ctx.globalAlpha = 0.06;
+    ctx.beginPath();
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      if (t > crossT) break;
+      const x = pad.left + t * plotW;
+      const y = pad.top + (1 - motorNoise(t)) * plotH;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    // Walk back along AI curve
+    for (let i = Math.floor(crossT * steps); i >= 0; i--) {
+      const t = i / steps;
+      const x = pad.left + t * plotW;
+      const y = pad.top + (1 - aiContam(t)) * plotH;
+      ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // Draw motor noise curve
+    ctx.strokeStyle = textFaint;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const x = pad.left + t * plotW;
+      const y = pad.top + (1 - motorNoise(t)) * plotH;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    // Draw AI contamination curve
+    ctx.strokeStyle = negative;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const x = pad.left + t * plotW;
+      const y = pad.top + (1 - aiContam(t)) * plotH;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    // Cross point marker
+    const crossX = pad.left + crossT * plotW;
+    const crossY = pad.top + (1 - motorNoise(crossT)) * plotH;
+    ctx.fillStyle = accent;
+    ctx.beginPath();
+    ctx.arc(crossX, crossY, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // "The window" label with dashed bracket
+    const windowMidT = crossT * 0.55;
+    const windowMidX = pad.left + windowMidT * plotW;
+    const motorMidY = pad.top + (1 - motorNoise(windowMidT)) * plotH;
+    const aiMidY = pad.top + (1 - aiContam(windowMidT)) * plotH;
+    const gapMidY = (motorMidY + aiMidY) / 2;
+
+    ctx.fillStyle = accent;
+    ctx.font = 'italic 13px serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('the window', windowMidX, gapMidY + 4);
+
+    // Curve labels
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = textFaint;
+    ctx.fillText('MOTOR NOISE', pad.left + plotW * 0.68, pad.top + (1 - motorNoise(0.7)) * plotH - 8);
+
+    ctx.fillStyle = negative;
+    ctx.fillText('AI CONTAMINATION', pad.left + plotW * 0.55, pad.top + (1 - aiContam(0.7)) * plotH + 18);
+
+    // Y-axis label
+    ctx.save();
+    ctx.fillStyle = textFaint;
+    ctx.font = '9px monospace';
+    ctx.textAlign = 'center';
+    ctx.translate(12, pad.top + plotH / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText('SIGNAL VALIDITY', 0, 0);
+    ctx.restore();
+  })();
+</script>
 
 <style is:global>
   /* ===== Research page styles ===== */
 
-  .research {
-    max-width: 720px;
-    margin: 0 auto;
-    padding-bottom: 6rem;
-  }
-
-  /* --- Hero --- */
+  /* --- Layout: hero full-width, then sidebar + content --- */
   .r-hero {
-    padding: 6rem 0 4rem;
+    display: grid;
+    grid-template-columns: 1fr 480px;
+    gap: 3rem;
+    align-items: center;
+    padding: 5rem 0 3rem;
   }
 
-  .r-hero h1 {
+  .r-hero-text h1 {
     font-family: var(--serif-display);
-    font-size: 2rem;
+    font-size: 2.2rem;
     font-weight: 400;
     line-height: 1.35;
     color: var(--text);
@@ -436,13 +793,97 @@ import PublicLayout from '../layouts/layPublic.astro';
     font-family: var(--serif-body);
     font-size: 1.1rem;
     line-height: 1.7;
+    color: var(--text);
+  }
+
+  /* --- Hero visualization --- */
+  .r-hero-viz {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .r-hero-viz canvas {
+    width: 100%;
+    height: auto;
+    border-radius: 6px;
+  }
+
+  .r-hero-viz-caption {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-faint);
+  }
+
+  .r-layout {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 4rem;
+    align-items: start;
+  }
+
+  /* --- Sidebar nav --- */
+  .r-nav {
+    position: sticky;
+    top: 6rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    padding-top: 3rem;
+  }
+
+  .r-nav-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .r-nav-group-label {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-faint);
+    padding-bottom: 0.35rem;
+    margin-bottom: 0.15rem;
+  }
+
+  .r-nav-link {
+    font-family: var(--serif-body);
+    font-size: 0.85rem;
     color: var(--text-muted);
+    text-decoration: none;
+    padding: 0.2rem 0 0.2rem 0.75rem;
+    border-left: 1px solid transparent;
+    transition: color 0.2s ease, border-color 0.2s ease;
+    line-height: 1.4;
+  }
+
+  .r-nav-link:hover {
+    color: var(--text);
+    text-decoration: none;
+  }
+
+  .r-nav-link.active {
+    color: var(--text);
+    border-left-color: var(--accent);
+  }
+
+  /* --- Content area --- */
+  .research {
+    padding-bottom: 6rem;
+    min-width: 0;
   }
 
   /* --- Sections --- */
   .r-section {
     padding: 3rem 0;
     border-top: 1px solid var(--border);
+    scroll-margin-top: 5rem;
   }
 
   .r-section h2 {
@@ -457,8 +898,9 @@ import PublicLayout from '../layouts/layPublic.astro';
     font-family: var(--serif-body);
     font-size: 1.05rem;
     line-height: 1.75;
-    color: var(--text-muted);
+    color: var(--text);
     margin-bottom: 1.25rem;
+    max-width: 720px;
   }
 
   .r-caption {
@@ -469,7 +911,7 @@ import PublicLayout from '../layouts/layPublic.astro';
   }
 
   .r-muted {
-    color: var(--text-faint);
+    color: var(--text-muted);
     font-size: 0.85rem;
   }
 
@@ -502,13 +944,13 @@ import PublicLayout from '../layouts/layPublic.astro';
     font-family: var(--serif-body);
     font-size: 0.9rem;
     line-height: 1.5;
-    color: var(--text-muted);
+    color: var(--text);
   }
 
   .r-stat-source {
     font-family: var(--mono);
     font-size: 0.75rem;
-    color: var(--text-faint);
+    color: var(--text-muted);
     letter-spacing: 0.02em;
   }
 
@@ -559,7 +1001,7 @@ import PublicLayout from '../layouts/layPublic.astro';
   .r-timeline-detail {
     font-family: var(--serif-body);
     font-size: 0.85rem;
-    color: var(--text-muted);
+    color: var(--text);
   }
 
   .r-bar-container {
@@ -614,7 +1056,7 @@ import PublicLayout from '../layouts/layPublic.astro';
   .r-window-diagram {
     margin: 2.5rem 0;
     padding: 2rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--text-muted);
     border-radius: 6px;
   }
 
@@ -631,11 +1073,16 @@ import PublicLayout from '../layouts/layPublic.astro';
   .r-window-label-right {
     font-family: var(--mono);
     font-size: 0.75rem;
-    color: var(--text-muted);
+    color: var(--text);
     letter-spacing: 0.04em;
     text-transform: uppercase;
     width: 35%;
     line-height: 1.5;
+  }
+
+  .r-window-label-left .r-muted,
+  .r-window-label-right .r-muted {
+    color: var(--text-muted);
   }
 
   .r-window-label-right {
@@ -647,7 +1094,7 @@ import PublicLayout from '../layouts/layPublic.astro';
     left: 50%;
     top: 50%;
     transform: translate(-50%, -50%);
-    border: 1px dashed var(--accent);
+    border: 2px dashed var(--text);
     border-radius: 4px;
     padding: 0.5rem 1.5rem;
     text-align: center;
@@ -655,9 +1102,9 @@ import PublicLayout from '../layouts/layPublic.astro';
 
   .r-window-gap-label {
     font-family: var(--serif-display);
-    font-size: 1rem;
+    font-size: 1.1rem;
     font-style: italic;
-    color: var(--accent);
+    color: var(--text);
   }
 
   .r-window-arrow {
@@ -666,14 +1113,13 @@ import PublicLayout from '../layouts/layPublic.astro';
     gap: 0.75rem;
     font-family: var(--mono);
     font-size: 0.75rem;
-    color: var(--text-faint);
+    color: var(--text);
   }
 
   .r-window-arrow-line {
     flex: 1;
-    height: 1px;
-    background: linear-gradient(to right, var(--positive), var(--text-faint), var(--negative));
-    opacity: 0.5;
+    height: 2px;
+    background: linear-gradient(to right, var(--positive), var(--text-muted), var(--negative));
   }
 
   /* --- Comparison boxes (noise vs replacement) --- */
@@ -703,7 +1149,7 @@ import PublicLayout from '../layouts/layPublic.astro';
     font-family: var(--serif-body);
     font-size: 0.95rem;
     line-height: 1.6;
-    color: var(--text-muted);
+    color: var(--text);
     margin-bottom: 0.75rem;
   }
 
@@ -716,7 +1162,7 @@ import PublicLayout from '../layouts/layPublic.astro';
     font-family: var(--serif-body);
     font-size: 0.85rem;
     font-style: italic;
-    color: var(--text-faint);
+    color: var(--text-muted);
     padding-top: 0.75rem;
     border-top: 1px solid var(--border);
   }
@@ -753,7 +1199,7 @@ import PublicLayout from '../layouts/layPublic.astro';
   .r-evidence-source {
     font-family: var(--mono);
     font-size: 0.7rem;
-    color: var(--text-faint);
+    color: var(--text-muted);
     letter-spacing: 0.04em;
   }
 
@@ -784,7 +1230,7 @@ import PublicLayout from '../layouts/layPublic.astro';
   .r-paradigm-from {
     font-family: var(--mono);
     font-size: 0.75rem;
-    color: var(--text-faint);
+    color: var(--text-muted);
     text-align: right;
     letter-spacing: 0.02em;
   }
@@ -816,7 +1262,7 @@ import PublicLayout from '../layouts/layPublic.astro';
   .r-paradigm-detail {
     font-family: var(--serif-body);
     font-size: 0.85rem;
-    color: var(--text-muted);
+    color: var(--text);
     line-height: 1.5;
   }
 
@@ -840,7 +1286,7 @@ import PublicLayout from '../layouts/layPublic.astro';
     font-size: 0.75rem;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: var(--text-muted);
+    color: var(--text);
     margin-bottom: 0.75rem;
   }
 
@@ -848,7 +1294,7 @@ import PublicLayout from '../layouts/layPublic.astro';
     font-family: var(--serif-body);
     font-size: 0.9rem;
     line-height: 1.6;
-    color: var(--text-muted);
+    color: var(--text);
     margin-bottom: 0;
   }
 
@@ -898,14 +1344,100 @@ import PublicLayout from '../layouts/layPublic.astro';
   .r-req-detail {
     font-family: var(--serif-body);
     font-size: 0.9rem;
-    color: var(--text-muted);
+    color: var(--text);
     line-height: 1.5;
+  }
+
+  /* --- Landscape cards --- */
+  .r-landscape-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.25rem;
+    margin: 2rem 0;
+  }
+
+  .r-landscape-card {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .r-landscape-card h3 {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text);
+    margin: 0;
+  }
+
+  .r-landscape-names {
+    font-family: var(--serif-body);
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-style: italic;
+  }
+
+  .r-landscape-has,
+  .r-landscape-lacks {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+
+  .r-landscape-check,
+  .r-landscape-x {
+    font-family: var(--serif-body);
+    font-size: 0.85rem;
+    line-height: 1.4;
+    padding-left: 1.25rem;
+    position: relative;
+  }
+
+  .r-landscape-check {
+    color: var(--text);
+  }
+
+  .r-landscape-check::before {
+    content: '+';
+    position: absolute;
+    left: 0;
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    color: var(--positive);
+    font-weight: 600;
+  }
+
+  .r-landscape-x {
+    color: var(--text);
+  }
+
+  .r-landscape-x::before {
+    content: '\2013';
+    position: absolute;
+    left: 0;
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    color: var(--negative);
+  }
+
+  .r-landscape-failure {
+    font-family: var(--serif-body) !important;
+    font-size: 0.85rem !important;
+    line-height: 1.5 !important;
+    color: var(--text-muted) !important;
+    margin: 0 !important;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border);
   }
 
   /* --- Demand cards --- */
   .r-demand-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, 1fr);
     gap: 1.25rem;
     margin: 2rem 0;
   }
@@ -916,8 +1448,9 @@ import PublicLayout from '../layouts/layPublic.astro';
     padding: 1.5rem;
   }
 
-  .r-demand-card:last-child {
-    grid-column: 1 / -1;
+  .r-demand-card:nth-child(4),
+  .r-demand-card:nth-child(5) {
+    grid-column: auto;
   }
 
   .r-demand-card h3 {
@@ -925,7 +1458,7 @@ import PublicLayout from '../layouts/layPublic.astro';
     font-size: 0.75rem;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: var(--text-muted);
+    color: var(--text);
     margin-bottom: 0.5rem;
   }
 
@@ -941,32 +1474,8 @@ import PublicLayout from '../layouts/layPublic.astro';
     font-family: var(--serif-body);
     font-size: 0.9rem;
     line-height: 1.6;
-    color: var(--text-muted);
-    margin-bottom: 0;
-  }
-
-  .r-demand-total {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 2rem;
-    margin: 1rem 0 2rem;
-    border: 1px dashed var(--border);
-    border-radius: 6px;
-  }
-
-  .r-demand-total-number {
-    font-family: var(--mono);
-    font-size: 2.5rem;
     color: var(--text);
-    letter-spacing: -0.02em;
-  }
-
-  .r-demand-total-label {
-    font-family: var(--serif-body);
-    font-size: 0.9rem;
-    color: var(--text-faint);
+    margin-bottom: 0;
   }
 
   /* --- Design constraints list --- */
@@ -1004,7 +1513,7 @@ import PublicLayout from '../layouts/layPublic.astro';
   .r-design-solution {
     font-family: var(--serif-body);
     font-size: 0.95rem;
-    color: var(--text-muted);
+    color: var(--text);
     line-height: 1.6;
   }
 
@@ -1062,7 +1571,7 @@ import PublicLayout from '../layouts/layPublic.astro';
     font-family: var(--serif-body);
     font-size: 0.9rem;
     line-height: 1.6;
-    color: var(--text-muted);
+    color: var(--text);
     margin-bottom: 0.75rem;
   }
 
@@ -1076,7 +1585,7 @@ import PublicLayout from '../layouts/layPublic.astro';
     font-family: var(--serif-body);
     font-size: 0.85rem;
     line-height: 1.6;
-    color: var(--text-muted);
+    color: var(--text);
     padding: 0.4rem 0;
     padding-left: 1rem;
     border-left: 1px solid var(--border);
@@ -1087,15 +1596,63 @@ import PublicLayout from '../layouts/layPublic.astro';
     color: var(--text-faint) !important;
   }
 
+  /* --- Tablet --- */
+  @media (max-width: 1024px) {
+    .r-layout {
+      grid-template-columns: 180px 1fr;
+      gap: 2.5rem;
+    }
+    .r-hero {
+      grid-template-columns: 1fr;
+    }
+    .r-hero-viz canvas {
+      max-width: 480px;
+    }
+  }
+
   /* --- Mobile --- */
   @media (max-width: 768px) {
     .r-hero { padding: 4rem 0 2.5rem; }
-    .r-hero h1 { font-size: 1.6rem; }
+    .r-hero-text h1 { font-size: 1.6rem; }
+
+    .r-layout {
+      display: block;
+    }
+
+    .r-nav {
+      position: static;
+      flex-direction: row;
+      flex-wrap: wrap;
+      gap: 0;
+      padding: 1.5rem 0;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 1rem;
+    }
+
+    .r-nav-group {
+      flex-direction: row;
+      flex-wrap: wrap;
+      gap: 0;
+      width: 100%;
+      margin-bottom: 0.75rem;
+    }
+
+    .r-nav-group-label {
+      width: 100%;
+      padding-bottom: 0.25rem;
+      margin-bottom: 0.25rem;
+    }
+
+    .r-nav-link {
+      border-left: none;
+      padding: 0.25rem 0.75rem;
+      font-size: 0.8rem;
+    }
 
     .r-stat-row { grid-template-columns: 1fr; }
     .r-comparison { grid-template-columns: 1fr; }
+    .r-landscape-grid { grid-template-columns: 1fr; }
     .r-demand-grid { grid-template-columns: 1fr; }
-    .r-demand-card:last-child { grid-column: auto; }
 
     .r-silos { grid-template-columns: 1fr; }
     .r-silo-gap { padding: 0.5rem 0; }
