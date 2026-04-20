@@ -1,0 +1,164 @@
+---
+import BaseLayout from '../../layouts/layBase.astro';
+---
+
+<BaseLayout title="Log in - Alice">
+  <div class="auth-page">
+    <a href="/landing" class="auth-back">&larr; Back</a>
+    <div class="auth-card">
+      <h1 class="auth-title">Enter</h1>
+
+      <form class="auth-form" id="login-form">
+        <div class="field">
+          <label for="email">Email</label>
+          <input type="email" id="email" name="email" required autocomplete="email" />
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password" required autocomplete="current-password" />
+        </div>
+        <button type="submit" class="auth-submit">Continue</button>
+      </form>
+
+      <div class="auth-divider"><span>or</span></div>
+
+      <a href="/app" class="auth-bypass">Skip to app (dev bypass)</a>
+
+      <p class="auth-switch">
+        Don't have an account? <a href="/auth/signup">Sign up</a>
+      </p>
+    </div>
+  </div>
+</BaseLayout>
+
+<script is:inline>
+  document.getElementById('login-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    // TODO: real auth
+    window.location.href = '/app';
+  });
+</script>
+
+<style is:global>
+  .auth-page {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+  }
+
+  .auth-back {
+    position: absolute;
+    top: 1.5rem;
+    left: 2rem;
+    font-size: 0.875rem;
+    color: var(--text-muted);
+  }
+
+  .auth-card {
+    width: 100%;
+    max-width: 380px;
+  }
+
+  .auth-title {
+    font-family: var(--serif-display);
+    font-weight: 400;
+    font-size: 1.75rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .auth-sub {
+    color: var(--text-muted);
+    font-size: 0.9375rem;
+    margin-bottom: 2rem;
+  }
+
+  .auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+  }
+
+  .field label {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    letter-spacing: 0.02em;
+  }
+
+  .field input {
+    padding: 0.625rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 0.9375rem;
+    font-family: var(--sans);
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .field input:focus {
+    border-color: var(--border-focus);
+  }
+
+  .auth-submit {
+    margin-top: 0.5rem;
+    padding: 0.75rem;
+    background: var(--text);
+    color: var(--bg);
+    border: none;
+    border-radius: 6px;
+    font-family: var(--sans);
+    font-size: 0.9375rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  .auth-submit:hover { opacity: 0.85; }
+
+  .auth-divider {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin: 1.5rem 0;
+    color: var(--text-faint);
+    font-size: 0.8125rem;
+  }
+  .auth-divider::before,
+  .auth-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .auth-bypass {
+    display: block;
+    text-align: center;
+    padding: 0.625rem;
+    border: 1px dashed var(--border);
+    border-radius: 6px;
+    font-size: 0.8125rem;
+    color: var(--text-faint);
+    transition: color 0.2s, border-color 0.2s;
+  }
+  .auth-bypass:hover {
+    color: var(--text-muted);
+    border-color: var(--border-focus);
+    text-decoration: none;
+  }
+
+  .auth-switch {
+    text-align: center;
+    margin-top: 1.5rem;
+    font-size: 0.875rem;
+    color: var(--text-muted);
+  }
+</style>

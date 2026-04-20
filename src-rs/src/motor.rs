@@ -150,6 +150,12 @@ fn lapse_rate(ikis: &[f64], total_duration_ms: f64) -> SignalResult<f64> {
 
     let mu = mean(ikis);
     let s = std_dev(ikis, Some(mu));
+    // Lapse rate is an estimator (Haag et al. 2020): a zero-variance series has no
+    // temporal variability to distinguish lapses from baseline. Report as ZeroVariance
+    // for consistency with sample_entropy, autocorrelation, adjacent_hold_time_cov.
+    if s == 0.0 {
+        return Err(SignalError::ZeroVariance { len: ikis.len() });
+    }
     let threshold = 3.0f64.mul_add(s, mu);
 
     let lapse_count = ikis.iter().filter(|&&v| v > threshold).count();
@@ -617,15 +623,24 @@ mod tests {
     }
 
     #[test]
-    fn lapse_rate_no_lapses() {
-        // Constant series: no value exceeds mu + 3*std (std = 0)
-        // Zero variance -> error
+    fn lapse_rate_zero_variance_fails() {
+        // Constant series: zero variance means no temporal variability to define lapses.
+        // As an estimator, this is ZeroVariance, consistent with sample_entropy et al.
         let constant = vec![100.0; 30];
-        assert!(lapse_rate(&constant, 60000.0).is_ok());
-        let rate = lapse_rate(&constant, 60000.0).unwrap();
+        assert!(matches!(
+            lapse_rate(&constant, 60000.0),
+            Err(SignalError::ZeroVariance { .. })
+        ));
+    }
+
+    #[test]
+    fn lapse_rate_no_lapses_with_variance() {
+        // Series with variance but no values exceeding mu + 3*std
+        let data: Vec<f64> = (0..30).map(|i| 100.0 + (i as f64) * 0.1).collect();
+        let rate = lapse_rate(&data, 60000.0).unwrap();
         assert!(
             rate.abs() < 1e-10,
-            "Lapse rate of constant should be 0, got {rate}"
+            "Lapse rate should be 0 when no values exceed threshold, got {rate}"
         );
     }
 }

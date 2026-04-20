@@ -16,6 +16,17 @@ use std::collections::HashSet;
 use crate::stats::mean;
 use crate::types::{utf16_to_byte_offset, SignalError, SignalResult};
 
+// ─── UTF-16 length helper ────────────────────────────────────────
+
+/// Count the length of a string in UTF-16 code units.
+/// JS's `string.length` and `deletedCount` are in UTF-16 units.
+/// Rust's `str::len()` returns byte count, which diverges for any
+/// non-ASCII character. This must be used wherever insertion length
+/// is compared against deletion count from the JS event log.
+fn utf16_len(s: &str) -> usize {
+    s.chars().map(|c| c.len_utf16()).sum()
+}
+
 // ─── Types ────────────────────────────────────────────────────────
 
 #[derive(serde::Deserialize)]
@@ -136,7 +147,7 @@ fn abandoned_thought_count(events: &[EventTuple], pause_threshold_ms: f64) -> Op
         }
 
         // Count in UTF-16 code units to match deletedCount from JS
-        let inserted_units: usize = events[i].3.chars().map(|c| c.len_utf16()).sum();
+        let inserted_units: usize = utf16_len(&events[i].3);
         if !(3..=50).contains(&inserted_units) {
             continue;
         }
@@ -314,7 +325,7 @@ fn phase_transition_point(events: &[EventTuple]) -> SignalResult<Option<f64>> {
         let mut deletions = 0usize;
 
         for evt in events.iter().take((i + window_size).min(events.len())).skip(i) {
-            insertions += evt.3.len();
+            insertions += utf16_len(&evt.3);
             deletions += evt.2;
         }
 
@@ -334,7 +345,7 @@ fn strategy_shift_count(events: &[EventTuple], burst_threshold_ms: f64) -> Optio
     let mut current_chars = 0usize;
 
     for i in 0..events.len() {
-        current_chars += events[i].3.len();
+        current_chars += utf16_len(&events[i].3);
 
         let is_gap =
             i < events.len() - 1 && (events[i + 1].0 - events[i].0) > burst_threshold_ms;
@@ -677,6 +688,191 @@ mod tests {
         let r = rate.unwrap();
         assert!(r > 0.0, "vocab expansion rate should be positive, got {r}");
         assert!(r <= 1.5, "vocab expansion rate should be <= 1.5 for unique words, got {r}");
+    }
+
+    // ─── UTF-16 helper tests ───────────────────────────────────────────
+
+    #[test]
+    fn utf16_len_ascii() {
+        assert_eq!(utf16_len("hello"), 5);
+    }
+
+    #[test]
+    fn utf16_len_accented() {
+        // 'e' is 1 byte, 'é' (U+00E9) is 2 bytes but 1 UTF-16 unit
+        assert_eq!(utf16_len("e"), 1);
+        assert_eq!(utf16_len("\u{00E9}"), 1);
+        assert_eq!(utf16_len("caf\u{00E9}"), 4); // same as "cafe"
+    }
+
+    #[test]
+    fn utf16_len_emoji() {
+        // U+1F600 is 4 bytes but 2 UTF-16 units (surrogate pair)
+        assert_eq!(utf16_len("\u{1F600}"), 2);
+        assert_eq!(utf16_len("a\u{1F600}b"), 4); // a(1) + emoji(2) + b(1)
+    }
+
+    // ─── Phase Transition UTF-16 Invariance ─────────────────────────────
+
+    #[test]
+    fn phase_transition_invariant_under_multibyte_substitution() {
+        // Construct two event streams with identical UTF-16 structure:
+        // one ASCII, one with accented characters (é = 1 UTF-16 unit, 2 bytes).
+        // If the signal used .len() (bytes), the accented version would count
+        // insertions as larger, potentially shifting the transition point.
+
+        // Build helper: stream of events with initial insertions then deletions
+        fn make_stream(insert_char: &str) -> Vec<EventTuple> {
+            let mut events = Vec::new();
+            let mut t = 0.0;
+            // 25 insertion events (each inserts 3 copies of the character)
+            for i in 0..25 {
+                let text = insert_char.repeat(3);
+                events.push(EventTuple(t, i * 3, 0, text));
+                t += 100.0;
+            }
+            // 25 deletion events (each deletes 3 UTF-16 units)
+            for _ in 0..25 {
+                events.push(EventTuple(t, 0, 3, String::new()));
+                t += 100.0;
+            }
+            events
+        }
+
+        let ascii_events = make_stream("a");           // 'a': 1 byte, 1 UTF-16 unit
+        let accented_events = make_stream("\u{00E9}");  // 'é': 2 bytes, 1 UTF-16 unit
+
+        let ascii_result = phase_transition_point(&ascii_events);
+        let accented_result = phase_transition_point(&accented_events);
+
+        // Both must produce the same transition point (or both None)
+        match (ascii_result, accented_result) {
+            (Ok(Some(a)), Ok(Some(b))) => {
+                assert!(
+                    (a - b).abs() < 1e-10,
+                    "phase transition should be identical for ASCII ({a}) and accented ({b}) \
+                     streams with same UTF-16 structure"
+                );
+            }
+            (Ok(None), Ok(None)) => {} // both found no transition, also valid
+            (a, b) => panic!(
+                "phase transition results should match: ASCII={a:?}, accented={b:?}"
+            ),
+        }
+    }
+
+    #[test]
+    fn phase_transition_invariant_with_emoji() {
+        // Emoji: U+1F600 is 4 bytes but 2 UTF-16 units.
+        // "ab" is 2 bytes AND 2 UTF-16 units. Same UTF-16 count, different byte count.
+
+        fn make_stream(insert_text: &str, utf16_units_per_insert: usize) -> Vec<EventTuple> {
+            let mut events = Vec::new();
+            let mut t = 0.0;
+            for i in 0..25 {
+                events.push(EventTuple(t, i * utf16_units_per_insert, 0, insert_text.to_string()));
+                t += 100.0;
+            }
+            for _ in 0..25 {
+                events.push(EventTuple(t, 0, utf16_units_per_insert, String::new()));
+                t += 100.0;
+            }
+            events
+        }
+
+        let ascii_events = make_stream("ab", 2);           // 2 bytes, 2 UTF-16 units
+        let emoji_events = make_stream("\u{1F600}", 2);     // 4 bytes, 2 UTF-16 units
+
+        let ascii_result = phase_transition_point(&ascii_events);
+        let emoji_result = phase_transition_point(&emoji_events);
+
+        match (ascii_result, emoji_result) {
+            (Ok(Some(a)), Ok(Some(b))) => {
+                assert!(
+                    (a - b).abs() < 1e-10,
+                    "phase transition should be identical for ASCII ({a}) and emoji ({b}) \
+                     streams with same UTF-16 structure"
+                );
+            }
+            (Ok(None), Ok(None)) => {}
+            (a, b) => panic!(
+                "phase transition results should match: ASCII={a:?}, emoji={b:?}"
+            ),
+        }
+    }
+
+    // ─── Strategy Shift UTF-16 Invariance ───────────────────────────────
+
+    #[test]
+    fn strategy_shift_invariant_under_multibyte_substitution() {
+        // Same structure as the phase transition test: two streams with identical
+        // UTF-16 character counts but different byte lengths.
+        // Short bursts of accented chars vs ASCII, then long bursts.
+
+        fn make_stream(short_char: &str, long_char: &str) -> Vec<EventTuple> {
+            let mut events = Vec::new();
+            let mut t = 0.0;
+            // 20 short bursts: 2 characters each (2 UTF-16 units)
+            for _ in 0..20 {
+                events.push(EventTuple(t, 0, 0, short_char.repeat(2)));
+                t += 100.0;
+                t += 3000.0;
+            }
+            // 20 long bursts: 15 characters each (15 UTF-16 units)
+            for _ in 0..20 {
+                events.push(EventTuple(t, 0, 0, long_char.repeat(15)));
+                t += 100.0;
+                t += 3000.0;
+            }
+            events
+        }
+
+        let ascii_events = make_stream("a", "b");           // 1 byte per char
+        let accented_events = make_stream("\u{00E9}", "\u{00E8}"); // 2 bytes per char, 1 UTF-16 unit each
+
+        let ascii_shifts = strategy_shift_count(&ascii_events, 2000.0);
+        let accented_shifts = strategy_shift_count(&accented_events, 2000.0);
+
+        assert_eq!(
+            ascii_shifts, accented_shifts,
+            "strategy shift count should be identical for ASCII ({ascii_shifts:?}) and \
+             accented ({accented_shifts:?}) streams with same UTF-16 structure"
+        );
+    }
+
+    #[test]
+    fn strategy_shift_invariant_with_emoji() {
+        // "ab" = 2 bytes, 2 UTF-16 units. U+1F600 = 4 bytes, 2 UTF-16 units.
+
+        fn make_stream(burst_text: &str) -> Vec<EventTuple> {
+            let mut events = Vec::new();
+            let mut t = 0.0;
+            // 20 short bursts: 1 unit of text
+            for _ in 0..20 {
+                events.push(EventTuple(t, 0, 0, burst_text.to_string()));
+                t += 100.0;
+                t += 3000.0;
+            }
+            // 20 long bursts: 8 units of text
+            for _ in 0..20 {
+                events.push(EventTuple(t, 0, 0, burst_text.repeat(8)));
+                t += 100.0;
+                t += 3000.0;
+            }
+            events
+        }
+
+        let ascii_events = make_stream("ab");           // 2 bytes, 2 UTF-16 units per unit
+        let emoji_events = make_stream("\u{1F600}");     // 4 bytes, 2 UTF-16 units per unit
+
+        let ascii_shifts = strategy_shift_count(&ascii_events, 2000.0);
+        let emoji_shifts = strategy_shift_count(&emoji_events, 2000.0);
+
+        assert_eq!(
+            ascii_shifts, emoji_shifts,
+            "strategy shift count should be identical for ASCII ({ascii_shifts:?}) and \
+             emoji ({emoji_shifts:?}) streams with same UTF-16 structure"
+        );
     }
 
     // ─── Strategy Shift Tests ────────────────────────────────────────

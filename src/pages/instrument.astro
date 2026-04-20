@@ -1,0 +1,513 @@
+---
+/**
+ * Instrument / architecture page.
+ *
+ * Genre: "technical credibility" page. Shows what Alice actually captures
+ * and how the measurement system works. Not source code, but enough
+ * architecture that a digital health researcher or biomarker developer
+ * sees a real, running system rather than a whitepaper.
+ *
+ * Audience: technically literate people evaluating whether this is real.
+ * Researchers, digital health teams, potential collaborators.
+ */
+import PublicLayout from '../layouts/layPublic.astro';
+---
+
+<PublicLayout title="Alice -- Instrument" active="instrument" description="The measurement architecture: what Alice captures, how signals are computed, and why the design constraints exist.">
+
+<article class="instrument">
+
+  <header class="i-hero">
+    <h1>A running measurement system, not a whitepaper.</h1>
+    <p class="i-lead">Alice captures keystroke-level temporal data and submitted text from daily writing sessions. A native signal engine computes cognitive process markers across three families. The architecture enforces six validity constraints by design, not by policy.</p>
+  </header>
+
+  <!-- ===== CAPTURE ===== -->
+  <section class="i-section" id="capture">
+    <h2>What is captured</h2>
+
+    <p>Every writing session produces two data channels, recorded simultaneously:</p>
+
+    <div class="i-channels">
+      <div class="i-channel">
+        <span class="i-channel-label">Process channel</span>
+        <span class="i-channel-sub">Keystroke stream</span>
+        <ul>
+          <li>Key-down and key-up timestamps (millisecond precision)</li>
+          <li>Character identity for each event</li>
+          <li>Full temporal microstructure: inter-key intervals, hold durations, flight times</li>
+          <li>Deletion events and revision sequences</li>
+          <li>Pause architecture (location, duration, context)</li>
+        </ul>
+      </div>
+      <div class="i-channel">
+        <span class="i-channel-label">Content channel</span>
+        <span class="i-channel-sub">Submitted text</span>
+        <ul>
+          <li>Final response text</li>
+          <li>Word count and session duration</li>
+          <li>Burst sequences (text produced between pauses)</li>
+          <li>Revision density and deletion patterns</li>
+          <li>The question that prompted the response (for context-aware analysis)</li>
+        </ul>
+      </div>
+    </div>
+
+    <p>Neither channel alone is sufficient. A decline in lexical diversity with stable production fluency means vocabulary contraction. The same decline with slowed production means retrieval difficulty under cognitive load. You need both to distinguish them.</p>
+  </section>
+
+  <!-- ===== SIGNAL ENGINE ===== -->
+  <section class="i-section" id="signals">
+    <h2>The signal engine</h2>
+
+    <p>Signal computation runs in a native Rust engine compiled to a platform-specific binary. Rust is the single source of truth for all measurements. There is no fallback implementation. A measurement instrument cannot have two sources of truth.</p>
+
+    <div class="i-families">
+      <div class="i-family">
+        <span class="i-family-label">Dynamical signals</span>
+        <p>Complexity and structure of the temporal process. How ordered or disordered your keystroke timing is, and at what scales.</p>
+        <div class="i-signals">
+          <span>Permutation entropy spectrum (orders 3-7)</span>
+          <span>Detrended fluctuation analysis</span>
+          <span>Recurrence quantification</span>
+          <span>Transfer entropy (KSG estimator)</span>
+        </div>
+      </div>
+      <div class="i-family">
+        <span class="i-family-label">Motor signals</span>
+        <p>The statistical shape of your keystroke timing distribution. How your motor system executes the physical act of typing.</p>
+        <div class="i-signals">
+          <span>Ex-Gaussian parameters (mu, sigma, tau via MLE)</span>
+          <span>Sample entropy</span>
+          <span>Autocorrelation structure</span>
+          <span>Compression ratio (Lempel-Ziv)</span>
+        </div>
+      </div>
+      <div class="i-family">
+        <span class="i-family-label">Process signals</span>
+        <p>The structural shape of how you wrote. Pause patterns, burst dynamics, revision behavior.</p>
+        <div class="i-signals">
+          <span>Pause-burst segmentation</span>
+          <span>I-burst detection and counting</span>
+          <span>Deletion density and revision patterns</span>
+          <span>Text reconstruction from keystroke stream</span>
+        </div>
+      </div>
+    </div>
+
+    <p>Each signal family has defined failure modes. When a session produces insufficient data for reliable estimation, the signal returns null with a typed error variant (InsufficientData, ZeroVariance, DegenerateValue). A missing measurement is better than a wrong one.</p>
+  </section>
+
+  <!-- ===== CALIBRATION ===== -->
+  <section class="i-section" id="calibration">
+    <h2>Calibration</h2>
+
+    <p>A single writing session cannot distinguish a bad day from a trend. Alice uses within-person calibration to separate transient state (fatigue, illness, distraction) from trajectory shifts.</p>
+
+    <div class="i-calibration-grid">
+      <div class="i-cal-item">
+        <span class="i-cal-label">Same-day baseline</span>
+        <p>Brief calibration task before the main writing session. Establishes today's motor baseline: are your fingers fast or slow right now, independent of what you're thinking about?</p>
+      </div>
+      <div class="i-cal-item">
+        <span class="i-cal-label">Historical self-reference</span>
+        <p>Deviation is measured against your own accumulated history, not a population average. Your "normal" is defined by your data, not a cohort mean.</p>
+      </div>
+      <div class="i-cal-item">
+        <span class="i-cal-label">Trajectory detection</span>
+        <p>A single outlier is noise. A consistent drift over weeks is signal. The longitudinal record makes this distinction possible in ways that cross-sectional designs cannot.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== CONSTRAINTS IN ACTION ===== -->
+  <section class="i-section" id="constraints">
+    <h2>Design constraints enforced by architecture</h2>
+
+    <p>These are not guidelines. They are properties of the system that cannot be violated without changing the code.</p>
+
+    <div class="i-constraint-list">
+      <div class="i-constraint">
+        <span class="i-constraint-name">Unmediated input</span>
+        <span class="i-constraint-how">The writing interface has no autocomplete, no predictive text, no suggestions. Every character in the keystroke stream corresponds to a deliberate motor and cognitive act.</span>
+      </div>
+      <div class="i-constraint">
+        <span class="i-constraint-name">Participant-blind measurement</span>
+        <span class="i-constraint-how">Signal values are never displayed to the user. No dashboard, no trend line, no "your processing speed today." The instrument is invisible. The user sees only the question and the writing space.</span>
+      </div>
+      <div class="i-constraint">
+        <span class="i-constraint-name">No gamification</span>
+        <span class="i-constraint-how">No streaks, no scores, no achievements, no progress bars. These are measurement artifacts that confound the signal. Retention comes from question quality, not dopamine mechanics.</span>
+      </div>
+      <div class="i-constraint">
+        <span class="i-constraint-name">Single source of truth</span>
+        <span class="i-constraint-how">Every signal is computed by exactly one implementation (the Rust engine). If the engine is unavailable, the measurement does not happen. The session saves; signals are absent. A silent wrong answer is worse than no answer.</span>
+      </div>
+      <div class="i-constraint">
+        <span class="i-constraint-name">Entries do not come back out</span>
+        <span class="i-constraint-how">Response text is stored but never displayed back to the user. The system learns from what you write. It does not show you what it learned. The black box stays black.</span>
+      </div>
+      <div class="i-constraint">
+        <span class="i-constraint-name">No AI in the writing path</span>
+        <span class="i-constraint-how">AI generates questions (from accumulated history) and powers observation. It never touches the writing process. The generative AI is on the instrument side, never the participant side.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== STACK ===== -->
+  <section class="i-section" id="stack">
+    <h2>Implementation</h2>
+
+    <div class="i-stack">
+      <div class="i-stack-row">
+        <span class="i-stack-label">Runtime</span>
+        <span class="i-stack-value">Astro (SSR, Node adapter)</span>
+      </div>
+      <div class="i-stack-row">
+        <span class="i-stack-label">Signal engine</span>
+        <span class="i-stack-value">Rust, compiled via napi-rs to native Node addon</span>
+      </div>
+      <div class="i-stack-row">
+        <span class="i-stack-label">Database</span>
+        <span class="i-stack-value">PostgreSQL 17 + pgvector (embeddings)</span>
+      </div>
+      <div class="i-stack-row">
+        <span class="i-stack-label">AI</span>
+        <span class="i-stack-value">Claude API (question generation, pattern observation)</span>
+      </div>
+      <div class="i-stack-row">
+        <span class="i-stack-label">Embeddings</span>
+        <span class="i-stack-value">VoyageAI (512-dim vectors, HNSW indexed)</span>
+      </div>
+      <div class="i-stack-row">
+        <span class="i-stack-label">Signal families</span>
+        <span class="i-stack-value">Dynamical, Motor, Process (all native Rust)</span>
+      </div>
+      <div class="i-stack-row">
+        <span class="i-stack-label">Status</span>
+        <span class="i-stack-value">Running daily at n=1 since April 2026</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== CLOSING ===== -->
+  <section class="i-section i-close">
+    <p>This is not a concept. It is a running system producing measurements every day. The gap between "running" and "validated" is the work that remains.</p>
+    <div class="i-close-links">
+      <a href="/research">Why this instrument needs to exist</a>
+      <a href="/vision">The broader vision</a>
+      <a href="/papers">Read the papers</a>
+    </div>
+  </section>
+
+</article>
+
+</PublicLayout>
+
+<style is:global>
+  .instrument {
+    padding-bottom: 4rem;
+  }
+
+  .i-hero {
+    padding: 5rem 0 3rem;
+    max-width: 720px;
+  }
+
+  .i-hero h1 {
+    font-family: var(--serif-display);
+    font-size: 2.2rem;
+    font-weight: 400;
+    line-height: 1.35;
+    color: var(--text);
+    margin-bottom: 1.5rem;
+  }
+
+  .i-lead {
+    font-family: var(--serif-body);
+    font-size: 1.1rem;
+    line-height: 1.75;
+    color: var(--text-muted);
+  }
+
+  .i-section {
+    padding: 3rem 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .i-section h2 {
+    font-family: var(--serif-display);
+    font-size: 1.5rem;
+    font-weight: 400;
+    color: var(--text);
+    margin-bottom: 1.25rem;
+  }
+
+  .i-section > p {
+    font-family: var(--serif-body);
+    font-size: 1.05rem;
+    line-height: 1.75;
+    color: var(--text);
+    max-width: 720px;
+    margin-bottom: 1.25rem;
+  }
+
+  /* --- Dual channels --- */
+  .i-channels {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin: 2rem 0;
+  }
+
+  .i-channel {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.5rem;
+  }
+
+  .i-channel-label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    margin-bottom: 0.25rem;
+  }
+
+  .i-channel-sub {
+    display: block;
+    font-family: var(--serif-body);
+    font-size: 1rem;
+    color: var(--text);
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .i-channel ul {
+    list-style: none;
+    padding: 0;
+  }
+
+  .i-channel li {
+    font-family: var(--serif-body);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: var(--text-muted);
+    padding: 0.3rem 0;
+    padding-left: 1rem;
+    position: relative;
+  }
+
+  .i-channel li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0.75rem;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--border);
+  }
+
+  /* --- Signal families --- */
+  .i-families {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    margin: 2rem 0;
+  }
+
+  .i-family {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.5rem;
+  }
+
+  .i-family-label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    margin-bottom: 0.5rem;
+  }
+
+  .i-family > p {
+    font-family: var(--serif-body);
+    font-size: 0.95rem;
+    line-height: 1.6;
+    color: var(--text);
+    margin-bottom: 1rem;
+  }
+
+  .i-signals {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .i-signals span {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.02em;
+    color: var(--text-muted);
+    background: var(--bg-dim);
+    padding: 0.35rem 0.75rem;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+  }
+
+  /* --- Calibration --- */
+  .i-calibration-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1.5rem;
+    margin: 2rem 0;
+  }
+
+  .i-cal-item {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.5rem;
+  }
+
+  .i-cal-label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin-bottom: 0.75rem;
+  }
+
+  .i-cal-item p {
+    font-family: var(--serif-body);
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: var(--text);
+  }
+
+  /* --- Constraints --- */
+  .i-constraint-list {
+    margin: 2rem 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .i-constraint {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 1.5rem;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    align-items: baseline;
+  }
+
+  .i-constraint:last-child {
+    border-bottom: none;
+  }
+
+  .i-constraint-name {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text);
+  }
+
+  .i-constraint-how {
+    font-family: var(--serif-body);
+    font-size: 0.95rem;
+    line-height: 1.6;
+    color: var(--text-muted);
+  }
+
+  /* --- Stack --- */
+  .i-stack {
+    margin: 1.5rem 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .i-stack-row {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    gap: 1.5rem;
+    padding: 0.75rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    align-items: baseline;
+  }
+
+  .i-stack-row:last-child {
+    border-bottom: none;
+  }
+
+  .i-stack-label {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-faint);
+  }
+
+  .i-stack-value {
+    font-family: var(--serif-body);
+    font-size: 0.95rem;
+    color: var(--text);
+  }
+
+  /* --- Closing --- */
+  .i-close > p {
+    font-family: var(--serif-display);
+    font-size: 1.3rem;
+    font-weight: 400;
+    line-height: 1.5;
+    color: var(--text);
+    max-width: 600px;
+  }
+
+  .i-close-links {
+    display: flex;
+    gap: 2rem;
+    margin-top: 2rem;
+  }
+
+  .i-close-links a {
+    font-family: var(--serif-body);
+    font-size: 1rem;
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.15rem;
+    transition: border-color 0.2s ease;
+  }
+
+  .i-close-links a:hover {
+    border-color: var(--accent);
+    text-decoration: none;
+  }
+
+  /* --- Mobile --- */
+  @media (max-width: 768px) {
+    .i-hero { padding: 4rem 0 2rem; }
+    .i-hero h1 { font-size: 1.6rem; }
+    .i-channels { grid-template-columns: 1fr; }
+    .i-calibration-grid { grid-template-columns: 1fr; }
+    .i-constraint {
+      grid-template-columns: 1fr;
+      gap: 0.35rem;
+    }
+    .i-stack-row {
+      grid-template-columns: 1fr;
+      gap: 0.25rem;
+    }
+    .i-close-links { flex-direction: column; gap: 1rem; }
+  }
+</style>

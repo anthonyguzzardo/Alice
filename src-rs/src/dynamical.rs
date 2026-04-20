@@ -305,6 +305,12 @@ fn rqa(series: &[f64]) -> SignalResult<RqaResult> {
 
 const KSG_K: usize = 4; // k-nearest neighbors; 4 is standard in the literature
 
+/// Maximum input length for transfer entropy. The KSG estimator is O(m^2) per
+/// point with m points = O(m^3) total. At 500 this is ~125M iterations, comparable
+/// to RQA's O(n^2) at 5000. Uses the tail of the series (most recent keystrokes)
+/// when input exceeds the cap, matching sample_entropy's truncation strategy.
+const MAX_TE_INPUT_LEN: usize = 500;
+
 /// TE(source -> target) via KSG conditional mutual information estimator.
 ///
 /// Normalizes both series to zero mean, unit variance so the Chebyshev
@@ -314,6 +320,12 @@ fn transfer_entropy(source: &[f64], target: &[f64], lag: usize) -> SignalResult<
     if n < 30 {
         return Err(SignalError::InsufficientData { needed: 30, got: n });
     }
+
+    // Truncate to tail if series exceeds cap (O(n^3) complexity bound)
+    let start = n.saturating_sub(MAX_TE_INPUT_LEN);
+    let source = &source[start..n];
+    let target = &target[start..n];
+    let n = source.len();
 
     let effective_n = n - lag;
     if effective_n < 20 {
@@ -329,8 +341,8 @@ fn transfer_entropy(source: &[f64], target: &[f64], lag: usize) -> SignalResult<
         });
     }
 
-    let s_norm = normalize(&source[..n]);
-    let t_norm = normalize(&target[..n]);
+    let s_norm = normalize(source);
+    let t_norm = normalize(target);
 
     // Joint vectors: X = T_future, Y = S_current, Z = T_current
     let m = effective_n;
@@ -643,5 +655,41 @@ mod tests {
         assert_eq!(result.iki_count, 0);
         assert_eq!(result.hold_flight_count, 0);
         assert!(result.permutation_entropy.is_none());
+    }
+
+    #[test]
+    fn te_cap_produces_result_for_large_input() {
+        // Series longer than MAX_TE_INPUT_LEN should still produce a result
+        // (truncated to tail) rather than running O(n^3) on the full input.
+        let n = MAX_TE_INPUT_LEN + 200;
+        let a: Vec<f64> = (0..n).map(|i| ((i as f64) * 0.1).sin()).collect();
+        let b: Vec<f64> = (0..n).map(|i| ((i as f64) * 0.37 + 2.0).cos()).collect();
+        let te = transfer_entropy(&a, &b, 1);
+        assert!(te.is_ok(), "TE should succeed on input exceeding cap, got {te:?}");
+    }
+
+    #[test]
+    fn te_cap_uses_tail() {
+        // Verify truncation uses the tail: a series that's all-zero except for
+        // structure in the last MAX_TE_INPUT_LEN entries should produce meaningful TE,
+        // while structure only in the discarded prefix should not affect the result.
+        let n = MAX_TE_INPUT_LEN + 300;
+
+        // Series with structure only in the tail
+        let mut a_tail = vec![0.0; 300];
+        a_tail.extend((0..MAX_TE_INPUT_LEN).map(|i| ((i as f64) * 0.2).sin()));
+        let b_tail: Vec<f64> = (0..n).map(|i| ((i as f64) * 0.13).cos()).collect();
+
+        // Same tail alone (what the cap should effectively see)
+        let a_only = &a_tail[300..];
+        let b_only = &b_tail[300..];
+
+        let te_full = transfer_entropy(&a_tail, &b_tail, 1).unwrap();
+        let te_tail = transfer_entropy(a_only, b_only, 1).unwrap();
+
+        assert!(
+            (te_full - te_tail).abs() < 1e-10,
+            "TE with cap should equal TE of tail alone: full={te_full}, tail={te_tail}"
+        );
     }
 }

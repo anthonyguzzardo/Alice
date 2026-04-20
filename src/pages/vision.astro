@@ -1,0 +1,372 @@
+---
+/**
+ * Vision / positioning page.
+ *
+ * Genre: "thesis page." States what Alice is, who it's for, and where
+ * it's going. Sits between the experiential landing page and the
+ * academic research page. This is the page people share.
+ *
+ * Design: tight. One concept per section. Scrollable in 3 minutes.
+ * No citations, no data. Just clear claims and structural positioning.
+ */
+import PublicLayout from '../layouts/layPublic.astro';
+---
+
+<PublicLayout title="Alice -- Vision" active="vision" description="A cognitive instrument disguised as a journal. Personal practice, measurement platform, and longitudinal research tool in one.">
+
+<article class="vision">
+
+  <header class="v-hero">
+    <h1>Alice is a cognitive instrument built on daily writing.</h1>
+    <p class="v-lead">It looks like a journal. Underneath, it is a longitudinal measurement system for cognitive process data that no other tool captures and no other architecture can sustain.</p>
+  </header>
+
+  <!-- ===== THREE IDENTITIES ===== -->
+  <section class="v-section">
+    <h2>Three things that must be one thing</h2>
+    <p>Alice is simultaneously a personal practice, a measurement instrument, and a research platform. These are not three products bundled together. They are three descriptions of the same architecture, and the architecture only works if all three are true at once.</p>
+
+    <div class="v-triad">
+      <div class="v-triad-item">
+        <span class="v-triad-label">Personal practice</span>
+        <p>One question per day. You write. The practice is valuable on its own terms. No dashboard, no score, no feedback loop. The writing is the thing.</p>
+      </div>
+      <div class="v-triad-item">
+        <span class="v-triad-label">Measurement instrument</span>
+        <p>Every session captures keystroke-level temporal data and submitted text. The signal pipeline computes cognitive process markers without surfacing them. The measurement is invisible because visibility would destroy it.</p>
+      </div>
+      <div class="v-triad-item">
+        <span class="v-triad-label">Research platform</span>
+        <p>The longitudinal record accumulates over years. Self-referential baselines. Dual-channel analysis. The dataset that keystroke-cognition research needs but cannot produce from lab visits.</p>
+      </div>
+    </div>
+
+    <p>The personal practice sustains the measurement. The measurement produces the research data. The research validates the measurement. Remove any one and the others collapse.</p>
+  </section>
+
+  <!-- ===== STRUCTURAL DIFFERENCE ===== -->
+  <section class="v-section">
+    <h2>What makes this structurally different</h2>
+
+    <div class="v-diff-grid">
+      <div class="v-diff">
+        <span class="v-diff-label">Every journaling app</span>
+        <span class="v-diff-claim">surfaces what it learns back to you</span>
+        <p>Alice does not. The black box stays black. Surfacing analysis contaminates the signal and creates optimization behavior. The instrument must be invisible to remain valid.</p>
+      </div>
+      <div class="v-diff">
+        <span class="v-diff-label">Every cognitive assessment</span>
+        <span class="v-diff-claim">requires a separate test session</span>
+        <p>Alice does not. The assessment is embedded in a daily practice the participant already wants to do. No lab. No appointment. No awareness of being tested.</p>
+      </div>
+      <div class="v-diff">
+        <span class="v-diff-label">Every quantified-self tool</span>
+        <span class="v-diff-claim">uses gamification for retention</span>
+        <p>Alice does not. Streaks and scores are measurement artifacts. Retention comes from question quality that improves with accumulated history. The instrument learns; the participant just writes.</p>
+      </div>
+      <div class="v-diff">
+        <span class="v-diff-label">Every keystroke dynamics study</span>
+        <span class="v-diff-claim">captures timing without content</span>
+        <p>Alice captures both. Keystroke timing alone cannot distinguish retrieval difficulty from vocabulary contraction. You need the temporal process and the linguistic output, jointly, over time.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== WHO IT'S FOR ===== -->
+  <section class="v-section">
+    <h2>Who this is for</h2>
+
+    <div class="v-audience-grid">
+      <div class="v-audience">
+        <span class="v-audience-label">Individuals</span>
+        <p>You want a daily writing practice that is private, unmediated, and accumulates depth over time without performing measurement back at you. You want to write without being watched, and trust that the watching serves you in the long run.</p>
+      </div>
+      <div class="v-audience">
+        <span class="v-audience-label">Cognitive health researchers</span>
+        <p>You need longitudinal keystroke-cognition data from fluent typists, with intra-individual baselines, ecological validity, and dual-channel capture. No existing instrument produces this. Alice's architecture is designed to.</p>
+      </div>
+      <div class="v-audience">
+        <span class="v-audience-label">Digital biomarker developers</span>
+        <p>You're building passive cognitive assessment and need a data source that combines process-level temporal signals with linguistic content over months and years. Alice is the only architecture sustaining daily ecological data collection at this granularity.</p>
+      </div>
+      <div class="v-audience">
+        <span class="v-audience-label">AI safety and cognitive sovereignty</span>
+        <p>You're concerned about AI mediation eroding cognitive capacities without detection. Alice captures unmediated baselines from the last cohort that will produce them at scale. This is the control condition for measuring what AI assistance changes.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== WHERE THIS GOES ===== -->
+  <section class="v-section">
+    <h2>Where this goes</h2>
+
+    <div class="v-timeline">
+      <div class="v-timeline-item">
+        <span class="v-timeline-phase">Now</span>
+        <p>Single-user prototype. Signal pipeline running. Rust measurement engine computing dynamical, motor, and process signals daily. Accumulating the longitudinal record.</p>
+      </div>
+      <div class="v-timeline-item">
+        <span class="v-timeline-phase">Near term</span>
+        <p>Multi-user architecture. Enough participants to detect signal stability across individuals. Calibration protocol validation. First published longitudinal keystroke-cognition results from ecological data.</p>
+      </div>
+      <div class="v-timeline-item">
+        <span class="v-timeline-phase">Medium term</span>
+        <p>Research partnerships. Cohort studies using Alice as the instrument. Validation against clinical cognitive batteries. The dataset that the field needs but cannot produce from cross-sectional designs.</p>
+      </div>
+      <div class="v-timeline-item">
+        <span class="v-timeline-phase">Long term</span>
+        <p>A standard longitudinal cognitive instrument for the era of AI mediation. Pre-clinical detection of cognitive trajectory shifts years before they would be caught by annual screening. The cognitive health equivalent of what continuous glucose monitors did for metabolic health.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== CLOSING ===== -->
+  <section class="v-section v-close">
+    <p>The window for capturing unmediated cognitive baselines is closing. Alice is the instrument designed to collect them while they still exist.</p>
+    <div class="v-close-links">
+      <a href="/research">Read the science</a>
+      <a href="/instrument">See the architecture</a>
+      <a href="/papers">Read the papers</a>
+    </div>
+  </section>
+
+</article>
+
+</PublicLayout>
+
+<style is:global>
+  .vision {
+    padding-bottom: 4rem;
+  }
+
+  .v-hero {
+    padding: 5rem 0 3rem;
+    max-width: 720px;
+  }
+
+  .v-hero h1 {
+    font-family: var(--serif-display);
+    font-size: 2.2rem;
+    font-weight: 400;
+    line-height: 1.35;
+    color: var(--text);
+    margin-bottom: 1.5rem;
+  }
+
+  .v-lead {
+    font-family: var(--serif-body);
+    font-size: 1.15rem;
+    line-height: 1.75;
+    color: var(--text-muted);
+  }
+
+  .v-section {
+    padding: 3rem 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .v-section h2 {
+    font-family: var(--serif-display);
+    font-size: 1.5rem;
+    font-weight: 400;
+    color: var(--text);
+    margin-bottom: 1.25rem;
+  }
+
+  .v-section > p {
+    font-family: var(--serif-body);
+    font-size: 1.05rem;
+    line-height: 1.75;
+    color: var(--text);
+    max-width: 720px;
+    margin-bottom: 1.25rem;
+  }
+
+  /* --- Triad --- */
+  .v-triad {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1.5rem;
+    margin: 2rem 0;
+  }
+
+  .v-triad-item {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.5rem;
+  }
+
+  .v-triad-label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    margin-bottom: 0.75rem;
+  }
+
+  .v-triad-item p {
+    font-family: var(--serif-body);
+    font-size: 0.95rem;
+    line-height: 1.6;
+    color: var(--text);
+  }
+
+  /* --- Structural differences --- */
+  .v-diff-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin: 2rem 0;
+  }
+
+  .v-diff {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.5rem;
+  }
+
+  .v-diff-label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-faint);
+    margin-bottom: 0.35rem;
+  }
+
+  .v-diff-claim {
+    display: block;
+    font-family: var(--serif-body);
+    font-size: 1.05rem;
+    font-style: italic;
+    color: var(--text);
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .v-diff p {
+    font-family: var(--serif-body);
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: var(--text-muted);
+  }
+
+  /* --- Audience grid --- */
+  .v-audience-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin: 1.5rem 0;
+  }
+
+  .v-audience {
+    padding: 1.5rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+
+  .v-audience-label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    margin-bottom: 0.75rem;
+  }
+
+  .v-audience p {
+    font-family: var(--serif-body);
+    font-size: 0.95rem;
+    line-height: 1.6;
+    color: var(--text);
+  }
+
+  /* --- Timeline --- */
+  .v-timeline {
+    margin: 2rem 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .v-timeline-item {
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: 100px 1fr;
+    gap: 1.5rem;
+    align-items: baseline;
+  }
+
+  .v-timeline-item:last-child {
+    border-bottom: none;
+  }
+
+  .v-timeline-phase {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+  }
+
+  .v-timeline-item p {
+    font-family: var(--serif-body);
+    font-size: 0.95rem;
+    line-height: 1.6;
+    color: var(--text);
+  }
+
+  /* --- Closing --- */
+  .v-close > p {
+    font-family: var(--serif-display);
+    font-size: 1.3rem;
+    font-weight: 400;
+    line-height: 1.5;
+    color: var(--text);
+    max-width: 600px;
+  }
+
+  .v-close-links {
+    display: flex;
+    gap: 2rem;
+    margin-top: 2rem;
+  }
+
+  .v-close-links a {
+    font-family: var(--serif-body);
+    font-size: 1.05rem;
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.15rem;
+    transition: border-color 0.2s ease;
+  }
+
+  .v-close-links a:hover {
+    border-color: var(--accent);
+    text-decoration: none;
+  }
+
+  /* --- Mobile --- */
+  @media (max-width: 768px) {
+    .v-hero { padding: 4rem 0 2rem; }
+    .v-hero h1 { font-size: 1.6rem; }
+    .v-triad { grid-template-columns: 1fr; }
+    .v-diff-grid { grid-template-columns: 1fr; }
+    .v-audience-grid { grid-template-columns: 1fr; }
+    .v-timeline-item {
+      grid-template-columns: 1fr;
+      gap: 0.35rem;
+    }
+    .v-close-links { flex-direction: column; gap: 1rem; }
+  }
+</style>

@@ -9,12 +9,13 @@ const { active = '' } = Astro.props;
   <div class="nav-menu">
     <button class="nav-menu-btn" id="nav-menu-btn" aria-label="Navigation" title="Navigation">&#x2022;&#x2022;&#x2022;</button>
     <div class="nav-dropdown" id="nav-dropdown">
-      <a href="/">Journal</a>
-      <a href="/landing" class:list={[{ current: active === 'home' }]}>Public Alice</a>
+      <a href="/landing" class:list={[{ current: active === 'home' }]}>Home</a>
+      <a href="/vision" class:list={[{ current: active === 'vision' }]}>Vision</a>
       <a href="/research" class:list={[{ current: active === 'research' }]}>Research</a>
+      <a href="/instrument" class:list={[{ current: active === 'instrument' }]}>Instrument</a>
       <a href="/papers" class:list={[{ current: active === 'papers' }]}>Papers</a>
       <div class="nav-divider"></div>
-      <a href="/alice-negative">Alice Negative</a>
+      <a href="/">Journal</a>
       <a href="/observatory">Observatory</a>
       <div class="nav-divider"></div>
       <a href="/dev/signals">Signal Sandbox</a>
