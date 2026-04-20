@@ -1,8 +1,54 @@
 ---
+/**
+ * Public Alice landing page.
+ *
+ * Design philosophy: shibui (渋い) + ma (間) + lagom.
+ *
+ * This page is deliberately non-performative. It does not try to convert,
+ * retain, or persuade. It is not performing minimalism as an aesthetic
+ * choice. It simply states what Alice is, with enough space between each
+ * thought to let it settle.
+ *
+ * Key design constraints (see: Hallnas & Redstrom "Slow Technology", 2001;
+ * Weiser & Brown "Calm Technology", 1995; Illich "Tools for Conviviality"):
+ *
+ *   - No typographic hierarchy. Every statement has equal weight.
+ *     Shibui: the form has no hero because there is nothing to promote.
+ *
+ *   - Variable vertical rhythm (ma). The opening breathes longest because
+ *     you just arrived. Middle sections are natural reading pace. The
+ *     closing contracts. Like actual breathing, not a grid.
+ *
+ *   - No CTA styling. "Enter" is a word that happens to be a link, not a
+ *     button. No border, no uppercase, no padding. Lagom: it is there
+ *     when you are ready. It does not ask to be noticed.
+ *
+ *   - No negation lists ("not a journal, not a therapist"). Enumerating
+ *     what you are not is still performing. The page only says what is true.
+ *
+ *   - No measurement language. The black box stays black. The user sees
+ *     the instrument interfaces (question, writing, form), never the
+ *     observations or what they get back.
+ *
+ *   - Action language is spatial, not temporal. "Enter" implies a space
+ *     that exists whether or not you walk into it. "Begin" / "Get started"
+ *     imply transformation and create subconscious urgency.
+ *
+ *   - The generative botanical: a tree is procedurally grown on a canvas
+ *     behind the text as the user scrolls. It is not a pre-drawn image
+ *     being revealed. It is generated. Each visit produces a slightly
+ *     different form (seeded from the date, so it's stable within a day).
+ *     This mirrors the witness form principle: your input (scrolling)
+ *     produces an output (the tree). It does not animate on its own.
+ *     It only grows when you move. You may not notice it until you
+ *     scroll back up. That's fine.
+ */
 import PublicLayout from '../layouts/PublicLayout.astro';
 ---
 
 <PublicLayout title="Alice" active="home" minimal>
+
+  <canvas id="botanical" aria-hidden="true"></canvas>
 
   <div class="landing">
 
@@ -34,24 +80,172 @@ import PublicLayout from '../layouts/PublicLayout.astro';
 
 </PublicLayout>
 
+<script is:inline>
+  /**
+   * Generative scroll-driven botanical.
+   *
+   * A recursive L-system-inspired tree that grows on a canvas as the
+   * user scrolls. The tree is not pre-drawn and revealed. It is
+   * generated fresh: scroll progress determines how deep the recursion
+   * goes and how far branches extend.
+   *
+   * Seeded from today's date so the form is stable within a single day
+   * but different tomorrow. No two days produce the same tree.
+   *
+   * The canvas is fixed behind the text at low opacity. It never
+   * competes with the words. It is the background, not the foreground.
+   */
+  (function () {
+    var canvas = document.getElementById('botanical');
+    if (!canvas) return;
+    var ctx = canvas.getContext('2d');
+
+    // Seed from today's date for stable-within-day randomness
+    var today = new Date();
+    var seed = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate();
+
+    // Simple seeded PRNG (mulberry32)
+    function mulberry32(a) {
+      return function () {
+        a |= 0; a = a + 0x6D2B79F5 | 0;
+        var t = Math.imul(a ^ a >>> 15, 1 | a);
+        t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+      };
+    }
+
+    var rand = mulberry32(seed);
+
+    // Pre-generate the tree's random parameters so they're stable across redraws
+    var MAX_DEPTH = 10;
+    var branchParams = [];
+    function pregenerate(depth, index) {
+      if (depth > MAX_DEPTH) return;
+      var params = {
+        angleOffsetL: rand() * 0.3 + 0.1,
+        angleOffsetR: rand() * 0.3 + 0.1,
+        lengthRatioL: rand() * 0.15 + 0.62,
+        lengthRatioR: rand() * 0.15 + 0.62,
+        widthRatio: rand() * 0.1 + 0.6
+      };
+      branchParams[index] = params;
+      pregenerate(depth + 1, index * 2 + 1);
+      pregenerate(depth + 1, index * 2 + 2);
+    }
+    pregenerate(0, 0);
+
+    function resize() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+
+    // Get stroke color from CSS custom property
+    function getStrokeColor() {
+      var style = getComputedStyle(document.documentElement);
+      return style.getPropertyValue('--border').trim() || '#ccc5bc';
+    }
+
+    function drawBranch(x, y, angle, length, width, depth, maxDepth, index) {
+      if (depth > maxDepth || length < 2 || width < 0.3) return;
+
+      var params = branchParams[index];
+      if (!params) return;
+
+      var x2 = x + Math.sin(angle) * length;
+      var y2 = y - Math.cos(angle) * length;
+
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x2, y2);
+      ctx.lineWidth = width;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+
+      var nextLen = length * params.lengthRatioL;
+      var nextLenR = length * params.lengthRatioR;
+      var nextWidth = width * params.widthRatio;
+
+      drawBranch(x2, y2, angle - params.angleOffsetL, nextLen, nextWidth, depth + 1, maxDepth, index * 2 + 1);
+      drawBranch(x2, y2, angle + params.angleOffsetR, nextLenR, nextWidth, depth + 1, maxDepth, index * 2 + 2);
+    }
+
+    function draw() {
+      var scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+      var docHeight = document.documentElement.scrollHeight - window.innerHeight;
+      if (docHeight <= 0) return;
+      var progress = Math.min(scrollTop / docHeight, 1);
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Map scroll to recursion depth (0 scroll = nothing, full scroll = full tree)
+      // The trunk appears early, branches fill in gradually
+      var depthFloat = progress * MAX_DEPTH;
+      var maxDepth = Math.floor(depthFloat);
+
+      if (maxDepth < 1) return;
+
+      var color = getStrokeColor();
+      ctx.strokeStyle = color;
+      ctx.globalAlpha = 0.25;
+
+      // Tree grows from bottom center
+      var startX = canvas.width / 2;
+      var startY = canvas.height * 0.92;
+      var trunkLength = Math.min(canvas.height * 0.18, 160);
+      var trunkWidth = 2.5;
+
+      drawBranch(startX, startY, 0, trunkLength, trunkWidth, 0, maxDepth, 0);
+    }
+
+    var ticking = false;
+    function onScroll() {
+      if (!ticking) {
+        requestAnimationFrame(function () {
+          draw();
+          ticking = false;
+        });
+        ticking = true;
+      }
+    }
+
+    resize();
+    window.addEventListener('resize', function () { resize(); draw(); });
+    window.addEventListener('scroll', onScroll, { passive: true });
+    draw();
+  })();
+</script>
+
 <style is:global>
+  /*
+   * No special classes for visual emphasis. Every .breath is styled
+   * identically except for vertical spacing (ma). The CSS is as
+   * minimal as the content. If you are tempted to add a hover
+   * animation, a fade-in, or a font-size bump, re-read the
+   * design comment above.
+   */
+
   .landing {
+    position: relative;
     max-width: 520px;
     margin: 0 auto;
     padding: 0 2rem;
   }
 
   .breath {
+    position: relative;
+    z-index: 1;
     min-height: 55vh;
     display: flex;
     align-items: center;
     justify-content: center;
   }
 
+  /* Longer opening: you just arrived, settle in */
   .breath.opening {
     min-height: 85vh;
   }
 
+  /* Shorter closing: the page does not linger */
   .breath.closing {
     min-height: 35vh;
     padding-bottom: 8rem;
@@ -66,7 +260,10 @@ import PublicLayout from '../layouts/PublicLayout.astro';
     max-width: 400px;
   }
 
+  /* Not a button. Just a word that is a link. */
   .enter {
+    position: relative;
+    z-index: 1;
     font-family: var(--serif-body);
     font-size: 1rem;
     color: var(--text-faint);
@@ -76,6 +273,22 @@ import PublicLayout from '../layouts/PublicLayout.astro';
   .enter:hover {
     color: var(--text-muted);
     text-decoration: none;
+  }
+
+  /*
+   * The canvas covers the viewport, fixed behind everything.
+   * Low opacity so it reads as a faint background texture,
+   * not a competing visual element. The tree grows from the
+   * bottom center, as trees do.
+   */
+  #botanical {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    pointer-events: none;
+    z-index: 0;
   }
 
   @media (max-width: 768px) {
