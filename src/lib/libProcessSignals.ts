@@ -144,10 +144,13 @@ function abandonedThoughtCount(
 
 // ─── R-burst / I-burst Classification (Deane 2015) ──────────────────
 // R-burst: production burst ending with deletion at leading edge
-// I-burst: production burst starting with cursor navigation backward
+// I-burst: production burst starting with cursor positioned within existing
+//          text (navigated backward), not appending at end.
+//          Matches Rust process.rs: cursor_position < text_length_before_event.
 
 function burstClassification(
   events: EventTuple[],
+  textStates: string[],
   burstThresholdMs: number = 2000,
 ): { rBursts: number; iBursts: number } | null {
   if (events.length < 10) return null;
@@ -155,16 +158,16 @@ function burstClassification(
   let rBursts = 0;
   let iBursts = 0;
 
-  // Group events into bursts by time gap
-  const bursts: EventTuple[][] = [];
-  let currentBurst: EventTuple[] = [events[0]];
+  // Group events into bursts by time gap, tracking event indices
+  const bursts: number[][] = []; // each burst is an array of event indices
+  let currentBurst: number[] = [0];
 
   for (let i = 1; i < events.length; i++) {
     if (events[i][0] - events[i - 1][0] > burstThresholdMs) {
       if (currentBurst.length > 0) bursts.push(currentBurst);
       currentBurst = [];
     }
-    currentBurst.push(events[i]);
+    currentBurst.push(i);
   }
   if (currentBurst.length > 0) bursts.push(currentBurst);
 
@@ -172,19 +175,24 @@ function burstClassification(
     if (burst.length < 2) continue;
 
     // R-burst: ends with deletion
-    const lastEvent = burst[burst.length - 1];
-    if (lastEvent[2] > 0) {
+    const lastIdx = burst[burst.length - 1];
+    if (events[lastIdx][2] > 0) {
       rBursts++;
       continue;
     }
 
-    // I-burst: first event after pause involves cursor positioned
-    // before end of text (navigated backward)
-    const firstEvent = burst[0];
-    if (firstEvent[3] && firstEvent[1] < (firstEvent[1] + firstEvent[3].length - 2)) {
-      // This heuristic checks if insertion is mid-text
-      // A better check would compare cursorPos to text length at that moment
-      iBursts++;
+    // I-burst: first event inserts text at a cursor position strictly
+    // before the end of the existing text (user navigated backward).
+    const firstIdx = burst[0];
+    const firstEvent = events[firstIdx];
+    if (firstEvent[3]) {
+      const textBefore = firstIdx > 0 ? textStates[firstIdx - 1] : '';
+      // Compare cursor position against text length. JS strings are UTF-16,
+      // and cursorPos from the browser is UTF-16 code units, so .length is
+      // the correct comparison (matches Rust's UTF-16 length calculation).
+      if (firstEvent[1] < textBefore.length) {
+        iBursts++;
+      }
     }
   }
 
@@ -327,7 +335,7 @@ export function computeProcessSignals(eventLogJson: string): ProcessSignals {
   const textStates = reconstructText(events);
   const pauseProfile = pauseLocationProfile(events, textStates);
   const abandoned = abandonedThoughtCount(events);
-  const bursts = burstClassification(events);
+  const bursts = burstClassification(events, textStates);
   const heaps = vocabExpansionRate(textStates);
   const phase = phaseTransitionPoint(events);
   const shifts = strategyShiftCount(events);

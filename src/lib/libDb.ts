@@ -1,8 +1,10 @@
 import sql from './libDbPool.ts';
+import type { TxSql } from './libDbPool.ts';
 import { localDateStr } from './utlDate.ts';
 
 // Re-export sql for callers that import it directly
 export { default as sql } from './libDbPool.ts';
+export type { TxSql } from './libDbPool.ts';
 
 // ----------------------------------------------------------------------------
 // DATE OVERRIDE (for simulation -- production never calls this)
@@ -48,8 +50,9 @@ export async function getTodaysResponse(): Promise<{ response_id: number; text: 
   return (rows[0] as { response_id: number; text: string }) ?? null;
 }
 
-export async function saveResponse(questionId: number, text: string): Promise<number> {
-  const [row] = await sql`
+export async function saveResponse(questionId: number, text: string, tx?: TxSql): Promise<number> {
+  const q = tx ?? sql;
+  const [row] = await q`
     INSERT INTO tb_responses (question_id, text, dttm_created_utc)
     VALUES (${questionId}, ${text}, ${nowStr()})
     RETURNING response_id
@@ -219,8 +222,9 @@ export interface SessionSummaryInput {
   dayOfWeek: number | null;
 }
 
-export async function saveSessionSummary(s: SessionSummaryInput): Promise<void> {
-  await sql`
+export async function saveSessionSummary(s: SessionSummaryInput, tx?: TxSql): Promise<void> {
+  const q = tx ?? sql;
+  await q`
     INSERT INTO tb_session_summaries (
        question_id, first_keystroke_ms, total_duration_ms,
        total_chars_typed, final_char_count, commitment_ratio,
@@ -304,19 +308,30 @@ export interface BurstEntry {
   durationMs: number;
 }
 
-export async function saveBurstSequence(questionId: number, bursts: BurstEntry[]): Promise<void> {
-  await sql.begin(async (sql) => {
+export async function saveBurstSequence(questionId: number, bursts: BurstEntry[], tx?: TxSql): Promise<void> {
+  if (tx) {
+    // Already in a transaction; use the handle directly
     for (let i = 0; i < bursts.length; i++) {
-      await sql`
+      await tx`
         INSERT INTO tb_burst_sequences (question_id, burst_index, burst_char_count, burst_duration_ms, burst_start_offset_ms)
         VALUES (${questionId}, ${i}, ${bursts[i].chars}, ${bursts[i].durationMs}, ${bursts[i].startOffsetMs})
       `;
     }
-  });
+  } else {
+    await sql.begin(async (sql) => {
+      for (let i = 0; i < bursts.length; i++) {
+        await sql`
+          INSERT INTO tb_burst_sequences (question_id, burst_index, burst_char_count, burst_duration_ms, burst_start_offset_ms)
+          VALUES (${questionId}, ${i}, ${bursts[i].chars}, ${bursts[i].durationMs}, ${bursts[i].startOffsetMs})
+        `;
+      }
+    });
+  }
 }
 
-export async function getBurstSequence(questionId: number): Promise<Array<BurstEntry & { burstIndex: number }>> {
-  return await sql`
+export async function getBurstSequence(questionId: number, tx?: TxSql): Promise<Array<BurstEntry & { burstIndex: number }>> {
+  const q = tx ?? sql;
+  return await q`
     SELECT burst_index AS "burstIndex", burst_char_count AS chars,
            burst_duration_ms AS "durationMs", burst_start_offset_ms AS "startOffsetMs"
     FROM tb_burst_sequences
@@ -341,8 +356,9 @@ export interface SessionMetadataRow {
   deletion_between_burst_count: number | null;
 }
 
-export async function saveSessionMetadata(row: Omit<SessionMetadataRow, 'session_metadata_id'>): Promise<number> {
-  const [result] = await sql`
+export async function saveSessionMetadata(row: Omit<SessionMetadataRow, 'session_metadata_id'>, tx?: TxSql): Promise<number> {
+  const q = tx ?? sql;
+  const [result] = await q`
     INSERT INTO tb_session_metadata (
        question_id, hour_typicality, deletion_curve_type, burst_trajectory_shape,
        inter_burst_interval_mean_ms, inter_burst_interval_std_ms,
@@ -456,8 +472,9 @@ export interface SessionEventsRow {
   decimation_count?: number | null;
 }
 
-export async function saveSessionEvents(row: Omit<SessionEventsRow, 'session_event_id'>): Promise<number> {
-  const [result] = await sql`
+export async function saveSessionEvents(row: Omit<SessionEventsRow, 'session_event_id'>, tx?: TxSql): Promise<number> {
+  const q = tx ?? sql;
+  const [result] = await q`
     INSERT INTO tb_session_events (question_id, event_log_json, total_events, session_duration_ms, keystroke_stream_json, total_input_events, decimation_count)
     VALUES (${row.question_id}, ${row.event_log_json}, ${row.total_events}, ${row.session_duration_ms}, ${row.keystroke_stream_json ?? null}, ${row.total_input_events ?? null}, ${row.decimation_count ?? null})
     RETURNING session_event_id
@@ -485,8 +502,9 @@ export async function getSessionEvents(questionId: number): Promise<SessionEvent
 }
 
 // Save deletion events JSON onto the session summary row
-export async function updateDeletionEvents(questionId: number, deletionEventsJson: string): Promise<void> {
-  await sql`
+export async function updateDeletionEvents(questionId: number, deletionEventsJson: string, tx?: TxSql): Promise<void> {
+  const q = tx ?? sql;
+  await q`
     UPDATE tb_session_summaries SET deletion_events_json = ${deletionEventsJson} WHERE question_id = ${questionId}
   `;
 }
@@ -707,28 +725,6 @@ export async function isCalibrationQuestion(questionId: number): Promise<boolean
   return rows.length > 0;
 }
 
-// ----------------------------------------------------------------------------
-// AI OBSERVATIONS & SUPPRESSED QUESTIONS -- ARCHIVED 2026-04-16
-// Functions retained as no-op stubs so imports don't break during slice-2
-// deletions. Called surfaces are being removed piecewise.
-// ----------------------------------------------------------------------------
-
-export function saveAiObservation(_questionId: number, _text: string, _date: string): number {
-  return 0;
-}
-
-export function saveSuppressedQuestion(_questionId: number, _text: string, _date: string): void {
-  // archived
-}
-
-export function getAllAiObservations(): Array<{ date: string; observation: string }> {
-  return [];
-}
-
-export function getAllSuppressedQuestions(): Array<{ date: string; question: string }> {
-  return [];
-}
-
 export async function getResponseCount(): Promise<number> {
   const [row] = await sql`SELECT COUNT(*)::int AS count FROM tb_responses`;
   return (row as { count: number }).count;
@@ -744,22 +740,29 @@ export async function saveCalibrationSession(
   responseText: string,
   summary: SessionSummaryInput
 ): Promise<number> {
-  const [qRow] = await sql`
-    INSERT INTO tb_questions (text, question_source_id)
-    VALUES (${promptText}, 3)
-    RETURNING question_id
-  `;
-  const questionId = qRow.question_id as number;
+  return await sql.begin(async (tx) => {
+    const [qRow] = await tx`
+      INSERT INTO tb_questions (text, question_source_id)
+      VALUES (${promptText}, 3)
+      RETURNING question_id
+    `;
+    const questionId = qRow.question_id as number;
 
-  await sql`
-    INSERT INTO tb_responses (question_id, text)
-    VALUES (${questionId}, ${responseText})
-  `;
+    await tx`
+      INSERT INTO tb_responses (question_id, text)
+      VALUES (${questionId}, ${responseText})
+    `;
 
-  await saveSessionSummary({ ...summary, questionId });
+    await saveSessionSummary({ ...summary, questionId }, tx);
 
-  return questionId;
+    return questionId;
+  });
 }
+
+// Known state: question_ids 42, 63, 64 are calibration sessions (source_id=3)
+// with responses but no session summaries or events. They predate the
+// calibration event-logging pipeline (2026-04-14, 2026-04-17). Not orphans
+// from a transaction bug. Response text is real; left in place intentionally.
 
 // ----------------------------------------------------------------------------
 // QUESTION FEEDBACK
@@ -827,25 +830,6 @@ export async function getResponsesSinceId(sinceResponseId: number): Promise<Arra
   ` as Array<{
     response_id: number; question_id: number; question: string; response: string; date: string;
   }>;
-}
-
-// archived 2026-04-16
-export function getRecentObservations(_limit: number): Array<{
-  ai_observation_id: number; date: string; observation: string;
-}> {
-  return [];
-}
-
-// archived 2026-04-16
-export function getObservationsSinceDate(_sinceDate: string): Array<{
-  ai_observation_id: number; date: string; observation: string;
-}> {
-  return [];
-}
-
-// archived 2026-04-16
-export function getRecentSuppressedQuestions(_limit: number): Array<{ date: string; question: string }> {
-  return [];
 }
 
 export async function getAllReflections(): Promise<Array<{
@@ -1350,139 +1334,9 @@ export async function getLatestEmotionBehaviorCoupling(entryCount: number): Prom
   ` as EmotionBehaviorCouplingRow[];
 }
 
-// ----------------------------------------------------------------------------
-// PREDICTIONS + THEORY CONFIDENCE -- ARCHIVED 2026-04-16
-// Retained as no-op stubs while callers are removed in slice 2.
-// Data preserved under zz_archive_predictions_20260416 and
-// zz_archive_theory_confidence_20260416.
-// ----------------------------------------------------------------------------
-
-export interface PredictionInput {
-  aiObservationId: number;
-  questionId: number;
-  predictionTypeId: number;
-  hypothesis: string;
-  favoredFrame: string | null;
-  expectedSignature: string;
-  falsificationCriteria: string;
-  targetTopic: string | null;
-  expirySessions?: number;
-  knowledgeTransformScore?: number | null;
-  gradeMethodId?: number;
-  structuredCriteria?: string | null;
-}
-
-export function savePrediction(_p: PredictionInput): number {
-  return 0; // archived
-}
-
-export interface OpenPrediction {
-  predictionId: number;
-  aiObservationId: number;
-  questionId: number;
-  predictionTypeId: number;
-  hypothesis: string;
-  favoredFrame: string | null;
-  expectedSignature: string;
-  falsificationCriteria: string;
-  targetTopic: string | null;
-  expirySessions: number;
-  gradeMethodId: number;
-  structuredCriteria: string | null;
-  sessionCheckResults: string | null;
-  dttmCreatedUtc: string;
-}
-
-export function getOpenPredictions(): OpenPrediction[] {
-  return []; // archived
-}
-
-export function updateSessionCheckResults(_predictionId: number, _results: string): void {
-  // archived
-}
-
-export function gradePrediction(
-  _predictionId: number,
-  _statusCode: 'confirmed' | 'falsified' | 'expired' | 'indeterminate',
-  _gradedByObservationId: number | null,
-  _rationale: string,
-): void {
-  // archived
-}
-
-export function getPredictionStats(): {
-  total: number; confirmed: number; falsified: number; expired: number; indeterminate: number; open: number;
-} {
-  return { total: 0, confirmed: 0, falsified: 0, expired: 0, indeterminate: 0, open: 0 };
-}
-
-export function getRecentGradedPredictions(_limit: number): Array<{
-  predictionId: number; hypothesis: string; favoredFrame: string | null;
-  statusCode: string; gradeRationale: string | null; targetTopic: string | null;
-  dttmCreatedUtc: string; dttmGradedUtc: string | null;
-}> {
-  return []; // archived
-}
-
-export function getTheoryConfidence(_theoryKey: string): {
-  alpha: number; beta: number; totalPredictions: number; posteriorMean: number;
-  logBayesFactor: number; status: string;
-} | null {
-  return null; // archived
-}
-
-export function updateTheoryConfidence(
-  _theoryKey: string,
-  _description: string,
-  _hit: boolean,
-  _predictionId: number,
-): void {
-  // archived
-}
-
-export function getAllTheoryConfidences(): Array<{
-  theoryKey: string; description: string; alpha: number; beta: number;
-  totalPredictions: number; posteriorMean: number;
-  logBayesFactor: number; status: string;
-}> {
-  return []; // archived
-}
-
-// ----------------------------------------------------------------------------
-// INTERVENTION INTENT + QUESTION CANDIDATES -- ARCHIVED 2026-04-16
-// Stubbed; data preserved under zz_archive_intervention_intent_20260416 and
-// zz_archive_question_candidates_20260416.
-// ----------------------------------------------------------------------------
-
-export function updateQuestionIntent(
-  _questionId: number,
-  _intentCode: string,
-  _rationale: string,
-): void {
-  // archived
-}
-
-export function getQuestionIntent(_questionId: number): {
-  intentCode: string; rationale: string | null;
-} | null {
-  return null; // archived
-}
-
-export interface QuestionCandidate {
-  candidateRank: number;
-  candidateText: string;
-  selectionRationale: string | null;
-  uncertaintyDimension: string | null;
-  themeTags: string | null;
-}
-
-export function saveQuestionCandidates(_questionId: number, _candidates: QuestionCandidate[]): void {
-  // archived
-}
-
-export function getQuestionCandidates(_questionId: number): QuestionCandidate[] {
-  return []; // archived
-}
+// Predictions, theory confidence, intervention intent, and question candidates
+// were archived 2026-04-16. Data preserved under zz_archive_* tables.
+// Stub functions removed 2026-04-20 — no active callers remain.
 
 // ----------------------------------------------------------------------------
 // CALIBRATION CONTEXT EXTRACTION
@@ -1832,31 +1686,6 @@ export async function getEntryStateByResponseId(responseId: number): Promise<(En
   return (rows[0] as (EntryStateRow & {
     date: string; question_id: number; question_text: string;
   })) ?? null;
-}
-
-// archived
-export function getObservationForQuestion(_questionId: number): {
-  ai_observation_id: number; observation_text: string; observation_date: string;
-} | null {
-  return null;
-}
-
-// archived
-export function getSuppressedQuestionForQuestion(_questionId: number): {
-  suppressed_text: string; suppressed_date: string;
-} | null {
-  return null;
-}
-
-// archived
-export function getPredictionsForQuestion(_questionId: number): Array<{
-  predictionId: number; hypothesis: string; favoredFrame: string | null;
-  expectedSignature: string; falsificationCriteria: string;
-  statusCode: string; gradeRationale: string | null;
-  targetTopic: string | null;
-  dttmCreatedUtc: string; dttmGradedUtc: string | null;
-}> {
-  return [];
 }
 
 // ===================================================================

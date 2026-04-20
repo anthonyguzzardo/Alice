@@ -34,6 +34,7 @@
 import 'dotenv/config';
 import Anthropic from '@anthropic-ai/sdk';
 import { saveCalibrationContext, type CalibrationContextTag } from './libDb.ts';
+import { logError } from './utlErrorLog.ts';
 
 const EXTRACTION_SYSTEM_PROMPT = `You are a structured data extractor. You receive a person's response to a neutral writing prompt (like "Describe what you did this morning" or "What did you have for breakfast?").
 
@@ -196,6 +197,6 @@ export async function runCalibrationExtraction(
       console.log(`[calibration-extract] No context tags found for question ${questionId}`);
     }
   } catch (err) {
-    console.error('[calibration-extract] Extraction failed (non-blocking):', (err as Error).message);
+    logError('calibrationExtract', err, { questionId });
   }
 }

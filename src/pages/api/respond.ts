@@ -8,6 +8,7 @@ import { runGeneration } from '../../lib/libGenerate.ts';
 import { embedResponse } from '../../lib/libEmbeddings.ts';
 import { logError } from '../../lib/utlErrorLog.ts';
 import { localDateStr } from '../../lib/utlDate.ts';
+import { parseBody } from '../../lib/utlParseBody.ts';
 import { computeLinguisticDensities } from '../../lib/libLinguistic.ts';
 import { computeMATTR } from '../../lib/libAliceNegative/libHelpers.ts';
 import { renderWitnessState } from '../../lib/libAliceNegative/libRenderWitness.ts';
@@ -20,7 +21,13 @@ import { computeAndPersistDerivedSignals } from '../../lib/libSignalPipeline.ts'
 // and renders the witness state.
 
 export const POST: APIRoute = async ({ request }) => {
-  const body = await request.json();
+  const body = await parseBody<{ questionId: number; text: string; sessionSummary?: Record<string, unknown> }>(request);
+  if (!body) {
+    return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
   const { questionId, text, sessionSummary } = body;
 
   if (!questionId || !text?.trim()) {
@@ -59,16 +66,17 @@ export const POST: APIRoute = async ({ request }) => {
   const sentLenVar = sentWordCounts.length > 1 && avgSentLen != null
     ? sentWordCounts.reduce((sum: number, c: number) => sum + (c - avgSentLen) ** 2, 0) / (sentWordCounts.length - 1) : null;
 
-  // All DB writes in a single transaction — either everything
-  // commits or nothing does. No more half-baked session state.
+  // All DB writes in a single transaction via the tx handle.
+  // Every write function receives tx so it runs on the transaction
+  // connection, not the module-level pool.
   let responseId: number;
   try {
-    responseId = await sql.begin(async (sql) => {
-      const responseId = await saveResponse(questionId, trimmedText);
+    responseId = await sql.begin(async (tx) => {
+      const responseId = await saveResponse(questionId, trimmedText, tx);
 
       if (sessionSummary) {
         if (Array.isArray(sessionSummary.burstSequence) && sessionSummary.burstSequence.length > 0) {
-          await saveBurstSequence(questionId, sessionSummary.burstSequence);
+          await saveBurstSequence(questionId, sessionSummary.burstSequence, tx);
         }
 
         if (Array.isArray(sessionSummary.eventLog) && sessionSummary.eventLog.length > 0) {
@@ -82,7 +90,7 @@ export const POST: APIRoute = async ({ request }) => {
               : null,
             total_input_events: sessionSummary.eventLogTotalInputs ?? null,
             decimation_count: 0,
-          });
+          }, tx);
         }
 
         await saveSessionSummary({
@@ -162,7 +170,7 @@ export const POST: APIRoute = async ({ request }) => {
           userAgent: sessionSummary.userAgent ?? null,
           hourOfDay: sessionSummary.hourOfDay ?? null,
           dayOfWeek: sessionSummary.dayOfWeek ?? null,
-        });
+        }, tx);
 
         // Persist deletion event timing log — must run AFTER saveSessionSummary
         // since updateDeletionEvents is an UPDATE on the row it creates.
@@ -171,11 +179,11 @@ export const POST: APIRoute = async ({ request }) => {
             c: Math.max(1, d.chars ?? d.c ?? 1),
             t: Math.max(0, d.time ?? d.t ?? 0),
           }));
-          await updateDeletionEvents(questionId, JSON.stringify(compact));
+          await updateDeletionEvents(questionId, JSON.stringify(compact), tx);
         }
 
         // Compute and persist slice-3 session metadata
-        const burstsForMeta = await getBurstSequence(questionId);
+        const burstsForMeta = await getBurstSequence(questionId, tx);
         const deletionEvents = Array.isArray(sessionSummary.deletionEvents)
           ? sessionSummary.deletionEvents.map((d: any) => ({
               c: Math.max(1, d.chars ?? d.c ?? 1),
@@ -189,7 +197,7 @@ export const POST: APIRoute = async ({ request }) => {
           deletionEvents,
           bursts: burstsForMeta,
         });
-        await saveSessionMetadata(meta);
+        await saveSessionMetadata(meta, tx);
       }
 
       return responseId;

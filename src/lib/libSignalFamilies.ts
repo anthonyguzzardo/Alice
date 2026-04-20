@@ -12,7 +12,7 @@
  */
 
 import { loadSessions, computeEntryStates, STATE_DIMENSIONS, type EntryState } from './libAliceNegative/libStateEngine.ts';
-import { avg, stddev } from './libAliceNegative/libHelpers.ts';
+import { avg } from './libAliceNegative/libHelpers.ts';
 
 // ─── Signal Family Definitions ─────────────────────────────────────
 

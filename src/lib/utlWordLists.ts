@@ -21,7 +21,7 @@ export const BOOSTER_WORDS = new Set([
   'sure', 'surely', 'indeed', 'truly', 'exactly',
   'completely', 'totally', 'entirely', 'fully', 'perfectly',
   'conclusively', 'undeniably', 'inevitably', 'unquestionably',
-  'proves', 'proves', 'demonstrates', 'establishes', 'confirms',
+  'proves', 'demonstrates', 'establishes', 'confirms',
   'guarantee', 'guarantees', 'guaranteed',
   'without doubt', 'no doubt', 'beyond question',
   'must', 'will',

@@ -6,6 +6,7 @@
  */
 import type { APIRoute } from 'astro';
 import sql, { getSessionEvents } from '../../../../lib/libDb.ts';
+import { logError } from '../../../../lib/utlErrorLog.ts';
 
 export const GET: APIRoute = async ({ params }) => {
   try {
@@ -63,9 +64,9 @@ export const GET: APIRoute = async ({ params }) => {
     }, null, 2), {
       headers: { 'Content-Type': 'application/json' },
     });
-  } catch (err: any) {
-    console.error('Playback API error:', err?.message || err);
-    return new Response(JSON.stringify({ error: 'Failed to load playback', detail: err?.message }), {
+  } catch (err) {
+    logError('api.observatory.playback', err);
+    return new Response(JSON.stringify({ error: 'Failed to load playback' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });

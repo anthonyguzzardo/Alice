@@ -8,6 +8,7 @@
  */
 import type { APIRoute } from 'astro';
 import sql, { getDynamicalSignals, getMotorSignals } from '../../../../lib/libDb.ts';
+import { logError } from '../../../../lib/utlErrorLog.ts';
 import { computeDynamicalSignals, type KeystrokeEvent } from '../../../../lib/libDynamicalSignals.ts';
 
 export const GET: APIRoute = async ({ params }) => {
@@ -215,9 +216,9 @@ export const GET: APIRoute = async ({ params }) => {
     }, null, 2), {
       headers: { 'Content-Type': 'application/json' },
     });
-  } catch (err: any) {
-    console.error('Observatory entry error:', err?.message || err);
-    return new Response(JSON.stringify({ error: 'Failed to load entry', detail: err?.message }), {
+  } catch (err) {
+    logError('api.observatory.entry', err);
+    return new Response(JSON.stringify({ error: 'Failed to load entry' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });

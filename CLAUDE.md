@@ -68,6 +68,31 @@ await sql`DELETE FROM tb_questions WHERE question_id = ${id}`;
 
 See `src/lib/libDb.ts` -- `getCalibrationSessionsWithText()` for the canonical multi-table JOIN pattern.
 
+### Cascade Dependencies per Parent Table
+
+When deleting from a parent table, the following children must be deleted first (or the delete must be skipped). There are no physical FK constraints to enforce this; application code is responsible.
+
+- `tb_questions` -> `tb_responses`, `tb_session_summaries`, `tb_session_events`, `tb_burst_sequences`, `tb_session_metadata`, `tb_dynamical_signals`, `tb_motor_signals`, `tb_semantic_signals`, `tb_process_signals`, `tb_cross_session_signals`, `tb_calibration_context`, `tb_question_feedback`, `tb_interaction_events`
+- `tb_responses` -> `tb_entry_states`, `tb_semantic_states`, `tb_embeddings` (where `embedding_source_id = 1`)
+- `tb_witness_states` -> no children (leaf table)
+- `tb_entry_states` -> no children (leaf table)
+
+Prefer `sql.begin` for any multi-table delete. When in doubt, do not delete; orphan detection is in the health endpoint.
+
+### Transaction Handles for Multi-Table Writes
+
+Write functions in `libDb.ts` accept an optional `tx` parameter (`TxSql`) for transaction propagation. When performing multiple writes that must be atomic, use `sql.begin` and pass the transaction handle through:
+
+```typescript
+await sql.begin(async (tx) => {
+  const responseId = await saveResponse(questionId, text, tx);
+  await saveSessionSummary(summary, tx);
+  await saveBurstSequence(questionId, bursts, tx);
+});
+```
+
+Without the `tx` parameter, each function uses the module-level connection pool and runs independently. The `tx` parameter is optional so existing single-write call sites are unaffected.
+
 ---
 
 ## Database Conventions
@@ -78,7 +103,7 @@ See `src/lib/libDb.ts` -- `getCalibrationSessionsWithText()` for the canonical m
 - **No footer** on static enum tables
 - **Header comments** on every table: PURPOSE, USE CASE, MUTABILITY, REFERENCED BY, FOOTER
 - **Enum tables** get explicit INSERT with fixed IDs
-- Do NOT use ALTER TABLE -- rewrite the CREATE TABLE in `db/sql/dbAlice_Tables.sql`
+- Do NOT use ALTER TABLE **in the schema file** (`db/sql/dbAlice_Tables.sql`) -- rewrite the CREATE TABLE so the schema always reads as a complete, intact script. Incremental changes belong in migration files under `db/sql/migrations/`.
 - Do NOT hard-code proper nouns into column names
 - **JSONB columns**: event_log_json, keystroke_stream_json, traits_json, signals_json, deletion_events_json, iki_autocorrelation_json, digraph_latency_json, pe_spectrum, prompt trace ID arrays
 - **Embeddings**: stored as `vector(512)` on `tb_embeddings` via pgvector with HNSW index
@@ -86,6 +111,8 @@ See `src/lib/libDb.ts` -- `getCalibrationSessionsWithText()` for the canonical m
 ---
 
 ## Naming Convention
+
+**Why prefixes exist:** Every prefix (`lib`, `utl`, `cmp`, `lay`, `sty`) makes a file self-identifying outside its directory. When a filename appears in a search result, a stack trace, an import line, or a tab bar, the prefix tells you what it is without needing the path. `cmpAppNav` is a component. `layBase` is a layout. `utlDate` is a utility. The file should never be ambiguous when encountered in the wild.
 
 All folders and files follow consistent conventions by layer.
 
@@ -233,6 +260,13 @@ src-rs/src/
 
 Each compute module defines its own result struct (e.g. `DynamicalResult`, `MotorResult`). `lib.rs` maps these to the flat napi output structs.
 
+### Rust / TS Semantic Drift Risk
+
+The TS fallback can produce different values, not just different performance. The signal pipeline falls back to TypeScript when the native module is unavailable, with shape-equivalent return types. However, complex signal logic (I-burst detection, sampleEntropy caps, multi-scale permutation entropy) is implemented independently in both languages and can drift. When adding or modifying a signal, ensure:
+1. Both implementations use the same algorithm with the same parameters.
+2. A parity test compares Rust and TS output on a shared synthetic input.
+3. The health endpoint exposes `rustEngine: true/false` so operators can detect degraded mode.
+
 ---
 
 ## Known Gotchas
@@ -240,6 +274,12 @@ Each compute module defines its own result struct (e.g. `DynamicalResult`, `Moto
 - **PostgreSQL camelCase aliases**: PG lowercases unquoted identifiers. Use double quotes for camelCase aliases in SQL: `SELECT col AS "camelCase"`.
 - **JSONB auto-parsing**: The postgres driver auto-parses JSONB columns into JS objects. Functions returning JSONB fields that callers expect as strings must re-stringify them.
 - **Rust native module**: Loaded via `createRequire` in `libSignalsNative.ts`. The `.node` file is platform-specific (`alice-signals.darwin-arm64.node`). If it fails to load, all three signal families fall back to TypeScript automatically. Rebuild with `npm run build:rust` after changing `src-rs/` code. See **Rust Signal Engine** section above for coding standards.
+
+---
+
+## Archival
+
+**Archival means removal, not stubbing.** When a feature is archived, its database tables, API handlers, lib functions, and any downstream integration points (health check fields, signal registries) must be deleted in the same commit. Stub functions that preserve imports during a transition must be deleted by the time the archival commit lands. Hardcoded `true`/`false` return values in place of computed coverage are never acceptable; remove the coverage field entirely instead. Data is preserved under `zz_archive_*` tables in the database, not in application code.
 
 ---
 

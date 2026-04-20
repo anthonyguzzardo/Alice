@@ -6,6 +6,7 @@
  */
 import type { APIRoute } from 'astro';
 import sql from '../../../lib/libDb.ts';
+import { logError } from '../../../lib/utlErrorLog.ts';
 
 export const GET: APIRoute = async () => {
   try {
@@ -63,9 +64,9 @@ export const GET: APIRoute = async () => {
     }, null, 2), {
       headers: { 'Content-Type': 'application/json' },
     });
-  } catch (err: any) {
-    console.error('Observatory coupling error:', err?.message || err);
-    return new Response(JSON.stringify({ error: 'Failed to load coupling data', detail: err?.message }), {
+  } catch (err) {
+    logError('api.observatory.coupling', err);
+    return new Response(JSON.stringify({ error: 'Failed to compute coupling' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });

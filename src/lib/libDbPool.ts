@@ -27,6 +27,13 @@ const sql = postgres(connectionString, {
 
 export default sql;
 
+/**
+ * Transaction handle type. Both the pool connection (sql) and the transaction
+ * handle (tx from sql.begin callback) can execute tagged-template queries.
+ * This type captures that common capability so write functions can accept either.
+ */
+export type TxSql = typeof sql;
+
 export async function close(): Promise<void> {
   await sql.end();
 }

@@ -8,6 +8,7 @@
  */
 import type { APIRoute } from 'astro';
 import sql from '../../../lib/libDb.ts';
+import { logError } from '../../../lib/utlErrorLog.ts';
 
 export const GET: APIRoute = async () => {
   try {
@@ -94,9 +95,9 @@ export const GET: APIRoute = async () => {
     return new Response(JSON.stringify({ states: enriched }, null, 2), {
       headers: { 'Content-Type': 'application/json' },
     });
-  } catch (err: any) {
-    console.error('Observatory states error:', err?.message || err);
-    return new Response(JSON.stringify({ error: 'Failed to load entry states', detail: err?.message }), {
+  } catch (err) {
+    logError('api.observatory.states', err);
+    return new Response(JSON.stringify({ error: 'Failed to load entry states' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });

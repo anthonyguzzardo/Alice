@@ -8,8 +8,10 @@
 import type { APIRoute } from 'astro';
 import sql from '../../lib/libDb.ts';
 import { DEFAULT_WITNESS } from '../../lib/libAliceNegative/libTypes.ts';
+import { logError } from '../../lib/utlErrorLog.ts';
 
 export const GET: APIRoute = async () => {
+  try {
   // Get distinct session days (by scheduled_for) with real responses
   const sessionDays = await sql`
     SELECT q.scheduled_for, MIN(r.dttm_created_utc) as first_response_utc,
@@ -77,4 +79,11 @@ export const GET: APIRoute = async () => {
   return new Response(JSON.stringify(states), {
     headers: { 'Content-Type': 'application/json' },
   });
+  } catch (err) {
+    logError('api.gallery', err);
+    return new Response(JSON.stringify({ error: 'Failed to load gallery' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
 };

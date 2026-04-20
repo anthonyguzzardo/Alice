@@ -7,6 +7,7 @@
  */
 import type { APIRoute } from 'astro';
 import { getCalibrationHistory } from '../../../lib/libDb.ts';
+import { logError } from '../../../lib/utlErrorLog.ts';
 
 export const GET: APIRoute = async () => {
   try {
@@ -29,9 +30,9 @@ export const GET: APIRoute = async () => {
     }, null, 2), {
       headers: { 'Content-Type': 'application/json' },
     });
-  } catch (err: any) {
-    console.error('Calibration drift error:', err?.message || err);
-    return new Response(JSON.stringify({ error: 'Failed to load calibration drift', detail: err?.message }), {
+  } catch (err) {
+    logError('api.observatory.calibrationDrift', err);
+    return new Response(JSON.stringify({ error: 'Failed to compute drift' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });

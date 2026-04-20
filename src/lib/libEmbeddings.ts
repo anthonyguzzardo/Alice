@@ -15,7 +15,6 @@ import {
 } from './libDb.ts';
 
 const VOYAGE_MODEL = 'voyage-3-lite';
-const EMBEDDING_DIMENSIONS = 512;
 
 const SOURCE_IDS = {
   response: 1,

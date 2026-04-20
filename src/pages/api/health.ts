@@ -15,12 +15,11 @@ import type { APIRoute } from 'astro';
 import sql from '../../lib/libDb.ts';
 import { localDateStr } from '../../lib/utlDate.ts';
 import { readRecentErrors } from '../../lib/utlErrorLog.ts';
+import { hasNativeEngine } from '../../lib/libSignalsNative.ts';
 
 interface PipelineCoverage {
   embedded: boolean;
   entryState: boolean;
-  observed: boolean;
-  suppressedQuestion: boolean;
   witnessRendered: boolean;
 }
 
@@ -53,6 +52,7 @@ interface HealthResponse {
     recentErrorCount: number;
     recentErrorJobs: string[];
   };
+  rustEngine: boolean;
   overall: 'green' | 'yellow' | 'red';
 }
 
@@ -105,8 +105,6 @@ export const GET: APIRoute = async () => {
     const pipeline: PipelineCoverage = {
       embedded: !!coverage.embedded,
       entryState: !!coverage.entry_state,
-      observed: true,           // archived — not checked
-      suppressedQuestion: true, // archived — not checked
       witnessRendered: !!coverage.witness_rendered,
     };
     const missing: string[] = [];
@@ -163,6 +161,11 @@ export const GET: APIRoute = async () => {
   `;
   const duplicateScheduledQuestions = (dupRow as { c: number }).c;
 
+  // Note: this intentionally excludes calibration sessions (source_id = 3).
+  // Three early calibration sessions (question_ids 42, 63, 64) have responses
+  // but no session summaries because they predate the calibration event-logging
+  // pipeline (2026-04-14 and 2026-04-17). They are not orphans from a
+  // transaction bug. The response text is real and left in place.
   const [missingRow] = await sql`
     SELECT COUNT(*)::int AS c
     FROM tb_responses r
@@ -207,6 +210,7 @@ export const GET: APIRoute = async () => {
       recentErrorCount: recentErrors.length,
       recentErrorJobs: uniqueErrorJobs,
     },
+    rustEngine: hasNativeEngine,
     overall,
   };
 

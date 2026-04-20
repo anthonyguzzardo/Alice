@@ -64,19 +64,24 @@ function std(arr: number[], m?: number): number {
 // Distinct from Shannon entropy (distribution) and permutation entropy (ordinal).
 
 function sampleEntropy(series: number[], m: number = 2, rFactor: number = 0.2): number | null {
-  const N = series.length;
-  if (N < 30) return null;
+  if (series.length < 30) return null;
 
+  // Tolerance computed from full series (matches Rust: full-series std_dev
+  // calibrates r to overall session variability)
   const r = rFactor * std(series);
   if (r <= 0) return null;
 
-  function countMatches(templateLen: number): number {
+  // Cap at 500 points for O(n^2 * m) feasibility (matches Rust motor.rs)
+  const data = series.length > 500 ? series.slice(-500) : series;
+  const n = data.length;
+
+  function countMatches(data: number[], n: number, templateLen: number, r: number): number {
     let count = 0;
-    for (let i = 0; i < N - templateLen; i++) {
-      for (let j = i + 1; j < N - templateLen; j++) {
+    for (let i = 0; i < n - templateLen; i++) {
+      for (let j = i + 1; j < n - templateLen; j++) {
         let match = true;
         for (let k = 0; k < templateLen; k++) {
-          if (Math.abs(series[i + k] - series[j + k]) > r) {
+          if (Math.abs(data[i + k] - data[j + k]) > r) {
             match = false;
             break;
           }
@@ -87,10 +92,8 @@ function sampleEntropy(series: number[], m: number = 2, rFactor: number = 0.2): 
     return count;
   }
 
-  // Cap at 500 points for performance (O(n^2 * m) complexity)
-  const capped = series.length > 500 ? series.slice(-500) : series;
-  const B = countMatches.call(null, m);
-  const A = countMatches.call(null, m + 1);
+  const B = countMatches(data, n, m, r);
+  const A = countMatches(data, n, m + 1, r);
 
   if (B === 0) return null;
   return -Math.log(A / B);

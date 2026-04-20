@@ -7,6 +7,7 @@ import { runCalibrationExtraction } from '../../lib/libCalibrationExtract.ts';
 import { snapshotCalibrationBaselinesAfterSubmit } from '../../lib/libCalibrationDrift.ts';
 import { computeAndPersistDerivedSignals } from '../../lib/libSignalPipeline.ts';
 import { logError } from '../../lib/utlErrorLog.ts';
+import { parseBody } from '../../lib/utlParseBody.ts';
 
 export const GET: APIRoute = async () => {
   const used = new Set(await getUsedCalibrationPrompts());
@@ -19,7 +20,13 @@ export const GET: APIRoute = async () => {
 };
 
 export const POST: APIRoute = async ({ request }) => {
-  const body = await request.json();
+  const body = await parseBody<{ prompt: string; text: string; sessionSummary: Record<string, unknown> }>(request);
+  if (!body) {
+    return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
   const { prompt, text, sessionSummary } = body;
 
   if (!prompt || !text?.trim() || !sessionSummary) {
@@ -133,7 +140,9 @@ export const POST: APIRoute = async ({ request }) => {
 
   // Fire-and-forget: extract life-context tags from calibration response text.
   // Non-blocking — extraction failure never prevents calibration from succeeding.
-  runCalibrationExtraction(questionId, text.trim(), prompt);
+  void runCalibrationExtraction(questionId, text.trim(), prompt).catch((err) =>
+    logError('calibrate.extraction', err, { questionId })
+  );
 
   // Fire-and-forget: compute derived signals (motor, semantic, process, cross-session)
   try { await computeAndPersistDerivedSignals(questionId); }

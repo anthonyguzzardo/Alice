@@ -15,6 +15,7 @@
  */
 import type { APIRoute } from 'astro';
 import sql from '../../../lib/libDb.ts';
+import { logError } from '../../../lib/utlErrorLog.ts';
 import {
   DIM_PLAIN, DIM_HIGH, DIM_LOW, EMO_PLAIN, TREND_VERB,
   CONVERGENCE_HIGH, CONVERGENCE_LOW, RARE_PREFIX,
@@ -256,9 +257,9 @@ export const GET: APIRoute = async () => {
     }, null, 2), {
       headers: { 'Content-Type': 'application/json' },
     });
-  } catch (err: any) {
-    console.error('Synthesis error:', err?.message || err);
-    return new Response(JSON.stringify({ error: 'Failed to synthesize', detail: err?.message }), {
+  } catch (err) {
+    logError('api.observatory.synthesis', err);
+    return new Response(JSON.stringify({ error: 'Failed to synthesize' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });

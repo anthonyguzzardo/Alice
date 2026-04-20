@@ -34,8 +34,8 @@ export const GET: APIRoute = async () => {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
-  } catch (err: any) {
-    return new Response(JSON.stringify({ error: err.message }), {
+  } catch (err) {
+    return new Response(JSON.stringify({ error: 'Signal variant analysis failed' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });
