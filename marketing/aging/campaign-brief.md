@@ -47,7 +47,7 @@ The family members, clinicians, and care providers who monitor aging adults need
 ### Longevity Clinic / Concierge Medicine Provider
 - Serves health-optimizing clients (often 50-70, high net worth)
 - Offers comprehensive biomarker panels (bloodwork, genomics, imaging)
-- Cognitive biomarkers are a gap in the current longevity assessment toolkit
+- Cognitive signals are a gap in the current longevity assessment toolkit
 - Clients want to monitor cognitive health proactively, not just physically
 - Willing to pay premium for cutting-edge assessment
 
@@ -100,7 +100,7 @@ Brain training apps (BrainHQ, Lumosity, CogniFit) fail as cognitive monitoring i
 | Frequency | 1x/year | Daily |
 | Temporal resolution | Single snapshot | Trajectory with slope and inflection points |
 | Setting | Clinical (anxiety-producing) | Home (comfortable, routine) |
-| Detection window | Detects moderate impairment | Designed for pre-clinical trajectory detection |
+| Detection window | Detects moderate impairment | Designed for pre-clinical trajectory detection (pending validation) |
 | Patient experience | "Am I losing it?" (test anxiety) | "What an interesting question" (journal practice) |
 | Data between visits | None | 365 data points |
 
@@ -126,7 +126,7 @@ Brain training apps (BrainHQ, Lumosity, CogniFit) fail as cognitive monitoring i
 | Dimension | Wearables | Alice |
 |---|---|---|
 | Signal domain | Physiological (HR, HRV, SpO2, steps) | Cognitive-linguistic |
-| Cognitive sensitivity | None (heart rate doesn't predict cognitive decline) | Designed specifically for cognitive trajectory |
+| Cognitive sensitivity | Not designed for cognitive measurement | Designed specifically for cognitive trajectory |
 | User burden | Wear a device (charging, skin irritation, aesthetics) | Answer a question (no hardware) |
 
 ## Key Messages
@@ -139,16 +139,20 @@ You can't call every day and listen for word-finding pauses. You can't fly home 
 Your parent won't feel tested. They won't feel watched. They'll feel asked. There is a difference.
 
 ### For Clinicians
-**"365 cognitive data points between annual visits."**
-The MoCA tells you where they are today. Alice tells you how they got there. Trajectory context transforms a single screening score into a clinical narrative.
+**"Up to 365 behavioral signal observations between annual visits."**
+The MoCA tells you where they are today. Alice is designed to show how they got there. Trajectory context can transform a single screening score into a clinical narrative.
 
 ### For Senior Living
 **"Dignified cognitive monitoring at scale."**
 Every resident gets a daily thinking practice. Staff get aggregate cognitive health indicators across the community. Individual trajectories are clinically privileged. No resident feels surveilled.
 
 ### For Longevity Clinics
-**"The cognitive biomarker panel your assessment is missing."**
-You measure telomere length, inflammatory markers, metabolic panels, and VO2 max. You have nothing for cognition except a 5-minute screening test. Alice provides daily ecological cognitive trajectory data alongside your physiological biomarker suite.
+**"The cognitive signal panel your assessment is missing."**
+You measure telomere length, inflammatory markers, metabolic panels, and VO2 max. You have nothing for cognition except a 5-minute screening test. Alice provides daily ecological behavioral signals designed to track cognitive trajectory, alongside your physiological biomarker suite.
+
+### Why Unmediated Writing Matters
+
+If the aging adult uses AI-assisted writing (autocomplete, predictive text, AI drafting) during Alice sessions, the cognitive signals become meaningless. AI mediation replaces the cognitive construct being measured: a word accepted from a suggestion reflects suggestion evaluation, not lexical retrieval (Arnold et al. 2020; Banovic et al. 2019). This is particularly relevant for the aging population, where AI writing assistants are increasingly marketed as accessibility tools. Alice requires unassisted writing by design. For aging adults who use AI writing tools in other contexts, the daily Alice question provides a protected window of unmediated cognitive output. See `scientific-foundation.md` Section 4.
 
 ## Objection Handling
 
@@ -165,7 +169,7 @@ No. Surveillance means someone can see what you're doing. Alice's care partner r
 Daily phone calls are wonderful but subjective. You notice change relative to last week, not last year. You rationalize ("they're just tired"). Alice's signal engine computes objective within-subject change trajectories across months and years, detecting gradual shifts that are invisible to casual observation.
 
 **"What if the trajectory report causes unnecessary alarm?"**
-The alert threshold requires multiple signal trajectories to cross predefined change thresholds simultaneously. Isolated single-signal fluctuations (a bad day, distraction, a cold) do not trigger alerts. The system is designed for specificity (few false alarms) over sensitivity (catching every possible change). False alarms undermine trust. We optimize for the alert that matters.
+The alert threshold requires multiple signal trajectories to cross predefined change thresholds simultaneously. Isolated single-signal fluctuations (a bad day, distraction, a cold) do not trigger alerts. The system is designed for high specificity (few false alarms) over sensitivity (catching every possible change). However, the base rate of cognitive decline in the target population means achieving clinically useful positive predictive value is a central design challenge: MCI incidence is roughly 1-2% per year in adults over 65, so even high specificity produces a non-trivial false positive rate at population scale. Alert framing (trajectory observations, not diagnostic flags) and clinical follow-up pathways are essential. This challenge is acknowledged, not solved.
 
 ## Go-to-Market
 

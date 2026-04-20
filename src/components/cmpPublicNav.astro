@@ -11,6 +11,7 @@ const { active = '' } = Astro.props;
     <div class="nav-dropdown" id="nav-dropdown">
       <a href="/">Journal</a>
       <a href="/landing" class:list={[{ current: active === 'home' }]}>Public Alice</a>
+      <a href="/research" class:list={[{ current: active === 'research' }]}>Research</a>
       <a href="/papers" class:list={[{ current: active === 'papers' }]}>Papers</a>
       <div class="nav-divider"></div>
       <a href="/alice-negative">Alice Negative</a>

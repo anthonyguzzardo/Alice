@@ -36,7 +36,7 @@ The FDA has signaled openness to digital endpoints and novel biomarkers. The 201
 
 ## Value Proposition
 
-Daily ecological digital cognitive biomarkers for CNS clinical trials. Alice provides high-frequency cognitive signal data from a 5-minute daily writing task, extracting implicit behavioral markers that detect within-subject cognitive change trajectories without practice effects, rater variability, or clinical site visits.
+Daily ecological digital cognitive signals for CNS clinical trials. Alice provides high-frequency behavioral signal data from a 5-minute daily writing task, extracting implicit markers designed to detect within-subject cognitive change trajectories, substantially reducing practice effects, rater variability, and clinical site visit burden.
 
 ## The Signal Advantage for Pharma
 
@@ -48,15 +48,17 @@ Traditional cognitive tests are explicit: the patient knows they are being teste
 - **Gaming** (patients prepare, use compensatory strategies)
 - **Rater effects** (different examiners score differently across sites)
 
-Alice's signals are implicit: they are extracted from naturalistic writing behavior during a daily journal question. The patient does not know what is being measured. This eliminates:
-- Practice effects (each question is unique and cannot be anticipated)
+Alice's signals are implicit: they are extracted from naturalistic writing behavior during a daily journal question. The patient does not know what is being measured. This substantially reduces or eliminates:
+- Practice effects (each question is unique and cannot be anticipated, though the daily writing routine itself creates some familiarity)
 - Performance anxiety (it's a journal, not a test)
 - Gaming (you cannot optimize metrics you cannot see)
 - Rater effects (signal extraction is algorithmic and deterministic)
 
 ### Signal-to-Endpoint Mapping
 
-| Alice Signal | Cognitive Construct | Traditional Endpoint Analog |
+*Hypothesized mappings based on cognitive science literature. Each mapping requires empirical validation in the target population. See `scientific-foundation.md` for known limitations of the current evidence base.*
+
+| Alice Signal | Hypothesized Cognitive Construct | Traditional Endpoint Analog |
 |---|---|---|
 | Inter-keystroke interval (IKI) distributions | Motor planning, processing speed | Trail Making Test, DSST |
 | Pause architecture (between-word, between-sentence) | Lexical retrieval, working memory | Category Fluency, Digit Span |
@@ -69,22 +71,22 @@ Alice's signals are implicit: they are extracted from naturalistic writing behav
 
 ### Sensitivity Advantage
 
-Traditional endpoints sample cognition 4x/year (quarterly visits). Alice samples daily. This produces:
-- **365x data density**: Within-subject trajectories are estimable with statistical power that quarterly snapshots cannot achieve
-- **Earlier signal detection**: Subtle cognitive changes that are noise at quarterly resolution become signal at daily resolution
-- **Reduced sample size requirements**: Higher measurement precision per participant reduces the N needed to detect a given effect size
+Traditional endpoints sample cognition 4x/year (quarterly visits). Alice samples daily. The potential advantages, pending validation of sufficient signal-to-noise ratio at daily resolution:
+- **Higher temporal density**: Within-subject trajectories are estimable with statistical power that quarterly snapshots cannot achieve, assuming daily signals carry independent cognitive information
+- **Earlier signal detection**: Subtle cognitive changes that may be undetectable at quarterly resolution may become detectable at daily resolution
+- **Reduced sample size requirements**: Higher measurement precision per participant may reduce the N needed to detect a given effect size
 - **Missing data tolerance**: A participant who misses 30% of daily assessments still provides ~255 data points/year vs. 3 quarterly visits
 
 ## Key Messages
 
 ### For Clinical Development Leadership
-"Daily digital cognitive endpoints that detect treatment effects before ADAS-Cog moves. No practice effects. No rater variability. No site visits."
+"Daily digital cognitive endpoints designed to detect treatment effects with higher temporal resolution than quarterly ADAS-Cog administration. Substantially reduced practice effects, no rater variability, no site visits."
 
 ### For Regulatory Strategy
-"An ecological cognitive signal instrument producing objective, algorithmic biomarker data compatible with decentralized trial architectures and FDA digital endpoint guidance."
+"An ecological cognitive signal instrument producing objective, algorithmic signal data amenable to biomarker qualification, compatible with decentralized trial architectures and FDA digital endpoint guidance."
 
 ### For Medical Affairs / KOL Engagement
-"A research instrument generating novel cognitive process biomarkers at daily resolution, with established psychometric foundations in the keystroke dynamics and computational linguistics literature."
+"A research instrument generating novel candidate cognitive process signals at daily resolution, with foundations in the keystroke dynamics and computational linguistics literature. Psychometric validation in longitudinal context is the research opportunity."
 
 ### For Real-World Evidence Teams
 "Post-market cognitive monitoring that patients experience as a daily journal, generating real-world cognitive trajectory data without clinical overhead."
@@ -104,6 +106,10 @@ Speech analysis is the closest methodological analog to Alice. Both extract cogn
 - Alice uses written language (controllable pacing, revision possible), speech is spoken (real-time, no revision)
 - Alice provides keystroke-level temporal data that speech analysis cannot (pause architecture within text production)
 - Alice's daily question model generates consistent engagement; speech collection tasks are typically periodic
+
+### Why Unmediated Writing Is a Measurement Validity Requirement
+
+AI-mediated writing input (autocomplete, predictive text, AI-assisted drafting) does not add noise to behavioral signals. It replaces the cognitive construct being measured: a word accepted from a suggestion reflects suggestion evaluation, not lexical retrieval. The surface output is identical; the generating process is different (Arnold et al. 2020; Banovic et al. 2019). The contamination is invisible in the finished text, undetectable post-hoc, and persists even after AI assistance is removed (Zhou and Liu 2025). Any trial instrument that captures writing behavior without controlling for AI mediation is measuring an unknown mixture of human cognition and human-AI interaction. Alice requires unassisted writing by design. See `scientific-foundation.md` Section 4 for the full argument.
 
 ## Objection Handling
 

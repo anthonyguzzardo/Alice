@@ -54,7 +54,7 @@ Organizational cognitive health intelligence without individual surveillance. Al
 ### Organizational Intelligence Layer
 - Aggregate cognitive health signals across the population (minimum reporting threshold: n=25 per group to prevent individual identification)
 - Trend indicators: organizational lexical diversity trends, response depth trends, hedging density shifts, semantic coherence changes
-- These signals correlate with cognitive load, decision fatigue, and burnout risk
+- These signals are hypothesized to correlate with cognitive load and decision fatigue based on the underlying cognitive science literature. Organizational-level validation is part of the design partner program
 - Reported as organizational health indicators (like engagement survey scores), never individual scores
 - Quarterly cognitive health report for leadership
 
@@ -85,7 +85,7 @@ Organizational cognitive health intelligence without individual surveillance. Al
 | Signal type | Self-reported opinion | Implicit cognitive behavioral signals |
 | Social desirability bias | High (employees curate responses) | None (employees don't know what's measured) |
 | Survey fatigue | Significant after 2-3 rounds | None (it's a journal, not a survey) |
-| Actionability | "Engagement dropped 3 points" | "Organizational hedging density increased 15%, indicating rising uncertainty/risk aversion" |
+| Actionability | "Engagement dropped 3 points" | e.g. "Organizational hedging density increased 15%" (hypothesized to indicate rising uncertainty/risk aversion; organizational-level interpretation requires validation) |
 
 ### vs. EAP / Therapy Platforms (Lyra, Spring Health, Ginger)
 | Dimension | Therapy Platforms | Alice Enterprise |
@@ -93,8 +93,8 @@ Organizational cognitive health intelligence without individual surveillance. Al
 | Position in care continuum | Clinical intervention (downstream) | Cognitive wellbeing (upstream) |
 | Stigma barrier | Employee must acknowledge a problem | Employee answers a daily question |
 | Coverage | 5-15% of employees use EAP | Accessible to entire population |
-| Signal | Clinical utilization rates | Pre-clinical cognitive health indicators |
-| Complementarity | Alice does not replace EAP; Alice detects organizational cognitive health trends that may predict EAP utilization |
+| Signal | Clinical utilization rates | Upstream cognitive health indicators |
+| Complementarity | Alice does not replace EAP; Alice is designed to detect organizational cognitive health trends that may correlate with EAP utilization (pending validation) |
 
 ## Key Messages
 
@@ -111,8 +111,8 @@ Calm for Business tells you 12% of employees meditated this month. Alice tells y
 No one at your company will ever see your answer. No one will know if you skipped a day. This is not a wellness program. It is a thinking practice that happens to be offered by your employer.
 
 ### For the Board
-**"A leading indicator of organizational cognitive health."**
-Engagement surveys are lagging indicators (they measure dissatisfaction that already happened). Cognitive signal trends are leading indicators (they detect cognitive overload and decision fatigue before they manifest as attrition, errors, or burnout claims).
+**"A candidate leading indicator of organizational cognitive health."**
+Engagement surveys are lagging indicators (they measure dissatisfaction that already happened). Cognitive signal trends may function as leading indicators, detecting cognitive overload and decision fatigue before they manifest as attrition, errors, or burnout claims. Validating this relationship is the core research question of the design partner program.
 
 ## Objection Handling
 

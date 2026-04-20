@@ -42,7 +42,7 @@ The longevity insurance market (annuities, pension de-risking, long-term care) n
 
 ## Value Proposition
 
-Longitudinal cognitive trajectory data for actuarial risk modeling. Alice provides years of daily cognitive signal data that characterize an individual's cognitive trajectory, enabling trajectory-based underwriting for longevity, long-term care, and life insurance products. The signals (lexical diversity trends, semantic coherence trajectories, processing speed patterns) are early indicators of cognitive reserve depletion, detectable years before clinical diagnosis.
+Longitudinal cognitive trajectory data for actuarial risk modeling. Alice provides years of daily behavioral signal data designed to characterize an individual's cognitive trajectory, enabling trajectory-based underwriting for longevity, long-term care, and life insurance products. The signals (lexical diversity trends, semantic coherence trajectories, processing speed patterns) are hypothesized to index cognitive reserve, with the potential for detection of trajectory changes in the pre-clinical window. Specific detection timelines require prospective validation.
 
 ## The Trajectory Advantage
 
@@ -57,9 +57,11 @@ Alice produces longitudinal daily data. Over 12 months, an individual generates 
 
 ### Signal-to-Risk Mapping
 
-| Alice Signal Trajectory | Cognitive Risk Interpretation | Actuarial Relevance |
+*Hypothesized mappings based on cognitive science literature. Each mapping requires prospective validation with Alice's specific signal ensemble before actuarial use.*
+
+| Alice Signal Trajectory | Hypothesized Cognitive Risk Interpretation | Actuarial Relevance |
 |---|---|---|
-| MATTR declining slope | Vocabulary access narrowing | Early semantic memory decline (3-7 years before clinical Dx) |
+| MATTR declining slope | Vocabulary access narrowing | Hypothesized early semantic memory decline (timeline requires prospective validation) |
 | IKI variance increasing | Processing speed becoming inconsistent | Motor-cognitive integration degrading |
 | Semantic coherence declining | Discourse becoming less organized | Executive function decline |
 | Pause architecture fragmenting | Lexical retrieval slowing | Word-finding difficulty (early MCI marker) |
@@ -71,7 +73,7 @@ Alice produces longitudinal daily data. Over 12 months, an individual generates 
 
 Clinical cognitive diagnosis (MCI, dementia) typically occurs 5-10 years after the underlying pathology begins. During this pre-clinical window, cognitive changes are subtle enough to escape standard screening but may be detectable in high-frequency behavioral data.
 
-Alice's signal engine is designed to operate in this pre-clinical window: detecting trajectory changes in writing behavior that precede clinical presentation. This is the window where actuarial intervention (pricing, reserve adjustment, product design) has the highest value.
+Alice's signal engine is designed to detect trajectory changes in writing behavior during this pre-clinical window, before changes surface in standard cognitive screening. Whether it succeeds requires prospective validation against clinical outcomes. This is the window where actuarial intervention (pricing, reserve adjustment, product design) has the highest potential value.
 
 ## Key Differentiators
 
@@ -109,12 +111,12 @@ Alice's signal engine is designed to operate in this pre-clinical window: detect
 Age tells you the population risk. A single cognitive screen tells you today's status. Alice tells you the direction, rate, and stability of cognitive change over years. Trajectory is the variable you've been missing.
 
 ### For Underwriting Innovation
-**"Leading indicators of cognitive decline, years before clinical diagnosis."**
-Claims-based models detect cognitive risk after the diagnosis code appears. Alice's behavioral signals operate in the pre-clinical window, where actuarial intervention has the highest value.
+**"Candidate leading indicators of cognitive decline, potentially years before clinical diagnosis."**
+Claims-based models detect cognitive risk after the diagnosis code appears. Alice's behavioral signals are designed to operate in the pre-clinical window, where actuarial intervention has the highest potential value. Specific predictive timelines require prospective validation (see Phase 1 validation study).
 
 ### For Medical Directors
-**"Cognitive reserve is modifiable and measurable."**
-Unlike genetic risk factors, cognitive reserve changes over time in response to intellectual engagement, physical activity, and social connection. Alice measures it longitudinally, providing the data to track individual cognitive reserve trajectories.
+**"Cognitive reserve is modifiable and potentially measurable."**
+Unlike genetic risk factors, cognitive reserve changes over time in response to intellectual engagement, physical activity, and social connection. Alice is designed to track behavioral signals hypothesized to index cognitive reserve longitudinally. Whether these signals reliably measure reserve is the research question the validation study addresses.
 
 ### For Product Design
 **"Price long-term care risk with cognitive trajectory, not just age."**

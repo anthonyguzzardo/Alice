@@ -2,7 +2,7 @@
 
 ## The Position
 
-Alice is the only cognitive instrument that learns from longitudinal response history while maintaining a complete black box for the user.
+Alice is the only system designed as a cognitive instrument that learns from longitudinal response history while maintaining a complete black box for the user.
 
 This is not a feature gap. It is the architecture. Every competitor either surfaces data back to the user (creating observer effects, metric gaming, and quantification anxiety) or doesn't learn from history (limiting depth over time). Alice does what no one else does: digests silently and asks sharper questions tomorrow.
 
@@ -20,7 +20,7 @@ The wellness app industry optimizes for engagement. Alice optimizes for depth. T
 Alice's question generation engine uses accumulated response history to calibrate tomorrow's question. The user experiences progressively sharper questioning. They never see the analysis, the patterns, or the signals that produced the question. This eliminates the feedback loop that makes every other AI journaling app eventually feel circular.
 
 ### 2. Signal Engine Runs Silent
-Behavioral, linguistic, and temporal signals are computed from every response: inter-keystroke intervals, pause architectures, lexical diversity trajectories, semantic coherence, hedging patterns, revision behaviors. These signals have research-grade value. The user never sees a single one. This means users cannot game metrics they cannot see, producing clean longitudinal data uncontaminated by observer effects.
+Behavioral, linguistic, and temporal signals are computed from every response: inter-keystroke intervals, pause architectures, lexical diversity trajectories, semantic coherence, hedging patterns, revision behaviors. These signals are computed using algorithms with established foundations in the writing research and cognitive science literature; their psychometric properties in a longitudinal journaling context have not yet been validated. The user never sees a single one. This means users cannot game metrics they cannot see, producing longitudinal data uncontaminated by the metric-gaming and practice effects that degrade explicit cognitive tests.
 
 ### 3. One Question Per Day
 Not unlimited entries. Not multi-modal check-ins. Not a blank page. One question. The constraint forces depth instead of breadth. It makes the question matter. It prevents the practice from becoming rumination (a documented risk of daily freeform journaling, per Pennebaker's own cautions).
@@ -30,6 +30,16 @@ No streaks. No badges. No scores. No progress bars. No leaderboards. Academic li
 
 ### 5. No Dashboard
 No mood graphs. No trend lines. No weekly summaries. No year-in-review. A 2025 survey found 91% of people who track personal metrics experience tracking-related stress. The absence of a dashboard is not a missing feature. It is the feature.
+
+## Why Unmediated Input Is Non-Negotiable
+
+The black box design is not only a philosophical choice. It is a measurement validity requirement.
+
+AI mediation of writing input (autocomplete, predictive text, AI-assisted drafting) does not add noise to behavioral signals. It replaces the construct being measured. A word accepted from a suggestion is not a noisy measurement of lexical retrieval; it is a clean measurement of suggestion evaluation. The surface output is identical. The generating process is different. More data does not help, because you are accumulating evidence about the wrong thing with increasing statistical power.
+
+This is empirically documented: predictive text shifts production from generation to selection (Arnold et al. 2020), autocomplete shifts pause distributions from lexical-retrieval patterns to suggestion-evaluation patterns (Banovic et al. 2019), and the effects persist even after AI is removed (Zhou and Liu 2025). The contamination is invisible at the point of collection and undetectable post-hoc.
+
+Alice requires unassisted writing because the signals it computes are only meaningful when the writing reflects the user's own cognitive processes. This is not a UX preference. It is the condition under which the instrument measures what it claims to measure. See `scientific-foundation.md` Section 4 for the full argument.
 
 ## What Alice Is Not
 
@@ -50,7 +60,7 @@ The moat is philosophical, not technical. Any company can build an AI that gener
 |---|---|---|
 | Consumer (DTC) | Daily journal | Depth without self-surveillance |
 | Clinical Research | Cognitive signal instrument | Longitudinal data without observer effects |
-| Pharmaceutical | Digital biomarker endpoint | Daily ecological cognitive measurement |
+| Pharmaceutical | Digital cognitive signal endpoint | Daily ecological cognitive measurement |
 | Enterprise | Employee cognitive wellbeing | Population health without the Panopticon |
 | Defense / Intelligence | Cognitive readiness tool | Pre-linguistic degradation detection |
 | Insurance / Actuarial | Cognitive risk model input | Trajectory-based underwriting |

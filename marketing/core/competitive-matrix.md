@@ -54,7 +54,7 @@ Alice is alone in the upper-right. Every product that learns from history shows 
 | Core modality | Meditation, guided exercises, CBT scripts | Single daily question |
 | Journaling role | Bolt-on feature (check-ins, reflections) | The entire practice |
 | AI model | Scripted CBT (Woebot), curated content (Calm), or chatbot (Headspace Ebb) | Generative question from response history |
-| Clinical validation | Mixed (Woebot had best evidence, then shut down) | Signal engine produces research-grade data |
+| Clinical validation | Mixed (Woebot had best evidence, then shut down) | Signal engine produces longitudinal data amenable to research validation |
 | Business model | Subscription justified by content library | Subscription justified by question quality |
 
 **Why this matters:** Woebot had the strongest clinical evidence of any mental health app and still shut down (June 2025) because it had no sustainable business model. Clinical validation and business sustainability are separate problems. Alice's value compounds over time (better questions from more history), creating natural retention without engagement mechanics.
@@ -102,7 +102,7 @@ Alice is alone in the upper-right. Every product that learns from history shows 
 | No gamification | PMC: no significant relationship between gamification and adherence; depression associated with hyposensitivity to rewards, making gamification counterproductive |
 | No dashboard | 2025 survey (n=2,999): 91% of metric trackers experience tracking-related stress |
 | One question/day | Pennebaker: daily emotional journaling can become rumination for brooders; single-question constraint prevents spiral |
-| Black box | Hawthorne effect: observer awareness contaminates behavioral data; hiding metrics eliminates gaming |
+| Black box | Hawthorne effect: observer awareness contaminates behavioral data; hiding metrics eliminates gaming. Additionally, unmediated writing is a measurement validity requirement: AI-assisted input replaces the cognitive construct being measured, not just adds noise (see `scientific-foundation.md` Section 4) |
 | AI from history | University of Michigan Resonance Project: AI feedback increases self-reflection depth by 41% vs. unguided writing |
 | No mood tracking | 75% of individuals with eating disorders report calorie-tracking apps contributed to their disorder; mood tracking is the mental health analog |
 
@@ -112,7 +112,7 @@ Alice is alone in the upper-right. Every product that learns from history shows 
 
 2. **The privacy betrayal.** Mozilla: mental health apps are worse than any other category for privacy (29/32 earned warning labels). BetterHelp fined $7.8M for sharing mental health data with ad platforms. Alice processes locally or with privacy-first architecture.
 
-3. **The 5% problem.** 20,000+ mental health apps exist; fewer than 5% have any empirical evidence. APA issued a formal health advisory in November 2025. Alice's signal engine produces research-grade longitudinal data that can be validated.
+3. **The 5% problem.** 20,000+ mental health apps exist; fewer than 5% have any empirical evidence. APA issued a formal health advisory in November 2025. Alice's signal engine produces longitudinal data amenable to psychometric validation.
 
 4. **The rumination engine.** Freeform daily journaling amplifies rumination in brooders (Pennebaker). Alice's single-question constraint directs attention rather than permitting spiral.
 

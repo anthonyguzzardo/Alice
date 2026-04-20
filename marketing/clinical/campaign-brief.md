@@ -6,7 +6,7 @@ Cognitive science, neuropsychology, and aging research face a persistent measure
 
 The field needs a daily, ecological, implicit cognitive measurement instrument that participants will actually maintain. Retention is the critical barrier: median mental health app retention is 30 days, and 70% of digital mental health program participants abandon within 100 days.
 
-Alice solves both problems simultaneously. The black box design eliminates observer effects. The single-question model with AI-generated questions from history creates natural engagement without gamification. The signal engine extracts cognitive process markers from writing behavior, not self-report.
+Alice addresses both problems simultaneously. The black box design substantially reduces observer effects. The single-question model with AI-generated questions from history creates natural engagement without gamification. The signal engine extracts candidate cognitive process markers from writing behavior, not self-report.
 
 ## Target Personas
 
@@ -31,9 +31,11 @@ Alice solves both problems simultaneously. The black box design eliminates obser
 
 ## Value Proposition
 
-A longitudinal cognitive signal instrument that collects daily behavioral data without observer effects. Participants engage with a single AI-generated question daily. The signal engine extracts cognitive process markers from response behavior. Participants experience a journal. Researchers access cognitive signal data.
+A longitudinal cognitive signal instrument that collects daily behavioral data without observer effects. Participants engage with a single AI-generated question daily. The signal engine extracts candidate cognitive process markers from response behavior. Participants experience a journal. Researchers access behavioral signal data for cognitive analysis.
 
-## Signal Inventory (Research-Grade Outputs)
+## Signal Inventory (Candidate Cognitive Process Markers)
+
+*Note: The algorithms below are implemented and computing. Their status as cognitive measures in a longitudinal journaling context is the research opportunity, not an established fact. Signal-to-construct mappings are hypothesized based on cognitive science literature. See `scientific-foundation.md` for the evidence chain and known limitations of the current evidence base.*
 
 ### Temporal Signals
 - Inter-keystroke interval distributions (IKI)
@@ -65,12 +67,12 @@ A longitudinal cognitive signal instrument that collects daily behavioral data w
 | Dimension | Batteries | Alice |
 |---|---|---|
 | Frequency | Quarterly or annual | Daily |
-| Practice effects | Documented and problematic | None (unique question each day) |
+| Practice effects | Documented and problematic | Substantially reduced (unique question each day) |
 | Ecological validity | Low (clinical setting) | High (participant's own environment) |
 | Participant burden | 30-90 minutes per session | 3-10 minutes daily |
 | Data density | 4-12 data points per year | 365 data points per year |
 | Signal type | Performance on explicit tasks | Implicit behavioral process markers |
-| Observer effects | Present (examiner in room) | Absent (black box design) |
+| Observer effects | Present (examiner in room) | Substantially reduced (black box design) |
 
 ### vs. Digital Cognitive Assessment (Lumosity, Cambridge Cognition, Cogstate)
 | Dimension | Digital Tests | Alice |
@@ -91,6 +93,10 @@ A longitudinal cognitive signal instrument that collects daily behavioral data w
 
 **Position**: Complementary, not competitive. Alice + wearable = physiological AND cognitive signal streams. The research value is in combining them.
 
+### Why Unmediated Writing Matters for Research Validity
+
+Alice requires unassisted writing because AI-mediated input produces construct replacement, not noise. A word accepted from a predictive text suggestion is not a noisy measurement of lexical retrieval; it is a clean measurement of suggestion evaluation (Arnold et al. 2020; Banovic et al. 2019). The contamination is invisible in the finished text and undetectable post-hoc. The effects persist even after AI is removed (Zhou and Liu 2025). Any keystroke-cognition instrument that does not control for or prevent AI mediation is measuring an unknown mixture of human cognition and human-AI interaction. See `scientific-foundation.md` Section 4 for the full argument and citations.
+
 ### vs. Ecological Momentary Assessment (EMA)
 | Dimension | Standard EMA | Alice |
 |---|---|---|
@@ -102,7 +108,7 @@ A longitudinal cognitive signal instrument that collects daily behavioral data w
 ## Key Messages
 
 ### For Grant Applications / IRB
-"A daily ecological cognitive measurement instrument that extracts implicit behavioral signals from naturalistic writing, eliminating practice effects and observer-awareness contamination inherent in traditional neuropsychological assessment."
+"A daily ecological cognitive measurement instrument that extracts implicit behavioral signals from naturalistic writing, substantially reducing the practice effects and observer-awareness contamination inherent in traditional neuropsychological assessment."
 
 ### For Conference Presentations
 "Longitudinal cognitive signals at daily resolution, without the Hawthorne effect."
@@ -111,7 +117,7 @@ A longitudinal cognitive signal instrument that collects daily behavioral data w
 "A daily journal that asks you one question. Your responses help researchers understand how thinking changes over time."
 
 ### For Department Heads / Funders
-"365 cognitive data points per year per participant, from a 5-minute daily practice that participants actually maintain."
+"Up to 365 behavioral signal observations per year per participant, from a 5-minute daily practice designed for sustained engagement."
 
 ## Objection Handling
 

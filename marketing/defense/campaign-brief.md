@@ -39,27 +39,31 @@ Both communities need continuous, implicit cognitive readiness measurement that 
 
 ## Value Proposition
 
-Continuous cognitive readiness assessment through daily implicit measurement. Operators experience a single daily journal question. The signal engine extracts cognitive process markers (processing speed, lexical retrieval, executive function, motor planning) from writing behavior. Commanders receive unit-level readiness indicators. Individual data remains clinically privileged.
+Continuous cognitive readiness assessment through daily implicit measurement. Operators experience a single daily journal question. The signal engine extracts candidate cognitive process markers (hypothesized to index processing speed, lexical retrieval, executive function, motor planning) from writing behavior. Commanders receive unit-level readiness indicators. Individual data remains clinically privileged.
 
 ## Operational Scenarios
 
+*The following scenarios describe the proposed operational model. None have been tested in operational settings. Each represents a design goal, not a demonstrated capability.*
+
 ### Pre-Deployment Baseline
-Operator begins daily Alice practice 90 days before deployment. Signal engine establishes individual cognitive baseline across all signal families: keystroke dynamics, lexical diversity, semantic coherence, pause architecture, revision behavior. This baseline is the operator's cognitive fingerprint under normal conditions.
+Operator begins daily Alice practice 90 days before deployment. Signal engine establishes individual cognitive baseline across all signal families: keystroke dynamics, lexical diversity, semantic coherence, pause architecture, revision behavior. This baseline serves as the operator's cognitive reference point under normal conditions.
 
 ### Deployment Monitoring
-During deployment, daily question continues. Signal deviations from baseline are computed automatically. Significant deviations (increased IKI variance, decreased lexical diversity, elevated hedging, fragmented pause architecture) indicate cognitive degradation before self-report.
+During deployment, daily question continues. Signal deviations from baseline are computed automatically. Significant deviations (increased IKI variance, decreased lexical diversity, elevated hedging, fragmented pause architecture) are hypothesized to indicate cognitive degradation before self-report.
 
 Unit-level aggregate signals (not individual) are available to the unit psychologist or human performance team. Individual-level signals are clinically privileged (accessible only to the medical provider with operator consent).
 
 ### Post-Deployment / Transition
-Return to baseline tracking. The signal trajectory during reintegration provides objective cognitive recovery data. For TBI cases, daily signal data supplements periodic ANAM/MACE-2 screening with continuous trajectory information.
+Return to baseline tracking. The signal trajectory during reintegration is designed to provide objective cognitive recovery data. For TBI cases, daily signal data would supplement periodic ANAM/MACE-2 screening with continuous trajectory information.
 
 ### Analyst Cognitive Load Monitoring
 Intelligence analysts complete daily Alice practice. Population-level cognitive health signals (hedging density, semantic coherence, response depth) provide leadership with an organizational cognitive health dashboard. Individual signals remain private. Elevated organizational hedging density may indicate analytical risk aversion, uncertainty overload, or decision fatigue across the analytic workforce.
 
 ## Signal Relevance to Military Cognitive Constructs
 
-| Alice Signal | Cognitive Construct | Operational Relevance |
+*Hypothesized signal-to-construct-to-operational-relevance mappings. Each link in the chain requires empirical validation in military populations.*
+
+| Alice Signal | Hypothesized Cognitive Construct | Hypothesized Operational Relevance |
 |---|---|---|
 | IKI variance increase | Processing speed degradation | Slowed tactical decision-making |
 | Pause architecture fragmentation | Working memory load | Impaired multi-factor situation assessment |
@@ -101,12 +105,12 @@ Intelligence analysts complete daily Alice practice. Population-level cognitive 
 ## Key Messages
 
 ### For Human Performance Leadership
-**"Cognitive readiness you can't fake."**
-Operators learn to pass cognitive tests and underreport symptoms on self-assessments. Alice measures how they actually process language, daily, implicitly. The signals cannot be gamed because the operator does not know what is being measured.
+**"Cognitive signals you can't fake."**
+Operators learn to pass cognitive tests and underreport symptoms on self-assessments. Alice measures how they actually process language, daily, implicitly. The signals cannot be gamed because the operator does not know what is being measured. Whether these signals constitute validated cognitive readiness measures requires empirical validation in military populations (see Phase 1 validation pathway).
 
 ### For DARPA / Research
-**"Daily ecological cognitive biomarkers with 365x the temporal resolution of current military cognitive screening."**
-Novel signal ensemble from naturalistic writing behavior. Deterministic signal computation (Rust). Complementary to physiological wearable data. Suitable for combined cognitive-physiological readiness models.
+**"Daily ecological cognitive signals with substantially higher temporal resolution than current military cognitive screening."**
+Novel candidate signal ensemble from naturalistic writing behavior. Deterministic signal computation (Rust). Complementary to physiological wearable data. Designed for combined cognitive-physiological readiness models.
 
 ### For Commander / Unit Leadership
 **"Unit cognitive health at a glance. No individual surveillance."**
@@ -115,6 +119,10 @@ Unit-level aggregate signals show cognitive readiness trends across the formatio
 ### For Military Psychology
 **"Continuous cognitive trajectory between formal assessments."**
 ANAM gives you a snapshot. Alice gives you the trajectory between snapshots. For TBI return-to-duty, daily signal data shows the recovery curve, not just the endpoint.
+
+### Why Unmediated Writing Matters for Operational Validity
+
+If operators use AI-assisted writing tools (autocomplete, predictive text, AI drafting) during Alice sessions, the signals become meaningless. AI mediation does not add noise to the behavioral data; it replaces the cognitive construct being measured entirely. A word accepted from a suggestion reflects suggestion evaluation, not lexical retrieval (Arnold et al. 2020; Banovic et al. 2019). The contamination is invisible in the finished text. Alice requires unassisted writing by design. In classified or operational environments where AI writing tools are already restricted, this requirement aligns with existing OPSEC posture. See `scientific-foundation.md` Section 4.
 
 ## Objection Handling
 

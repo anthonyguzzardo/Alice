@@ -21,7 +21,7 @@ marketing/
 │   └── campaign-brief.md     Longitudinal cognitive signals without observer effects.
 │
 ├── pharma/                Pharmaceutical and biotech
-│   └── campaign-brief.md     Digital cognitive biomarkers for CNS trials.
+│   └── campaign-brief.md     Digital cognitive signals for CNS trials.
 │
 ├── enterprise/            Corporate wellness
 │   └── campaign-brief.md     Cognitive wellbeing without the Panopticon.
@@ -44,7 +44,7 @@ Alice appears differently to each market, but the architecture is the same:
 |---|---|---|
 | Consumer | Daily journal question | Depth without self-surveillance |
 | Clinical | Research participation (journal) | Daily ecological cognitive signals |
-| Pharma | Clinical trial daily task (journal) | Digital biomarker endpoints |
+| Pharma | Clinical trial daily task (journal) | Digital cognitive signal endpoints |
 | Enterprise | Private daily thinking practice | Aggregate organizational cognitive health |
 | Defense | Daily journal (voluntary) | Unit-level cognitive readiness indicators |
 | Insurance | Cognitive wellness benefit | Longitudinal trajectory data for risk models |
