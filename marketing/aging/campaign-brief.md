@@ -18,6 +18,8 @@ The family members, clinicians, and care providers who monitor aging adults need
 3. Detects trajectory changes early
 4. Preserves the dignity of the person being monitored
 
+**The dignity dimension is supported by demand research.** People across all age groups describe the harm of being measured. Alexandra Carmichael (tracked 40 metrics/day): *"I had stopped trusting myself. Letting the numbers drown out my intuition."* If younger, healthy adults experience metric-induced anxiety, the effect on aging adults facing cognitive concerns is amplified. Brain training apps confirm this: users who perform poorly stop using them, creating selection bias where the population most needing monitoring self-selects out. Alice's journal question model eliminates the performance dimension entirely.
+
 ## Target Personas
 
 ### Adult Child of Aging Parent (Primary Buyer)

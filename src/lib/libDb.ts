@@ -985,38 +985,17 @@ export async function getUnembeddedResponses(): Promise<Array<{
     SELECT r.response_id, q.text AS question, r.text AS response, q.scheduled_for AS date
     FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
-    WHERE NOT EXISTS (
-      SELECT 1 FROM tb_embeddings e
-      WHERE e.embedding_source_id = 1 AND e.source_record_id = r.response_id
-    )
+    WHERE q.question_source_id != 3
+      AND NOT EXISTS (
+        SELECT 1 FROM tb_embeddings e
+        WHERE e.embedding_source_id = 1 AND e.source_record_id = r.response_id
+      )
     ORDER BY q.scheduled_for ASC
   ` as Array<{
     response_id: number; question: string; response: string; date: string;
   }>;
 }
 
-// archived 2026-04-16
-export function getUnembeddedObservations(): Array<{
-  ai_observation_id: number; observation: string; date: string;
-}> {
-  return [];
-}
-
-export async function getUnembeddedReflections(): Promise<Array<{
-  reflection_id: number; text: string; dttm_created_utc: string;
-}>> {
-  return await sql`
-    SELECT r.reflection_id, r.text, r.dttm_created_utc
-    FROM tb_reflections r
-    WHERE NOT EXISTS (
-      SELECT 1 FROM tb_embeddings e
-      WHERE e.embedding_source_id = 3 AND e.source_record_id = r.reflection_id
-    )
-    ORDER BY r.dttm_created_utc ASC
-  ` as Array<{
-    reflection_id: number; text: string; dttm_created_utc: string;
-  }>;
-}
 
 export async function searchVecEmbeddings(queryVector: number[], k: number): Promise<Array<{
   embedding_id: number; distance: number; embedding_source_id: number;

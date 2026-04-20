@@ -9,8 +9,13 @@ The backlash is real and growing:
 - Utilization rates are typically 5-15% after launch enthusiasm fades
 - The McMindfulness critique applies: companies offer meditation apps while maintaining the workload that causes burnout
 - Academic literature documents that corporate wellness programs shift health responsibility onto individuals while ignoring systemic causes
+- Calm's Trustpilot rating: 1.8/5. Headspace: 2.0/5. Dominant complaints are billing traps and streak anxiety.
+- 91% of self-trackers experience tracking-related stress (2025 survey, n=2,999)
+- The Global Wellness Summit named "The Over-Optimization Backlash" a top-10 trend for 2026
 
 The progressive HR leader knows this. They want employee cognitive wellbeing without the Panopticon. They want signal without surveillance.
+
+**The employee perspective is equally clear.** Dan Ginn, after quitting his Apple Watch: *"I stopped listening to my body and became dependent on consumer technology."* Jessica Post: *"If I needed a stand hour but I was stuck in class, I would discreetly shake my wrist because I needed to close those rings."* These are the same employees being asked to use Calm for Business.
 
 ## Target Personas
 

@@ -56,6 +56,29 @@ The moat is philosophical, not technical. Any company can build an AI that gener
 | Insurance / Actuarial | Cognitive risk model input | Trajectory-based underwriting |
 | Aging / Longevity | Cognitive monitoring | Dignity-preserving decline detection |
 
+## Demand Validation
+
+Alice's architecture is not speculative. Five distinct populations are already expressing demand for exactly what Alice does, using different language, in different communities, without knowing they're describing the same product. (See `demand-evidence.md` for full research with verbatim quotes and sources.)
+
+### The Five Convergent Populations
+
+| Population | Proxy Signal | What They're Asking For |
+|---|---|---|
+| **Journal Burners** | 3M+ copies of "Burn After Writing," 84.5M TikTok views | The act of writing without the burden of the artifact |
+| **Tracker Quitters** | 91% of self-trackers report tracking-related stress | Depth without self-surveillance |
+| **Depth Seekers** | Stanford (Science, 2026): AI affirms 49% more than humans; GlazingGate forced OpenAI rollback | Questions that challenge rather than validate |
+| **Privacy Refugees** | Universal in journaling communities; PTSD forums document self-censorship | Guaranteed invisibility of what was written |
+| **Confession Posters** | 6M+ members in r/offmychest + r/TrueOffMyChest + r/UnsentLetters | Externalize without consequence |
+
+### Key Evidence
+
+- **Pennebaker** (200+ studies): The therapeutic benefit of writing is identical whether the output is kept, destroyed, or never existed. The act is the medicine.
+- **Duke University** (Journal of Consumer Research, Best Article Award 2019): "The very people who self-select into measurement are the ones who are hurt by it."
+- **Global Wellness Summit**: Named "The Over-Optimization Backlash" a top-10 defining trend for 2026.
+- **Digital gap**: 3M+ copies of a physical black-box journal product. The digital equivalent barely exists (Drift and Halka are micro-indie projects, not real products).
+
+The market is not waiting to be educated. It is waiting to be served.
+
 ## Brand Principles
 
 1. **Depth over speed.** If a decision optimizes for throughput or engagement, it is wrong.

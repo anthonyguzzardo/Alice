@@ -117,3 +117,40 @@ Alice is alone in the upper-right. Every product that learns from history shows 
 4. **The rumination engine.** Freeform daily journaling amplifies rumination in brooders (Pennebaker). Alice's single-question constraint directs attention rather than permitting spiral.
 
 5. **The quantification fallacy.** Users optimize the metric instead of the thing the metric represents. Streaks replace learning. Mood scores replace feeling. Alice has no visible metrics to optimize.
+
+## Demand-Side Competitive Advantage
+
+Beyond product differentiation, Alice holds a demand-side advantage: the populations who need it most are currently unserved or actively harmed by existing products.
+
+### Existing Products Failing Their Users
+
+| Competitor | User Complaint | Alice Resolution |
+|---|---|---|
+| Rosebud | "Responses become formulaic after extended use" | Question quality from history, no feedback loop |
+| Reflectly | "Incredibly irrelevant and take very little thought to answer" | AI-generated from personal history, never generic |
+| Daylio | "Captures what/when but never why" | Only asks why |
+| WHOOP | "I know I'm 60% recovered. Now what?" | The question IS the action |
+| Calm/Headspace | Trustpilot 1.8-2.0/5, billing/streak complaints | No subscription dark patterns, no streaks |
+| ChatGPT | "Validates everything, stops being useful" (GlazingGate) | Mirror, not validator |
+| Apple Watch | "I'd shake my wrist to close rings during class" | Nothing to close, complete, or optimize |
+
+### Unserved Populations
+
+| Population | Current Proxy | Why It Fails | Alice Advantage |
+|---|---|---|---|
+| Journal burners | Physical "Burn After Writing" books (3M+ sold) | Two-step process, no learning, no depth | Digests silently, generates questions from history |
+| Privacy refugees | Encrypted journal apps (Day One, Penzu) | Still stores a readable record | No readable record exists |
+| Confession posters | r/offmychest, r/UnsentLetters (6M+ members) | Public, strangers with opinions, no continuity | Private, no audience, accumulates history |
+| Tracker quitters | Quitting entirely (33% of wearable buyers) | Lose all potential benefit alongside the harm | Signals computed but never surfaced |
+| Depth seekers | Custom ChatGPT system prompts ("be brutally honest") | Models still fold when user pushes back | Architecture prevents validation; question-only output |
+
+### Cultural Tailwinds
+
+- **Anti-optimization**: Global Wellness Summit top-10 trend for 2026
+- **Digital detox market**: $62.4B and growing at 18.6% CAGR
+- **Dumbphone surge**: 25% sales increase in 2025
+- **AI sycophancy backlash**: Stanford published in *Science*, OpenAI forced to roll back
+- **Contemplative tech**: Calm Tech Institute launched certification, r/nosurf hit 293K members
+- **Gen Z screen reduction**: 86% actively trying to reduce screen time
+
+Alice is not chasing these trends. These trends are converging on Alice's position.

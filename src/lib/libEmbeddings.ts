@@ -12,7 +12,6 @@ import {
   insertEmbeddingMeta,
   isRecordEmbedded,
   getUnembeddedResponses,
-  getUnembeddedReflections,
 } from './libDb.ts';
 
 const VOYAGE_MODEL = 'voyage-3-lite';
@@ -20,8 +19,6 @@ const EMBEDDING_DIMENSIONS = 512;
 
 const SOURCE_IDS = {
   response: 1,
-  observation: 2,
-  reflection: 3,
 } as const;
 
 let voyageClient: VoyageClient | null = null;
@@ -130,44 +127,17 @@ export async function embedResponse(
   await storeEmbedding('response', responseId, text, sourceDate, vector);
 }
 
-export async function embedObservation(
-  observationId: number,
-  observationText: string,
-  sourceDate: string
-): Promise<void> {
-  if (await isRecordEmbedded(SOURCE_IDS.observation, observationId)) return;
-  const vector = await generateEmbedding(observationText);
-  if (!vector) return;
-  await storeEmbedding('observation', observationId, observationText, sourceDate, vector);
-}
-
-export async function embedReflection(
-  reflectionId: number,
-  reflectionText: string,
-  sourceDate: string
-): Promise<void> {
-  if (await isRecordEmbedded(SOURCE_IDS.reflection, reflectionId)) return;
-  const vector = await generateEmbedding(reflectionText);
-  if (!vector) return;
-  await storeEmbedding('reflection', reflectionId, reflectionText, sourceDate, vector);
-}
-
 export async function backfillEmbeddings(): Promise<{ embedded: number; failed: number }> {
   let embedded = 0;
   let failed = 0;
 
   const unembeddedResponses = await getUnembeddedResponses();
-  const unembeddedObservations: Array<{ ai_observation_id: number; observation: string; date: string }> = [];
-  const unembeddedReflections = await getUnembeddedReflections();
-
-  const total = unembeddedResponses.length + unembeddedObservations.length + unembeddedReflections.length;
-  if (total === 0) {
+  if (unembeddedResponses.length === 0) {
     console.log('[backfill] All records already embedded.');
     return { embedded: 0, failed: 0 };
   }
-  console.log(`[backfill] ${total} records to embed (${unembeddedResponses.length} responses, ${unembeddedObservations.length} observations, ${unembeddedReflections.length} reflections)`);
+  console.log(`[backfill] ${unembeddedResponses.length} responses to embed`);
 
-  // Batch responses in groups of 20
   for (let i = 0; i < unembeddedResponses.length; i += 20) {
     const batch = unembeddedResponses.slice(i, i + 20);
     const texts = batch.map(r => `Question: ${r.question}\nResponse: ${r.response}`);
@@ -185,46 +155,6 @@ export async function backfillEmbeddings(): Promise<{ embedded: number; failed: 
       await new Promise(r => setTimeout(r, 500)); // rate limit courtesy
     }
     console.log(`[backfill] Responses: ${Math.min(i + 20, unembeddedResponses.length)}/${unembeddedResponses.length}`);
-  }
-
-  // Batch observations
-  for (let i = 0; i < unembeddedObservations.length; i += 20) {
-    const batch = unembeddedObservations.slice(i, i + 20);
-    const texts = batch.map(o => o.observation);
-    const vectors = await generateEmbeddings(texts);
-
-    for (let j = 0; j < batch.length; j++) {
-      if (vectors[j]) {
-        await storeEmbedding('observation', batch[j].ai_observation_id, texts[j], batch[j].date, vectors[j]!);
-        embedded++;
-      } else {
-        failed++;
-      }
-    }
-    if (i + 20 < unembeddedObservations.length) {
-      await new Promise(r => setTimeout(r, 500));
-    }
-    console.log(`[backfill] Observations: ${Math.min(i + 20, unembeddedObservations.length)}/${unembeddedObservations.length}`);
-  }
-
-  // Batch reflections
-  for (let i = 0; i < unembeddedReflections.length; i += 20) {
-    const batch = unembeddedReflections.slice(i, i + 20);
-    const texts = batch.map(r => r.text);
-    const vectors = await generateEmbeddings(texts);
-
-    for (let j = 0; j < batch.length; j++) {
-      if (vectors[j]) {
-        await storeEmbedding('reflection', batch[j].reflection_id, texts[j], batch[j].dttm_created_utc, vectors[j]!);
-        embedded++;
-      } else {
-        failed++;
-      }
-    }
-    if (i + 20 < unembeddedReflections.length) {
-      await new Promise(r => setTimeout(r, 500));
-    }
-    console.log(`[backfill] Reflections: ${Math.min(i + 20, unembeddedReflections.length)}/${unembeddedReflections.length}`);
   }
 
   return { embedded, failed };
