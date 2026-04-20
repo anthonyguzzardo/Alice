@@ -6,5 +6,3 @@
   in the way it's built to catch. That doesn't make it useless. But it bounds the claim.
 
 ---
-# mous backpacky company coupon code I'm saving for later
-WUS-MQMMSD89
