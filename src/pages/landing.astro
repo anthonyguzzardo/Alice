@@ -34,21 +34,27 @@
  *     that exists whether or not you walk into it. "Begin" / "Get started"
  *     imply transformation and create subconscious urgency.
  *
- *   - The generative botanical: a tree is procedurally grown on a canvas
- *     behind the text as the user scrolls. It is not a pre-drawn image
- *     being revealed. It is generated. Each visit produces a slightly
- *     different form (seeded from the date, so it's stable within a day).
- *     This mirrors the witness form principle: your input (scrolling)
- *     produces an output (the tree). It does not animate on its own.
- *     It only grows when you move. You may not notice it until you
- *     scroll back up. That's fine.
+ *   - The generative connectome: as the user scrolls, a WebGL neural
+ *     network grows across the viewport behind the text. Neurons are
+ *     placed procedurally, connections form between nearby nodes as
+ *     scroll depth increases. Rendered on the GPU with soft glow
+ *     shaders. The visual reference is a connectome or cortical
+ *     column: the biological substrate that Alice's signal pipeline
+ *     measures through. Seeded from today's date. Different every day.
+ *     The network structure only grows when you scroll, but once
+ *     connections exist, impulses fire along them randomly and
+ *     unpredictably (using Math.random, not the seeded PRNG).
+ *     They cascade across connected neurons like actual signal
+ *     propagation. The network is alive even when you stop
+ *     scrolling. The thing you're reading about is the thing
+ *     forming behind the words.
  */
 import PublicLayout from '../layouts/PublicLayout.astro';
 ---
 
 <PublicLayout title="Alice" active="home" minimal>
 
-  <canvas id="botanical" aria-hidden="true"></canvas>
+  <canvas id="connectome" aria-hidden="true"></canvas>
 
   <div class="landing">
 
@@ -82,29 +88,30 @@ import PublicLayout from '../layouts/PublicLayout.astro';
 
 <script is:inline>
   /**
-   * Generative scroll-driven botanical.
+   * GPU-rendered generative connectome.
    *
-   * A recursive L-system-inspired tree that grows on a canvas as the
-   * user scrolls. The tree is not pre-drawn and revealed. It is
-   * generated fresh: scroll progress determines how deep the recursion
-   * goes and how far branches extend.
+   * A WebGL visualization of a neural network that grows as the user
+   * scrolls. Neurons are soft, glowing points. Synapses are fine lines
+   * connecting nearby neurons, fading with distance. Scroll progress
+   * controls connection density: at zero scroll, scattered dark nodes.
+   * At full scroll, a dense luminous network spans the viewport.
    *
-   * Seeded from today's date so the form is stable within a single day
-   * but different tomorrow. No two days produce the same tree.
+   * All geometry is computed on the CPU (seeded PRNG for stable layout),
+   * rendered on the GPU via WebGL shaders for smooth glow and blending.
    *
-   * The canvas is fixed behind the text at low opacity. It never
-   * competes with the words. It is the background, not the foreground.
+   * Seeded from today's date. Same network all day, different tomorrow.
+   * No self-animation. Grows only when you scroll.
    */
   (function () {
-    var canvas = document.getElementById('botanical');
+    var canvas = document.getElementById('connectome');
     if (!canvas) return;
-    var ctx = canvas.getContext('2d');
 
-    // Seed from today's date for stable-within-day randomness
+    var gl = canvas.getContext('webgl', { alpha: true, antialias: true, premultipliedAlpha: false });
+    if (!gl) return; // Fallback: page works fine without the visual
+
+    // --- PRNG seeded from today ---
     var today = new Date();
     var seed = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate();
-
-    // Simple seeded PRNG (mulberry32)
     function mulberry32(a) {
       return function () {
         a |= 0; a = a + 0x6D2B79F5 | 0;
@@ -113,105 +120,424 @@ import PublicLayout from '../layouts/PublicLayout.astro';
         return ((t ^ t >>> 14) >>> 0) / 4294967296;
       };
     }
-
     var rand = mulberry32(seed);
 
-    // Pre-generate the tree's random parameters so they're stable across redraws
-    var MAX_DEPTH = 10;
-    var branchParams = [];
-    function pregenerate(depth, index) {
-      if (depth > MAX_DEPTH) return;
-      var params = {
-        angleOffsetL: rand() * 0.3 + 0.1,
-        angleOffsetR: rand() * 0.3 + 0.1,
-        lengthRatioL: rand() * 0.15 + 0.62,
-        lengthRatioR: rand() * 0.15 + 0.62,
-        widthRatio: rand() * 0.1 + 0.6
-      };
-      branchParams[index] = params;
-      pregenerate(depth + 1, index * 2 + 1);
-      pregenerate(depth + 1, index * 2 + 2);
-    }
-    pregenerate(0, 0);
+    // --- Generate neuron positions ---
+    // Clustered distribution: several nuclei with gaussian scatter,
+    // mimicking cortical column organization rather than uniform noise.
+    var NUM_NEURONS = 280;
+    var NUM_CLUSTERS = 8;
 
-    function resize() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+    var clusters = [];
+    for (var c = 0; c < NUM_CLUSTERS; c++) {
+      clusters.push({
+        x: rand() * 1.6 - 0.3,  // allow some off-screen for edge density
+        y: rand() * 1.6 - 0.3,
+        spread: rand() * 0.15 + 0.08
+      });
     }
 
-    // Get stroke color from CSS custom property
-    function getStrokeColor() {
+    // Box-Muller for gaussian scatter
+    function gaussRand() {
+      var u = rand(), v = rand();
+      return Math.sqrt(-2 * Math.log(u + 0.0001)) * Math.cos(6.2832 * v);
+    }
+
+    var neurons = [];
+    for (var i = 0; i < NUM_NEURONS; i++) {
+      var cl = clusters[Math.floor(rand() * NUM_CLUSTERS)];
+      var nx = cl.x + gaussRand() * cl.spread;
+      var ny = cl.y + gaussRand() * cl.spread;
+      // Neuron size varies: some large soma, mostly small
+      var size = rand() < 0.1 ? rand() * 4 + 3 : rand() * 2 + 1;
+      neurons.push({ x: nx, y: ny, size: size });
+    }
+
+    // --- Pre-compute connections (edges) ---
+    // Connect neurons within a distance threshold, sorted by distance
+    // so shorter connections appear first as scroll increases.
+    var MAX_DIST = 0.18;
+    var edges = [];
+    for (var i = 0; i < neurons.length; i++) {
+      for (var j = i + 1; j < neurons.length; j++) {
+        var dx = neurons[i].x - neurons[j].x;
+        var dy = neurons[i].y - neurons[j].y;
+        var d = Math.sqrt(dx * dx + dy * dy);
+        if (d < MAX_DIST) {
+          edges.push({ a: i, b: j, dist: d });
+        }
+      }
+    }
+    // Sort by distance: closest connections form first
+    edges.sort(function (a, b) { return a.dist - b.dist; });
+
+    // --- Impulse system ---
+    // Neural impulses travel along synapses. They fire randomly and
+    // unpredictably, like actual neural activity. Each impulse is a
+    // bright point that travels from one neuron to another along a
+    // connection, then may cascade to adjacent connections (signal
+    // propagation). Uses Math.random() deliberately, not the seeded
+    // PRNG, so firing patterns are different every moment.
+    var MAX_IMPULSES = 60;
+    var impulses = [];
+
+    function spawnImpulse(edgeIdx) {
+      if (impulses.length >= MAX_IMPULSES) return;
+      var e = edges[edgeIdx];
+      impulses.push({
+        edge: edgeIdx,
+        t: 0,
+        speed: 0.003 + Math.random() * 0.006, // variable speed
+        direction: Math.random() > 0.5 ? 1 : -1, // either direction
+        brightness: 0.5 + Math.random() * 0.5
+      });
+    }
+
+    function updateImpulses(numVisible) {
+      if (numVisible < 1) return;
+
+      // Randomly fire new impulses. More connections = more activity.
+      // Unpredictable: sometimes quiet, sometimes bursts.
+      var fireChance = 0.03 + (numVisible / edges.length) * 0.12;
+      // Occasional bursts: 5% chance of firing several at once
+      if (Math.random() < 0.05 && numVisible > 10) {
+        var burstSize = Math.floor(Math.random() * 6) + 3;
+        for (var b = 0; b < burstSize; b++) {
+          spawnImpulse(Math.floor(Math.random() * numVisible));
+        }
+      } else if (Math.random() < fireChance) {
+        spawnImpulse(Math.floor(Math.random() * numVisible));
+      }
+
+      // Update existing impulses
+      for (var i = impulses.length - 1; i >= 0; i--) {
+        var imp = impulses[i];
+        imp.t += imp.speed;
+
+        if (imp.t >= 1) {
+          // Impulse reached the end. Chance to cascade to adjacent edges.
+          var arrivedNeuron = imp.direction > 0 ? edges[imp.edge].b : edges[imp.edge].a;
+          // 30% chance to propagate to a random connected edge
+          if (Math.random() < 0.3 && numVisible > 1) {
+            for (var attempt = 0; attempt < 3; attempt++) {
+              var nextEdge = Math.floor(Math.random() * numVisible);
+              var ne = edges[nextEdge];
+              if (ne.a === arrivedNeuron || ne.b === arrivedNeuron) {
+                var newImp = {
+                  edge: nextEdge,
+                  t: 0,
+                  speed: 0.003 + Math.random() * 0.006,
+                  direction: ne.a === arrivedNeuron ? 1 : -1,
+                  brightness: imp.brightness * 0.75
+                };
+                if (impulses.length < MAX_IMPULSES) impulses.push(newImp);
+                break;
+              }
+            }
+          }
+          impulses.splice(i, 1);
+        }
+      }
+    }
+
+    // --- WebGL shaders ---
+    // Vertex shader shared by points and lines
+    var vertSrc = [
+      'attribute vec2 a_pos;',
+      'attribute float a_size;',
+      'attribute float a_alpha;',
+      'varying float v_alpha;',
+      'void main() {',
+      '  gl_Position = vec4(a_pos * 2.0 - 1.0, 0.0, 1.0);',
+      '  gl_Position.y = -gl_Position.y;', // flip Y so 0,0 is top-left
+      '  gl_PointSize = a_size;',
+      '  v_alpha = a_alpha;',
+      '}'
+    ].join('\n');
+
+    // Fragment shader for neurons: soft radial glow
+    var fragPointSrc = [
+      'precision mediump float;',
+      'varying float v_alpha;',
+      'uniform vec3 u_color;',
+      'void main() {',
+      '  vec2 pc = gl_PointCoord - 0.5;',
+      '  float r = length(pc) * 2.0;',
+      // Soft glow: bright center fading to nothing
+      '  float glow = exp(-r * r * 3.0);',
+      '  gl_FragColor = vec4(u_color, glow * v_alpha);',
+      '}'
+    ].join('\n');
+
+    // Fragment shader for connections: simple alpha
+    var fragLineSrc = [
+      'precision mediump float;',
+      'varying float v_alpha;',
+      'uniform vec3 u_color;',
+      'void main() {',
+      '  gl_FragColor = vec4(u_color, v_alpha);',
+      '}'
+    ].join('\n');
+
+    function compileShader(src, type) {
+      var s = gl.createShader(type);
+      gl.shaderSource(s, src);
+      gl.compileShader(s);
+      return s;
+    }
+
+    function createProgram(vSrc, fSrc) {
+      var p = gl.createProgram();
+      gl.attachShader(p, compileShader(vSrc, gl.VERTEX_SHADER));
+      gl.attachShader(p, compileShader(fSrc, gl.FRAGMENT_SHADER));
+      gl.linkProgram(p);
+      return p;
+    }
+
+    var pointProg = createProgram(vertSrc, fragPointSrc);
+    var lineProg = createProgram(vertSrc, fragLineSrc);
+
+    // --- Attribute locations ---
+    var pLocs = {
+      pos: gl.getAttribLocation(pointProg, 'a_pos'),
+      size: gl.getAttribLocation(pointProg, 'a_size'),
+      alpha: gl.getAttribLocation(pointProg, 'a_alpha'),
+      color: gl.getUniformLocation(pointProg, 'u_color')
+    };
+
+    var lLocs = {
+      pos: gl.getAttribLocation(lineProg, 'a_pos'),
+      size: gl.getAttribLocation(lineProg, 'a_size'),
+      alpha: gl.getAttribLocation(lineProg, 'a_alpha'),
+      color: gl.getUniformLocation(lineProg, 'u_color')
+    };
+
+    // --- Buffers ---
+    var neuronPosBuf = gl.createBuffer();
+    var neuronSizeBuf = gl.createBuffer();
+    var neuronAlphaBuf = gl.createBuffer();
+    var lineBuf = gl.createBuffer();
+    var lineAlphaBuf = gl.createBuffer();
+    // Dummy size buffer for lines (not used but attribute must exist)
+    var lineSizeBuf = gl.createBuffer();
+
+    // Static neuron position data
+    var posArr = new Float32Array(NUM_NEURONS * 2);
+    var sizeArr = new Float32Array(NUM_NEURONS);
+    for (var i = 0; i < NUM_NEURONS; i++) {
+      posArr[i * 2] = neurons[i].x;
+      posArr[i * 2 + 1] = neurons[i].y;
+      sizeArr[i] = neurons[i].size * (window.devicePixelRatio || 1);
+    }
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, neuronPosBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, posArr, gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, neuronSizeBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, sizeArr, gl.STATIC_DRAW);
+
+    // --- Parse CSS color ---
+    // Use --text-muted for better visibility. --text-faint disappears
+    // at the alpha levels we need for subtlety.
+    function getColor() {
       var style = getComputedStyle(document.documentElement);
-      return style.getPropertyValue('--border').trim() || '#ccc5bc';
+      var hex = style.getPropertyValue('--text-muted').trim() || '#6b6560';
+      if (hex[0] === '#') {
+        var r = parseInt(hex.slice(1, 3), 16) / 255;
+        var g = parseInt(hex.slice(3, 5), 16) / 255;
+        var b = parseInt(hex.slice(5, 7), 16) / 255;
+        return [r, g, b];
+      }
+      return [0.42, 0.4, 0.38];
     }
 
-    function drawBranch(x, y, angle, length, width, depth, maxDepth, index) {
-      if (depth > maxDepth || length < 2 || width < 0.3) return;
+    // --- Resize ---
+    function resize() {
+      var dpr = window.devicePixelRatio || 1;
+      var w = window.innerWidth;
+      var h = window.innerHeight;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      canvas.style.width = w + 'px';
+      canvas.style.height = h + 'px';
+      gl.viewport(0, 0, canvas.width, canvas.height);
 
-      var params = branchParams[index];
-      if (!params) return;
-
-      var x2 = x + Math.sin(angle) * length;
-      var y2 = y - Math.cos(angle) * length;
-
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(x2, y2);
-      ctx.lineWidth = width;
-      ctx.lineCap = 'round';
-      ctx.stroke();
-
-      var nextLen = length * params.lengthRatioL;
-      var nextLenR = length * params.lengthRatioR;
-      var nextWidth = width * params.widthRatio;
-
-      drawBranch(x2, y2, angle - params.angleOffsetL, nextLen, nextWidth, depth + 1, maxDepth, index * 2 + 1);
-      drawBranch(x2, y2, angle + params.angleOffsetR, nextLenR, nextWidth, depth + 1, maxDepth, index * 2 + 2);
+      // Update point sizes for DPR
+      for (var i = 0; i < NUM_NEURONS; i++) {
+        sizeArr[i] = neurons[i].size * dpr;
+      }
+      gl.bindBuffer(gl.ARRAY_BUFFER, neuronSizeBuf);
+      gl.bufferData(gl.ARRAY_BUFFER, sizeArr, gl.STATIC_DRAW);
     }
 
+    // --- Draw ---
     function draw() {
       var scrollTop = window.pageYOffset || document.documentElement.scrollTop;
       var docHeight = document.documentElement.scrollHeight - window.innerHeight;
       if (docHeight <= 0) return;
       var progress = Math.min(scrollTop / docHeight, 1);
 
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-      // Map scroll to recursion depth (0 scroll = nothing, full scroll = full tree)
-      // The trunk appears early, branches fill in gradually
-      var depthFloat = progress * MAX_DEPTH;
-      var maxDepth = Math.floor(depthFloat);
+      var color = getColor();
 
-      if (maxDepth < 1) return;
+      // --- Draw connections ---
+      // Number of visible edges scales with scroll progress (quadratic for acceleration)
+      var numVisible = Math.floor(progress * progress * edges.length);
 
-      var color = getStrokeColor();
-      ctx.strokeStyle = color;
-      ctx.globalAlpha = 0.25;
+      if (numVisible > 0) {
+        var lineVerts = new Float32Array(numVisible * 4); // 2 points * 2 coords
+        var lineAlphas = new Float32Array(numVisible * 2);
+        var lineSizes = new Float32Array(numVisible * 2);
 
-      // Tree grows from bottom center
-      var startX = canvas.width / 2;
-      var startY = canvas.height * 0.92;
-      var trunkLength = Math.min(canvas.height * 0.18, 160);
-      var trunkWidth = 2.5;
+        for (var i = 0; i < numVisible; i++) {
+          var e = edges[i];
+          lineVerts[i * 4] = neurons[e.a].x;
+          lineVerts[i * 4 + 1] = neurons[e.a].y;
+          lineVerts[i * 4 + 2] = neurons[e.b].x;
+          lineVerts[i * 4 + 3] = neurons[e.b].y;
+          // Closer connections are more visible, farther ones are ghostly
+          var alpha = (1 - e.dist / MAX_DIST) * 0.35;
+          lineAlphas[i * 2] = alpha;
+          lineAlphas[i * 2 + 1] = alpha;
+          lineSizes[i * 2] = 1.0;
+          lineSizes[i * 2 + 1] = 1.0;
+        }
 
-      drawBranch(startX, startY, 0, trunkLength, trunkWidth, 0, maxDepth, 0);
-    }
+        gl.useProgram(lineProg);
+        gl.uniform3f(lLocs.color, color[0], color[1], color[2]);
 
-    var ticking = false;
-    function onScroll() {
-      if (!ticking) {
-        requestAnimationFrame(function () {
-          draw();
-          ticking = false;
-        });
-        ticking = true;
+        gl.bindBuffer(gl.ARRAY_BUFFER, lineBuf);
+        gl.bufferData(gl.ARRAY_BUFFER, lineVerts, gl.DYNAMIC_DRAW);
+        gl.enableVertexAttribArray(lLocs.pos);
+        gl.vertexAttribPointer(lLocs.pos, 2, gl.FLOAT, false, 0, 0);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, lineAlphaBuf);
+        gl.bufferData(gl.ARRAY_BUFFER, lineAlphas, gl.DYNAMIC_DRAW);
+        gl.enableVertexAttribArray(lLocs.alpha);
+        gl.vertexAttribPointer(lLocs.alpha, 1, gl.FLOAT, false, 0, 0);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, lineSizeBuf);
+        gl.bufferData(gl.ARRAY_BUFFER, lineSizes, gl.DYNAMIC_DRAW);
+        gl.enableVertexAttribArray(lLocs.size);
+        gl.vertexAttribPointer(lLocs.size, 1, gl.FLOAT, false, 0, 0);
+
+        gl.lineWidth(1.0);
+        gl.drawArrays(gl.LINES, 0, numVisible * 2);
+      }
+
+      // --- Draw neurons ---
+      // Neurons become visible and brighter as connections reach them
+      var neuronAlphas = new Float32Array(NUM_NEURONS);
+      // Base: faint but visible at all scroll positions
+      for (var i = 0; i < NUM_NEURONS; i++) {
+        neuronAlphas[i] = progress * 0.15;
+      }
+      // Brighten neurons that have connections
+      for (var i = 0; i < numVisible; i++) {
+        var e = edges[i];
+        neuronAlphas[e.a] = Math.min(neuronAlphas[e.a] + 0.08, 0.7);
+        neuronAlphas[e.b] = Math.min(neuronAlphas[e.b] + 0.08, 0.7);
+      }
+
+      gl.useProgram(pointProg);
+      gl.uniform3f(pLocs.color, color[0], color[1], color[2]);
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, neuronPosBuf);
+      gl.enableVertexAttribArray(pLocs.pos);
+      gl.vertexAttribPointer(pLocs.pos, 2, gl.FLOAT, false, 0, 0);
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, neuronSizeBuf);
+      gl.enableVertexAttribArray(pLocs.size);
+      gl.vertexAttribPointer(pLocs.size, 1, gl.FLOAT, false, 0, 0);
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, neuronAlphaBuf);
+      gl.bufferData(gl.ARRAY_BUFFER, neuronAlphas, gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(pLocs.alpha);
+      gl.vertexAttribPointer(pLocs.alpha, 1, gl.FLOAT, false, 0, 0);
+
+      gl.drawArrays(gl.POINTS, 0, NUM_NEURONS);
+
+      // --- Draw impulses ---
+      // Impulses are bright points traveling along connections.
+      // Rendered as GL_POINTS with the glow shader, larger and
+      // brighter than resting neurons.
+      updateImpulses(numVisible);
+
+      if (impulses.length > 0) {
+        var impPos = new Float32Array(impulses.length * 2);
+        var impSize = new Float32Array(impulses.length);
+        var impAlpha = new Float32Array(impulses.length);
+        var dpr = window.devicePixelRatio || 1;
+
+        for (var i = 0; i < impulses.length; i++) {
+          var imp = impulses[i];
+          var e = edges[imp.edge];
+          var ax = neurons[e.a].x, ay = neurons[e.a].y;
+          var bx = neurons[e.b].x, by = neurons[e.b].y;
+          // Position along the edge
+          var t = imp.direction > 0 ? imp.t : (1 - imp.t);
+          impPos[i * 2] = ax + (bx - ax) * t;
+          impPos[i * 2 + 1] = ay + (by - ay) * t;
+          // Pulse shape: brightest at center of travel, fading at ends
+          var pulse = Math.sin(imp.t * 3.14159);
+          impSize[i] = (3 + pulse * 4) * dpr;
+          impAlpha[i] = imp.brightness * pulse * 0.8;
+        }
+
+        var impPosBuf = gl.createBuffer();
+        var impSizeBuf = gl.createBuffer();
+        var impAlphaBuf = gl.createBuffer();
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, impPosBuf);
+        gl.bufferData(gl.ARRAY_BUFFER, impPos, gl.DYNAMIC_DRAW);
+        gl.enableVertexAttribArray(pLocs.pos);
+        gl.vertexAttribPointer(pLocs.pos, 2, gl.FLOAT, false, 0, 0);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, impSizeBuf);
+        gl.bufferData(gl.ARRAY_BUFFER, impSize, gl.DYNAMIC_DRAW);
+        gl.enableVertexAttribArray(pLocs.size);
+        gl.vertexAttribPointer(pLocs.size, 1, gl.FLOAT, false, 0, 0);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, impAlphaBuf);
+        gl.bufferData(gl.ARRAY_BUFFER, impAlpha, gl.DYNAMIC_DRAW);
+        gl.enableVertexAttribArray(pLocs.alpha);
+        gl.vertexAttribPointer(pLocs.alpha, 1, gl.FLOAT, false, 0, 0);
+
+        // Use additive blending for impulses so they glow
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+        gl.drawArrays(gl.POINTS, 0, impulses.length);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+        gl.deleteBuffer(impPosBuf);
+        gl.deleteBuffer(impSizeBuf);
+        gl.deleteBuffer(impAlphaBuf);
       }
     }
 
+    // --- Animation loop ---
+    // Continuous loop so impulses fire and travel even when not
+    // scrolling. The network structure only changes on scroll,
+    // but the activity within it is alive and unpredictable.
+    var scrollProgress = 0;
+    function onScroll() {
+      var scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+      var docHeight = document.documentElement.scrollHeight - window.innerHeight;
+      if (docHeight > 0) scrollProgress = Math.min(scrollTop / docHeight, 1);
+    }
+
+    function loop() {
+      draw();
+      requestAnimationFrame(loop);
+    }
+
     resize();
-    window.addEventListener('resize', function () { resize(); draw(); });
+    window.addEventListener('resize', function () { resize(); });
     window.addEventListener('scroll', onScroll, { passive: true });
-    draw();
+    onScroll();
+    loop();
   })();
 </script>
 
@@ -276,12 +602,12 @@ import PublicLayout from '../layouts/PublicLayout.astro';
   }
 
   /*
-   * The canvas covers the viewport, fixed behind everything.
-   * Low opacity so it reads as a faint background texture,
-   * not a competing visual element. The tree grows from the
-   * bottom center, as trees do.
+   * The WebGL canvas covers the viewport, fixed behind everything.
+   * Transparent background so the page color shows through. Neurons
+   * and connections are rendered with soft alpha blending. The network
+   * is the background, never the foreground.
    */
-  #botanical {
+  #connectome {
     position: fixed;
     top: 0;
     left: 0;
