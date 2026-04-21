@@ -786,6 +786,20 @@ export async function getUsedCalibrationPrompts(): Promise<string[]> {
   return rows.map(r => r.text);
 }
 
+/** Return calibration prompt texts ordered by last use, oldest first. */
+export async function getCalibrationPromptsByRecency(): Promise<string[]> {
+  const rows = await sql`
+    SELECT sub.text FROM (
+      SELECT text, MAX(dttm_created_utc) AS last_used
+      FROM tb_questions
+      WHERE question_source_id = 3
+      GROUP BY text
+    ) sub
+    ORDER BY sub.last_used ASC
+  ` as Array<{ text: string }>;
+  return rows.map(r => r.text);
+}
+
 export async function saveCalibrationSession(
   promptText: string,
   responseText: string,

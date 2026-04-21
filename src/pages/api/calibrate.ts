@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { saveCalibrationSession, getUsedCalibrationPrompts, saveSessionEvents } from '../../lib/libDb.ts';
+import { saveCalibrationSession, getUsedCalibrationPrompts, getCalibrationPromptsByRecency, saveSessionEvents } from '../../lib/libDb.ts';
 import { CALIBRATION_PROMPTS } from '../../lib/libCalibrationPrompts.ts';
 import { computeLinguisticDensities } from '../../lib/libLinguistic.ts';
 import { computeMATTR } from '../../lib/libAliceNegative/libHelpers.ts';
@@ -12,8 +12,23 @@ import { parseBody } from '../../lib/utlParseBody.ts';
 export const GET: APIRoute = async () => {
   const used = new Set(await getUsedCalibrationPrompts());
   const available = CALIBRATION_PROMPTS.filter(p => !used.has(p));
-  const pool = available.length > 0 ? available : CALIBRATION_PROMPTS; // cycle if all used
-  const prompt = pool[Math.floor(Math.random() * pool.length)];
+
+  let prompt: string;
+  if (available.length > 0) {
+    // Fresh prompts remain — pick randomly
+    prompt = available[Math.floor(Math.random() * available.length)];
+  } else {
+    // Pool exhausted — prefer prompts used longest ago for max temporal spacing.
+    // Pick randomly from the oldest quartile so repeat pairs stay spread out.
+    const byRecency = await getCalibrationPromptsByRecency();
+    const stillInPool = byRecency.filter(p => used.has(p) && CALIBRATION_PROMPTS.includes(p));
+    const quartile = Math.max(1, Math.floor(stillInPool.length / 4));
+    const oldest = stillInPool.slice(0, quartile);
+    prompt = oldest.length > 0
+      ? oldest[Math.floor(Math.random() * oldest.length)]
+      : CALIBRATION_PROMPTS[Math.floor(Math.random() * CALIBRATION_PROMPTS.length)];
+  }
+
   return new Response(JSON.stringify({ prompt }), {
     headers: { 'Content-Type': 'application/json' },
   });
