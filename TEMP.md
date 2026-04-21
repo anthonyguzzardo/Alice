@@ -1,0 +1,1 @@
+# weird avatar bug where the cursor always sits and blinks on the line above which is being written on

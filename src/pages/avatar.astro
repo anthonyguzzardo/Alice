@@ -8,7 +8,7 @@ import PublicLayout from '../layouts/layPublic.astro';
 
   <header class="av-hero">
     <h1>Avatar</h1>
-    <p class="av-lead">Markov chain text generation from your corpus, replayed with your keystroke timing profile. No LLM. Pure math.</p>
+    <p class="av-lead">Behavioral reconstruction from your writing process profile. Markov chain text, motor timing, revision, tempo drift. No LLM.</p>
   </header>
 
   <section class="av-section">
@@ -31,26 +31,54 @@ import PublicLayout from '../layouts/layPublic.astro';
     </div>
 
     <div class="av-signals" id="signals" hidden>
-      <div class="av-signal">
-        <span class="av-signal-label">chars</span>
-        <span class="av-signal-value" id="sig-chars">0</span>
+      <div class="av-signal-row">
+        <div class="av-signal">
+          <span class="av-signal-label">chars</span>
+          <span class="av-signal-value" id="sig-chars">0</span>
+        </div>
+        <div class="av-signal">
+          <span class="av-signal-label">bursts</span>
+          <span class="av-signal-value" id="sig-bursts">0</span>
+        </div>
+        <div class="av-signal">
+          <span class="av-signal-label">pauses</span>
+          <span class="av-signal-value" id="sig-pauses">0</span>
+        </div>
+        <div class="av-signal">
+          <span class="av-signal-label">avg iki</span>
+          <span class="av-signal-value" id="sig-iki">0ms</span>
+        </div>
+        <div class="av-signal">
+          <span class="av-signal-label">elapsed</span>
+          <span class="av-signal-value" id="sig-elapsed">0s</span>
+        </div>
       </div>
-      <div class="av-signal">
-        <span class="av-signal-label">bursts</span>
-        <span class="av-signal-value" id="sig-bursts">0</span>
+      <div class="av-signal-row">
+        <div class="av-signal">
+          <span class="av-signal-label">deletions</span>
+          <span class="av-signal-value" id="sig-deletions">0</span>
+        </div>
+        <div class="av-signal">
+          <span class="av-signal-label">r-bursts</span>
+          <span class="av-signal-value" id="sig-rbursts">0</span>
+        </div>
+        <div class="av-signal">
+          <span class="av-signal-label">i-bursts</span>
+          <span class="av-signal-value" id="sig-ibursts">0</span>
+        </div>
+        <div class="av-signal">
+          <span class="av-signal-label">eval pauses</span>
+          <span class="av-signal-value" id="sig-evals">0</span>
+        </div>
+        <div class="av-signal">
+          <span class="av-signal-label">tempo</span>
+          <span class="av-signal-value" id="sig-tempo">--</span>
+        </div>
       </div>
-      <div class="av-signal">
-        <span class="av-signal-label">pauses</span>
-        <span class="av-signal-value" id="sig-pauses">0</span>
-      </div>
-      <div class="av-signal">
-        <span class="av-signal-label">avg iki</span>
-        <span class="av-signal-value" id="sig-iki">0ms</span>
-      </div>
-      <div class="av-signal">
-        <span class="av-signal-label">elapsed</span>
-        <span class="av-signal-value" id="sig-elapsed">0s</span>
-      </div>
+    </div>
+
+    <div class="av-phase" id="phase" hidden>
+      <span class="av-phase-indicator" id="phase-indicator"></span>
     </div>
   </section>
 
@@ -67,17 +95,26 @@ import PublicLayout from '../layouts/layPublic.astro';
   var cursor = document.getElementById('cursor');
   var meta = document.getElementById('meta');
   var signals = document.getElementById('signals');
+  var phaseEl = document.getElementById('phase');
+  var phaseInd = document.getElementById('phase-indicator');
+
   var sigChars = document.getElementById('sig-chars');
   var sigBursts = document.getElementById('sig-bursts');
   var sigPauses = document.getElementById('sig-pauses');
   var sigIki = document.getElementById('sig-iki');
   var sigElapsed = document.getElementById('sig-elapsed');
+  var sigDeletions = document.getElementById('sig-deletions');
+  var sigRbursts = document.getElementById('sig-rbursts');
+  var sigIbursts = document.getElementById('sig-ibursts');
+  var sigEvals = document.getElementById('sig-evals');
+  var sigTempo = document.getElementById('sig-tempo');
 
   if (!form || !input || !output) return;
 
-  // Timing comes from Rust. Client just replays the pre-computed delays.
-  var PAUSE_THRESHOLD = 500; // ms — delays above this count as pauses
-  var BURST_THRESHOLD = 2000; // ms — delays above this count as burst boundaries
+  var PAUSE_THRESHOLD = 500;
+  var BURST_THRESHOLD = 2000;
+  var EVAL_THRESHOLD = 3500;
+  var BACKSPACE = '\u0008';
 
   var cancelReplay = null;
 
@@ -86,7 +123,6 @@ import PublicLayout from '../layouts/layPublic.astro';
     var topic = input.value.trim();
     if (!topic) return;
 
-    // Cancel any running replay
     if (cancelReplay) cancelReplay();
 
     btn.disabled = true;
@@ -95,6 +131,7 @@ import PublicLayout from '../layouts/layPublic.astro';
     cursor.hidden = false;
     meta.hidden = true;
     signals.hidden = true;
+    phaseEl.hidden = true;
     var oldDone = document.querySelector('.av-done');
     if (oldDone) oldDone.remove();
 
@@ -120,59 +157,163 @@ import PublicLayout from '../layouts/layPublic.astro';
         document.getElementById('meta-sessions').textContent = data.sessionCount + ' sessions profiled';
         meta.hidden = false;
         signals.hidden = false;
+        phaseEl.hidden = false;
 
-        // Replay using Rust-computed delays
+        // Parse the keystroke stream for replay
+        var stream = [];
+        try {
+          stream = JSON.parse(data.keystrokeStreamJson || '[]');
+        } catch (e) {
+          stream = [];
+        }
+
+        // Fall back to text + delays if no stream
+        var useStream = stream.length > 0;
         var text = data.text;
         var delays = data.delays || [];
-        var chars = Array.from(text);
+
         var i = 0;
         var charCount = 0;
         var burstCount = 1;
         var pauseCount = 0;
+        var deletionCount = 0;
+        var rBurstCount = 0;
+        var iBurstCount = 0;
+        var evalPauseCount = 0;
         var totalIki = 0;
         var ikiCount = 0;
+        var recentIkis = [];
+        var displayText = '';
         var startTime = performance.now();
         var cancelled = false;
+        var totalEvents = useStream ? stream.length : text.length;
+        var inDeletion = false;
+        var deletionRun = 0;
 
         cancelReplay = function () { cancelled = true; };
 
+        function getDelay() {
+          if (useStream && i > 0 && i < stream.length) {
+            return Math.max(0, stream[i].d - stream[i - 1].d);
+          }
+          return i < delays.length ? delays[i] : 120;
+        }
+
+        function getChar() {
+          if (useStream && i < stream.length) {
+            return stream[i].c;
+          }
+          return i < text.length ? text[i] : null;
+        }
+
+        function updatePhase() {
+          var progress = i / totalEvents;
+          var label;
+          if (progress < 0.2) {
+            label = 'exploring';
+          } else if (progress < 0.75) {
+            label = 'composing';
+          } else {
+            label = 'finishing';
+          }
+          phaseInd.textContent = label;
+          phaseInd.className = 'av-phase-indicator av-phase-' + label;
+        }
+
+        function updateTempo() {
+          if (recentIkis.length < 3) {
+            sigTempo.textContent = '--';
+            return;
+          }
+          var recent = recentIkis.slice(-10);
+          var avg = recent.reduce(function (a, b) { return a + b; }, 0) / recent.length;
+          if (avg < 150) {
+            sigTempo.textContent = 'fast';
+          } else if (avg < 300) {
+            sigTempo.textContent = 'steady';
+          } else {
+            sigTempo.textContent = 'slow';
+          }
+        }
+
         function typeNext() {
-          if (cancelled || i >= chars.length) {
+          if (cancelled || i >= totalEvents) {
             cursor.hidden = true;
             cancelReplay = null;
-            // Show done state
             var elapsed = (performance.now() - startTime) / 1000;
             sigElapsed.textContent = elapsed.toFixed(1) + 's';
             var done = document.createElement('div');
             done.className = 'av-done';
             done.textContent = charCount + ' chars in ' + elapsed.toFixed(1) + 's';
             output.parentNode.appendChild(done);
+            phaseInd.textContent = 'done';
+            phaseInd.className = 'av-phase-indicator av-phase-done';
             return;
           }
 
-          output.textContent += chars[i];
-          charCount++;
+          var ch = getChar();
+          var delay = getDelay();
 
-          var delay = i < delays.length ? delays[i] : 120;
+          if (ch === BACKSPACE || ch === '\b') {
+            // Deletion event
+            if (displayText.length > 0) {
+              displayText = displayText.slice(0, -1);
+              output.textContent = displayText;
+            }
+            deletionCount++;
+            deletionRun++;
+            if (!inDeletion) {
+              inDeletion = true;
+              deletionRun = 1;
+            }
+          } else if (ch !== null) {
+            // Production or insertion event
+            if (inDeletion) {
+              // Finished a deletion run
+              if (deletionRun >= 4) {
+                rBurstCount++;
+              }
+              inDeletion = false;
+              deletionRun = 0;
+            }
 
-          // Classify delay for signal display
-          if (delay >= BURST_THRESHOLD) {
+            displayText += ch;
+            output.textContent = displayText;
+            charCount++;
+          }
+
+          // Classify delay for signals
+          if (delay >= EVAL_THRESHOLD) {
+            evalPauseCount++;
+            pauseCount++;
+            burstCount++;
+          } else if (delay >= BURST_THRESHOLD) {
             burstCount++;
             pauseCount++;
           } else if (delay >= PAUSE_THRESHOLD) {
             pauseCount++;
           }
 
-          totalIki += delay;
-          ikiCount++;
+          if (delay > 0 && delay < BURST_THRESHOLD) {
+            totalIki += delay;
+            ikiCount++;
+            recentIkis.push(delay);
+            if (recentIkis.length > 30) recentIkis.shift();
+          }
 
           // Update live signals
           sigChars.textContent = charCount;
+          sigDeletions.textContent = deletionCount;
+          sigRbursts.textContent = rBurstCount;
+          sigEvals.textContent = evalPauseCount;
           var elapsed = (performance.now() - startTime) / 1000;
           sigElapsed.textContent = elapsed.toFixed(1) + 's';
           sigBursts.textContent = burstCount;
           sigPauses.textContent = pauseCount;
-          sigIki.textContent = Math.round(totalIki / ikiCount) + 'ms';
+          sigIki.textContent = ikiCount > 0 ? Math.round(totalIki / ikiCount) + 'ms' : '0ms';
+
+          updatePhase();
+          updateTempo();
 
           output.scrollTop = output.scrollHeight;
           i++;
@@ -180,9 +321,11 @@ import PublicLayout from '../layouts/layPublic.astro';
           setTimeout(typeNext, delay);
         }
 
-        // First delay is the first keystroke latency (already in delays[0])
-        var firstDelay = delays.length > 0 ? delays[0] : 3000;
-        setTimeout(typeNext, firstDelay);
+        // Start replay
+        var firstDelay = useStream && stream.length > 0 ? stream[0].d : (delays.length > 0 ? delays[0] : 3000);
+        // First delay is absolute timestamp; convert to relative
+        if (useStream && firstDelay > 10000) firstDelay = 3000;
+        setTimeout(typeNext, Math.min(firstDelay, 5000));
       })
       .catch(function () {
         btn.disabled = false;
@@ -329,9 +472,15 @@ import PublicLayout from '../layouts/layPublic.astro';
   /* --- Live signals --- */
   .av-signals {
     display: flex;
-    gap: 2rem;
+    flex-direction: column;
+    gap: 0.75rem;
     margin-top: 1rem;
     padding: 1rem 0;
+  }
+
+  .av-signal-row {
+    display: flex;
+    gap: 2rem;
   }
 
   .av-signal {
@@ -355,6 +504,41 @@ import PublicLayout from '../layouts/layPublic.astro';
     letter-spacing: -0.02em;
   }
 
+  /* --- Phase indicator --- */
+  .av-phase {
+    padding: 0.5rem 0;
+  }
+
+  .av-phase-indicator {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 0.3rem 0.8rem;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    color: var(--text-faint);
+    transition: color 0.4s ease, border-color 0.4s ease;
+  }
+
+  .av-phase-exploring {
+    color: var(--text-faint);
+  }
+
+  .av-phase-composing {
+    color: var(--text-muted);
+    border-color: var(--border-focus);
+  }
+
+  .av-phase-finishing {
+    color: var(--text-faint);
+  }
+
+  .av-phase-done {
+    color: var(--text-faint);
+    border-color: var(--border);
+  }
+
   .av-done {
     font-family: var(--mono);
     font-size: 0.7rem;
@@ -369,7 +553,8 @@ import PublicLayout from '../layouts/layPublic.astro';
     .av-hero { padding: 4rem 0 1.5rem; }
     .av-hero h1 { font-size: 1.6rem; }
     .av-form { flex-direction: column; }
-    .av-signals { flex-wrap: wrap; gap: 1rem; }
+    .av-signal-row { flex-wrap: wrap; gap: 1rem; }
     .av-meta { flex-wrap: wrap; gap: 0.75rem; }
   }
 </style>
+</PublicLayout>
