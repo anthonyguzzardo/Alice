@@ -4,7 +4,7 @@ slug: reconstruction-validity
 author: Anthony Guzzardo
 date: 2026-04-20
 status: published
-version: 1
+version: 2
 target_venue: Behavior Research Methods
 abstract: "Behavioral measurement instruments extract features from temporal behavioral streams and claim those features index cognitive or motor states. The standard approach to validating these claims is external-criterion: correlate extracted features with clinically meaningful outcomes. This paper introduces reconstruction validity, a complementary form of validity evidence in which the instrument's measurements are used to reconstruct the behavior they were extracted from, and the fidelity of the reconstruction is the validity metric. Reconstruction validity is computable, deterministic, requires no external criterion, and is meaningful from n=1. The reconstruction residual, the structured gap between reconstruction and reality, characterizes what the instrument does not capture. The paper formalizes the concept using the observability framework from control theory, demonstrates feasibility through a writing-process instrument that reconstructs keystroke behavior from extracted signal features via Markov chain text generation and motor profile timing synthesis, and shows that the framework provides a direct empirical response to the non-identifiability problem in keystroke-based authorship verification identified by Condrey (2026)."
 ---
