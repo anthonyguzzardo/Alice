@@ -508,7 +508,7 @@ import PublicLayout from '../layouts/layPublic.astro';
 
     <div class="r-reconstruction-viz-wrap">
       <canvas id="reconstruction-viz" width="620" height="340" aria-hidden="true"></canvas>
-      <p class="r-caption">Projected reconstruction fidelity by signal family. Motor dimensions converge quickly because the reconstruction draws from the same distributions the instrument fits. Semantic dimensions remain near zero because the Markov chain generates statistically plausible but meaningless text. The persistent gap is the cognitive residual. Schematic projections, not measured values.</p>
+      <p class="r-caption">Reconstruction fidelity by signal family (schematic). Empirical results from 56 sessions confirm the pattern: motor L2 dominates (mean 90.0), dynamical L2 is near-zero (&lt;1.3), and semantic L2 remains small (&lt;0.35). The reconstruction draws from the right distributions but types in the wrong sequences. Full results in <a class="r-cite" href="/papers/reconstruction-validity">Guzzardo 2026c</a>.</p>
     </div>
 
     <p>The reconstruction is the strongest possible adversary that operates within the instrument's own measurement space. It has the person's vocabulary, their motor fingerprint, their pause architecture, their revision profile. What it lacks is the cognitive engagement that couples meaning to process: the pause before a difficult idea, the burst through a familiar argument, the deletion that reformulates rather than corrects.</p>
@@ -548,11 +548,11 @@ import PublicLayout from '../layouts/layPublic.astro';
 
   <!-- ===== SECTION 13: THEORETICAL EXTENSIONS ===== -->
   <section class="r-section" id="extensions">
-    <h2>Theoretical extensions (working frameworks, not published findings)</h2>
+    <h2>Theoretical extensions</h2>
 
-    <p>The argument on this page addresses one modality (typed writing) and one measurement context (longitudinal cognitive assessment). Two broader frameworks are in development as working papers, not peer-reviewed findings.</p>
+    <p>The argument on this page addresses one modality (typed writing) and one measurement context (longitudinal cognitive assessment). Two broader frameworks extend the argument beyond this domain.</p>
 
-    <p>The construct replacement problem is not specific to typing. AI mediation is simultaneously altering the cognitive processes underlying speech (voice assistants restructure request formulation), spatial navigation (GPS replaces cognitive map formation), and decision-making (recommendation engines replace evaluative reasoning). Each modality has its own research silo documenting effects. A framework paper in development argues that four design constraints emerge consistently across modalities: unassisted input, process-level capture, longitudinal intra-individual baselines, and attachment to intrinsically motivated practices. The six instrument requirements on this page are a domain-specific instantiation of those four general constraints.</p>
+    <p>The construct replacement problem is not specific to typing. AI mediation is simultaneously altering the cognitive processes underlying speech (voice assistants restructure request formulation), spatial navigation (GPS replaces cognitive map formation), and decision-making (recommendation engines replace evaluative reasoning). Each modality has its own research silo documenting effects. <a class="r-cite" href="/papers/irreversible-loss">Guzzardo (2026d)</a> argues from information theory that the loss of process-level cognitive data is mathematically irreversible: the artifact is a lossy compression of the process that produced it, and lossy compression is one-way. No future technology can recover what was discarded. Four design constraints emerge consistently across modalities: unassisted input, process-level capture, longitudinal intra-individual baselines, and attachment to intrinsically motivated practices. The six instrument requirements on this page are a domain-specific instantiation of those four general constraints.</p>
   </section>
 
 
@@ -600,11 +600,12 @@ import PublicLayout from '../layouts/layPublic.astro';
   <!-- ===== SOURCES ===== -->
   <footer class="r-sources">
     <h2>Sources</h2>
-    <p>This page draws from three papers and the primary literature they cite. Full reference lists are in the source papers.</p>
+    <p>This page draws from four papers and the primary literature they cite. Full reference lists are in the source papers.</p>
     <ul>
-      <li>Guzzardo, A. (2026a). "A Closing Window: The Demographic Confound in Keystroke-Based Cognitive Biomarkers and the AI-Mediation Threat to the Paradigm That Would Replace It." Preprint, v2.</li>
-      <li>Guzzardo, A. (2026b). "Construct Replacement: When AI-Mediated Input Invalidates Behavioral Measurement." Preprint, v2.</li>
-      <li>Guzzardo, A. (2026c). "Reconstruction Validity: Self-Validation of Process-Level Behavioral Instruments via Adversarial Synthesis." v1.</li>
+      <li>Guzzardo, A. (2026a). <a href="/papers/closing-window">"A Closing Window: The Demographic Confound in Keystroke-Based Cognitive Biomarkers and the AI-Mediation Threat to the Paradigm That Would Replace It."</a> Preprint, v2.</li>
+      <li>Guzzardo, A. (2026b). <a href="/papers/construct-replacement">"Construct Replacement: When AI-Mediated Input Invalidates Behavioral Measurement."</a> Preprint, v2.</li>
+      <li>Guzzardo, A. (2026c). <a href="/papers/reconstruction-validity">"Reconstruction Validity: Self-Validation of Process-Level Behavioral Instruments via Adversarial Synthesis."</a> Preprint, v3.</li>
+      <li>Guzzardo, A. (2026d). <a href="/papers/irreversible-loss">"Irreversible Loss: An Information-Theoretic Argument for Process-Level Cognitive Preservation."</a> Preprint, v1.</li>
     </ul>
     <p class="r-sources-note">Key citations: Adair 1984; Arnold et al. 2020; Banovic et al. 2019; Buchman &amp; Bennett 2011; Buschek et al. 2021; Chen &amp; Goodman 1999; Covington &amp; McFall 2010; Csikszentmihalyi &amp; Larson 1987; Dhakal et al. 2018; Doshi &amp; Hauser 2024; Etkin 2016; Hayes &amp; Flower 1980; Inhoff &amp; Rayner 1986; Jelinek &amp; Mercer 1980; Kellogg 1996; Kim et al. 2024; Li et al. 2025; McCambridge, Witton &amp; Elbourne 2014; Meulemans et al. 2022; Molenaar 2004; Pennebaker 1997; Pinet et al. 2022; Rosman et al. 2021; Shiffman, Stone &amp; Hufford 2008; Vishnevsky et al. 2024; Yamaguchi &amp; Logan 2014; Zhou &amp; Liu 2025.</p>
   </footer>
