@@ -1,0 +1,809 @@
+---
+/**
+ * Observatory · Ghost in the Shell
+ *
+ * Reconstruction residual view. The ghost is a Markov avatar that writes
+ * alongside you using your own statistical profile. Everything it gets
+ * right is pattern. Everything it gets wrong is cognition.
+ *
+ * Shows: convergence trajectory, per-family norms, calibration vs journal
+ * gap, perplexity comparison, PE spectrum residuals, per-signal breakdown.
+ */
+import '../../styles/styObservatory.css';
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ghost in the Shell · Observatory · Alice</title>
+    <script is:inline>
+      (function () {
+        var t = localStorage.getItem('alice-theme') || 'light';
+        document.documentElement.setAttribute('data-theme', t);
+      })();
+    </script>
+    <style is:global>
+      .ghost-chart {
+        width: 100%;
+        height: 140px;
+        display: block;
+      }
+      .ghost-chart.tall {
+        height: 200px;
+      }
+      .chart-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+      }
+      .chart-row.three {
+        grid-template-columns: 1fr 1fr 1fr;
+      }
+      @media (max-width: 820px) {
+        .chart-row, .chart-row.three { grid-template-columns: 1fr; }
+      }
+      .chart-panel {
+        background: var(--bg-panel);
+        border: 1px solid var(--border);
+        border-radius: 2px;
+        padding: 1rem 1.25rem 0.75rem;
+        margin-bottom: 0.5rem;
+      }
+      .chart-panel h3 {
+        font-family: var(--mono);
+        font-size: 10px;
+        font-weight: 500;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--text-faint);
+        margin: 0 0 0.5rem;
+      }
+      .chart-panel .latest-reading {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--text-muted);
+        margin-top: 0.25rem;
+        letter-spacing: 0.08em;
+      }
+      .chart-panel .latest-reading .val {
+        color: var(--text);
+        font-weight: 500;
+      }
+      .section-label {
+        font-family: var(--mono);
+        font-size: 10px;
+        font-weight: 500;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--text-faint);
+        margin: 2rem 0 0.75rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid var(--border);
+      }
+      .insufficient {
+        font-family: var(--sans);
+        font-size: 13px;
+        color: var(--text-muted);
+        padding: 2rem 0;
+      }
+      .legend {
+        display: flex;
+        gap: 1.2rem;
+        margin-top: 0.4rem;
+        font-family: var(--mono);
+        font-size: 9px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--text-faint);
+      }
+      .legend-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        margin-right: 4px;
+        vertical-align: middle;
+      }
+      .signal-table td.signal-name {
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.06em;
+        color: var(--text-muted);
+      }
+      .signal-table td.residual-val {
+        font-family: var(--mono);
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+      }
+      .signal-table .family-header td {
+        font-family: var(--mono);
+        font-size: 9px;
+        font-weight: 500;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--text-faint);
+        padding-top: 1rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="frame">
+      <header>
+        <h1>Ghost in the Shell</h1>
+        <nav>
+          <a href="/observatory">overview</a>
+          <a href="/observatory/trajectory">trajectory</a>
+          <a href="/observatory/coupling">coupling</a>
+          <a href="/observatory/ghost" class="active">ghost</a>
+          <a href="/">→ alice</a>
+        </nav>
+      </header>
+
+      <div class="meta-row" id="meta-row">
+        <span id="counts">loading…</span>
+      </div>
+
+      <div id="ghost-content">
+        <div class="empty">loading…</div>
+      </div>
+    </div>
+
+    <script type="module">
+      function resolveCssVar(el, v) {
+        return getComputedStyle(el).getPropertyValue(v.replace('var(', '').replace(')', '').trim()) || v;
+      }
+
+      function fmtVal(v, decimals = 2) {
+        if (v == null || !Number.isFinite(v)) return '—';
+        return Number(v).toFixed(decimals);
+      }
+
+      // ── Chart: single line (raw values, mean reference) ──────────────
+
+      function drawRawChart(canvas, values, color, labels) {
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.getBoundingClientRect();
+        const w = rect.width, h = rect.height;
+        canvas.width = w * dpr;
+        canvas.height = h * dpr;
+        canvas.style.width = w + 'px';
+        canvas.style.height = h + 'px';
+        const ctx = canvas.getContext('2d');
+        ctx.scale(dpr, dpr);
+
+        const colBorder = resolveCssVar(canvas, 'var(--border)');
+        const colFaint = resolveCssVar(canvas, 'var(--text-faint)');
+        const colLine = resolveCssVar(canvas, color);
+
+        const padL = 44, padR = 8, padT = 8, padB = 20;
+        const chartW = w - padL - padR, chartH = h - padT - padB;
+
+        const valid = values.filter(v => v != null && Number.isFinite(v));
+        if (valid.length === 0) return;
+        const minV = Math.min(...valid), maxV = Math.max(...valid);
+        const range = maxV - minV || 1;
+        const yMin = minV - range * 0.1, yMax = maxV + range * 0.1;
+        const yRange = yMax - yMin;
+
+        // Mean reference line
+        const meanV = valid.reduce((a,b) => a+b, 0) / valid.length;
+        const meanY = padT + chartH * (1 - (meanV - yMin) / yRange);
+        ctx.strokeStyle = colBorder;
+        ctx.lineWidth = 0.5;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(padL, meanY);
+        ctx.lineTo(padL + chartW, meanY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Y-axis labels
+        ctx.fillStyle = colFaint;
+        ctx.font = '9px SF Mono, Menlo, monospace';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        const fmt = (v) => Math.abs(v) >= 100 ? Math.round(v) : v.toFixed(1);
+        ctx.fillText(fmt(yMax), padL - 4, padT);
+        ctx.fillText(fmt(yMin), padL - 4, padT + chartH);
+
+        // Plot
+        const pts = [];
+        for (let i = 0; i < values.length; i++) {
+          if (values[i] != null && Number.isFinite(values[i])) {
+            const x = padL + (values.length === 1 ? chartW / 2 : (i / (values.length - 1)) * chartW);
+            const y = padT + chartH * (1 - (values[i] - yMin) / yRange);
+            pts.push({ x, y, i });
+          }
+        }
+        if (pts.length === 1) {
+          ctx.beginPath(); ctx.arc(pts[0].x, pts[0].y, 3, 0, Math.PI * 2);
+          ctx.fillStyle = colLine; ctx.fill(); return;
+        }
+        if (pts.length < 2) return;
+
+        // Fill area under curve
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, meanY);
+        for (const p of pts) ctx.lineTo(p.x, p.y);
+        ctx.lineTo(pts[pts.length - 1].x, meanY);
+        ctx.closePath();
+        ctx.fillStyle = colLine + '18';
+        ctx.fill();
+
+        // Stroke
+        ctx.strokeStyle = colLine; ctx.lineWidth = 1.5; ctx.lineJoin = 'round';
+        ctx.beginPath();
+        for (let i = 0; i < pts.length; i++) {
+          if (i === 0) ctx.moveTo(pts[i].x, pts[i].y);
+          else ctx.lineTo(pts[i].x, pts[i].y);
+        }
+        ctx.stroke();
+
+        // Dots
+        for (const p of pts) {
+          ctx.beginPath(); ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
+          ctx.fillStyle = colLine; ctx.fill();
+        }
+
+        // Date labels
+        if (labels && labels.length > 0) {
+          ctx.fillStyle = colFaint; ctx.font = '9px SF Mono, Menlo, monospace';
+          ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+          ctx.fillText(labels[0] || '', padL, padT + chartH + 4);
+          if (labels.length > 1) {
+            ctx.textAlign = 'right';
+            ctx.fillText(labels[labels.length - 1] || '', padL + chartW, padT + chartH + 4);
+          }
+        }
+      }
+
+      // ── Chart: dual line (two series, same axes) ─────────────────────
+
+      function drawDualChart(canvas, vals1, vals2, color1, color2, labels) {
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.getBoundingClientRect();
+        const w = rect.width, h = rect.height;
+        canvas.width = w * dpr;
+        canvas.height = h * dpr;
+        canvas.style.width = w + 'px';
+        canvas.style.height = h + 'px';
+        const ctx = canvas.getContext('2d');
+        ctx.scale(dpr, dpr);
+
+        const colBorder = resolveCssVar(canvas, 'var(--border)');
+        const colFaint = resolveCssVar(canvas, 'var(--text-faint)');
+        const col1 = resolveCssVar(canvas, color1);
+        const col2 = resolveCssVar(canvas, color2);
+
+        const padL = 44, padR = 8, padT = 8, padB = 20;
+        const chartW = w - padL - padR, chartH = h - padT - padB;
+
+        const all = [...vals1, ...vals2].filter(v => v != null && Number.isFinite(v));
+        if (all.length === 0) return;
+        const minV = Math.min(...all), maxV = Math.max(...all);
+        const range = maxV - minV || 1;
+        const yMin = minV - range * 0.1, yMax = maxV + range * 0.1;
+        const yRange = yMax - yMin;
+
+        // Y-axis labels
+        ctx.fillStyle = colFaint;
+        ctx.font = '9px SF Mono, Menlo, monospace';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        const fmt = (v) => Math.abs(v) >= 100 ? Math.round(v) : v.toFixed(1);
+        ctx.fillText(fmt(yMax), padL - 4, padT);
+        ctx.fillText(fmt(yMin), padL - 4, padT + chartH);
+
+        function plotLine(values, col) {
+          const pts = [];
+          for (let i = 0; i < values.length; i++) {
+            if (values[i] != null && Number.isFinite(values[i])) {
+              const x = padL + (values.length === 1 ? chartW / 2 : (i / (values.length - 1)) * chartW);
+              const y = padT + chartH * (1 - (values[i] - yMin) / yRange);
+              pts.push({ x, y });
+            }
+          }
+          if (pts.length === 1) {
+            ctx.beginPath(); ctx.arc(pts[0].x, pts[0].y, 3, 0, Math.PI * 2);
+            ctx.fillStyle = col; ctx.fill(); return;
+          }
+          if (pts.length < 2) return;
+
+          ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.lineJoin = 'round';
+          ctx.beginPath();
+          for (let i = 0; i < pts.length; i++) {
+            if (i === 0) ctx.moveTo(pts[i].x, pts[i].y);
+            else ctx.lineTo(pts[i].x, pts[i].y);
+          }
+          ctx.stroke();
+          for (const p of pts) {
+            ctx.beginPath(); ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
+            ctx.fillStyle = col; ctx.fill();
+          }
+        }
+
+        plotLine(vals1, col1);
+        plotLine(vals2, col2);
+
+        if (labels && labels.length > 0) {
+          ctx.fillStyle = colFaint; ctx.font = '9px SF Mono, Menlo, monospace';
+          ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+          ctx.fillText(labels[0] || '', padL, padT + chartH + 4);
+          if (labels.length > 1) {
+            ctx.textAlign = 'right';
+            ctx.fillText(labels[labels.length - 1] || '', padL + chartW, padT + chartH + 4);
+          }
+        }
+      }
+
+      // ── Chart: PE spectrum (5 lines, one per order) ──────────────────
+
+      function drawSpectrumChart(canvas, spectrumData, labels) {
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.getBoundingClientRect();
+        const w = rect.width, h = rect.height;
+        canvas.width = w * dpr;
+        canvas.height = h * dpr;
+        canvas.style.width = w + 'px';
+        canvas.style.height = h + 'px';
+        const ctx = canvas.getContext('2d');
+        ctx.scale(dpr, dpr);
+
+        const colBorder = resolveCssVar(canvas, 'var(--border)');
+        const colFaint = resolveCssVar(canvas, 'var(--text-faint)');
+
+        const padL = 44, padR = 8, padT = 8, padB = 20;
+        const chartW = w - padL - padR, chartH = h - padT - padB;
+
+        // spectrumData: array of arrays (one per session), each inner array has 5 values (orders 3-7)
+        const allVals = spectrumData.flat().filter(v => v != null && Number.isFinite(v));
+        if (allVals.length === 0) return;
+        const minV = Math.min(...allVals), maxV = Math.max(...allVals);
+        const range = maxV - minV || 0.01;
+        const yMin = minV - range * 0.1, yMax = maxV + range * 0.1;
+        const yRange = yMax - yMin;
+
+        // Zero line
+        if (yMin < 0 && yMax > 0) {
+          const zeroY = padT + chartH * (1 - (0 - yMin) / yRange);
+          ctx.strokeStyle = colBorder;
+          ctx.lineWidth = 0.5;
+          ctx.setLineDash([3, 3]);
+          ctx.beginPath();
+          ctx.moveTo(padL, zeroY);
+          ctx.lineTo(padL + chartW, zeroY);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
+        // Y-axis labels
+        ctx.fillStyle = colFaint;
+        ctx.font = '9px SF Mono, Menlo, monospace';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(yMax.toFixed(3), padL - 4, padT);
+        ctx.fillText(yMin.toFixed(3), padL - 4, padT + chartH);
+
+        // Order colors: gradient from warm to cool
+        const orderColors = ['#b5603f', '#c9a55e', '#7a5a44', '#6b8e6b', '#7a5a7a'];
+        const n = spectrumData.length;
+
+        for (let order = 0; order < 5; order++) {
+          const col = orderColors[order];
+          const pts = [];
+          for (let i = 0; i < n; i++) {
+            const spec = spectrumData[i];
+            if (spec && spec[order] != null && Number.isFinite(spec[order])) {
+              const x = padL + (n === 1 ? chartW / 2 : (i / (n - 1)) * chartW);
+              const y = padT + chartH * (1 - (spec[order] - yMin) / yRange);
+              pts.push({ x, y });
+            }
+          }
+          if (pts.length < 2) continue;
+
+          ctx.strokeStyle = col;
+          ctx.lineWidth = 1.2;
+          ctx.lineJoin = 'round';
+          ctx.globalAlpha = 0.8;
+          ctx.beginPath();
+          for (let i = 0; i < pts.length; i++) {
+            if (i === 0) ctx.moveTo(pts[i].x, pts[i].y);
+            else ctx.lineTo(pts[i].x, pts[i].y);
+          }
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+
+        if (labels && labels.length > 0) {
+          ctx.fillStyle = colFaint; ctx.font = '9px SF Mono, Menlo, monospace';
+          ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+          ctx.fillText(labels[0] || '', padL, padT + chartH + 4);
+          if (labels.length > 1) {
+            ctx.textAlign = 'right';
+            ctx.fillText(labels[labels.length - 1] || '', padL + chartW, padT + chartH + 4);
+          }
+        }
+      }
+
+      // ── Chart: split series (journal vs calibration on same axes) ────
+
+      function drawSplitChart(canvas, journalVals, journalIdx, calVals, calIdx, totalLen, labels) {
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.getBoundingClientRect();
+        const w = rect.width, h = rect.height;
+        canvas.width = w * dpr;
+        canvas.height = h * dpr;
+        canvas.style.width = w + 'px';
+        canvas.style.height = h + 'px';
+        const ctx = canvas.getContext('2d');
+        ctx.scale(dpr, dpr);
+
+        const colBorder = resolveCssVar(canvas, 'var(--border)');
+        const colFaint = resolveCssVar(canvas, 'var(--text-faint)');
+        const colAccent = resolveCssVar(canvas, 'var(--accent)');
+        const colSemantic = resolveCssVar(canvas, 'var(--semantic)');
+
+        const padL = 44, padR = 8, padT = 8, padB = 20;
+        const chartW = w - padL - padR, chartH = h - padT - padB;
+
+        const all = [...journalVals, ...calVals].filter(v => v != null && Number.isFinite(v));
+        if (all.length === 0) return;
+        const minV = Math.min(...all), maxV = Math.max(...all);
+        const range = maxV - minV || 1;
+        const yMin = minV - range * 0.15, yMax = maxV + range * 0.15;
+        const yRange = yMax - yMin;
+
+        // Y-axis
+        ctx.fillStyle = colFaint;
+        ctx.font = '9px SF Mono, Menlo, monospace';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        const fmt = (v) => Math.abs(v) >= 100 ? Math.round(v) : v.toFixed(1);
+        ctx.fillText(fmt(yMax), padL - 4, padT);
+        ctx.fillText(fmt(yMin), padL - 4, padT + chartH);
+
+        // Mean lines
+        function drawMean(vals, col) {
+          const valid = vals.filter(v => v != null && Number.isFinite(v));
+          if (valid.length === 0) return;
+          const mean = valid.reduce((a,b) => a+b,0) / valid.length;
+          const meanY = padT + chartH * (1 - (mean - yMin) / yRange);
+          ctx.strokeStyle = col;
+          ctx.lineWidth = 0.5;
+          ctx.globalAlpha = 0.4;
+          ctx.setLineDash([3, 3]);
+          ctx.beginPath();
+          ctx.moveTo(padL, meanY);
+          ctx.lineTo(padL + chartW, meanY);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.globalAlpha = 1;
+        }
+        drawMean(journalVals, colAccent);
+        drawMean(calVals, colSemantic);
+
+        // Plot dots (no connecting lines, since series are interleaved)
+        function plotDots(vals, indices, col) {
+          for (let j = 0; j < vals.length; j++) {
+            const v = vals[j];
+            if (v == null || !Number.isFinite(v)) continue;
+            const i = indices[j];
+            const x = padL + (totalLen === 1 ? chartW / 2 : (i / (totalLen - 1)) * chartW);
+            const y = padT + chartH * (1 - (v - yMin) / yRange);
+            ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+            ctx.fillStyle = col; ctx.fill();
+          }
+        }
+
+        plotDots(calVals, calIdx, colSemantic);
+        plotDots(journalVals, journalIdx, colAccent);
+
+        if (labels && labels.length > 0) {
+          ctx.fillStyle = colFaint; ctx.font = '9px SF Mono, Menlo, monospace';
+          ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+          ctx.fillText(labels[0] || '', padL, padT + chartH + 4);
+          if (labels.length > 1) {
+            ctx.textAlign = 'right';
+            ctx.fillText(labels[labels.length - 1] || '', padL + chartW, padT + chartH + 4);
+          }
+        }
+      }
+
+      // ── Render ───────────────────────────────────────────────────────
+
+      fetch('/api/observatory/ghost').then(r => r.json()).then(data => {
+        if (data.error) {
+          document.getElementById('ghost-content').innerHTML = `<div class="empty">${data.error}</div>`;
+          return;
+        }
+
+        const { sessions, summary } = data;
+        if (sessions.length === 0) {
+          document.getElementById('ghost-content').innerHTML =
+            '<div class="insufficient">No reconstruction residuals yet. The ghost appears after your next session.</div>';
+          return;
+        }
+
+        // Meta row
+        document.getElementById('counts').textContent =
+          `${summary.count} sessions · ${summary.journalCount} journal · ${summary.calibrationCount} calibration`;
+
+        const labels = sessions.map(s => s.date ? s.date.slice(5) : '—');
+        const latest = sessions[sessions.length - 1];
+
+        let html = '';
+
+        // ── KPI row ──────────────────────────────────────────────────
+        html += `
+          <div class="kpi-row" style="margin-bottom: 2rem;">
+            <div class="kpi">
+              <div class="k">latest total residual</div>
+              <div class="v">${fmtVal(latest.totalL2, 1)}</div>
+            </div>
+            <div class="kpi">
+              <div class="k">mean residual</div>
+              <div class="v">${fmtVal(summary.avgTotalL2, 1)}</div>
+            </div>
+            <div class="kpi">
+              <div class="k">journal mean</div>
+              <div class="v">${summary.journalCount > 0 ? fmtVal(summary.journalAvgL2, 1) : '—'}</div>
+            </div>
+            <div class="kpi">
+              <div class="k">calibration mean</div>
+              <div class="v">${summary.calibrationCount > 0 ? fmtVal(summary.calibrationAvgL2, 1) : '—'}</div>
+            </div>
+            <div class="kpi">
+              <div class="k">real perplexity (avg)</div>
+              <div class="v">${fmtVal(summary.avgRealPerplexity, 1)}</div>
+            </div>
+            <div class="kpi">
+              <div class="k">ghost perplexity (avg)</div>
+              <div class="v">${fmtVal(summary.avgAvatarPerplexity, 1)}</div>
+            </div>
+          </div>
+        `;
+
+        // ── Convergence trajectory ───────────────────────────────────
+        html += `
+          <div class="section-label">Convergence · total reconstruction residual over time</div>
+          <div class="chart-panel">
+            <h3>Total L2 norm</h3>
+            <canvas class="ghost-chart" id="chart-convergence"></canvas>
+            <div class="latest-reading">latest: <span class="val">${fmtVal(latest.totalL2, 1)}</span> · signals: <span class="val">${latest.residualCount}</span></div>
+          </div>
+        `;
+
+        // ── Per-family norms ─────────────────────────────────────────
+        html += `
+          <div class="section-label">Per-family residuals · what the ghost gets wrong by domain</div>
+          <div class="chart-row three">
+            <div class="chart-panel">
+              <h3>Dynamical L2</h3>
+              <canvas class="ghost-chart" id="chart-dyn"></canvas>
+              <div class="latest-reading">latest: <span class="val">${fmtVal(latest.dynL2, 3)}</span></div>
+            </div>
+            <div class="chart-panel">
+              <h3>Motor L2</h3>
+              <canvas class="ghost-chart" id="chart-mot"></canvas>
+              <div class="latest-reading">latest: <span class="val">${fmtVal(latest.motL2, 1)}</span></div>
+            </div>
+            <div class="chart-panel">
+              <h3>Semantic L2</h3>
+              <canvas class="ghost-chart" id="chart-sem"></canvas>
+              <div class="latest-reading">latest: <span class="val">${fmtVal(latest.semL2, 3)}</span></div>
+            </div>
+          </div>
+        `;
+
+        // ── Calibration vs journal gap ───────────────────────────────
+        html += `
+          <div class="section-label">Calibration vs journal · cognitive contribution by question type</div>
+          <div class="chart-panel">
+            <h3>Total L2 by source</h3>
+            <canvas class="ghost-chart tall" id="chart-split"></canvas>
+            <div class="legend">
+              <span><span class="legend-dot" style="background: var(--accent);"></span> journal</span>
+              <span><span class="legend-dot" style="background: var(--semantic);"></span> calibration</span>
+            </div>
+          </div>
+        `;
+
+        // ── Perplexity comparison ────────────────────────────────────
+        html += `
+          <div class="section-label">Perplexity · real vs ghost (Markov model)</div>
+          <div class="chart-row">
+            <div class="chart-panel">
+              <h3>Perplexity over time</h3>
+              <canvas class="ghost-chart tall" id="chart-perplexity"></canvas>
+              <div class="legend">
+                <span><span class="legend-dot" style="background: var(--accent);"></span> real</span>
+                <span><span class="legend-dot" style="background: var(--negative);"></span> ghost</span>
+              </div>
+            </div>
+            <div class="chart-panel">
+              <h3>Perplexity residual (real - ghost)</h3>
+              <canvas class="ghost-chart tall" id="chart-perp-residual"></canvas>
+              <div class="latest-reading">latest: <span class="val">${fmtVal(latest.perplexityResidual, 1)}</span></div>
+            </div>
+          </div>
+        `;
+
+        // ── PE spectrum residual ─────────────────────────────────────
+        const hasSpectrum = sessions.some(s => s.peSpectrumResidual != null);
+        if (hasSpectrum) {
+          html += `
+            <div class="section-label">PE spectrum residual · per-order complexity (orders 3-7)</div>
+            <div class="chart-panel">
+              <h3>Spectral residual across sessions</h3>
+              <canvas class="ghost-chart tall" id="chart-spectrum"></canvas>
+              <div class="legend">
+                <span><span class="legend-dot" style="background: #b5603f;"></span> order 3</span>
+                <span><span class="legend-dot" style="background: #c9a55e;"></span> order 4</span>
+                <span><span class="legend-dot" style="background: #7a5a44;"></span> order 5</span>
+                <span><span class="legend-dot" style="background: #6b8e6b;"></span> order 6</span>
+                <span><span class="legend-dot" style="background: #7a5a7a;"></span> order 7</span>
+              </div>
+            </div>
+          `;
+        }
+
+        // ── Per-signal residual table ────────────────────────────────
+        const signalDefs = [
+          { family: 'Dynamical', signals: [
+            { key: 'resPE', label: 'Permutation entropy' },
+            { key: 'resDFA', label: 'DFA alpha' },
+            { key: 'resRQADet', label: 'RQA determinism' },
+            { key: 'resRQALam', label: 'RQA laminarity' },
+            { key: 'resTEDom', label: 'TE dominance' },
+          ]},
+          { family: 'Motor', signals: [
+            { key: 'resSampEn', label: 'Sample entropy' },
+            { key: 'resJerk', label: 'Motor jerk' },
+            { key: 'resLapse', label: 'Lapse rate' },
+            { key: 'resDrift', label: 'Tempo drift' },
+            { key: 'resTau', label: 'Ex-Gaussian tau' },
+            { key: 'resTauProp', label: 'Tau proportion' },
+          ]},
+          { family: 'Semantic', signals: [
+            { key: 'resIdea', label: 'Idea density' },
+            { key: 'resLex', label: 'Lexical sophistication' },
+            { key: 'resEpist', label: 'Epistemic stance' },
+            { key: 'resInteg', label: 'Integrative complexity' },
+            { key: 'resCohes', label: 'Deep cohesion' },
+            { key: 'resCompress', label: 'Text compression ratio' },
+          ]},
+        ];
+
+        html += `
+          <div class="section-label">Per-signal residuals · latest session breakdown</div>
+          <section class="panel">
+            <table class="signal-table">
+              <thead><tr>
+                <th>signal</th>
+                <th style="text-align:right">residual</th>
+              </tr></thead>
+              <tbody>
+        `;
+        for (const fam of signalDefs) {
+          html += `<tr class="family-header"><td colspan="2">${fam.family}</td></tr>`;
+          for (const sig of fam.signals) {
+            const v = latest[sig.key];
+            const display = (v == null || !Number.isFinite(v)) ? '—' : (v >= 0 ? '+' : '') + Number(v).toFixed(4);
+            const cls = (v != null && Number.isFinite(v)) ? (v >= 0 ? 'sign-pos' : 'sign-neg') : '';
+            html += `<tr>
+              <td class="signal-name">${sig.label}</td>
+              <td class="residual-val num ${cls}">${display}</td>
+            </tr>`;
+          }
+        }
+        html += '</tbody></table></section>';
+
+        document.getElementById('ghost-content').innerHTML = html;
+
+        // ── Draw charts ──────────────────────────────────────────────
+
+        // Convergence
+        drawRawChart(
+          document.getElementById('chart-convergence'),
+          sessions.map(s => s.totalL2),
+          'var(--accent)',
+          labels
+        );
+
+        // Per-family
+        drawRawChart(
+          document.getElementById('chart-dyn'),
+          sessions.map(s => s.dynL2),
+          'var(--warn)',
+          labels
+        );
+        drawRawChart(
+          document.getElementById('chart-mot'),
+          sessions.map(s => s.motL2),
+          'var(--negative)',
+          labels
+        );
+        drawRawChart(
+          document.getElementById('chart-sem'),
+          sessions.map(s => s.semL2),
+          'var(--semantic)',
+          labels
+        );
+
+        // Split: journal vs calibration
+        const journalVals = [], journalIdx = [];
+        const calVals = [], calIdx = [];
+        sessions.forEach((s, i) => {
+          if (s.sourceId === 3) { calVals.push(s.totalL2); calIdx.push(i); }
+          else { journalVals.push(s.totalL2); journalIdx.push(i); }
+        });
+        drawSplitChart(
+          document.getElementById('chart-split'),
+          journalVals, journalIdx,
+          calVals, calIdx,
+          sessions.length,
+          labels
+        );
+
+        // Perplexity dual
+        drawDualChart(
+          document.getElementById('chart-perplexity'),
+          sessions.map(s => s.realPerplexity),
+          sessions.map(s => s.avatarPerplexity),
+          'var(--accent)',
+          'var(--negative)',
+          labels
+        );
+        drawRawChart(
+          document.getElementById('chart-perp-residual'),
+          sessions.map(s => s.perplexityResidual),
+          'var(--negative)',
+          labels
+        );
+
+        // PE spectrum
+        if (hasSpectrum) {
+          const spectrumData = sessions.map(s => {
+            if (!s.peSpectrumResidual) return [null, null, null, null, null];
+            const arr = typeof s.peSpectrumResidual === 'string'
+              ? JSON.parse(s.peSpectrumResidual)
+              : s.peSpectrumResidual;
+            return Array.isArray(arr) ? arr : [null, null, null, null, null];
+          });
+          drawSpectrumChart(
+            document.getElementById('chart-spectrum'),
+            spectrumData,
+            labels
+          );
+        }
+
+        // Resize handler
+        let resizeTimer;
+        window.addEventListener('resize', () => {
+          clearTimeout(resizeTimer);
+          resizeTimer = setTimeout(() => {
+            drawRawChart(document.getElementById('chart-convergence'), sessions.map(s => s.totalL2), 'var(--accent)', labels);
+            drawRawChart(document.getElementById('chart-dyn'), sessions.map(s => s.dynL2), 'var(--warn)', labels);
+            drawRawChart(document.getElementById('chart-mot'), sessions.map(s => s.motL2), 'var(--negative)', labels);
+            drawRawChart(document.getElementById('chart-sem'), sessions.map(s => s.semL2), 'var(--semantic)', labels);
+            drawSplitChart(document.getElementById('chart-split'), journalVals, journalIdx, calVals, calIdx, sessions.length, labels);
+            drawDualChart(document.getElementById('chart-perplexity'), sessions.map(s => s.realPerplexity), sessions.map(s => s.avatarPerplexity), 'var(--accent)', 'var(--negative)', labels);
+            drawRawChart(document.getElementById('chart-perp-residual'), sessions.map(s => s.perplexityResidual), 'var(--negative)', labels);
+            if (hasSpectrum) {
+              const spectrumData = sessions.map(s => {
+                if (!s.peSpectrumResidual) return [null, null, null, null, null];
+                const arr = typeof s.peSpectrumResidual === 'string' ? JSON.parse(s.peSpectrumResidual) : s.peSpectrumResidual;
+                return Array.isArray(arr) ? arr : [null, null, null, null, null];
+              });
+              drawSpectrumChart(document.getElementById('chart-spectrum'), spectrumData, labels);
+            }
+          }, 150);
+        });
+
+      }).catch(err => {
+        document.getElementById('ghost-content').innerHTML = `<div class="empty">failed to load: ${err?.message ?? err}</div>`;
+      });
+    </script>
+  </body>
+</html>

@@ -841,6 +841,7 @@ CREATE TABLE IF NOT EXISTS tb_paper_comments (
 CREATE TABLE IF NOT EXISTS tb_reconstruction_residuals (
    reconstruction_residual_id   INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
   ,question_id                  INT NOT NULL UNIQUE
+  ,question_source_id           SMALLINT
 
   -- ── Avatar generation metadata ──────────────────────────────────────
   ,avatar_text                  TEXT

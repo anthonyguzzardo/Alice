@@ -65,8 +65,12 @@ function spectrumDelta(
   }
 }
 
+function isFiniteNum(v: number | null): v is number {
+  return v != null && Number.isFinite(v);
+}
+
 function l2(values: (number | null)[]): number | null {
-  const valid = values.filter((v): v is number => v != null);
+  const valid = values.filter(isFiniteNum);
   if (valid.length === 0) return null;
   return Math.sqrt(valid.reduce((s, v) => s + v * v, 0) / valid.length);
 }
@@ -87,10 +91,12 @@ export async function computeReconstructionResidual(questionId: number): Promise
 
   if (textRows.length < 3) return; // Need minimum corpus for Markov chain
 
-  // Fetch question text (topic seed for avatar)
-  const qRows = await sql`SELECT text FROM tb_questions WHERE question_id = ${questionId}`;
-  const questionText = (qRows[0] as { text: string } | undefined)?.text;
+  // Fetch question text + source (topic seed for avatar)
+  const qRows = await sql`SELECT text, question_source_id FROM tb_questions WHERE question_id = ${questionId}`;
+  const qRow = qRows[0] as { text: string; question_source_id: number } | undefined;
+  const questionText = qRow?.text;
   if (!questionText) return;
+  const questionSourceId = qRow.question_source_id;
 
   // Fetch real response text + word count
   const summaryRows = await sql`
@@ -213,10 +219,11 @@ export async function computeReconstructionResidual(questionId: number): Promise
     delta(realPerp?.perplexity ?? null, avatarPerp?.perplexity ?? null),
   ];
   const totalNorm = l2(allResiduals);
-  const residualCount = allResiduals.filter(v => v != null).length;
+  const residualCount = allResiduals.filter(isFiniteNum).length;
 
   // ── Persist ─────────────────────────────────────────────────────
   const row: ReconstructionResidualInput = {
+    question_source_id: questionSourceId,
     avatar_text: avatar.text,
     avatar_word_count: avatar.wordCount,
     avatar_markov_order: avatar.markovOrder,

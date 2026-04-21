@@ -152,3 +152,17 @@ The ghost is the foundation. What it enables:
 ## The sentence
 
 Your statistical ghost writes next to you. The difference between you and your ghost is the signal.
+---
+
+The ghost exists to prove a negative.
+
+Your whole paper rests on a claim that's easy to assert and hard to prove: *the signals Alice measures capture something about cognition, not just typing habits.* Every skeptic reading that paper is going to ask the same question — "how do you know you're not just measuring how fast this guy's fingers move?" You need an answer that isn't hand-waving.
+
+The ghost is the answer. Here's the logic in one line: *if a statistical model of your typing can reproduce the signals, the signals are statistical. If it can't, what's left over is the thing you're actually claiming to measure.*
+
+That's it. The ghost is a subtraction tool. You build the best possible statistical imitation of yourself — Markov chain over your words, motor profile over your timing — and you run the signal pipeline on what it produces. Whatever the ghost reproduces is, by definition, stuff that was *already latent in your statistical fingerprint*. Whatever it can't reproduce is what's left when you subtract the statistics out. That remainder is your evidence for the cognitive claim.
+
+Without the ghost, you're asserting the signals are cognitive. With the ghost, you're *showing* which signals survive the subtraction.
+
+
+In plain English: it's the control condition that lets you say "here's what's statistical, here's what's left, and the stuff that's left is what the instrument is actually measuring." Without it, your paper is an argument. With it, your paper is a measurement.

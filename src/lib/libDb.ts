@@ -1954,6 +1954,7 @@ export async function getCrossSessionSignals(questionId: number): Promise<CrossS
 // ----------------------------------------------------------------------------
 
 export interface ReconstructionResidualInput {
+  question_source_id: number | null;
   avatar_text: string | null;
   avatar_word_count: number | null;
   avatar_markov_order: number | null;
@@ -2035,6 +2036,7 @@ export async function saveReconstructionResidual(
   const [row] = await sql`
     INSERT INTO tb_reconstruction_residuals (
        question_id
+      ,question_source_id
       ,avatar_text, avatar_word_count, avatar_markov_order, avatar_chain_size
       ,avatar_i_burst_count, real_word_count, corpus_size, session_count
       ,real_perplexity, real_known_fraction, avatar_perplexity, avatar_known_fraction
@@ -2061,6 +2063,7 @@ export async function saveReconstructionResidual(
       ,residual_count
     ) VALUES (
        ${questionId}
+      ,${s.question_source_id}
       ,${s.avatar_text}, ${s.avatar_word_count}, ${s.avatar_markov_order}, ${s.avatar_chain_size}
       ,${s.avatar_i_burst_count}, ${s.real_word_count}, ${s.corpus_size}, ${s.session_count}
       ,${s.real_perplexity}, ${s.real_known_fraction}, ${s.avatar_perplexity}, ${s.avatar_known_fraction}
