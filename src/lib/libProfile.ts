@@ -39,7 +39,7 @@ const nn = (vals: (number | null)[]): number[] => vals.filter((v): v is number =
 
 export async function updateProfile(questionId: number): Promise<void> {
   try {
-    // ── Gather all journal session data ──
+    // ── Gather all session data (journal + calibration) ──
     const summaries = await sql`
       SELECT ss.question_id,
              ss.total_duration_ms, ss.word_count, ss.total_chars_typed,
@@ -54,8 +54,6 @@ export async function updateProfile(questionId: number): Promise<void> {
              ss.first_half_deletion_chars, ss.second_half_deletion_chars,
              ss.mattr
       FROM tb_session_summaries ss
-      JOIN tb_questions q ON ss.question_id = q.question_id
-      WHERE q.question_source_id != 3
       ORDER BY ss.session_summary_id ASC
     ` as any[];
 
@@ -66,8 +64,6 @@ export async function updateProfile(questionId: number): Promise<void> {
       SELECT ms.ex_gaussian_mu, ms.ex_gaussian_sigma, ms.ex_gaussian_tau,
              ms.digraph_latency_json
       FROM tb_motor_signals ms
-      JOIN tb_questions q ON ms.question_id = q.question_id
-      WHERE q.question_source_id != 3
     ` as any[];
 
     // ── Process signals (pause location, bursts) ──
@@ -75,16 +71,12 @@ export async function updateProfile(questionId: number): Promise<void> {
       SELECT ps.pause_within_word, ps.pause_between_word, ps.pause_between_sentence,
              ps.r_burst_count, ps.i_burst_count
       FROM tb_process_signals ps
-      JOIN tb_questions q ON ps.question_id = q.question_id
-      WHERE q.question_source_id != 3
     ` as any[];
 
     // ── Burst sequences for consolidation ──
     const burstRows = await sql`
       SELECT bs.question_id, bs.burst_index, bs.burst_char_count
       FROM tb_burst_sequences bs
-      JOIN tb_questions q ON bs.question_id = q.question_id
-      WHERE q.question_source_id != 3
       ORDER BY bs.question_id, bs.burst_index
     ` as any[];
 
@@ -93,7 +85,6 @@ export async function updateProfile(questionId: number): Promise<void> {
       SELECT r.text
       FROM tb_responses r
       JOIN tb_questions q ON r.question_id = q.question_id
-      WHERE q.question_source_id != 3
       ORDER BY q.scheduled_for ASC
     ` as any[];
 

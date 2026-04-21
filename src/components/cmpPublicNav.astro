@@ -9,23 +9,31 @@ const { active = '' } = Astro.props;
   <div class="nav-menu">
     <button class="nav-menu-btn" id="nav-menu-btn" aria-label="Navigation" title="Navigation">&#x2022;&#x2022;&#x2022;</button>
     <div class="nav-dropdown" id="nav-dropdown">
-      <a href="/landing" class:list={[{ current: active === 'home' }]}>Home</a>
-      <a href="/vision" class:list={[{ current: active === 'vision' }]}>Vision</a>
-      <a href="/questions" class:list={[{ current: active === 'questions' }]}>Questions</a>
-      <a href="/research" class:list={[{ current: active === 'research' }]}>Research</a>
-      <a href="/instrument" class:list={[{ current: active === 'instrument' }]}>Instrument</a>
-      <a href="/methodology" class:list={[{ current: active === 'methodology' }]}>Methodology</a>
-      <a href="/papers" class:list={[{ current: active === 'papers' }]}>Papers</a>
-      <a href="/log" class:list={[{ current: active === 'log' }]}>Log</a>
-      <a href="/collaborate" class:list={[{ current: active === 'collaborate' }]}>Collaborate</a>
-      <a href="/about" class:list={[{ current: active === 'about' }]}>About</a>
+      <div class="nav-columns">
+        <div class="nav-col">
+          <div class="nav-heading">Project</div>
+          <a href="/landing" class:list={[{ current: active === 'home' }]}>Home</a>
+          <a href="/vision" class:list={[{ current: active === 'vision' }]}>Vision</a>
+          <a href="/about" class:list={[{ current: active === 'about' }]}>About</a>
+          <a href="/research" class:list={[{ current: active === 'research' }]}>Research</a>
+          <a href="/questions" class:list={[{ current: active === 'questions' }]}>Questions</a>
+          <a href="/collaborate" class:list={[{ current: active === 'collaborate' }]}>Collaborate</a>
+        </div>
+        <div class="nav-col">
+          <div class="nav-heading">Instrument</div>
+          <a href="/instrument" class:list={[{ current: active === 'instrument' }]}>Overview</a>
+          <a href="/methodology" class:list={[{ current: active === 'methodology' }]}>Methodology</a>
+          <a href="/papers" class:list={[{ current: active === 'papers' }]}>Papers</a>
+          <a href="/log" class:list={[{ current: active === 'log' }]}>Log</a>
+          <a href="/avatar" class:list={[{ current: active === 'avatar' }]}>Avatar</a>
+        </div>
+      </div>
       <div class="nav-divider"></div>
-      <a href="/avatar" class:list={[{ current: active === 'avatar' }]}>Avatar</a>
-      <div class="nav-divider"></div>
-      <a href="/">Journal</a>
-      <a href="/observatory">Observatory</a>
-      <div class="nav-divider"></div>
-      <a href="/dev/signals">Signal Sandbox</a>
+      <div class="nav-footer">
+        <a href="/">Journal</a>
+        <a href="/observatory">Observatory</a>
+        <a href="/dev/signals">Sandbox</a>
+      </div>
     </div>
   </div>
   <button class="top-btn" id="public-theme-toggle" aria-label="Toggle theme"></button>
@@ -133,8 +141,8 @@ const { active = '' } = Astro.props;
     background: var(--bg);
     border: 1px solid var(--border);
     border-radius: 8px;
-    padding: 0.5rem 0;
-    min-width: 180px;
+    padding: 0.6rem 0;
+    min-width: 320px;
     opacity: 0;
     pointer-events: none;
     transform: translateY(-4px);
@@ -148,14 +156,34 @@ const { active = '' } = Astro.props;
     transform: translateY(0);
   }
 
+  .nav-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+  }
+
+  .nav-col {
+    padding: 0 0.4rem;
+  }
+
+  .nav-heading {
+    padding: 0.4rem 0.8rem 0.3rem;
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-faint);
+  }
+
   .nav-dropdown a {
     display: block;
-    padding: 0.6rem 1.2rem;
+    padding: 0.4rem 0.8rem;
     color: var(--text-muted);
     text-decoration: none;
     font-family: var(--serif-body);
-    font-size: 1.05rem;
+    font-size: 0.95rem;
     letter-spacing: 0.03em;
+    border-radius: 4px;
     transition: color 0.2s ease, background 0.2s ease;
   }
 
@@ -171,6 +199,30 @@ const { active = '' } = Astro.props;
   .nav-dropdown .nav-divider {
     height: 1px;
     background: var(--border);
-    margin: 0.4rem 1.2rem;
+    margin: 0.4rem 0.8rem;
+  }
+
+  .nav-footer {
+    display: flex;
+    gap: 0;
+    padding: 0 0.4rem;
+  }
+
+  .nav-footer a {
+    flex: 1;
+    text-align: center;
+    font-size: 0.85rem;
+    padding: 0.4rem 0.5rem;
+    color: var(--text-faint);
+  }
+
+  .nav-footer a:hover {
+    color: var(--text-muted);
+  }
+
+  @media (max-width: 480px) {
+    .nav-dropdown {
+      min-width: 260px;
+    }
   }
 </style>

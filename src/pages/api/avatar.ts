@@ -37,12 +37,11 @@ export const POST: APIRoute = async ({ request }) => {
     });
   }
 
-  // Fetch all journal response texts
+  // Fetch all response texts (journal + calibration)
   const textRows = await sql`
     SELECT r.text
     FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
-    WHERE q.question_source_id != 3
     ORDER BY q.scheduled_for ASC
   ` as Array<{ text: string }>;
 
