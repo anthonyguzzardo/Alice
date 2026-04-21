@@ -119,6 +119,16 @@ pub fn compute_motor_signals(stream_json: String, total_duration_ms: f64) -> Mot
 
 #[napi(object)]
 #[derive(Serialize, Default)]
+pub struct RBurstEntry {
+    pub deleted_char_count: i32,
+    pub total_char_count: i32,
+    pub duration_ms: f64,
+    pub start_offset_ms: f64,
+    pub is_leading_edge: bool,
+}
+
+#[napi(object)]
+#[derive(Serialize, Default)]
 pub struct ProcessSignals {
     pub pause_within_word: Option<i32>,
     pub pause_between_word: Option<i32>,
@@ -126,6 +136,7 @@ pub struct ProcessSignals {
     pub abandoned_thought_count: Option<i32>,
     pub r_burst_count: Option<i32>,
     pub i_burst_count: Option<i32>,
+    pub r_burst_sequences: Vec<RBurstEntry>,
     pub vocab_expansion_rate: Option<f64>,
     pub phase_transition_point: Option<f64>,
     pub strategy_shift_count: Option<i32>,
@@ -143,6 +154,17 @@ pub fn compute_process_signals(event_log_json: String) -> ProcessSignals {
         abandoned_thought_count: r.abandoned_thought_count,
         r_burst_count: r.r_burst_count,
         i_burst_count: r.i_burst_count,
+        r_burst_sequences: r
+            .r_burst_details
+            .into_iter()
+            .map(|d| RBurstEntry {
+                deleted_char_count: d.deleted_char_count,
+                total_char_count: d.total_char_count,
+                duration_ms: d.duration_ms,
+                start_offset_ms: d.start_offset_ms,
+                is_leading_edge: d.is_leading_edge,
+            })
+            .collect(),
         vocab_expansion_rate: r.vocab_expansion_rate,
         phase_transition_point: r.phase_transition_point,
         strategy_shift_count: r.strategy_shift_count,

@@ -206,6 +206,9 @@ const responseId = parseInt(id ?? '', 10);
         if (metadata?.burst_trajectory_shape && metadata.burst_trajectory_shape !== 'none') {
           metaPills.push(`<span class="pill">burst: ${metadata.burst_trajectory_shape.replace(/_/g, ' ')}</span>`);
         }
+        if (metadata?.rburst_trajectory_shape && metadata.rburst_trajectory_shape !== 'none') {
+          metaPills.push(`<span class="pill">revision: ${metadata.rburst_trajectory_shape.replace(/_/g, ' ')}</span>`);
+        }
         if (metadata?.hour_typicality != null) {
           const label = metadata.hour_typicality > 1 ? 'typical hour' : metadata.hour_typicality < -1 ? 'unusual hour' : 'avg hour';
           metaPills.push(`<span class="pill">${label} · z=${metadata.hour_typicality.toFixed(2)}</span>`);

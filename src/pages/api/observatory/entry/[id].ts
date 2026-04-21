@@ -126,6 +126,7 @@ export const GET: APIRoute = async ({ params }) => {
     // Session metadata (slice-3 follow-ups)
     const metadataRows = await sql`
       SELECT hour_typicality, deletion_curve_type, burst_trajectory_shape,
+             rburst_trajectory_shape,
              inter_burst_interval_mean_ms, inter_burst_interval_std_ms,
              deletion_during_burst_count, deletion_between_burst_count
       FROM tb_session_metadata
@@ -138,6 +139,15 @@ export const GET: APIRoute = async ({ params }) => {
     const burstSequence = await sql`
       SELECT burst_index, burst_char_count, burst_duration_ms, burst_start_offset_ms
       FROM tb_burst_sequences
+      WHERE question_id = ${entryState.question_id}
+      ORDER BY burst_index ASC
+    ` as any[];
+
+    // R-burst sequence (revision burst detail)
+    const rburstSequence = await sql`
+      SELECT burst_index, deleted_char_count, total_char_count,
+             burst_duration_ms, burst_start_offset_ms, is_leading_edge
+      FROM tb_rburst_sequences
       WHERE question_id = ${entryState.question_id}
       ORDER BY burst_index ASC
     ` as any[];
@@ -202,6 +212,7 @@ export const GET: APIRoute = async ({ params }) => {
       sessionSummary,
       metadata,
       burstSequence,
+      rburstSequence,
       dynamicalSignals,
       motorSignals,
       replay: replayRow ? {

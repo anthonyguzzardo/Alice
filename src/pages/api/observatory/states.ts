@@ -47,6 +47,7 @@ export const GET: APIRoute = async () => {
       SELECT
          question_id
         ,hour_typicality, deletion_curve_type, burst_trajectory_shape
+        ,rburst_trajectory_shape
         ,inter_burst_interval_mean_ms, inter_burst_interval_std_ms
         ,deletion_during_burst_count, deletion_between_burst_count
       FROM tb_session_metadata

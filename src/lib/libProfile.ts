@@ -80,6 +80,14 @@ export async function updateProfile(questionId: number): Promise<void> {
       ORDER BY bs.question_id, bs.burst_index
     ` as any[];
 
+    // ── R-burst sequences for revision profile ──
+    const rburstRows = await sql`
+      SELECT rs.question_id, rs.burst_index, rs.deleted_char_count,
+             rs.burst_duration_ms, rs.is_leading_edge
+      FROM tb_rburst_sequences rs
+      ORDER BY rs.question_id, rs.burst_index
+    ` as any[];
+
     // ── Response texts for trigram model + vocab ──
     const textRows = await sql`
       SELECT r.text
@@ -131,6 +139,31 @@ export async function updateProfile(questionId: number): Promise<void> {
       const firstAvg = mean(firstHalf.map(b => b.char_count));
       const secondAvg = mean(secondHalf.map(b => b.char_count));
       if (firstAvg > 0) consolidationRatios.push(secondAvg / firstAvg);
+    }
+
+    // R-burst consolidation: same approach as P-burst, on deleted_char_count
+    const rburstConsolidationRatios: number[] = [];
+    const allRburstSizes: number[] = [];
+    const allRburstDurations: number[] = [];
+    let rburstLeadingEdgeCount = 0;
+    let rburstTotalCount = 0;
+    const rburstsByQuestion = new Map<number, Array<{ deleted_char_count: number; burst_duration_ms: number; is_leading_edge: boolean }>>();
+    for (const r of rburstRows) {
+      if (!rburstsByQuestion.has(r.question_id)) rburstsByQuestion.set(r.question_id, []);
+      rburstsByQuestion.get(r.question_id)!.push(r);
+      allRburstSizes.push(r.deleted_char_count);
+      allRburstDurations.push(r.burst_duration_ms);
+      rburstTotalCount++;
+      if (r.is_leading_edge) rburstLeadingEdgeCount++;
+    }
+    for (const [, rbursts] of rburstsByQuestion) {
+      if (rbursts.length < 4) continue;
+      const mid = Math.floor(rbursts.length / 2);
+      const firstHalf = rbursts.slice(0, mid);
+      const secondHalf = rbursts.slice(mid);
+      const firstAvg = mean(firstHalf.map(b => b.deleted_char_count));
+      const secondAvg = mean(secondHalf.map(b => b.deleted_char_count));
+      if (firstAvg > 0) rburstConsolidationRatios.push(secondAvg / firstAvg);
     }
 
     const durations = nn(summaries.map((s: any) => s.total_duration_ms));
@@ -247,6 +280,7 @@ export async function updateProfile(questionId: number): Promise<void> {
           pause_rate_mean, first_keystroke_mean, first_keystroke_std,
           small_del_rate_mean, large_del_rate_mean,
           revision_timing_bias, r_burst_ratio_mean,
+          rburst_consolidation, rburst_mean_size, rburst_mean_duration, rburst_leading_edge_pct,
           trigram_model_json, vocab_cumulative,
           mattr_mean, mattr_std,
           dttm_updated_utc
@@ -278,6 +312,10 @@ export async function updateProfile(questionId: number): Promise<void> {
           ${largeDelRates.length > 0 ? mean(largeDelRates) : null},
           ${revisionTimings.length > 0 ? mean(revisionTimings) : null},
           ${rBurstRatios.length > 0 ? mean(rBurstRatios) : null},
+          ${rburstConsolidationRatios.length > 0 ? mean(rburstConsolidationRatios) : null},
+          ${allRburstSizes.length > 0 ? mean(allRburstSizes) : null},
+          ${allRburstDurations.length > 0 ? mean(allRburstDurations) : null},
+          ${rburstTotalCount > 0 ? rburstLeadingEdgeCount / rburstTotalCount : null},
           ${trigramJson}, ${allWords.size},
           ${mattrs.length > 0 ? mean(mattrs) : null}, ${mattrs.length > 1 ? std(mattrs) : null},
           NOW()

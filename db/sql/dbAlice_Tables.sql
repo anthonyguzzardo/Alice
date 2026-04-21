@@ -111,7 +111,7 @@ CREATE TABLE IF NOT EXISTS te_context_dimension (
 -- PURPOSE: daily questions (seed, generated, calibration)
 -- USE CASE: one row per question, scheduled_for is unique calendar date
 -- MUTABILITY: insert once, rarely updated (intervention fields may be set later)
--- REFERENCED BY: tb_responses, tb_session_summaries, tb_session_events, tb_burst_sequences
+-- REFERENCED BY: tb_responses, tb_session_summaries, tb_session_events, tb_burst_sequences, tb_rburst_sequences
 -- FOOTER: yes
 CREATE TABLE IF NOT EXISTS tb_questions (
    question_id            INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
@@ -406,6 +406,27 @@ CREATE TABLE IF NOT EXISTS tb_burst_sequences (
 
 -- --------------------------------------------------------------------------
 
+-- PURPOSE: R-burst (revision burst) sequences per session
+-- USE CASE: per-R-burst decomposition parallel to P-burst sequences;
+--           Deane 2015 classification + Lindgren & Sullivan 2006 leading edge
+-- MUTABILITY: insert only
+-- REFERENCED BY: none (leaf table)
+-- FOOTER: created only
+CREATE TABLE IF NOT EXISTS tb_rburst_sequences (
+   rburst_sequence_id     INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,question_id            INT      NOT NULL
+  ,burst_index            SMALLINT NOT NULL
+  ,deleted_char_count     INT      NOT NULL
+  ,total_char_count       INT      NOT NULL
+  ,burst_duration_ms      DOUBLE PRECISION NOT NULL
+  ,burst_start_offset_ms  DOUBLE PRECISION NOT NULL
+  ,is_leading_edge        BOOLEAN  NOT NULL
+  ,dttm_created_utc       TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ,created_by             TEXT NOT NULL DEFAULT 'system'
+);
+
+-- --------------------------------------------------------------------------
+
 -- PURPOSE: derived session-level metadata (computed post-submission)
 -- USE CASE: hour typicality, burst trajectory shape, deletion curve
 -- MUTABILITY: insert once per session
@@ -416,6 +437,7 @@ CREATE TABLE IF NOT EXISTS tb_session_metadata (
   ,hour_typicality               DOUBLE PRECISION
   ,deletion_curve_type           TEXT
   ,burst_trajectory_shape        TEXT
+  ,rburst_trajectory_shape       TEXT
   ,inter_burst_interval_mean_ms  DOUBLE PRECISION
   ,inter_burst_interval_std_ms   DOUBLE PRECISION
   ,deletion_during_burst_count   INT

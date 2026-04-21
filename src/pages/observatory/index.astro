@@ -161,6 +161,8 @@ import '../../styles/styObservatory.css';
             metaParts.push(`del:${s.metadata.deletion_curve_type}`);
           if (s.metadata?.burst_trajectory_shape && s.metadata.burst_trajectory_shape !== 'none')
             metaParts.push(`burst:${s.metadata.burst_trajectory_shape}`);
+          if (s.metadata?.rburst_trajectory_shape && s.metadata.rburst_trajectory_shape !== 'none')
+            metaParts.push(`rev:${s.metadata.rburst_trajectory_shape}`);
           if (s.metadata?.hour_typicality != null && Math.abs(s.metadata.hour_typicality) > 1)
             metaParts.push(`hr:${s.metadata.hour_typicality > 0 ? 'typical' : 'unusual'}`);
           const meta = metaParts.length ? metaParts.join(' · ') : '—';

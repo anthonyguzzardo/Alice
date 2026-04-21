@@ -341,6 +341,54 @@ export async function getBurstSequence(questionId: number, tx?: TxSql): Promise<
 }
 
 // ----------------------------------------------------------------------------
+// R-BURST SEQUENCES (parallel to P-burst sequences)
+// ----------------------------------------------------------------------------
+
+export interface RBurstEntry {
+  deletedCharCount: number;
+  totalCharCount: number;
+  durationMs: number;
+  startOffsetMs: number;
+  isLeadingEdge: boolean;
+}
+
+export async function saveRburstSequence(questionId: number, rbursts: RBurstEntry[], tx?: TxSql): Promise<void> {
+  if (rbursts.length === 0) return;
+  if (tx) {
+    for (let i = 0; i < rbursts.length; i++) {
+      await tx`
+        INSERT INTO tb_rburst_sequences (question_id, burst_index, deleted_char_count, total_char_count, burst_duration_ms, burst_start_offset_ms, is_leading_edge)
+        VALUES (${questionId}, ${i}, ${rbursts[i].deletedCharCount}, ${rbursts[i].totalCharCount}, ${rbursts[i].durationMs}, ${rbursts[i].startOffsetMs}, ${rbursts[i].isLeadingEdge})
+      `;
+    }
+  } else {
+    await sql.begin(async (sql) => {
+      for (let i = 0; i < rbursts.length; i++) {
+        await sql`
+          INSERT INTO tb_rburst_sequences (question_id, burst_index, deleted_char_count, total_char_count, burst_duration_ms, burst_start_offset_ms, is_leading_edge)
+          VALUES (${questionId}, ${i}, ${rbursts[i].deletedCharCount}, ${rbursts[i].totalCharCount}, ${rbursts[i].durationMs}, ${rbursts[i].startOffsetMs}, ${rbursts[i].isLeadingEdge})
+        `;
+      }
+    });
+  }
+}
+
+export async function getRburstSequence(questionId: number, tx?: TxSql): Promise<Array<RBurstEntry & { burstIndex: number }>> {
+  const q = tx ?? sql;
+  return await q`
+    SELECT burst_index AS "burstIndex",
+           deleted_char_count AS "deletedCharCount",
+           total_char_count AS "totalCharCount",
+           burst_duration_ms AS "durationMs",
+           burst_start_offset_ms AS "startOffsetMs",
+           is_leading_edge AS "isLeadingEdge"
+    FROM tb_rburst_sequences
+    WHERE question_id = ${questionId}
+    ORDER BY burst_index ASC
+  ` as Array<RBurstEntry & { burstIndex: number }>;
+}
+
+// ----------------------------------------------------------------------------
 // SESSION METADATA (slice-3 follow-up signals)
 // ----------------------------------------------------------------------------
 
@@ -350,6 +398,7 @@ export interface SessionMetadataRow {
   hour_typicality: number | null;
   deletion_curve_type: string | null;
   burst_trajectory_shape: string | null;
+  rburst_trajectory_shape: string | null;
   inter_burst_interval_mean_ms: number | null;
   inter_burst_interval_std_ms: number | null;
   deletion_during_burst_count: number | null;
@@ -361,10 +410,12 @@ export async function saveSessionMetadata(row: Omit<SessionMetadataRow, 'session
   const [result] = await q`
     INSERT INTO tb_session_metadata (
        question_id, hour_typicality, deletion_curve_type, burst_trajectory_shape,
+       rburst_trajectory_shape,
        inter_burst_interval_mean_ms, inter_burst_interval_std_ms,
        deletion_during_burst_count, deletion_between_burst_count
     ) VALUES (
       ${row.question_id}, ${row.hour_typicality}, ${row.deletion_curve_type}, ${row.burst_trajectory_shape},
+      ${row.rburst_trajectory_shape},
       ${row.inter_burst_interval_mean_ms}, ${row.inter_burst_interval_std_ms},
       ${row.deletion_during_burst_count}, ${row.deletion_between_burst_count}
     )

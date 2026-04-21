@@ -15,6 +15,8 @@
  */
 
 import sql from './libDb.ts';
+import { getRburstSequence } from './libDb.ts';
+import type { RBurstEntry } from './libDb.ts';
 
 export interface SessionMetadataInputs {
   questionId: number;
@@ -29,6 +31,7 @@ export interface SessionMetadataResult {
   hour_typicality: number | null;
   deletion_curve_type: string | null;
   burst_trajectory_shape: string | null;
+  rburst_trajectory_shape: string | null;
   inter_burst_interval_mean_ms: number | null;
   inter_burst_interval_std_ms: number | null;
   deletion_during_burst_count: number | null;
@@ -219,6 +222,16 @@ function computeDeletionBurstProximity(
   return { during, between };
 }
 
+// ─── 6. R-burst trajectory shape ────────────────────────────────────
+// Same shape taxonomy as P-bursts, applied to R-burst deletion magnitudes.
+// "Are your revisions getting larger or smaller over the session?"
+
+function classifyRburstShape(rbursts: Array<{ deletedCharCount: number }>): string | null {
+  if (rbursts.length < 3) return 'none';
+  // Reuse the same classifier on deletion magnitudes
+  return classifyBurstShape(rbursts.map(r => ({ chars: r.deletedCharCount })));
+}
+
 // ─── Public API ─────────────────────────────────────────────────────
 
 export async function computeSessionMetadata(inputs: SessionMetadataInputs): Promise<SessionMetadataResult> {
@@ -233,9 +246,24 @@ export async function computeSessionMetadata(inputs: SessionMetadataInputs): Pro
     hour_typicality,
     deletion_curve_type,
     burst_trajectory_shape,
+    rburst_trajectory_shape: null, // computed later in signal pipeline after R-burst sequences are saved
     inter_burst_interval_mean_ms: ibi.mean,
     inter_burst_interval_std_ms: ibi.std,
     deletion_during_burst_count: proximity.during,
     deletion_between_burst_count: proximity.between,
   };
+}
+
+/**
+ * Compute and persist R-burst trajectory shape for a session.
+ * Called from the signal pipeline after R-burst sequences have been saved.
+ */
+export async function updateRburstTrajectoryShape(questionId: number): Promise<void> {
+  const rbursts = await getRburstSequence(questionId);
+  const shape = classifyRburstShape(rbursts);
+  await sql`
+    UPDATE tb_session_metadata
+    SET rburst_trajectory_shape = ${shape}
+    WHERE question_id = ${questionId}
+  `;
 }

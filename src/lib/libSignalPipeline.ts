@@ -14,6 +14,7 @@ import sql, {
   saveSemanticSignals,
   saveProcessSignals,
   saveCrossSessionSignals,
+  saveRburstSequence,
   getDynamicalSignals,
   getMotorSignals,
   getSemanticSignals,
@@ -32,6 +33,7 @@ import { updateProfile } from './libProfile.ts';
 import { computeReconstructionResidual } from './libReconstruction.ts';
 import { computeSessionIntegrity } from './libIntegrity.ts';
 import { saveSessionIntegrity, getSessionIntegrity } from './libDb.ts';
+import { updateRburstTrajectoryShape } from './libSessionMetadata.ts';
 import { logError } from './utlErrorLog.ts';
 
 async function getKeystrokeStream(questionId: number): Promise<KeystrokeEvent[] | null> {
@@ -170,6 +172,12 @@ export async function computeAndPersistDerivedSignals(questionId: number): Promi
           phase_transition_point: ps.phaseTransitionPoint,
           strategy_shift_count: ps.strategyShiftCount,
         });
+
+        // Persist per-R-burst sequences and compute trajectory shape
+        if (ps.rBurstSequences.length > 0) {
+          await saveRburstSequence(questionId, ps.rBurstSequences);
+          await updateRburstTrajectoryShape(questionId);
+        }
       }
     } catch (err) {
       logError('signal-pipeline.process', err, { questionId });

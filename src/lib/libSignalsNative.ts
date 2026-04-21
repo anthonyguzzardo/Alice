@@ -49,6 +49,14 @@ export interface MotorSignals {
   adjacentHoldTimeCov: number | null;
 }
 
+export interface RBurstEntry {
+  deletedCharCount: number;
+  totalCharCount: number;
+  durationMs: number;
+  startOffsetMs: number;
+  isLeadingEdge: boolean;
+}
+
 export interface ProcessSignals {
   pauseWithinWord: number | null;
   pauseBetweenWord: number | null;
@@ -56,6 +64,7 @@ export interface ProcessSignals {
   abandonedThoughtCount: number | null;
   rBurstCount: number | null;
   iBurstCount: number | null;
+  rBurstSequences: RBurstEntry[];
   vocabExpansionRate: number | null;
   phaseTransitionPoint: number | null;
   strategyShiftCount: number | null;
@@ -127,6 +136,13 @@ interface NativeModule {
     abandonedThoughtCount: number | null;
     rBurstCount: number | null;
     iBurstCount: number | null;
+    rBurstSequences: Array<{
+      deletedCharCount: number;
+      totalCharCount: number;
+      durationMs: number;
+      startOffsetMs: number;
+      isLeadingEdge: boolean;
+    }>;
     vocabExpansionRate: number | null;
     phaseTransitionPoint: number | null;
     strategyShiftCount: number | null;
@@ -266,6 +282,7 @@ export function computeProcessSignals(eventLogJson: string): ProcessSignals | nu
       abandonedThoughtCount: n(result.abandonedThoughtCount),
       rBurstCount: n(result.rBurstCount),
       iBurstCount: n(result.iBurstCount),
+      rBurstSequences: result.rBurstSequences ?? [],
       vocabExpansionRate: n(result.vocabExpansionRate),
       phaseTransitionPoint: n(result.phaseTransitionPoint),
       strategyShiftCount: n(result.strategyShiftCount),

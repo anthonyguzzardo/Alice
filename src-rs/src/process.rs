@@ -39,6 +39,7 @@ pub(crate) struct ProcessResult {
     pub(crate) abandoned_thought_count: Option<i32>,
     pub(crate) r_burst_count: Option<i32>,
     pub(crate) i_burst_count: Option<i32>,
+    pub(crate) r_burst_details: Vec<RBurstDetail>,
     pub(crate) vocab_expansion_rate: Option<f64>,
     pub(crate) phase_transition_point: Option<f64>,
     pub(crate) strategy_shift_count: Option<i32>,
@@ -181,10 +182,31 @@ fn abandoned_thought_count(events: &[EventTuple], pause_threshold_ms: f64) -> Op
 }
 
 // ─── R-burst / I-burst Classification (Deane 2015) ───────────────
+//
+// Per-R-burst detail implements the "point of inscription" concept from
+// Lindgren & Sullivan (2006) via `is_leading_edge`, and deletion magnitude
+// decomposition from Faigley & Witte (1981) via `deleted_char_count`.
+
+/// Per-R-burst detail for sequence capture (parallel to P-burst sequences).
+pub(crate) struct RBurstDetail {
+    /// UTF-16 code units deleted in the terminal deletion event.
+    pub(crate) deleted_char_count: i32,
+    /// Total UTF-16 code units inserted across all events in this burst.
+    pub(crate) total_char_count: i32,
+    /// Duration from first to last event in the burst (ms).
+    pub(crate) duration_ms: f64,
+    /// Timestamp of the first event in the burst (ms offset from session start).
+    pub(crate) start_offset_ms: f64,
+    /// Lindgren & Sullivan (2006): true if the deletion occurred at or near
+    /// the point of inscription (leading edge of text), false if the user
+    /// navigated back into earlier text to revise.
+    pub(crate) is_leading_edge: bool,
+}
 
 struct BurstResult {
     r_bursts: i32,
     i_bursts: i32,
+    r_burst_details: Vec<RBurstDetail>,
 }
 
 fn burst_classification(
@@ -214,15 +236,51 @@ fn burst_classification(
 
     let mut r_bursts = 0i32;
     let mut i_bursts = 0i32;
+    let mut r_burst_details: Vec<RBurstDetail> = Vec::new();
 
     for burst in &bursts {
         if burst.len() < 2 {
             continue;
         }
 
-        let last = &events[*burst.last().unwrap()];
+        let last_idx = *burst.last().unwrap();
+        let last = &events[last_idx];
         if last.2 > 0 {
             r_bursts += 1;
+
+            // Collect per-R-burst detail
+            let first_idx = burst[0];
+            let deleted_char_count = i32::try_from(last.2).unwrap_or(i32::MAX);
+            let total_char_count = burst
+                .iter()
+                .map(|&idx| utf16_len(&events[idx].3))
+                .sum::<usize>();
+            let total_char_count = i32::try_from(total_char_count).unwrap_or(i32::MAX);
+            let duration_ms = events[last_idx].0 - events[first_idx].0;
+            let start_offset_ms = events[first_idx].0;
+
+            // Leading edge: deletion is at or near the end of the text.
+            // Compare the deletion endpoint (cursor + deletedCount) against
+            // the text length at the state just before the burst started.
+            let empty = String::new();
+            let text_before = if first_idx > 0 {
+                &text_states[first_idx - 1]
+            } else {
+                &empty
+            };
+            let text_len_utf16: usize = text_before.chars().map(|c| c.len_utf16()).sum();
+            // Deletion endpoint in UTF-16 units
+            let deletion_end = last.1 + last.2;
+            let is_leading_edge = deletion_end >= text_len_utf16;
+
+            r_burst_details.push(RBurstDetail {
+                deleted_char_count,
+                total_char_count,
+                duration_ms,
+                start_offset_ms,
+                is_leading_edge,
+            });
+
             continue;
         }
 
@@ -247,7 +305,11 @@ fn burst_classification(
         }
     }
 
-    Some(BurstResult { r_bursts, i_bursts })
+    Some(BurstResult {
+        r_bursts,
+        i_bursts,
+        r_burst_details,
+    })
 }
 
 // ─── Vocabulary Expansion Rate (Heaps' Law) ──────────────────────
@@ -400,6 +462,7 @@ pub(crate) fn compute(event_log_json: &str) -> ProcessResult {
         abandoned_thought_count: None,
         r_burst_count: None,
         i_burst_count: None,
+        r_burst_details: Vec::new(),
         vocab_expansion_rate: None,
         phase_transition_point: None,
         strategy_shift_count: None,
@@ -429,6 +492,7 @@ pub(crate) fn compute(event_log_json: &str) -> ProcessResult {
         abandoned_thought_count: abandoned,
         r_burst_count: bursts.as_ref().map(|b| b.r_bursts),
         i_burst_count: bursts.as_ref().map(|b| b.i_bursts),
+        r_burst_details: bursts.map(|b| b.r_burst_details).unwrap_or_default(),
         vocab_expansion_rate: heaps,
         phase_transition_point: phase,
         strategy_shift_count: shifts,
@@ -899,5 +963,167 @@ mod tests {
         let count = strategy_shift_count(&events, 2000.0);
         assert!(count.is_some(), "expected Some shift count");
         assert!(count.unwrap() >= 1, "expected at least 1 strategy shift, got {:?}", count);
+    }
+
+    // ─── R-burst Detail Tests ───────────────────────────────────────
+
+    #[test]
+    fn r_burst_detail_captures_deletion_count_and_duration() {
+        let mut events = Vec::new();
+        let mut t = 0.0;
+
+        // Initial text: 8 chars typed rapidly
+        for i in 0..8 {
+            events.push(EventTuple(t, i, 0, "a".to_string()));
+            t += 100.0;
+        }
+        // Long pause to start new burst
+        t += 3000.0;
+        // Burst: type "xy" then delete 2 chars
+        let burst_start = t;
+        events.push(EventTuple(t, 8, 0, "x".to_string()));
+        t += 150.0;
+        events.push(EventTuple(t, 9, 0, "y".to_string()));
+        t += 200.0;
+        let burst_end = t;
+        events.push(EventTuple(t, 9, 2, "".to_string()));
+
+        let text_states = reconstruct_text(&events);
+        let result = burst_classification(&events, &text_states, 2000.0).unwrap();
+
+        assert_eq!(result.r_burst_details.len(), 1);
+        let detail = &result.r_burst_details[0];
+        assert_eq!(detail.deleted_char_count, 2);
+        assert_eq!(detail.total_char_count, 2); // "x" + "y" = 2 UTF-16 units
+        assert!((detail.duration_ms - (burst_end - burst_start)).abs() < 1e-6);
+        assert!((detail.start_offset_ms - burst_start).abs() < 1e-6);
+    }
+
+    #[test]
+    fn r_burst_leading_edge_true_when_deleting_at_end() {
+        let mut events = Vec::new();
+        let mut t = 0.0;
+
+        // Type "abcdefgh" (8 chars at the leading edge)
+        for i in 0..8 {
+            events.push(EventTuple(t, i, 0, "a".to_string()));
+            t += 100.0;
+        }
+        // Pause, then type "xy" at end and delete them
+        t += 3000.0;
+        events.push(EventTuple(t, 8, 0, "x".to_string()));
+        t += 100.0;
+        events.push(EventTuple(t, 9, 0, "y".to_string()));
+        t += 100.0;
+        // Delete 2 chars at pos 8 (end of original text = leading edge)
+        events.push(EventTuple(t, 8, 2, "".to_string()));
+
+        let text_states = reconstruct_text(&events);
+        let result = burst_classification(&events, &text_states, 2000.0).unwrap();
+
+        assert_eq!(result.r_burst_details.len(), 1);
+        assert!(result.r_burst_details[0].is_leading_edge,
+            "deletion at end of text should be leading edge");
+    }
+
+    #[test]
+    fn r_burst_leading_edge_false_when_deleting_mid_text() {
+        let mut events = Vec::new();
+        let mut t = 0.0;
+
+        // Type "abcdefghijklmnop" (16 chars)
+        for i in 0..16 {
+            events.push(EventTuple(t, i, 0, "a".to_string()));
+            t += 100.0;
+        }
+        // Pause, then navigate back to position 4 and delete 2 chars
+        t += 3000.0;
+        events.push(EventTuple(t, 4, 0, "z".to_string())); // insert at pos 4
+        t += 100.0;
+        events.push(EventTuple(t, 3, 2, "".to_string())); // delete 2 at pos 3
+
+        let text_states = reconstruct_text(&events);
+        let result = burst_classification(&events, &text_states, 2000.0).unwrap();
+
+        assert_eq!(result.r_burst_details.len(), 1);
+        assert!(!result.r_burst_details[0].is_leading_edge,
+            "deletion in middle of text should not be leading edge");
+    }
+
+    #[test]
+    fn r_burst_detail_utf16_safety_with_emoji() {
+        let mut events = Vec::new();
+        let mut t = 0.0;
+
+        // Type text with emoji: "a\u{1F600}bcdefgh" (9 chars, 10 UTF-16 units)
+        events.push(EventTuple(t, 0, 0, "a\u{1F600}bcdefgh".to_string()));
+        t += 100.0;
+        // Padding events to reach minimum
+        for _ in 0..9 {
+            events.push(EventTuple(t, 10, 0, ".".to_string()));
+            t += 100.0;
+        }
+        // Pause, then delete the emoji (2 UTF-16 units at pos 1)
+        t += 3000.0;
+        events.push(EventTuple(t, 1, 0, "x".to_string())); // insert before delete
+        t += 100.0;
+        events.push(EventTuple(t, 1, 2, "".to_string())); // delete emoji (2 UTF-16 units)
+
+        let text_states = reconstruct_text(&events);
+        let result = burst_classification(&events, &text_states, 2000.0).unwrap();
+
+        assert_eq!(result.r_burst_details.len(), 1);
+        assert_eq!(result.r_burst_details[0].deleted_char_count, 2,
+            "emoji deletion should count as 2 UTF-16 units");
+    }
+
+    #[test]
+    fn multiple_r_bursts_captured_independently() {
+        let mut events = Vec::new();
+        let mut t = 0.0;
+
+        // Initial text
+        for i in 0..8 {
+            events.push(EventTuple(t, i, 0, "a".to_string()));
+            t += 100.0;
+        }
+
+        // First R-burst: small deletion (1 char)
+        t += 3000.0;
+        events.push(EventTuple(t, 8, 0, "x".to_string()));
+        t += 100.0;
+        events.push(EventTuple(t, 8, 1, "".to_string()));
+
+        // Second R-burst: larger deletion (5 chars)
+        t += 3000.0;
+        events.push(EventTuple(t, 8, 0, "hello".to_string()));
+        t += 100.0;
+        events.push(EventTuple(t, 8, 5, "".to_string()));
+
+        let text_states = reconstruct_text(&events);
+        let result = burst_classification(&events, &text_states, 2000.0).unwrap();
+
+        assert_eq!(result.r_bursts, 2);
+        assert_eq!(result.r_burst_details.len(), 2);
+        assert_eq!(result.r_burst_details[0].deleted_char_count, 1);
+        assert_eq!(result.r_burst_details[1].deleted_char_count, 5);
+    }
+
+    #[test]
+    fn r_burst_details_empty_vec_when_no_r_bursts() {
+        let mut events = Vec::new();
+        let mut t = 0.0;
+
+        // Only insertions, no deletions
+        for i in 0..15 {
+            events.push(EventTuple(t, i, 0, "a".to_string()));
+            t += 100.0;
+        }
+
+        let text_states = reconstruct_text(&events);
+        let result = burst_classification(&events, &text_states, 2000.0).unwrap();
+
+        assert_eq!(result.r_bursts, 0);
+        assert!(result.r_burst_details.is_empty());
     }
 }

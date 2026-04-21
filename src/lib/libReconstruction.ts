@@ -118,6 +118,7 @@ export async function computeReconstructionResidual(questionId: number): Promise
            first_keystroke_mean,
            small_del_rate_mean, large_del_rate_mean,
            revision_timing_bias, r_burst_ratio_mean,
+           rburst_mean_size, rburst_leading_edge_pct,
            session_count
     FROM tb_personal_profile
     LIMIT 1
@@ -142,6 +143,8 @@ export async function computeReconstructionResidual(questionId: number): Promise
     large_del_rate: p.large_del_rate_mean ?? null,
     revision_timing_bias: p.revision_timing_bias ?? null,
     r_burst_ratio: p.r_burst_ratio_mean ?? null,
+    rburst_mean_size: p.rburst_mean_size ?? null,
+    rburst_leading_edge_pct: p.rburst_leading_edge_pct ?? null,
   });
 
   // Generate avatar for the same question

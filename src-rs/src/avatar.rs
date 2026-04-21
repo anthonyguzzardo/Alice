@@ -44,6 +44,12 @@ pub(crate) struct TimingProfile {
     /// R-burst ratio: r_bursts / (r_bursts + i_bursts).
     /// Used by I-burst synthesis to derive insertion rate (1 - r_burst_ratio).
     pub(crate) r_burst_ratio: Option<f64>,
+    /// Mean R-burst deletion size in UTF-16 code units.
+    /// Used to calibrate large deletion size instead of fixed 4-15 range.
+    pub(crate) rburst_mean_size: Option<f64>,
+    /// Fraction of R-bursts at the leading edge of text (Lindgren & Sullivan 2006).
+    /// Used to bias revision placement toward point of inscription vs back in text.
+    pub(crate) rburst_leading_edge_pct: Option<f64>,
 }
 
 pub(crate) struct AvatarResult {
@@ -880,8 +886,18 @@ fn inject_revisions(
         let pos = pick_revision_position(total_chars, midpoint, timing_bias, rng);
         positions.push((pos, false));
     }
+    // Large deletions (R-bursts): bias toward leading edge if profile says so.
+    // rburst_leading_edge_pct controls what fraction of R-bursts land near the
+    // current writing front vs. back in earlier text.
+    let leading_edge_pct = profile.rburst_leading_edge_pct.unwrap_or(0.5);
     for _ in 0..n_large {
-        let pos = pick_revision_position(total_chars, midpoint, timing_bias, rng);
+        let pos = if rng.f64() < leading_edge_pct {
+            // Leading edge: position in last 20% of text
+            let start = (total_chars as f64 * 0.8) as usize;
+            start.max(2) + (rng.f64() * (total_chars - start.max(2)).max(1) as f64) as usize
+        } else {
+            pick_revision_position(total_chars, midpoint, timing_bias, rng)
+        };
         positions.push((pos, true));
     }
 
@@ -894,8 +910,13 @@ fn inject_revisions(
         }
 
         let del_count = if is_large {
-            // R-burst: delete 4-15 chars (a word or phrase)
-            4 + (rng.f64() * 11.0) as usize
+            // R-burst: deletion size from profile mean, or fallback to 4-15 range
+            if let Some(mean_size) = profile.rburst_mean_size {
+                let size = rng.gaussian(mean_size, mean_size * 0.4).clamp(2.0, mean_size * 3.0);
+                size as usize
+            } else {
+                4 + (rng.f64() * 11.0) as usize
+            }
         } else {
             // Small deletion: 1-3 chars
             1 + (rng.f64() * 2.0) as usize
@@ -1102,6 +1123,8 @@ fn default_profile() -> TimingProfile {
         large_del_rate: None,
         revision_timing_bias: None,
         r_burst_ratio: None,
+        rburst_mean_size: None,
+        rburst_leading_edge_pct: None,
     }
 }
 
