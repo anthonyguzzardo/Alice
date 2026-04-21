@@ -94,6 +94,13 @@ pub(crate) struct TimingProfile {
     /// Fraction of R-bursts at the leading edge of text (Lindgren & Sullivan 2006).
     /// Used to bias revision placement toward point of inscription vs back in text.
     pub(crate) rburst_leading_edge_pct: Option<f64>,
+    /// Ratio of second-half to first-half R-burst deletion size within a session.
+    /// Values above 1.0 mean R-bursts get larger as the session progresses (consolidation).
+    /// Used to scale deletion size by position in the keystroke stream.
+    pub(crate) rburst_consolidation: Option<f64>,
+    /// Mean duration in ms of a complete R-burst episode (pre-pause + deletion + retype).
+    /// Used to calibrate the total timing of synthesized R-burst episodes.
+    pub(crate) rburst_mean_duration: Option<f64>,
     // ── Variant-specific fields ──
     /// IKI autocorrelation at lag 1 (mean across sessions).
     /// AR(1) coefficient for conditional timing variant.
@@ -968,6 +975,23 @@ fn inject_revisions(
     // Sort descending so insertions don't shift earlier indices
     positions.sort_by_key(|p| std::cmp::Reverse(p.0));
 
+    // R-burst consolidation: scale deletion size by position in the stream.
+    // consolidation > 1.0 means R-bursts grow larger as the session progresses.
+    // We model this as a linear ramp: first-half deletions are scaled down,
+    // second-half deletions are scaled up, preserving the mean size overall.
+    //
+    // NOTE (2026-04-21): consolidation and duration budget were added after the
+    // initial 23 sessions were computed. Residuals for those sessions used
+    // hardcoded R-burst timing (fixed 80ms backspace IKI, 400-1600ms deliberation).
+    // New sessions use calibrated values. To recompute old sessions, delete their
+    // rows from tb_reconstruction_residuals and re-run backfill-adversary-variants.
+    let consolidation = profile.rburst_consolidation.unwrap_or(1.0).clamp(0.2, 5.0);
+
+    // R-burst duration budget: calibrate episode timing from profile.
+    // The budget covers pre-pause + backspace sequence + retype pause + retype.
+    // If not available, the old hardcoded values are used.
+    let rburst_duration_budget = profile.rburst_mean_duration;
+
     for (pos, is_large) in positions {
         if pos < 2 || pos >= keystrokes.len() {
             continue;
@@ -975,12 +999,23 @@ fn inject_revisions(
 
         let del_count = if is_large {
             // R-burst: deletion size from profile mean, or fallback to 4-15 range
-            if let Some(mean_size) = profile.rburst_mean_size {
-                let size = rng.gaussian(mean_size, mean_size * 0.4).clamp(2.0, mean_size * 3.0);
-                size as usize
+            let base_size = if let Some(mean_size) = profile.rburst_mean_size {
+                rng.gaussian(mean_size, mean_size * 0.4).clamp(2.0, mean_size * 3.0)
             } else {
-                4 + (rng.f64() * 11.0) as usize
-            }
+                4.0 + rng.f64() * 11.0
+            };
+            // Apply consolidation scaling: early R-bursts shrink, late ones grow.
+            // At progress=0 scale is 1/consolidation, at progress=1 scale is consolidation.
+            // For consolidation=1.0 (even), scale is always 1.0.
+            let progress = pos as f64 / total_chars.max(1) as f64;
+            let scale = if (consolidation - 1.0).abs() < 0.01 {
+                1.0
+            } else {
+                // Log-linear interpolation: ln(scale) goes from -ln(c) to +ln(c)
+                let log_c = consolidation.ln();
+                (log_c.mul_add(2.0 * progress - 1.0, 0.0)).exp()
+            };
+            (base_size * scale).clamp(2.0, base_size * 3.0) as usize
         } else {
             // Small deletion: 1-3 chars
             1 + (rng.f64() * 2.0) as usize
@@ -994,9 +1029,15 @@ fn inject_revisions(
         // Clock position: start from the keystroke we're revising at
         let mut clock = keystrokes[pos].key_up_ms;
 
-        // Pre-deletion pause (recognition that something is wrong)
+        // Pre-deletion pause (recognition that something is wrong).
+        // If we have a duration budget, allocate ~25% to deliberation.
         let pre_pause = if is_large {
-            400.0 + rng.f64() * 1200.0 // R-burst: longer deliberation
+            if let Some(budget) = rburst_duration_budget {
+                let target = budget * 0.25;
+                rng.gaussian(target, target * 0.3).clamp(100.0, budget * 0.5)
+            } else {
+                400.0 + rng.f64() * 1200.0
+            }
         } else {
             100.0 + rng.f64() * 300.0 // Small: quick correction
         };
@@ -1012,8 +1053,24 @@ fn inject_revisions(
         let mut revision_keys: Vec<SyntheticKeystroke> = Vec::new();
         let mut revision_delays: Vec<f64> = Vec::new();
 
+        // Backspace IKI and retype pause: calibrated from duration budget if available.
+        // Budget allocation: 25% pre-pause (above), 35% backspace, 10% retype pause, 30% retype.
+        let (bs_iki_target, retype_pause_target) = if is_large {
+            if let Some(budget) = rburst_duration_budget {
+                let remaining = budget - pre_pause;
+                let bs_share = remaining * 0.35;
+                let bs_per_key = if del_count > 0 { bs_share / del_count as f64 } else { 80.0 };
+                let rp = remaining * 0.10;
+                (bs_per_key.clamp(40.0, 200.0), rp.clamp(80.0, 800.0))
+            } else {
+                (80.0, 150.0 + rng.f64() * 400.0)
+            }
+        } else {
+            (80.0, 150.0 + rng.f64() * 400.0)
+        };
+
         for _ in 0..del_count {
-            let bs_delay = rng.gaussian(80.0, 25.0).clamp(40.0, 200.0);
+            let bs_delay = rng.gaussian(bs_iki_target, bs_iki_target * 0.3).clamp(40.0, 200.0);
             clock += bs_delay;
             let hold = rng.gaussian(60.0, 15.0).clamp(30.0, 120.0);
             revision_keys.push(SyntheticKeystroke {
@@ -1025,7 +1082,11 @@ fn inject_revisions(
         }
 
         // Brief pause before retyping
-        let retype_pause = 150.0 + rng.f64() * 400.0;
+        let retype_pause = if is_large {
+            rng.gaussian(retype_pause_target, retype_pause_target * 0.3).clamp(80.0, 1500.0)
+        } else {
+            retype_pause_target
+        };
         clock += retype_pause;
 
         // Retype: small deletions re-emit the same chars (typo fix).
@@ -1697,6 +1758,8 @@ fn default_profile() -> TimingProfile {
         r_burst_ratio: None,
         rburst_mean_size: None,
         rburst_leading_edge_pct: None,
+        rburst_consolidation: None,
+        rburst_mean_duration: None,
         iki_autocorrelation_lag1: None,
         hold_flight_rank_correlation: None,
         hold_time_mean: None,

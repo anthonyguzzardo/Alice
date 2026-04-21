@@ -314,6 +314,7 @@ export async function computeReconstructionResidual(questionId: number): Promise
            small_del_rate_mean, large_del_rate_mean,
            revision_timing_bias, r_burst_ratio_mean,
            rburst_mean_size, rburst_leading_edge_pct,
+           rburst_consolidation, rburst_mean_duration,
            session_count,
            iki_autocorrelation_lag1_mean, hold_flight_rank_correlation,
            hold_time_mean_mean, hold_time_mean_std,
@@ -342,6 +343,10 @@ export async function computeReconstructionResidual(questionId: number): Promise
     r_burst_ratio: p.r_burst_ratio_mean ?? null,
     rburst_mean_size: p.rburst_mean_size ?? null,
     rburst_leading_edge_pct: p.rburst_leading_edge_pct ?? null,
+    // Added 2026-04-21. Sessions before this date have residuals computed without
+    // these fields (hardcoded R-burst timing). See avatar.rs note for recompute instructions.
+    rburst_consolidation: p.rburst_consolidation ?? null,
+    rburst_mean_duration: p.rburst_mean_duration ?? null,
     iki_autocorrelation_lag1: p.iki_autocorrelation_lag1_mean ?? null,
     hold_flight_rank_correlation: p.hold_flight_rank_correlation ?? null,
     hold_time_mean: p.hold_time_mean_mean ?? null,

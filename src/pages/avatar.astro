@@ -14,13 +14,20 @@ import PublicLayout from '../layouts/layPublic.astro';
   <section class="av-section">
     <form class="av-form" id="avatar-form">
       <input type="text" id="topic-input" class="av-input" placeholder="Enter a topic..." required />
-      <select id="variant-select" class="av-input" style="width:auto; min-width:160px; margin-left:0.5rem;">
-        <option value="1">Baseline</option>
-        <option value="2">Conditional Timing</option>
-        <option value="3">Copula Motor</option>
-        <option value="4">PPM Text</option>
-        <option value="5">Full Adversary</option>
-      </select>
+      <div class="av-dropdown" id="variant-dropdown">
+        <button type="button" class="av-dropdown-trigger" id="variant-trigger">
+          <span id="variant-label">Baseline</span>
+          <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.2"/></svg>
+        </button>
+        <ul class="av-dropdown-menu" id="variant-menu">
+          <li class="av-dropdown-item av-dropdown-active" data-value="1">Baseline</li>
+          <li class="av-dropdown-item" data-value="2">Conditional Timing</li>
+          <li class="av-dropdown-item" data-value="3">Copula Motor</li>
+          <li class="av-dropdown-item" data-value="4">PPM Text</li>
+          <li class="av-dropdown-item" data-value="5">Full Adversary</li>
+        </ul>
+        <input type="hidden" id="variant-select" name="variant" value="1" />
+      </div>
       <button type="submit" class="av-btn" id="generate-btn">Generate</button>
     </form>
 
@@ -345,6 +352,37 @@ import PublicLayout from '../layouts/layPublic.astro';
       });
   });
 })();
+
+(function () {
+  var trigger = document.getElementById('variant-trigger');
+  var menu = document.getElementById('variant-menu');
+  var hidden = document.getElementById('variant-select');
+  var label = document.getElementById('variant-label');
+  if (!trigger || !menu || !hidden || !label) return;
+
+  trigger.addEventListener('click', function () {
+    var open = menu.classList.toggle('av-dropdown-open');
+    trigger.classList.toggle('av-dropdown-trigger-open', open);
+  });
+
+  menu.addEventListener('click', function (e) {
+    var item = e.target.closest('.av-dropdown-item');
+    if (!item) return;
+    hidden.value = item.dataset.value;
+    label.textContent = item.textContent;
+    menu.querySelector('.av-dropdown-active').classList.remove('av-dropdown-active');
+    item.classList.add('av-dropdown-active');
+    menu.classList.remove('av-dropdown-open');
+    trigger.classList.remove('av-dropdown-trigger-open');
+  });
+
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest('#variant-dropdown')) {
+      menu.classList.remove('av-dropdown-open');
+      trigger.classList.remove('av-dropdown-trigger-open');
+    }
+  });
+})();
 </script>
 
 <style is:global>
@@ -404,6 +442,82 @@ import PublicLayout from '../layouts/layPublic.astro';
   .av-input::placeholder {
     color: var(--text-faint);
     font-style: italic;
+  }
+
+  .av-dropdown {
+    position: relative;
+  }
+
+  .av-dropdown-trigger {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.7rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-panel);
+    color: var(--text-muted);
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: border-color 0.2s ease, color 0.2s ease;
+  }
+
+  .av-dropdown-trigger svg {
+    flex-shrink: 0;
+    transition: transform 0.2s ease;
+  }
+
+  .av-dropdown-trigger-open svg {
+    transform: rotate(180deg);
+  }
+
+  .av-dropdown-trigger:hover,
+  .av-dropdown-trigger-open {
+    border-color: var(--border-focus);
+    color: var(--text);
+  }
+
+  .av-dropdown-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    min-width: 100%;
+    margin: 0;
+    padding: 0.35rem 0;
+    list-style: none;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    z-index: 10;
+  }
+
+  .av-dropdown-menu.av-dropdown-open {
+    display: block;
+  }
+
+  .av-dropdown-item {
+    padding: 0.5rem 1rem;
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 0.15s ease, background 0.15s ease;
+  }
+
+  .av-dropdown-item:hover {
+    color: var(--text);
+    background: var(--bg-dim);
+  }
+
+  .av-dropdown-item.av-dropdown-active {
+    color: var(--text);
   }
 
   .av-btn {
@@ -563,6 +677,9 @@ import PublicLayout from '../layouts/layPublic.astro';
     .av-hero { padding: 4rem 0 1.5rem; }
     .av-hero h1 { font-size: 1.6rem; }
     .av-form { flex-direction: column; }
+    .av-dropdown { width: 100%; }
+    .av-dropdown-trigger { width: 100%; justify-content: space-between; }
+    .av-dropdown-menu { width: 100%; }
     .av-signal-row { flex-wrap: wrap; gap: 1rem; }
     .av-meta { flex-wrap: wrap; gap: 0.75rem; }
   }

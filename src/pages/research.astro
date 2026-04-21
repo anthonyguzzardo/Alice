@@ -500,37 +500,37 @@ import PublicLayout from '../layouts/layPublic.astro';
 
     <p>External-criterion validity requires correlating extracted features with clinical outcomes. That requires longitudinal data that does not yet exist. But there is a second validity question that is answerable now: are the measurements <em>informationally sufficient</em>?</p>
 
-    <p>Reconstruction validity (<a class="r-cite" href="/papers/reconstruction-validity">Guzzardo 2026c</a>) tests this through adversarial synthesis. Take the behavioral profile the instrument has extracted across all sessions. Use it to reconstruct a synthetic writing session: text from the person's vocabulary and transition probabilities, timing from their motor fingerprint, revision from their deletion profile. Then feed the synthetic session back through the same signal pipeline. Compare the extracted signals to those from real sessions, dimension by dimension.</p>
+    <p>Reconstruction validity (<a class="r-cite" href="/papers/reconstruction-validity">Guzzardo 2026c</a>) tests this through adversarial synthesis. Build the strongest possible statistical reconstruction of a writing session from the instrument's own measurements. Text from the person's vocabulary and transition probabilities. Timing from their motor fingerprint. Revision from their deletion profile. Feed the synthetic session back through the same signal pipeline. Compare the extracted signals to those from real sessions, dimension by dimension.</p>
 
     <div class="r-callout">
       <p>Where the reconstruction matches reality, the instrument captures that dimension. Where it diverges, the gap is diagnostic.</p>
     </div>
 
+    <p>A single reconstruction invites a follow-up: maybe the generator is just weak. To close that objection, the instrument runs five adversary variants on every session. Each one adds exactly one statistical improvement to the ghost. If the improvement closes the residual, that component of the gap was statistical, not cognitive. Whatever remains after the strongest ghost is the irreducible floor.</p>
+
     <div class="r-reconstruction-viz-wrap">
       <canvas id="reconstruction-viz" width="620" height="340" aria-hidden="true"></canvas>
-      <p class="r-caption">Reconstruction fidelity by signal family (schematic). Empirical results from 56 sessions confirm the pattern: motor L2 dominates (mean 90.0), dynamical L2 is near-zero (&lt;1.3), and semantic L2 remains small (&lt;0.35). The reconstruction draws from the right distributions but types in the wrong sequences. Full results in <a class="r-cite" href="/papers/reconstruction-validity">Guzzardo 2026c</a>.</p>
+      <p class="r-caption">Reconstruction fidelity by signal family (schematic). The motor residual dominates across all five adversary variants. Better timing (AR(1) serial dependence, Gaussian copula hold-flight coupling) and better text (variable-order PPM) each close their targeted gaps without collapsing the motor floor. Full results in <a class="r-cite" href="/papers/reconstruction-validity">Guzzardo 2026c</a>.</p>
     </div>
-
-    <p>The reconstruction is the strongest adversary the instrument's own measurements can construct. It has the person's vocabulary, their motor fingerprint, their pause architecture, their revision profile. What it lacks is the cognitive engagement that couples meaning to process.</p>
 
     <div class="r-residual-grid">
       <div class="r-residual-card">
         <span class="r-residual-type">Content residual</span>
         <span class="r-residual-expected">Small and converging</span>
         <span class="r-residual-measured" id="measured-content"></span>
-        <p>The Markov chain approximates the person's vocabulary and surface linguistic statistics. These converge as the corpus grows. Content structure is statistically compressible.</p>
+        <p>PPM text generation (adaptive context depth up to order 5) closes the semantic gap further than the baseline Markov chain. Content structure is statistically compressible. The text axis and the timing axis are independent in the measurement.</p>
       </div>
       <div class="r-residual-card r-residual-card-key">
         <span class="r-residual-type">Motor residual</span>
-        <span class="r-residual-expected">Predicted small. Measured largest by two orders of magnitude.</span>
+        <span class="r-residual-expected">Five adversary strategies. None collapse the floor.</span>
         <span class="r-residual-measured" id="measured-motor"></span>
-        <p>The synthesis draws from the correct ex-Gaussian and digraph distributions. Distributional equivalence is not behavioral equivalence. Motor sequences in genuine composition are coupled to cognitive state: the pause before a difficult idea, the burst through a familiar argument. The motor channel does not just measure motor output. It measures cognitive-motor coupling through the motor channel. This is where the mind shows in the measurements.</p>
+        <p>Preserving IKI serial dependence (AR(1)), coupling hold and flight times (Gaussian copula), improving text generation (PPM), and combining all three: the motor floor holds across every variant. Distributional equivalence is not behavioral equivalence. Motor sequences in genuine composition are coupled to cognitive state. This is where the mind shows in the measurements.</p>
       </div>
       <div class="r-residual-card">
         <span class="r-residual-type">Cognitive load signature</span>
         <span class="r-residual-expected">The falsification test: does the residual vary with cognitive demand?</span>
         <span class="r-residual-measured" id="measured-cognitive-load"></span>
-        <p>The motor residual is larger on journal questions than on calibration questions. When the question demands more cognitive engagement, the person-reconstruction gap widens. A purely biomechanical residual would not vary with question type. It does. This is the specific evidence that the motor residual carries cognitive content.</p>
+        <p>The motor residual is larger on journal questions than on calibration questions. When the question demands more cognitive engagement, the person-reconstruction gap widens. A purely biomechanical residual would not vary with question type. It does.</p>
       </div>
     </div>
 
@@ -540,9 +540,10 @@ import PublicLayout from '../layouts/layPublic.astro';
       <span class="r-instrument-stat" id="strip-sessions"></span>
       <span class="r-instrument-stat" id="strip-families"></span>
       <span class="r-instrument-stat" id="strip-residuals"></span>
+      <span class="r-instrument-stat" id="strip-variants"></span>
     </div>
 
-    <p>This framework also provides a direct empirical response to <a class="r-cite" href="https://arxiv.org/abs/2601.17280" target="_blank" rel="noopener">Condrey (2026a)</a>, who proved that keystroke timing alone cannot distinguish composition from transcription. The reconstruction is timing-perfect but meaning-absent. If the instrument's full signal set (including process and revision signals) can distinguish its own reconstruction from real sessions, it captures something beyond timing. It captures the content-process binding that Condrey's result says timing-only instruments cannot detect.</p>
+    <p>This framework also provides a direct empirical response to <a class="r-cite" href="https://arxiv.org/abs/2601.17280" target="_blank" rel="noopener">Condrey (2026a)</a>, who proved that keystroke timing alone cannot distinguish composition from transcription. Five reconstructions are timing-calibrated and meaning-absent. The instrument's full signal set distinguishes all five from real sessions. It captures the content-process binding that Condrey's result says timing-only instruments cannot detect. The multi-adversary system turns that from a single data point into a surface. The surface's shape is the validity evidence.</p>
   </section>
 
 
@@ -604,7 +605,7 @@ import PublicLayout from '../layouts/layPublic.astro';
     <ul>
       <li>Guzzardo, A. (2026a). <a href="/papers/closing-window">"A Closing Window: The Demographic Confound in Keystroke-Based Cognitive Biomarkers and the AI-Mediation Threat to the Paradigm That Would Replace It."</a> Preprint, v2.</li>
       <li>Guzzardo, A. (2026b). <a href="/papers/construct-replacement">"Construct Replacement: When AI-Mediated Input Invalidates Behavioral Measurement."</a> Preprint, v2.</li>
-      <li>Guzzardo, A. (2026c). <a href="/papers/reconstruction-validity">"Reconstruction Validity: Self-Validation of Process-Level Behavioral Instruments via Adversarial Synthesis."</a> Preprint, v3.</li>
+      <li>Guzzardo, A. (2026c). <a href="/papers/reconstruction-validity">"Reconstruction Validity: Self-Validation of Process-Level Behavioral Instruments via Adversarial Synthesis."</a> Preprint, v4.</li>
       <li>Guzzardo, A. (2026d). <a href="/papers/irreversible-loss">"Irreversible Loss: An Information-Theoretic Argument for Process-Level Cognitive Preservation."</a> Preprint, v1.</li>
     </ul>
     <p class="r-sources-note">Key citations: Adair 1984; Arnold et al. 2020; Banovic et al. 2019; Buchman &amp; Bennett 2011; Buschek et al. 2021; Chen &amp; Goodman 1999; Covington &amp; McFall 2010; Csikszentmihalyi &amp; Larson 1987; Dhakal et al. 2018; Doshi &amp; Hauser 2024; Etkin 2016; Hayes &amp; Flower 1980; Inhoff &amp; Rayner 1986; Jelinek &amp; Mercer 1980; Kellogg 1996; Kim et al. 2024; Li et al. 2025; McCambridge, Witton &amp; Elbourne 2014; Meulemans et al. 2022; Molenaar 2004; Pennebaker 1997; Pinet et al. 2022; Rosman et al. 2021; Shiffman, Stone &amp; Hufford 2008; Vishnevsky et al. 2024; Yamaguchi &amp; Logan 2014; Zhou &amp; Liu 2025.</p>
@@ -939,28 +940,44 @@ import PublicLayout from '../layouts/layPublic.astro';
     ctx.stroke();
   })();
 
-  // Instrument status: fetch live metadata and populate residual cards + strip
+  // Instrument status: fetch live metadata and populate residual cards + strip.
+  // Uses full adversary (variant 5) for the strongest claim, baseline (variant 1) as reference.
   fetch('/api/instrument-status')
     .then(r => r.json())
     .then(data => {
       if (data.error) return;
 
-      const c = data.convergence;
+      // Full adversary is the strongest ghost; fall back to baseline if not yet computed
+      const fa = data.fullAdversary || {};
+      const bl = data.convergence || {};
+      const hasMulti = fa.motorL2 != null;
+      const motor = hasMulti ? fa : bl;
+      const nVariants = data.variants ? data.variants.length : 1;
+      const sessionsPerVariant = data.variants && data.variants[0] ? data.variants[0].sessions : 0;
 
       // Populate measured values on residual cards
       const contentEl = document.getElementById('measured-content');
-      if (contentEl && c.semanticL2 != null) {
-        contentEl.textContent = `Measured: semantic L2 = ${c.semanticL2} (n=${data.reconstructionResiduals})`;
+      if (contentEl && fa.semanticL2 != null) {
+        contentEl.textContent = `Measured: semantic L2 = ${fa.semanticL2} (full adversary, n=${sessionsPerVariant})`;
+      } else if (contentEl && bl.semanticL2 != null) {
+        contentEl.textContent = `Measured: semantic L2 = ${bl.semanticL2} (baseline, n=${sessionsPerVariant})`;
       }
 
       const motorEl = document.getElementById('measured-motor');
-      if (motorEl && c.motorL2 != null) {
-        motorEl.textContent = `Measured: motor L2 = ${c.motorL2} (n=${data.reconstructionResiduals})`;
+      if (motorEl && hasMulti) {
+        const range = data.variants
+          .map((v: {motorL2: number | null}) => v.motorL2)
+          .filter((v: number | null) => v != null);
+        const min = Math.min(...range);
+        const max = Math.max(...range);
+        motorEl.textContent = `Measured: motor L2 = ${min}\u2013${max} across ${nVariants} adversary variants (n=${sessionsPerVariant})`;
+      } else if (motorEl && bl.motorL2 != null) {
+        motorEl.textContent = `Measured: motor L2 = ${bl.motorL2} (baseline, n=${sessionsPerVariant})`;
       }
 
       const cogLoadEl = document.getElementById('measured-cognitive-load');
-      if (cogLoadEl && c.journalL2 != null && c.calibrationL2 != null) {
-        cogLoadEl.textContent = `Measured: journal L2 = ${c.journalL2}, calibration L2 = ${c.calibrationL2}`;
+      if (cogLoadEl && motor.journalL2 != null && motor.calibrationL2 != null) {
+        cogLoadEl.textContent = `Measured: journal L2 = ${motor.journalL2}, calibration L2 = ${motor.calibrationL2}`;
       }
 
       // Populate instrument strip
@@ -975,6 +992,8 @@ import PublicLayout from '../layouts/layPublic.astro';
         if (fam) fam.textContent = `${data.signalFamilies.active}/${data.signalFamilies.total} signal families`;
         const res = document.getElementById('strip-residuals');
         if (res) res.textContent = `${data.reconstructionResiduals} reconstruction residuals`;
+        const vEl = document.getElementById('strip-variants');
+        if (vEl && nVariants > 1) vEl.textContent = `${nVariants} adversary variants`;
       }
     })
     .catch(() => {});

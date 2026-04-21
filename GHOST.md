@@ -122,7 +122,7 @@ The Reconstruction Validity paper proposes self-validating instruments: extract 
 src/lib/libReconstruction.ts     -- orchestrates the full pipeline (all 5 variants per session)
 src/lib/libSignalsNative.ts      -- generateAvatar() and computePerplexity() FFI wrappers
 src/lib/libSignalPipeline.ts     -- reconstruction runs as final stage after profile update
-src/lib/libProfile.ts            -- aggregates iki_autocorrelation_lag1_mean and hold_flight_rank_correlation
+src/lib/libProfile.ts            -- aggregates variant inputs + R-burst revision profile fields
 src/lib/libDb.ts                 -- saveReconstructionResidual(), getReconstructionResidual() (variant-aware)
 src-rs/src/avatar.rs             -- AdversaryVariant enum, Markov + PPM text, baseline + conditional + copula timing
 src-rs/src/motor.rs              -- hold_flight_rank_correlation (Spearman rank corr for copula)
@@ -139,7 +139,7 @@ Journal/Calibration submission
 Signal pipeline (dynamical, motor, semantic, process, cross-session)
   |
   v
-Profile update (rolling behavioral aggregate, now includes iki_autocorrelation_lag1_mean + hold_flight_rank_correlation)
+Profile update (rolling behavioral aggregate: variant inputs, R-burst revision calibration)
   |
   v
 Reconstruction residual (for each variant 1-5):
@@ -178,24 +178,31 @@ The variant enum table `te_adversary_variants` stores the five variant definitio
 
 **Why the AR(1) innovation is centered.** The AR(1) process adds `phi * (prev - mu) + innovation` to mu. The innovation is sampled as `ex_gaussian(0, sigma_adj, tau) - tau`, subtracting tau to center the exponential component. Without centering, the process would drift upward because the exponential is strictly positive. Centering preserves the target mean.
 
+**Why R-burst duration is budget-allocated, not sampled directly.** A real R-burst episode has internal structure: deliberation (recognizing something is wrong), deletion (backspace sequence), transition pause (reformulating), and retype (new text). Sampling total duration as a single number would produce the right elapsed time but the wrong internal rhythm. The budget splits the measured mean duration into phases (25% deliberation, 35% deletion, 10% transition, 30% retype) with gaussian jitter on each phase. This preserves the temporal signature the dynamical signals detect.
+
+**Why R-burst consolidation uses log-linear interpolation.** The consolidation ratio (second-half R-burst size / first-half R-burst size) is multiplicative, not additive. A consolidation of 2.0 means late R-bursts are twice as large. Log-linear interpolation (`exp(ln(c) * (2p - 1))`) maps this onto a smooth scale factor from `1/c` at the start to `c` at the end, preserving the mean size across the session. Linear interpolation would bias the mean upward for high consolidation values.
+
 ### Backfill
 
 Backfill scripts exist for both forward and retroactive computation:
 
+- `src/scripts/backfill-rburst-sequences.ts`: Extracts per-R-burst detail (size, duration, leading-edge flag) from existing event logs into `tb_rburst_sequences`. Computes `rburst_trajectory_shape` on session metadata. Refreshes profile at the end. Idempotent.
 - `src/scripts/backfill-hold-flight-corr.ts`: One-off. Computes `hold_flight_rank_corr` from existing keystroke streams for motor signal rows that predate migration 010. Required before profile regeneration.
 - `src/scripts/backfill-adversary-variants.ts`: Finds sessions with baseline (variant 1) but missing variants 2-5. Calls `computeReconstructionResidual()` which internally loops over all variants and skips existing ones. Idempotent.
-- `src/scripts/backfill-profile.ts`: Regenerates the personal profile from all sessions. Must be run after `backfill-hold-flight-corr.ts` to populate the new profile fields.
+- `src/scripts/backfill-profile.ts`: Regenerates the personal profile from all sessions. Must be run after R-burst and hold-flight-corr backfills to populate all profile fields.
 
-**Backfill order:** hold-flight-corr, then profile, then adversary-variants.
+**Backfill order:** rburst-sequences, then hold-flight-corr, then profile, then adversary-variants.
 
-### Profile fields added for variants
+### Profile fields feeding the ghost
 
-Two new fields in `tb_personal_profile`, aggregated from per-session motor signals:
+Four fields in `tb_personal_profile` serve the adversary variants, two for timing synthesis and two for revision calibration:
 
 | Field | Source | Used By |
 |-------|--------|---------|
 | `iki_autocorrelation_lag1_mean` | Mean of lag-1 from each session's `iki_autocorrelation` JSONB array | Conditional Timing (AR(1) phi coefficient) |
 | `hold_flight_rank_correlation` | Mean of per-session `hold_flight_rank_corr` (Spearman rho) from `tb_motor_signals` | Copula Motor (Gaussian copula parameter) |
+| `rburst_consolidation` | Ratio of second-half to first-half R-burst deletion size, averaged across sessions with 2+ R-bursts | Revision synthesis (scales R-burst size by position in session) |
+| `rburst_mean_duration` | Mean duration in ms of a complete R-burst episode (deliberation + deletion + retype), from `tb_rburst_sequences` | Revision synthesis (budget-allocated episode timing) |
 
 One new field in `tb_motor_signals`:
 

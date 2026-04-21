@@ -59,8 +59,10 @@ export const GET: APIRoute = async () => {
     ];
     const activeFamilies = families.filter(f => f.count > 0).length;
 
-    // Reconstruction convergence (L2 norms by family, no raw signals)
-    const convergence = await sql`
+    // Reconstruction convergence: baseline (variant 1) for paper continuity,
+    // full adversary (variant 5) for the strongest claim, both needed by research page.
+    // Prior to multi-adversary (migration 010), all rows have adversary_variant_id = 1.
+    const convergenceQuery = (variantId: number) => sql`
       SELECT
         ROUND(AVG(motor_l2_norm)::numeric, 1)       AS "motorL2",
         ROUND(AVG(semantic_l2_norm)::numeric, 3)     AS "semanticL2",
@@ -71,18 +73,44 @@ export const GET: APIRoute = async () => {
         ROUND(AVG(CASE WHEN question_source_id != 3 THEN total_l2_norm END)::numeric, 1) AS "journalL2",
         ROUND(AVG(CASE WHEN question_source_id = 3 THEN total_l2_norm END)::numeric, 1)  AS "calibrationL2"
       FROM tb_reconstruction_residuals
-    ` as [Record<string, unknown>];
+      WHERE adversary_variant_id = ${variantId}
+    `;
 
-    const conv = (convergence[0] ?? {}) as {
-      motorL2: string | null;
-      semanticL2: string | null;
-      dynamicalL2: string | null;
-      totalL2: string | null;
-      avgSignals: string | null;
-      perpResidual: string | null;
-      journalL2: string | null;
-      calibrationL2: string | null;
+    // Per-variant motor L2 summary for multi-adversary comparison
+    const variantSummary = await sql`
+      SELECT
+        adversary_variant_id AS "variantId",
+        ROUND(AVG(motor_l2_norm)::numeric, 1) AS "motorL2",
+        ROUND(AVG(dynamical_l2_norm)::numeric, 3) AS "dynamicalL2",
+        ROUND(AVG(semantic_l2_norm)::numeric, 3) AS "semanticL2",
+        ROUND(AVG(total_l2_norm)::numeric, 1) AS "totalL2",
+        COUNT(*)::int AS "sessions"
+      FROM tb_reconstruction_residuals
+      GROUP BY adversary_variant_id
+      ORDER BY adversary_variant_id
+    ` as Array<Record<string, unknown>>;
+
+    const [baselineRows, fullAdversaryRows] = await Promise.all([
+      convergenceQuery(1),
+      convergenceQuery(5),
+    ]);
+
+    const parseConv = (rows: Array<Record<string, unknown>>) => {
+      const r = (rows[0] ?? {}) as Record<string, string | null>;
+      return {
+        motorL2: r.motorL2 ? Number(r.motorL2) : null,
+        semanticL2: r.semanticL2 ? Number(r.semanticL2) : null,
+        dynamicalL2: r.dynamicalL2 ? Number(r.dynamicalL2) : null,
+        totalL2: r.totalL2 ? Number(r.totalL2) : null,
+        avgSignals: r.avgSignals ? Number(r.avgSignals) : null,
+        perpResidual: r.perpResidual ? Number(r.perpResidual) : null,
+        journalL2: r.journalL2 ? Number(r.journalL2) : null,
+        calibrationL2: r.calibrationL2 ? Number(r.calibrationL2) : null,
+      };
     };
+
+    const baseline = parseConv(baselineRows as Array<Record<string, unknown>>);
+    const fullAdversary = parseConv(fullAdversaryRows as Array<Record<string, unknown>>);
 
     return new Response(JSON.stringify({
       daysActive,
@@ -94,16 +122,19 @@ export const GET: APIRoute = async () => {
       signalFamilies: { active: activeFamilies, total: 5 },
       reconstructionResiduals: c.residuals,
       rustEngine: hasNativeEngine,
-      convergence: {
-        motorL2: conv.motorL2 ? Number(conv.motorL2) : null,
-        semanticL2: conv.semanticL2 ? Number(conv.semanticL2) : null,
-        dynamicalL2: conv.dynamicalL2 ? Number(conv.dynamicalL2) : null,
-        totalL2: conv.totalL2 ? Number(conv.totalL2) : null,
-        avgSignals: conv.avgSignals ? Number(conv.avgSignals) : null,
-        perpResidual: conv.perpResidual ? Number(conv.perpResidual) : null,
-        journalL2: conv.journalL2 ? Number(conv.journalL2) : null,
-        calibrationL2: conv.calibrationL2 ? Number(conv.calibrationL2) : null,
-      },
+      // Baseline (variant 1) for backward compat with paper's published numbers
+      convergence: baseline,
+      // Full adversary (variant 5) for the strongest claim
+      fullAdversary,
+      // Per-variant summary for multi-adversary comparison
+      variants: variantSummary.map(v => ({
+        variantId: Number(v.variantId),
+        motorL2: v.motorL2 ? Number(v.motorL2) : null,
+        dynamicalL2: v.dynamicalL2 ? Number(v.dynamicalL2) : null,
+        semanticL2: v.semanticL2 ? Number(v.semanticL2) : null,
+        totalL2: v.totalL2 ? Number(v.totalL2) : null,
+        sessions: Number(v.sessions),
+      })),
     }), {
       headers: { 'Content-Type': 'application/json' },
     });
