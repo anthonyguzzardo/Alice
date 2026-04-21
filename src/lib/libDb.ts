@@ -1019,6 +1019,8 @@ export interface PromptTraceInput {
   observationIds?: number[];
   modelName?: string;
   tokenEstimate?: number;
+  difficultyLevel?: string | null;
+  difficultyInputs?: { avgMATTR: number; avgCogDensity: number } | null;
 }
 
 export async function savePromptTrace(trace: PromptTraceInput): Promise<void> {
@@ -1028,7 +1030,8 @@ export async function savePromptTrace(trace: PromptTraceInput): Promise<void> {
        prompt_trace_type_id, output_record_id,
        recent_entry_ids, rag_entry_ids, contrarian_entry_ids,
        reflection_ids, observation_ids,
-       model_name, token_estimate
+       model_name, token_estimate,
+       difficulty_level, difficulty_inputs
     ) VALUES (
       ${typeId},
       ${trace.outputRecordId ?? null},
@@ -1038,7 +1041,9 @@ export async function savePromptTrace(trace: PromptTraceInput): Promise<void> {
       ${trace.reflectionIds ? JSON.stringify(trace.reflectionIds) : null},
       ${trace.observationIds ? JSON.stringify(trace.observationIds) : null},
       ${trace.modelName ?? 'claude-opus-4-6'},
-      ${trace.tokenEstimate ?? null}
+      ${trace.tokenEstimate ?? null},
+      ${trace.difficultyLevel ?? null},
+      ${trace.difficultyInputs ? JSON.stringify(trace.difficultyInputs) : null}
     )
   `;
 }
@@ -2098,6 +2103,48 @@ export async function saveReconstructionResidual(
 export async function getReconstructionResidual(questionId: number): Promise<ReconstructionResidualInput | null> {
   const rows = await sql`SELECT * FROM tb_reconstruction_residuals WHERE question_id = ${questionId}`;
   return (rows[0] as ReconstructionResidualInput) ?? null;
+}
+
+// ----------------------------------------------------------------------------
+// SESSION INTEGRITY
+// ----------------------------------------------------------------------------
+
+export interface SessionIntegrityInput {
+  questionId: number;
+  profileDistance: number;
+  dimensionCount: number;
+  zScoresJson: string;
+  isFlagged: boolean;
+  thresholdUsed: number;
+  profileSessionCount: number;
+}
+
+export async function saveSessionIntegrity(s: SessionIntegrityInput): Promise<void> {
+  await sql`
+    INSERT INTO tb_session_integrity (
+       question_id, profile_distance, dimension_count,
+       z_scores_json, is_flagged, threshold_used, profile_session_count
+    ) VALUES (
+      ${s.questionId}, ${s.profileDistance}, ${s.dimensionCount},
+      ${s.zScoresJson}, ${s.isFlagged}, ${s.thresholdUsed}, ${s.profileSessionCount}
+    )
+    ON CONFLICT (question_id) DO NOTHING
+  `;
+}
+
+export async function getSessionIntegrity(questionId: number): Promise<SessionIntegrityInput | null> {
+  const rows = await sql`
+    SELECT question_id AS "questionId",
+           profile_distance AS "profileDistance",
+           dimension_count AS "dimensionCount",
+           z_scores_json AS "zScoresJson",
+           is_flagged AS "isFlagged",
+           threshold_used AS "thresholdUsed",
+           profile_session_count AS "profileSessionCount"
+    FROM tb_session_integrity
+    WHERE question_id = ${questionId}
+  `;
+  return (rows[0] as SessionIntegrityInput) ?? null;
 }
 
 export default sql;

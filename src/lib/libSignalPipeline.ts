@@ -30,6 +30,8 @@ import { computeSemanticSignals } from './libSemanticSignals.ts';
 import { computeCrossSessionSignals } from './libCrossSessionSignals.ts';
 import { updateProfile } from './libProfile.ts';
 import { computeReconstructionResidual } from './libReconstruction.ts';
+import { computeSessionIntegrity } from './libIntegrity.ts';
+import { saveSessionIntegrity, getSessionIntegrity } from './libDb.ts';
 import { logError } from './utlErrorLog.ts';
 
 async function getKeystrokeStream(questionId: number): Promise<KeystrokeEvent[] | null> {
@@ -195,6 +197,26 @@ export async function computeAndPersistDerivedSignals(questionId: number): Promi
       }
     } catch (err) {
       logError('signal-pipeline.crossSession', err, { questionId });
+    }
+  }
+
+  // ── Session integrity (BEFORE profile update — compares against prior profile) ──
+  if (!(await getSessionIntegrity(questionId))) {
+    try {
+      const integrity = await computeSessionIntegrity(questionId);
+      if (integrity) {
+        await saveSessionIntegrity({
+          questionId: integrity.questionId,
+          profileDistance: integrity.profileDistance,
+          dimensionCount: integrity.dimensionCount,
+          zScoresJson: JSON.stringify(integrity.zScores),
+          isFlagged: integrity.isFlagged,
+          thresholdUsed: integrity.thresholdUsed,
+          profileSessionCount: integrity.profileSessionCount,
+        });
+      }
+    } catch (err) {
+      logError('signal-pipeline.integrity', err, { questionId });
     }
   }
 

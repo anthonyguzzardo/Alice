@@ -337,6 +337,8 @@ CREATE TABLE IF NOT EXISTS tb_prompt_traces (
   ,observation_ids        JSONB
   ,model_name             TEXT NOT NULL DEFAULT 'claude-opus-4-6'
   ,token_estimate         INT
+  ,difficulty_level       TEXT
+  ,difficulty_inputs      JSONB
   ,dttm_created_utc       TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
   ,created_by             TEXT NOT NULL DEFAULT 'system'
 );
@@ -945,4 +947,26 @@ CREATE TABLE IF NOT EXISTS tb_reconstruction_residuals (
   -- ── Footer ──────────────────────────────────────────────────────────
   ,dttm_created_utc             TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
   ,created_by                   TEXT NOT NULL DEFAULT 'system'
+);
+
+-- --------------------------------------------------------------------------
+
+-- PURPOSE: per-session profile-based mediation detection
+-- USE CASE: flags sessions whose motor/process signals fall outside the
+--           person's established behavioral range. Profile distance is the
+--           L2 norm of z-scores across motor/process dimensions.
+-- MUTABILITY: insert once per session, computed in signal pipeline
+-- REFERENCED BY: none (leaf table)
+-- FOOTER: created only
+CREATE TABLE IF NOT EXISTS tb_session_integrity (
+   session_integrity_id   INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,question_id            INT NOT NULL UNIQUE
+  ,profile_distance       DOUBLE PRECISION NOT NULL
+  ,dimension_count        SMALLINT NOT NULL
+  ,z_scores_json          JSONB NOT NULL
+  ,is_flagged             BOOLEAN NOT NULL DEFAULT FALSE
+  ,threshold_used         DOUBLE PRECISION
+  ,profile_session_count  INT
+  ,dttm_created_utc       TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ,created_by             TEXT NOT NULL DEFAULT 'system'
 );

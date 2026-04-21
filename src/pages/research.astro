@@ -516,9 +516,9 @@ import PublicLayout from '../layouts/layPublic.astro';
     <div class="r-residual-grid">
       <div class="r-residual-card">
         <span class="r-residual-type">Motor residual</span>
-        <span class="r-residual-expected">Expected: small</span>
+        <span class="r-residual-expected">Expected: small. Measured: largest family.</span>
         <span class="r-residual-measured" id="measured-motor"></span>
-        <p>Timing synthesis draws from the same ex-Gaussian and digraph distributions the instrument fits. Motor fidelity should converge within 15-20 sessions as the profile stabilizes.</p>
+        <p>The original prediction was wrong. Timing synthesis draws from the same ex-Gaussian and digraph distributions, but the measured motor L2 is the largest residual family. Motor execution encodes structure beyond what statistical profile reconstruction can capture. The ghost types from the right distributions but not in the right sequences.</p>
       </div>
       <div class="r-residual-card">
         <span class="r-residual-type">Content residual</span>

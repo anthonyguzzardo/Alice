@@ -184,9 +184,11 @@ export async function runGeneration(options?: GenerationOptions): Promise<void> 
     ? recentCogDensities.reduce((a, b) => a + b, 0) / recentCogDensities.length : null;
 
   let difficultyGuidance = '';
+  let difficultyLevel: string | null = null;
   if (avgMATTR !== null && avgCogDensity !== null) {
     const complexity = avgMATTR > 0.72 && avgCogDensity > 0.04 ? 'high'
       : avgMATTR < 0.62 || avgCogDensity < 0.02 ? 'low' : 'moderate';
+    difficultyLevel = complexity;
     difficultyGuidance = `\n\nADAPTIVE DIFFICULTY (Bjork & Bjork 2011 — desirable difficulties):
 Recent response complexity: ${complexity.toUpperCase()} (avg MATTR=${avgMATTR.toFixed(3)}, avg cognitive density=${(avgCogDensity * 100).toFixed(1)}%)
 ${complexity === 'high' ? '→ This person is producing complex, cognitively rich responses. Escalate: use more abstract questions, surface contradictions, ask them to reconcile opposing positions. They can handle it.' : complexity === 'low' ? '→ Recent responses show lower complexity. This could mean the questions are too abstract, the person is fatigued, or topics aren\'t landing. Try more concrete, personally anchored questions. "What specifically..." over "What does it mean to..."' : '→ Moderate complexity. Maintain current challenge level but vary the type — if recent questions have been introspective, try an evaluative or reconciliation question.'}`;
@@ -360,6 +362,10 @@ Generate 3 candidate questions with your selection, theme tags, and uncertainty 
     ],
     observationIds: [],
     tokenEstimate: message.usage?.input_tokens,
+    difficultyLevel,
+    difficultyInputs: avgMATTR !== null && avgCogDensity !== null
+      ? { avgMATTR, avgCogDensity }
+      : null,
   });
 }
 

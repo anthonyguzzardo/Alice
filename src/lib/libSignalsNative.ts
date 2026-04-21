@@ -150,6 +150,28 @@ interface NativeModule {
     chainSize: number;
     iBurstCount: number;
   };
+  computeProfileDistance(
+    valuesJson: string,
+    meansJson: string,
+    stdsJson: string,
+  ): {
+    zScores: number[];
+    distance: number;
+    dimensionCount: number;
+  };
+  computeBatchCorrelations(
+    seriesAJson: string,
+    seriesBJson: string,
+    windowSizesJson: string,
+    maxLag: number,
+    threshold: number,
+  ): Array<{
+    aIndex: number;
+    bIndex: number;
+    windowSize: number;
+    correlation: number;
+    lag: number;
+  }>;
 }
 
 let native: NativeModule | null = null;
@@ -304,6 +326,66 @@ export function generateAvatar(
     };
   } catch (err) {
     logError('signalsNative.avatar', err);
+    return null;
+  }
+}
+
+// ─── Profile distance (mediation detection) ──────────────────────
+
+export interface ProfileDistanceResult {
+  zScores: number[];
+  distance: number;
+  dimensionCount: number;
+}
+
+export function computeProfileDistance(
+  values: number[],
+  means: number[],
+  stds: number[],
+): ProfileDistanceResult | null {
+  if (!native) return null;
+
+  try {
+    return native.computeProfileDistance(
+      JSON.stringify(values),
+      JSON.stringify(means),
+      JSON.stringify(stds),
+    );
+  } catch (err) {
+    logError('signalsNative.profileDistance', err);
+    return null;
+  }
+}
+
+// ─── Batch correlations (coupling stability) ─────────────────────
+
+export interface BatchCorrelationResult {
+  aIndex: number;
+  bIndex: number;
+  windowSize: number;
+  correlation: number;
+  lag: number;
+}
+
+export function computeBatchCorrelations(
+  seriesA: number[][],
+  seriesB: number[][],
+  windowSizes: number[],
+  maxLag: number,
+  threshold: number,
+): BatchCorrelationResult[] | null {
+  if (!native) return null;
+
+  try {
+    return native.computeBatchCorrelations(
+      JSON.stringify(seriesA),
+      JSON.stringify(seriesB),
+      JSON.stringify(windowSizes),
+      maxLag,
+      threshold,
+    );
+  } catch (err) {
+    logError('signalsNative.batchCorrelations', err);
     return null;
   }
 }

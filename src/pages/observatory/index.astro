@@ -66,6 +66,11 @@ import '../../styles/styObservatory.css';
       </section>
 
       <section class="panel">
+        <h2>Session integrity · profile-based mediation detection</h2>
+        <div id="integrity"></div>
+      </section>
+
+      <section class="panel">
         <h2>Entries · per-entry state vectors + replay</h2>
         <div id="entries-table"></div>
       </section>
@@ -204,17 +209,85 @@ import '../../styles/styObservatory.css';
         `;
       }
 
+      function renderIntegrity(data, container) {
+        if (data.error || !data.sessions || data.sessions.length === 0) {
+          container.innerHTML = '<div class="empty">no integrity data yet</div>';
+          return;
+        }
+
+        const s = data.summary;
+        const flagged = data.sessions.filter(r => r.flagged);
+
+        let html = `
+          <div class="kpi-row">
+            <div class="kpi">
+              <div class="k">sessions scored</div>
+              <div class="v">${s.count}</div>
+            </div>
+            <div class="kpi">
+              <div class="k">flagged</div>
+              <div class="v">${s.flaggedCount}</div>
+            </div>
+            <div class="kpi">
+              <div class="k">mean distance</div>
+              <div class="v">${s.meanDistance != null ? s.meanDistance.toFixed(1) : '—'}</div>
+            </div>
+            <div class="kpi">
+              <div class="k">std dev</div>
+              <div class="v">${s.stdDevDistance != null ? s.stdDevDistance.toFixed(1) : '—'}</div>
+            </div>
+            <div class="kpi flex1">
+              <div class="k">distance trajectory</div>
+              ${sparkline(data.sessions.map(r => r.distance))}
+            </div>
+          </div>
+        `;
+
+        // Most deviant dimensions
+        if (s.dimSummary && s.dimSummary.length > 0) {
+          html += `<div style="margin-top:0.75rem;font-family:var(--mono);font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-faint);">most deviant dimensions (mean |z|)</div>`;
+          html += '<table><thead><tr><th>dimension</th><th>mean |z|</th><th>max |z|</th></tr></thead><tbody>';
+          for (const d of s.dimSummary.slice(0, 6)) {
+            html += `<tr>
+              <td>${d.dim}</td>
+              <td class="num">${d.meanAbsZ.toFixed(2)}</td>
+              <td class="num">${d.maxAbsZ.toFixed(2)}</td>
+            </tr>`;
+          }
+          html += '</tbody></table>';
+        }
+
+        // Flagged sessions
+        if (flagged.length > 0) {
+          html += `<div style="margin-top:0.75rem;font-family:var(--mono);font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-faint);">flagged sessions</div>`;
+          html += '<table><thead><tr><th>date</th><th>distance</th><th>dims</th><th>threshold</th></tr></thead><tbody>';
+          for (const f of flagged) {
+            html += `<tr>
+              <td>${f.date ? f.date.slice(5) : '—'}</td>
+              <td class="num sign-neg">${Number(f.distance).toFixed(1)}</td>
+              <td class="num">${f.dimCount}</td>
+              <td class="num">${f.threshold != null ? Number(f.threshold).toFixed(1) : '—'}</td>
+            </tr>`;
+          }
+          html += '</tbody></table>';
+        }
+
+        container.innerHTML = html;
+      }
+
       Promise.all([
         fetch('/api/observatory/synthesis').then(r => r.json()),
         fetch('/api/observatory/states').then(r => r.json()),
         fetch('/api/observatory/calibration-drift').then(r => r.json()),
-      ]).then(([syn, st, cd]) => {
+        fetch('/api/observatory/integrity').then(r => r.json()),
+      ]).then(([syn, st, cd, integ]) => {
         document.getElementById('counts').textContent =
           `${syn.behavioralCount} behavioral · ${syn.semanticCount} semantic · ${cd.totalSnapshots ?? 0} calibration snapshots${syn.latestDate ? ' · latest ' + syn.latestDate : ''}`;
         renderInsights(syn.rightNow ?? [], document.getElementById('right-now'));
         renderArcs(syn.arcs ?? [], document.getElementById('arcs'), syn.arcsLowN);
         renderDiscoveries(syn.discoveries ?? [], document.getElementById('discoveries'));
         renderCalDrift(cd, document.getElementById('cal-drift'));
+        renderIntegrity(integ, document.getElementById('integrity'));
         renderEntries(st.states ?? [], document.getElementById('entries-table'));
       }).catch(err => {
         document.querySelector('.frame').innerHTML += `<div class="panel" style="border-color:var(--negative);color:var(--negative);">load failed: ${err?.message ?? err}</div>`;

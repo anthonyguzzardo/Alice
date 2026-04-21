@@ -510,6 +510,148 @@ import '../../styles/styObservatory.css';
         }
       }
 
+      // ── Chart: grouped dot plot by category ──────────────────────────
+
+      function drawGroupedDots(canvas, groups, yLabel) {
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.getBoundingClientRect();
+        const w = rect.width, h = rect.height;
+        canvas.width = w * dpr;
+        canvas.height = h * dpr;
+        canvas.style.width = w + 'px';
+        canvas.style.height = h + 'px';
+        const ctx = canvas.getContext('2d');
+        ctx.scale(dpr, dpr);
+
+        const colBorder = resolveCssVar(canvas, 'var(--border)');
+        const colFaint = resolveCssVar(canvas, 'var(--text-faint)');
+        const colText = resolveCssVar(canvas, 'var(--text-muted)');
+
+        const padL = 44, padR = 12, padT = 12, padB = 28;
+        const chartW = w - padL - padR, chartH = h - padT - padB;
+
+        // groups: [{ label, values[], color, mean }]
+        const allVals = groups.flatMap(g => g.values).filter(v => v != null && Number.isFinite(v));
+        if (allVals.length === 0) return;
+        const minV = Math.min(...allVals), maxV = Math.max(...allVals);
+        const range = maxV - minV || 1;
+        const yMin = minV - range * 0.15, yMax = maxV + range * 0.15;
+        const yRange = yMax - yMin;
+
+        // Y-axis
+        ctx.fillStyle = colFaint;
+        ctx.font = '9px SF Mono, Menlo, monospace';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        const fmt = (v) => Math.abs(v) >= 100 ? Math.round(v) : v.toFixed(1);
+        ctx.fillText(fmt(yMax), padL - 4, padT);
+        ctx.fillText(fmt(yMin), padL - 4, padT + chartH);
+
+        const groupW = chartW / groups.length;
+
+        for (let g = 0; g < groups.length; g++) {
+          const group = groups[g];
+          const cx = padL + groupW * g + groupW / 2;
+          const col = resolveCssVar(canvas, group.color);
+
+          // Mean line
+          if (group.mean != null && Number.isFinite(group.mean)) {
+            const meanY = padT + chartH * (1 - (group.mean - yMin) / yRange);
+            ctx.strokeStyle = col;
+            ctx.lineWidth = 1.5;
+            ctx.globalAlpha = 0.4;
+            ctx.beginPath();
+            ctx.moveTo(cx - groupW * 0.3, meanY);
+            ctx.lineTo(cx + groupW * 0.3, meanY);
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+          }
+
+          // Dots (jitter horizontally)
+          for (let i = 0; i < group.values.length; i++) {
+            const v = group.values[i];
+            if (v == null || !Number.isFinite(v)) continue;
+            const jitter = (Math.random() - 0.5) * groupW * 0.3;
+            const x = cx + jitter;
+            const y = padT + chartH * (1 - (v - yMin) / yRange);
+            ctx.beginPath();
+            ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+            ctx.fillStyle = col;
+            ctx.globalAlpha = 0.7;
+            ctx.fill();
+            ctx.globalAlpha = 1;
+          }
+
+          // Label
+          ctx.fillStyle = colText;
+          ctx.font = '10px SF Mono, Menlo, monospace';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'top';
+          ctx.fillText(group.label.toUpperCase(), cx, padT + chartH + 6);
+        }
+      }
+
+      // ── Chart: scatter with continuous x ───────────────────────────────
+
+      function drawScatter(canvas, points, xLabel, color) {
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.getBoundingClientRect();
+        const w = rect.width, h = rect.height;
+        canvas.width = w * dpr;
+        canvas.height = h * dpr;
+        canvas.style.width = w + 'px';
+        canvas.style.height = h + 'px';
+        const ctx = canvas.getContext('2d');
+        ctx.scale(dpr, dpr);
+
+        const colBorder = resolveCssVar(canvas, 'var(--border)');
+        const colFaint = resolveCssVar(canvas, 'var(--text-faint)');
+        const col = resolveCssVar(canvas, color);
+
+        const padL = 44, padR = 12, padT = 12, padB = 28;
+        const chartW = w - padL - padR, chartH = h - padT - padB;
+
+        const xs = points.map(p => p.x).filter(v => v != null && Number.isFinite(v));
+        const ys = points.map(p => p.y).filter(v => v != null && Number.isFinite(v));
+        if (xs.length === 0 || ys.length === 0) return;
+
+        const xMin = Math.min(...xs), xMax = Math.max(...xs);
+        const yMin = Math.min(...ys), yMax = Math.max(...ys);
+        const xRange = (xMax - xMin) || 0.01;
+        const yRange = (yMax - yMin) || 1;
+        const xPad = xRange * 0.1, yPad = yRange * 0.15;
+
+        // Y-axis labels
+        ctx.fillStyle = colFaint;
+        ctx.font = '9px SF Mono, Menlo, monospace';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        ctx.fillText((yMax + yPad).toFixed(0), padL - 4, padT);
+        ctx.fillText((yMin - yPad).toFixed(0), padL - 4, padT + chartH);
+
+        // X-axis labels
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        ctx.fillText(xMin.toFixed(3), padL, padT + chartH + 6);
+        ctx.textAlign = 'right';
+        ctx.fillText(xMax.toFixed(3), padL + chartW, padT + chartH + 6);
+        ctx.textAlign = 'center';
+        ctx.fillText(xLabel, padL + chartW / 2, padT + chartH + 14);
+
+        // Dots
+        for (const p of points) {
+          if (p.x == null || p.y == null || !Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
+          const px = padL + ((p.x - (xMin - xPad)) / (xRange + 2 * xPad)) * chartW;
+          const py = padT + chartH * (1 - (p.y - (yMin - yPad)) / (yRange + 2 * yPad));
+          ctx.beginPath();
+          ctx.arc(px, py, 4, 0, Math.PI * 2);
+          ctx.fillStyle = col;
+          ctx.globalAlpha = 0.65;
+          ctx.fill();
+          ctx.globalAlpha = 1;
+        }
+      }
+
       // ── Render ───────────────────────────────────────────────────────
 
       fetch('/api/observatory/ghost').then(r => r.json()).then(data => {
@@ -714,6 +856,9 @@ import '../../styles/styObservatory.css';
             </div>
           `;
         }
+
+        // ── Difficulty-residual correlation (populated by second fetch) ──
+        html += `<div id="difficulty-section"></div>`;
 
         // ── Per-signal residual table ────────────────────────────────
         const signalDefs = [
@@ -923,6 +1068,86 @@ import '../../styles/styObservatory.css';
       }).catch(err => {
         document.getElementById('ghost-content').innerHTML = `<div class="empty">failed to load: ${err?.message ?? err}</div>`;
       });
+
+      // ── Difficulty-residual correlation (second fetch) ──────────────
+      fetch('/api/observatory/difficulty').then(r => r.json()).then(data => {
+        const el = document.getElementById('difficulty-section');
+        if (!el || data.error) return;
+
+        const { sessions: dSessions, summary: dSummary } = data;
+        if (!dSessions || dSessions.length === 0) {
+          el.innerHTML = `
+            <div class="section-label">Adaptive difficulty · does harder questioning produce larger ghosts?</div>
+            <p class="insufficient">Awaiting data. Difficulty classification will be logged with future question generations.</p>
+          `;
+          return;
+        }
+
+        const levels = ['low', 'moderate', 'high'];
+        const levelColors = { low: 'var(--semantic)', moderate: 'var(--warn)', high: 'var(--negative)' };
+
+        let dHtml = `
+          <div class="section-label">Adaptive difficulty · does harder questioning produce larger ghosts?</div>
+        `;
+
+        // KPI row by difficulty level
+        dHtml += `<div class="kpi-row" style="margin-bottom: 1rem;">`;
+        for (const level of levels) {
+          const s = dSummary[level];
+          if (!s) {
+            dHtml += `<div class="kpi"><div class="k">${level}</div><div class="v">—</div></div>`;
+            continue;
+          }
+          dHtml += `
+            <div class="kpi">
+              <div class="k">${level} (n=${s.count})</div>
+              <div class="v">${fmtVal(s.avgTotalL2, 1)}</div>
+            </div>
+          `;
+        }
+        dHtml += `</div>`;
+
+        // Grouped dot plot: difficulty level -> total L2
+        dHtml += `
+          <div class="chart-row">
+            <div class="chart-panel">
+              <h3>Total L2 by difficulty level</h3>
+              <canvas class="ghost-chart tall" id="chart-diff-group"></canvas>
+            </div>
+            <div class="chart-panel">
+              <h3>MATTR vs total L2</h3>
+              <canvas class="ghost-chart tall" id="chart-diff-mattr"></canvas>
+            </div>
+          </div>
+        `;
+
+        el.innerHTML = dHtml;
+
+        // Grouped dot plot
+        const groups = levels
+          .filter(level => dSummary[level])
+          .map(level => ({
+            label: level,
+            values: dSessions
+              .filter(s => s.difficultyLevel === level)
+              .map(s => s.totalL2)
+              .filter(v => v != null && Number.isFinite(v)),
+            color: levelColors[level],
+            mean: dSummary[level]?.avgTotalL2 ?? null,
+          }));
+        if (groups.length > 0) {
+          drawGroupedDots(document.getElementById('chart-diff-group'), groups);
+        }
+
+        // MATTR scatter
+        const mattrPoints = dSessions
+          .filter(s => s.difficultyInputs?.avgMATTR != null && s.totalL2 != null)
+          .map(s => ({ x: s.difficultyInputs.avgMATTR, y: s.totalL2 }));
+        if (mattrPoints.length > 0) {
+          drawScatter(document.getElementById('chart-diff-mattr'), mattrPoints, 'MATTR', 'var(--accent)');
+        }
+
+      }).catch(() => {});
     </script>
   </body>
 </html>

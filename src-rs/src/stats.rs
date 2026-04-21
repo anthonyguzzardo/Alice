@@ -111,6 +111,80 @@ pub(crate) fn normalize(arr: &[f64]) -> Vec<f64> {
     arr.iter().map(|&v| (v - mu) / sd).collect()
 }
 
+/// Signed Pearson correlation coefficient.
+/// Returns 0.0 for series shorter than 3 or with zero variance.
+#[inline]
+pub(crate) fn pearson(a: &[f64], b: &[f64]) -> f64 {
+    let n = a.len().min(b.len());
+    if n < 3 {
+        return 0.0;
+    }
+    let ma = mean(&a[..n]);
+    let mb = mean(&b[..n]);
+    let mut num = 0.0;
+    let mut da = 0.0;
+    let mut db = 0.0;
+    for i in 0..n {
+        let ai = a[i] - ma;
+        let bi = b[i] - mb;
+        num = ai.mul_add(bi, num);
+        da = ai.mul_add(ai, da);
+        db = bi.mul_add(bi, db);
+    }
+    let denom = (da * db).sqrt();
+    if denom < 1e-10 {
+        0.0
+    } else {
+        num / denom
+    }
+}
+
+/// Compute z-scores given session values, profile means, and profile stds.
+/// Returns (z_scores, l2_distance). Skips dimensions where std <= 0.
+pub(crate) fn z_scores_and_distance(
+    values: &[f64],
+    means: &[f64],
+    stds: &[f64],
+) -> (Vec<f64>, f64) {
+    let n = values.len().min(means.len()).min(stds.len());
+    let mut z_scores = Vec::with_capacity(n);
+    let mut sum_sq = 0.0;
+    for i in 0..n {
+        if stds[i] > 0.0 {
+            let z = (values[i] - means[i]) / stds[i];
+            z_scores.push(z);
+            sum_sq = z.mul_add(z, sum_sq);
+        }
+    }
+    let distance = sum_sq.sqrt();
+    (z_scores, distance)
+}
+
+/// Compute best lagged Pearson correlation (emotion leads behavior).
+/// Tests lags 0..=max_lag. Returns (best_corr, best_lag) or None if
+/// insufficient data.
+pub(crate) fn best_lagged_correlation(
+    a: &[f64],
+    b: &[f64],
+    max_lag: usize,
+) -> Option<(f64, usize)> {
+    let n = a.len().min(b.len());
+    if n < max_lag * 2 + 3 {
+        return None;
+    }
+    let mut best_corr: f64 = 0.0;
+    let mut best_lag = 0;
+    for lag in 0..=max_lag {
+        let end = n - lag;
+        let r = pearson(&a[..end], &b[lag..lag + end]);
+        if r.abs() > best_corr.abs() {
+            best_corr = r;
+            best_lag = lag;
+        }
+    }
+    Some((best_corr, best_lag))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -241,5 +315,73 @@ mod tests {
         for i in 1..normed.len() {
             assert!(normed[i] > normed[i - 1], "normalization should preserve order");
         }
+    }
+
+    #[test]
+    fn pearson_perfect_positive() {
+        let a = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let b = vec![2.0, 4.0, 6.0, 8.0, 10.0];
+        let r = pearson(&a, &b);
+        assert!((r - 1.0).abs() < 1e-10, "perfect positive correlation, got {r}");
+    }
+
+    #[test]
+    fn pearson_perfect_negative() {
+        let a = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let b = vec![10.0, 8.0, 6.0, 4.0, 2.0];
+        let r = pearson(&a, &b);
+        assert!((r - (-1.0)).abs() < 1e-10, "perfect negative correlation, got {r}");
+    }
+
+    #[test]
+    fn pearson_uncorrelated() {
+        let a = vec![1.0, 0.0, -1.0, 0.0];
+        let b = vec![0.0, 1.0, 0.0, -1.0];
+        let r = pearson(&a, &b);
+        assert!(r.abs() < 1e-10, "orthogonal series should have r=0, got {r}");
+    }
+
+    #[test]
+    fn pearson_insufficient_data() {
+        assert_eq!(pearson(&[1.0, 2.0], &[3.0, 4.0]), 0.0);
+    }
+
+    #[test]
+    fn z_scores_basic() {
+        let values = vec![12.0, 25.0];
+        let means = vec![10.0, 20.0];
+        let stds = vec![2.0, 5.0];
+        let (z, dist) = z_scores_and_distance(&values, &means, &stds);
+        assert_eq!(z.len(), 2);
+        assert!((z[0] - 1.0).abs() < 1e-10, "z[0] should be 1.0, got {}", z[0]);
+        assert!((z[1] - 1.0).abs() < 1e-10, "z[1] should be 1.0, got {}", z[1]);
+        assert!((dist - 2.0_f64.sqrt()).abs() < 1e-10, "distance should be sqrt(2), got {dist}");
+    }
+
+    #[test]
+    fn z_scores_skips_zero_std() {
+        let values = vec![5.0, 10.0];
+        let means = vec![5.0, 8.0];
+        let stds = vec![0.0, 2.0]; // first dim has zero std, should be skipped
+        let (z, dist) = z_scores_and_distance(&values, &means, &stds);
+        assert_eq!(z.len(), 1);
+        assert!((z[0] - 1.0).abs() < 1e-10);
+        assert!((dist - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn best_lagged_correlation_concurrent() {
+        let a = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
+        let b = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
+        let (corr, lag) = best_lagged_correlation(&a, &b, 3).unwrap();
+        assert!((corr - 1.0).abs() < 1e-10, "same series should correlate at 1.0");
+        assert_eq!(lag, 0, "same series should have lag 0");
+    }
+
+    #[test]
+    fn best_lagged_correlation_insufficient() {
+        let a = vec![1.0, 2.0, 3.0];
+        let b = vec![1.0, 2.0, 3.0];
+        assert!(best_lagged_correlation(&a, &b, 3).is_none());
     }
 }

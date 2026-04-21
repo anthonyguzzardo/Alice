@@ -228,6 +228,129 @@ pub fn generate_avatar(
     }
 }
 
+// ─── Profile distance (mediation detection) ────────────────────
+
+#[napi(object)]
+#[derive(Serialize, Default)]
+pub struct ProfileDistanceOutput {
+    /// Per-dimension z-scores (only dimensions with std > 0)
+    pub z_scores: Vec<f64>,
+    /// L2 norm of z-scores
+    pub distance: f64,
+    /// How many dimensions contributed
+    pub dimension_count: i32,
+}
+
+/// Compute profile distance: z-score each dimension against profile means/stds,
+/// return L2 norm. Used for mediation detection (flagging anomalous sessions).
+#[napi]
+#[allow(clippy::needless_pass_by_value)]
+pub fn compute_profile_distance(
+    values_json: String,
+    means_json: String,
+    stds_json: String,
+) -> ProfileDistanceOutput {
+    let values: Vec<f64> = match serde_json::from_str(&values_json) {
+        Ok(v) => v,
+        Err(_) => return ProfileDistanceOutput::default(),
+    };
+    let means: Vec<f64> = match serde_json::from_str(&means_json) {
+        Ok(v) => v,
+        Err(_) => return ProfileDistanceOutput::default(),
+    };
+    let stds: Vec<f64> = match serde_json::from_str(&stds_json) {
+        Ok(v) => v,
+        Err(_) => return ProfileDistanceOutput::default(),
+    };
+
+    let (z_scores, distance) = stats::z_scores_and_distance(&values, &means, &stds);
+    let dimension_count = i32::try_from(z_scores.len()).unwrap_or(i32::MAX);
+
+    ProfileDistanceOutput {
+        z_scores,
+        distance,
+        dimension_count,
+    }
+}
+
+// ─── Batch lagged correlations (coupling stability) ─────────────
+
+#[napi(object)]
+#[derive(Serialize)]
+pub struct CorrelationResult {
+    /// Index of the first series (emotion dimension)
+    pub a_index: i32,
+    /// Index of the second series (behavior dimension)
+    pub b_index: i32,
+    /// Window size used
+    pub window_size: i32,
+    /// Best lagged Pearson correlation
+    pub correlation: f64,
+    /// Lag at which best correlation was found
+    pub lag: i32,
+}
+
+/// Batch-compute lagged Pearson correlations between all pairs of
+/// series_a and series_b at multiple window sizes. Returns only pairs
+/// exceeding the threshold. Used for coupling stability analysis.
+///
+/// `series_a_json`: JSON array of arrays (e.g., 9 emotion dims x N entries)
+/// `series_b_json`: JSON array of arrays (e.g., 7 behavior dims x N entries)
+/// `window_sizes_json`: JSON array of window sizes to test
+/// `max_lag`: maximum lag to test
+/// `threshold`: minimum |r| to include in results
+#[napi]
+#[allow(clippy::needless_pass_by_value)]
+pub fn compute_batch_correlations(
+    series_a_json: String,
+    series_b_json: String,
+    window_sizes_json: String,
+    max_lag: i32,
+    threshold: f64,
+) -> Vec<CorrelationResult> {
+    let series_a: Vec<Vec<f64>> = match serde_json::from_str(&series_a_json) {
+        Ok(v) => v,
+        Err(_) => return Vec::new(),
+    };
+    let series_b: Vec<Vec<f64>> = match serde_json::from_str(&series_b_json) {
+        Ok(v) => v,
+        Err(_) => return Vec::new(),
+    };
+    let window_sizes: Vec<i32> = match serde_json::from_str(&window_sizes_json) {
+        Ok(v) => v,
+        Err(_) => return Vec::new(),
+    };
+
+    let ml = max_lag.max(0) as usize;
+    let mut results = Vec::new();
+
+    for ws in &window_sizes {
+        let w = (*ws).max(0) as usize;
+
+        for (ai, a_series) in series_a.iter().enumerate() {
+            let a_win: Vec<f64> = a_series.iter().take(w).copied().collect();
+
+            for (bi, b_series) in series_b.iter().enumerate() {
+                let b_win: Vec<f64> = b_series.iter().take(w).copied().collect();
+
+                if let Some((corr, lag)) = stats::best_lagged_correlation(&a_win, &b_win, ml) {
+                    if corr.abs() >= threshold {
+                        results.push(CorrelationResult {
+                            a_index: i32::try_from(ai).unwrap_or(i32::MAX),
+                            b_index: i32::try_from(bi).unwrap_or(i32::MAX),
+                            window_size: *ws,
+                            correlation: corr,
+                            lag: i32::try_from(lag).unwrap_or(i32::MAX),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    results
+}
+
 /// Compute perplexity of a text against the corpus Markov model.
 /// Tracks convergence: as the corpus grows, perplexity of real journal
 /// responses should decrease monotonically.
