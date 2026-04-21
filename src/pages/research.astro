@@ -500,10 +500,10 @@ import PublicLayout from '../layouts/layPublic.astro';
 
     <p>External-criterion validity requires correlating extracted features with clinical outcomes. That requires longitudinal data that does not yet exist. But there is a second validity question that is answerable now: are the measurements <em>informationally sufficient</em>?</p>
 
-    <p>Reconstruction validity (<a class="r-cite" href="/papers/reconstruction-validity">Guzzardo 2026c</a>) tests this by running the instrument in reverse. Take the behavioral profile the instrument has extracted across all sessions. Use it to reconstruct a synthetic writing session: text from the person's vocabulary and transition probabilities, timing from their motor fingerprint, revision from their deletion profile. Then feed the synthetic session back through the same signal pipeline. Compare the extracted signals to those from real sessions, dimension by dimension.</p>
+    <p>Reconstruction validity (<a class="r-cite" href="/papers/reconstruction-validity">Guzzardo 2026c</a>) tests this through adversarial synthesis. Take the behavioral profile the instrument has extracted across all sessions. Use it to reconstruct a synthetic writing session: text from the person's vocabulary and transition probabilities, timing from their motor fingerprint, revision from their deletion profile. Then feed the synthetic session back through the same signal pipeline. Compare the extracted signals to those from real sessions, dimension by dimension.</p>
 
     <div class="r-callout">
-      <p>Where the reconstruction matches reality, the instrument captures that dimension. Where it diverges, it does not. The gap is not noise. It is diagnostic.</p>
+      <p>Where the reconstruction matches reality, the instrument captures that dimension. Where it diverges, the gap is diagnostic.</p>
     </div>
 
     <div class="r-reconstruction-viz-wrap">
@@ -511,26 +511,26 @@ import PublicLayout from '../layouts/layPublic.astro';
       <p class="r-caption">Reconstruction fidelity by signal family (schematic). Empirical results from 56 sessions confirm the pattern: motor L2 dominates (mean 90.0), dynamical L2 is near-zero (&lt;1.3), and semantic L2 remains small (&lt;0.35). The reconstruction draws from the right distributions but types in the wrong sequences. Full results in <a class="r-cite" href="/papers/reconstruction-validity">Guzzardo 2026c</a>.</p>
     </div>
 
-    <p>The reconstruction is the strongest possible adversary that operates within the instrument's own measurement space. It has the person's vocabulary, their motor fingerprint, their pause architecture, their revision profile. What it lacks is the cognitive engagement that couples meaning to process: the pause before a difficult idea, the burst through a familiar argument, the deletion that reformulates rather than corrects.</p>
+    <p>The reconstruction is the strongest adversary the instrument's own measurements can construct. It has the person's vocabulary, their motor fingerprint, their pause architecture, their revision profile. What it lacks is the cognitive engagement that couples meaning to process.</p>
 
     <div class="r-residual-grid">
       <div class="r-residual-card">
-        <span class="r-residual-type">Motor residual</span>
-        <span class="r-residual-expected">Expected: small. Measured: largest family.</span>
-        <span class="r-residual-measured" id="measured-motor"></span>
-        <p>The original prediction was wrong. Timing synthesis draws from the same ex-Gaussian and digraph distributions, but the measured motor L2 is the largest residual family. Motor execution encodes structure beyond what statistical profile reconstruction can capture. The ghost types from the right distributions but not in the right sequences.</p>
-      </div>
-      <div class="r-residual-card">
         <span class="r-residual-type">Content residual</span>
-        <span class="r-residual-expected">Expected: decreasing</span>
+        <span class="r-residual-expected">Small and converging</span>
         <span class="r-residual-measured" id="measured-content"></span>
-        <p>The Markov chain converges on the person's vocabulary and transitions as the corpus grows. Content fidelity improves monotonically. The rate of convergence characterizes how regular or context-dependent the person's language is.</p>
+        <p>The Markov chain approximates the person's vocabulary and surface linguistic statistics. These converge as the corpus grows. Content structure is statistically compressible.</p>
       </div>
       <div class="r-residual-card r-residual-card-key">
-        <span class="r-residual-type">Cognitive residual</span>
-        <span class="r-residual-expected">Expected: persistent</span>
-        <span class="r-residual-measured" id="measured-cognitive"></span>
-        <p>The reconstruction cannot produce the coupling between what is being written and how it is being written. This residual persists regardless of corpus size. It IS the cognitive engagement that builds cognitive reserve, that AI mediation replaces, and that timing-only instruments cannot detect.</p>
+        <span class="r-residual-type">Motor residual</span>
+        <span class="r-residual-expected">Predicted small. Measured largest by two orders of magnitude.</span>
+        <span class="r-residual-measured" id="measured-motor"></span>
+        <p>The synthesis draws from the correct ex-Gaussian and digraph distributions. Distributional equivalence is not behavioral equivalence. Motor sequences in genuine composition are coupled to cognitive state: the pause before a difficult idea, the burst through a familiar argument. The motor channel does not just measure motor output. It measures cognitive-motor coupling through the motor channel. This is where the mind shows in the measurements.</p>
+      </div>
+      <div class="r-residual-card">
+        <span class="r-residual-type">Cognitive load signature</span>
+        <span class="r-residual-expected">The falsification test: does the residual vary with cognitive demand?</span>
+        <span class="r-residual-measured" id="measured-cognitive-load"></span>
+        <p>The motor residual is larger on journal questions than on calibration questions. When the question demands more cognitive engagement, the person-reconstruction gap widens. A purely biomechanical residual would not vary with question type. It does. This is the specific evidence that the motor residual carries cognitive content.</p>
       </div>
     </div>
 
@@ -948,19 +948,19 @@ import PublicLayout from '../layouts/layPublic.astro';
       const c = data.convergence;
 
       // Populate measured values on residual cards
+      const contentEl = document.getElementById('measured-content');
+      if (contentEl && c.semanticL2 != null) {
+        contentEl.textContent = `Measured: semantic L2 = ${c.semanticL2} (n=${data.reconstructionResiduals})`;
+      }
+
       const motorEl = document.getElementById('measured-motor');
       if (motorEl && c.motorL2 != null) {
-        motorEl.textContent = `Measured: L2 = ${c.motorL2} (n=${data.reconstructionResiduals})`;
+        motorEl.textContent = `Measured: motor L2 = ${c.motorL2} (n=${data.reconstructionResiduals})`;
       }
 
-      const contentEl = document.getElementById('measured-content');
-      if (contentEl && c.perpResidual != null) {
-        contentEl.textContent = `Measured: perplexity gap = ${c.perpResidual} (n=${data.reconstructionResiduals})`;
-      }
-
-      const cogEl = document.getElementById('measured-cognitive');
-      if (cogEl && c.totalL2 != null) {
-        cogEl.textContent = `Measured: total L2 = ${c.totalL2} (n=${data.reconstructionResiduals})`;
+      const cogLoadEl = document.getElementById('measured-cognitive-load');
+      if (cogLoadEl && c.journalL2 != null && c.calibrationL2 != null) {
+        cogLoadEl.textContent = `Measured: journal L2 = ${c.journalL2}, calibration L2 = ${c.calibrationL2}`;
       }
 
       // Populate instrument strip

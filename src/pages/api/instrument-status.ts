@@ -67,7 +67,9 @@ export const GET: APIRoute = async () => {
         ROUND(AVG(dynamical_l2_norm)::numeric, 3)    AS "dynamicalL2",
         ROUND(AVG(total_l2_norm)::numeric, 1)        AS "totalL2",
         ROUND(AVG(residual_count)::numeric, 1)       AS "avgSignals",
-        ROUND(AVG(perplexity_residual)::numeric, 1)  AS "perpResidual"
+        ROUND(AVG(perplexity_residual)::numeric, 1)  AS "perpResidual",
+        ROUND(AVG(CASE WHEN question_source_id != 3 THEN total_l2_norm END)::numeric, 1) AS "journalL2",
+        ROUND(AVG(CASE WHEN question_source_id = 3 THEN total_l2_norm END)::numeric, 1)  AS "calibrationL2"
       FROM tb_reconstruction_residuals
     ` as [Record<string, unknown>];
 
@@ -78,6 +80,8 @@ export const GET: APIRoute = async () => {
       totalL2: string | null;
       avgSignals: string | null;
       perpResidual: string | null;
+      journalL2: string | null;
+      calibrationL2: string | null;
     };
 
     return new Response(JSON.stringify({
@@ -97,6 +101,8 @@ export const GET: APIRoute = async () => {
         totalL2: conv.totalL2 ? Number(conv.totalL2) : null,
         avgSignals: conv.avgSignals ? Number(conv.avgSignals) : null,
         perpResidual: conv.perpResidual ? Number(conv.perpResidual) : null,
+        journalL2: conv.journalL2 ? Number(conv.journalL2) : null,
+        calibrationL2: conv.calibrationL2 ? Number(conv.calibrationL2) : null,
       },
     }), {
       headers: { 'Content-Type': 'application/json' },
