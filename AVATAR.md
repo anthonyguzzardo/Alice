@@ -43,18 +43,18 @@ Word-level Markov chain trained on the full journal + calibration corpus.
 
 - Order 1 at < 10 entries, order 2 at >= 10 entries
 - Topic-seeded: searches starters and transition keys for the seed word
-- Backoff: order-2 falls back to order-1 transitions before random restart
+- Interpolated backoff: Witten-Bell weights (Jelinek & Mercer 1980) blend order-2 and order-1 distributions probabilistically. Lambda = T(h) / (T(h) + C(h)) where T = unique successors, C = total count. Falls through to random restart only when both orders have no valid continuation.
 - Sentence structure: capitalizes after periods, inserts period before dead-end restarts
-- Internal PRNG: xoshiro128+ seeded from system time, no external dependency
+- Internal PRNG: xoshiro128+ (Blackman & Vigna 2018) seeded via SplitMix64 (Steele, Lea & Flood 2014), no external dependency. Gaussian sampling via Box-Muller (Box & Muller 1958).
 
-**Convergence metric:** Per-word log2 perplexity of real responses under the Markov model. Exposed via `compute_perplexity()` napi function. Should decrease monotonically with corpus size.
+**Convergence metric:** Per-word log2 perplexity using Absolute Discounting (Chen & Goodman 1999) with unigram backoff. Discount parameter d = n1 / (n1 + 2*n2). Exposed via `compute_perplexity()` napi function. Returns `SignalError::InsufficientData` for empty corpus or too-short text. Should decrease monotonically with corpus size.
 
 ### 2. Motor Timing (Ex-Gaussian + Digraph)
 
 Per-character delay synthesized from the personal motor profile.
 
 - **Digraph-specific latency** where the preceding + current character bigram exists in the aggregate digraph map, with Gaussian jitter (std 20ms)
-- **Ex-Gaussian fallback** sampling from the person's mu/sigma/tau distribution, floored at 30ms
+- **Ex-Gaussian fallback** sampling from the person's mu/sigma/tau distribution (Lacouture & Cousineau 2008), floored at 30ms
 - **Hold time** per keystroke: Gaussian (mu=95ms, sigma=20ms), clamped 40-200ms
 - **Full keystroke events** (key_down_ms + key_up_ms) for every character, serialized as `{c, d, u}` wire format compatible with the signal pipeline
 
@@ -73,9 +73,10 @@ Grounded in Wengelin (2006) writing process phase research. Currently uses a fix
 Pause duration at word boundaries is modulated by the difficulty of the upcoming word.
 
 - Word frequency map built from the corpus during chain construction
-- Rare words (low frequency in the person's writing) get longer pre-word pauses (multiplier up to ~2.5x)
-- Common words get shorter pauses (multiplier ~0.7x)
-- Unseen words (not in corpus) get high-difficulty treatment (~1.8x + jitter)
+- Log-frequency scaling (Inhoff & Rayner 1986): multiplier = 0.7 + (-ln(freq) - 3.0) * 0.28, clamped to [0.7, 2.5]
+- Common words (freq ~0.05) get ~0.7x multiplier (faster pauses)
+- Rare words (freq ~0.001) get ~1.8x multiplier (longer pauses)
+- Unseen words get high-difficulty treatment (1.8 + stochastic jitter in [0, 0.5])
 
 This couples **what** is being written to **how** it is being written, which is the content-process binding that Condrey (2026) identifies as necessary for authorship verification.
 
@@ -96,7 +97,7 @@ Stochastic deletion + retype episodes injected after forward production.
 - **Large deletions / R-bursts** (4-15 chars): Word or phrase reformulation. Injected at `large_del_rate` per 100 chars. Longer pre-deletion deliberation pause (400-1600ms vs 100-400ms).
 - **Revision timing bias**: Deletions cluster in first half or second half matching `revision_timing_bias` from the profile.
 - **Backspace events**: Generated as `\u{0008}` with faster timing (80ms mean, 60ms hold). The signal pipeline classifies these as R-burst episodes.
-- **Retype**: After deletion, characters are retyped at the person's normal ex-Gaussian rate.
+- **Retype**: Small deletions re-emit the same characters (typo correction). Large deletions (R-bursts) generate variant text from the Markov chain using nearby context as seed, modeling genuine reformulation rather than identical retype. This produces structurally honest revision patterns in the signal pipeline.
 
 Grounded in Hayes & Flower (1980) reviewing-as-core-process, Galbraith (1999) knowledge-constituting model, Faigley & Witte (1981) revision taxonomy.
 
@@ -108,6 +109,7 @@ Navigate back to an earlier position and insert new text.
 - Targets the first 70% of the text (you go BACK to insert)
 - Navigation pause (1.5-4s): Represents reading back to find the insertion point
 - Generates 2-6 words from the Markov chain seeded on nearby context
+- Inserted text timing includes tempo drift (based on session position) and word difficulty coupling, matching forward production timing characteristics so insertions are not trivially distinguishable in the signal pipeline
 - Post-insertion reorientation pause (0.5-1.5s): Getting back to where you were
 - Inserts at word boundaries for structural coherence
 
@@ -144,13 +146,15 @@ Two exports in `lib.rs`:
 - `max_words`: target word count (default 150)
 - Returns: `{ text, delays, keystrokeStreamJson, wordCount, order, chainSize }`
 - `keystrokeStreamJson` is a JSON array of `{c, d, u}` events, directly compatible with the signal pipeline's `computeDynamicalSignals` and `computeMotorSignals` inputs
+- Internal `compute()` returns `SignalResult<AvatarResult>`. `SignalError::InsufficientData` for empty corpus. At the napi boundary, errors map to `AvatarOutput::default()`.
 
 ### `compute_perplexity(corpus_json, text) -> PerplexityOutput`
 
-- Builds Markov chain from corpus, scores `text` against it
+- Builds Markov chain from corpus, scores `text` against it using Absolute Discounting (Chen & Goodman 1999)
 - Returns: `{ perplexity, wordCount, knownFraction }`
-- `perplexity`: per-word log2 perplexity (lower = model predicts the text better)
+- `perplexity`: per-word log2 perplexity (lower = model predicts the text better). Returns -1.0 on error.
 - `knownFraction`: proportion of transitions that existed in the chain (0.0-1.0)
+- Internal functions return `SignalResult`. `SignalError::InsufficientData` for empty corpus or text shorter than chain order + 1 tokens.
 - Convergence metric: track per session, should decrease as corpus grows
 
 ## Adversarial Validation Loop (Not Yet Implemented)
@@ -191,9 +195,11 @@ These residuals are the cognitive engagement that builds cognitive reserve (Ster
 
 - **All signal computation in Rust.** The Avatar is part of the measurement instrument. Single source of truth.
 - **No LLM in the reconstruction.** Reconstruction must be bounded by what the instrument measures. An LLM closes the residual gap artificially.
+- **`SignalResult`/`SignalError` for error propagation.** Internal functions return `SignalResult<T>` with typed error variants (`InsufficientData`). Convert to defaults with `.ok()` or `match` only at the napi boundary in `lib.rs`. This matches the pattern in `dynamical.rs`, `motor.rs`, and `process.rs`.
+- **Numerical functions must be cited.** Every statistical algorithm (PRNG, smoothing method, sampling distribution) cites its source with author and year. This is a measurement tool; provenance matters.
 - **Profile fields are the contract.** If the Avatar needs a new behavioral dimension, it must be computed in `libProfile.ts`, stored in `tb_personal_profile`, and passed through the API.
 - **All sessions contribute.** Journal AND calibration sessions feed the corpus and profile. Calibration keystrokes are equally valid for motor fingerprinting.
 - **Backspace is `\u{0008}`.** The signal pipeline's text reconstruction handles this character as deletion.
-- **The PRNG is internal.** xoshiro128+ seeded from system time. No external randomness dependency.
+- **The PRNG is internal.** xoshiro128+ (Blackman & Vigna 2018) seeded via SplitMix64 (Steele, Lea & Flood 2014). No external randomness dependency. `f64()` returns `[0, 1)` strictly (never 1.0).
 - **`cargo clippy -- -W clippy::all` before committing.** Zero warnings on standard lints.
-- **`cargo test` before committing.** All tests must pass.
+- **`cargo test` before committing.** All tests must pass. The avatar module has 39 tests covering PRNG invariants, tokenization, chain building, weighted sampling, text generation, word difficulty, perplexity, interpolated backoff, timing synthesis, and the full pipeline.
