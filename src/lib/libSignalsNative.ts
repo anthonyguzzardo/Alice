@@ -61,6 +61,22 @@ export interface ProcessSignals {
   strategyShiftCount: number | null;
 }
 
+export interface PerplexityResult {
+  perplexity: number;
+  wordCount: number;
+  knownFraction: number;
+}
+
+export interface AvatarResult {
+  text: string;
+  delays: number[];
+  keystrokeStream: KeystrokeEvent[];
+  wordCount: number;
+  markovOrder: number;
+  chainSize: number;
+  iBurstCount: number;
+}
+
 // ─── Null coercion helpers ────────────────────────────────────────
 // napi-rs omits Rust Option::None fields entirely, producing undefined.
 // postgres.js rejects undefined values. Coerce to null.
@@ -114,6 +130,25 @@ interface NativeModule {
     vocabExpansionRate: number | null;
     phaseTransitionPoint: number | null;
     strategyShiftCount: number | null;
+  };
+  computePerplexity(corpusJson: string, text: string): {
+    perplexity: number;
+    wordCount: number;
+    knownFraction: number;
+  };
+  generateAvatar(
+    corpusJson: string,
+    topic: string,
+    profileJson: string,
+    maxWords: number,
+  ): {
+    text: string;
+    delays: number[];
+    keystrokeStreamJson: string;
+    wordCount: number;
+    order: number;
+    chainSize: number;
+    iBurstCount: number;
   };
 }
 
@@ -215,6 +250,60 @@ export function computeProcessSignals(eventLogJson: string): ProcessSignals | nu
     };
   } catch (err) {
     logError('signalsNative.process', err);
+    return null;
+  }
+}
+
+// ─── Perplexity (Markov model) ────────────────────────────────────
+
+export function computePerplexity(corpusJson: string, text: string): PerplexityResult | null {
+  if (!native) return null;
+
+  try {
+    const t0 = performance.now();
+    const result = native.computePerplexity(corpusJson, text);
+    console.log(`[signals] rust perplexity: ${(performance.now() - t0).toFixed(1)}ms`);
+    if (result.perplexity < 0) return null; // Rust signals error with -1.0
+    return {
+      perplexity: result.perplexity,
+      wordCount: result.wordCount,
+      knownFraction: result.knownFraction,
+    };
+  } catch (err) {
+    logError('signalsNative.perplexity', err);
+    return null;
+  }
+}
+
+// ─── Avatar generation ────────────────────────────────────────────
+
+export function generateAvatar(
+  corpusJson: string,
+  topic: string,
+  profileJson: string,
+  maxWords: number,
+): AvatarResult | null {
+  if (!native) return null;
+
+  try {
+    const t0 = performance.now();
+    const result = native.generateAvatar(corpusJson, topic, profileJson, maxWords);
+    console.log(`[signals] rust avatar: ${(performance.now() - t0).toFixed(1)}ms (${result.wordCount} words)`);
+    if (!result.text) return null;
+    const stream: KeystrokeEvent[] = result.keystrokeStreamJson
+      ? JSON.parse(result.keystrokeStreamJson) as KeystrokeEvent[]
+      : [];
+    return {
+      text: result.text,
+      delays: result.delays,
+      keystrokeStream: stream,
+      wordCount: result.wordCount,
+      markovOrder: result.order,
+      chainSize: result.chainSize,
+      iBurstCount: result.iBurstCount,
+    };
+  } catch (err) {
+    logError('signalsNative.avatar', err);
     return null;
   }
 }

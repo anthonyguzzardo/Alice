@@ -1949,4 +1949,152 @@ export async function getCrossSessionSignals(questionId: number): Promise<CrossS
   return (rows[0] as CrossSessionSignalRow) ?? null;
 }
 
+// ----------------------------------------------------------------------------
+// RECONSTRUCTION RESIDUALS
+// ----------------------------------------------------------------------------
+
+export interface ReconstructionResidualInput {
+  avatar_text: string | null;
+  avatar_word_count: number | null;
+  avatar_markov_order: number | null;
+  avatar_chain_size: number | null;
+  avatar_i_burst_count: number | null;
+  real_word_count: number | null;
+  corpus_size: number | null;
+  session_count: number | null;
+  real_perplexity: number | null;
+  real_known_fraction: number | null;
+  avatar_perplexity: number | null;
+  avatar_known_fraction: number | null;
+  perplexity_residual: number | null;
+  real_permutation_entropy: number | null;
+  avatar_permutation_entropy: number | null;
+  residual_permutation_entropy: number | null;
+  real_pe_spectrum: string | null;
+  avatar_pe_spectrum: string | null;
+  residual_pe_spectrum: string | null;
+  real_dfa_alpha: number | null;
+  avatar_dfa_alpha: number | null;
+  residual_dfa_alpha: number | null;
+  real_rqa_determinism: number | null;
+  avatar_rqa_determinism: number | null;
+  residual_rqa_determinism: number | null;
+  real_rqa_laminarity: number | null;
+  avatar_rqa_laminarity: number | null;
+  residual_rqa_laminarity: number | null;
+  real_te_dominance: number | null;
+  avatar_te_dominance: number | null;
+  residual_te_dominance: number | null;
+  real_sample_entropy: number | null;
+  avatar_sample_entropy: number | null;
+  residual_sample_entropy: number | null;
+  real_motor_jerk: number | null;
+  avatar_motor_jerk: number | null;
+  residual_motor_jerk: number | null;
+  real_lapse_rate: number | null;
+  avatar_lapse_rate: number | null;
+  residual_lapse_rate: number | null;
+  real_tempo_drift: number | null;
+  avatar_tempo_drift: number | null;
+  residual_tempo_drift: number | null;
+  real_ex_gaussian_tau: number | null;
+  avatar_ex_gaussian_tau: number | null;
+  residual_ex_gaussian_tau: number | null;
+  real_tau_proportion: number | null;
+  avatar_tau_proportion: number | null;
+  residual_tau_proportion: number | null;
+  real_idea_density: number | null;
+  avatar_idea_density: number | null;
+  residual_idea_density: number | null;
+  real_lexical_sophistication: number | null;
+  avatar_lexical_sophistication: number | null;
+  residual_lexical_sophistication: number | null;
+  real_epistemic_stance: number | null;
+  avatar_epistemic_stance: number | null;
+  residual_epistemic_stance: number | null;
+  real_integrative_complexity: number | null;
+  avatar_integrative_complexity: number | null;
+  residual_integrative_complexity: number | null;
+  real_deep_cohesion: number | null;
+  avatar_deep_cohesion: number | null;
+  residual_deep_cohesion: number | null;
+  real_text_compression_ratio: number | null;
+  avatar_text_compression_ratio: number | null;
+  residual_text_compression_ratio: number | null;
+  dynamical_l2_norm: number | null;
+  motor_l2_norm: number | null;
+  semantic_l2_norm: number | null;
+  total_l2_norm: number | null;
+  residual_count: number | null;
+}
+
+export async function saveReconstructionResidual(
+  questionId: number,
+  s: ReconstructionResidualInput,
+): Promise<number> {
+  const [row] = await sql`
+    INSERT INTO tb_reconstruction_residuals (
+       question_id
+      ,avatar_text, avatar_word_count, avatar_markov_order, avatar_chain_size
+      ,avatar_i_burst_count, real_word_count, corpus_size, session_count
+      ,real_perplexity, real_known_fraction, avatar_perplexity, avatar_known_fraction
+      ,perplexity_residual
+      ,real_permutation_entropy, avatar_permutation_entropy, residual_permutation_entropy
+      ,real_pe_spectrum, avatar_pe_spectrum, residual_pe_spectrum
+      ,real_dfa_alpha, avatar_dfa_alpha, residual_dfa_alpha
+      ,real_rqa_determinism, avatar_rqa_determinism, residual_rqa_determinism
+      ,real_rqa_laminarity, avatar_rqa_laminarity, residual_rqa_laminarity
+      ,real_te_dominance, avatar_te_dominance, residual_te_dominance
+      ,real_sample_entropy, avatar_sample_entropy, residual_sample_entropy
+      ,real_motor_jerk, avatar_motor_jerk, residual_motor_jerk
+      ,real_lapse_rate, avatar_lapse_rate, residual_lapse_rate
+      ,real_tempo_drift, avatar_tempo_drift, residual_tempo_drift
+      ,real_ex_gaussian_tau, avatar_ex_gaussian_tau, residual_ex_gaussian_tau
+      ,real_tau_proportion, avatar_tau_proportion, residual_tau_proportion
+      ,real_idea_density, avatar_idea_density, residual_idea_density
+      ,real_lexical_sophistication, avatar_lexical_sophistication, residual_lexical_sophistication
+      ,real_epistemic_stance, avatar_epistemic_stance, residual_epistemic_stance
+      ,real_integrative_complexity, avatar_integrative_complexity, residual_integrative_complexity
+      ,real_deep_cohesion, avatar_deep_cohesion, residual_deep_cohesion
+      ,real_text_compression_ratio, avatar_text_compression_ratio, residual_text_compression_ratio
+      ,dynamical_l2_norm, motor_l2_norm, semantic_l2_norm, total_l2_norm
+      ,residual_count
+    ) VALUES (
+       ${questionId}
+      ,${s.avatar_text}, ${s.avatar_word_count}, ${s.avatar_markov_order}, ${s.avatar_chain_size}
+      ,${s.avatar_i_burst_count}, ${s.real_word_count}, ${s.corpus_size}, ${s.session_count}
+      ,${s.real_perplexity}, ${s.real_known_fraction}, ${s.avatar_perplexity}, ${s.avatar_known_fraction}
+      ,${s.perplexity_residual}
+      ,${s.real_permutation_entropy}, ${s.avatar_permutation_entropy}, ${s.residual_permutation_entropy}
+      ,${s.real_pe_spectrum}, ${s.avatar_pe_spectrum}, ${s.residual_pe_spectrum}
+      ,${s.real_dfa_alpha}, ${s.avatar_dfa_alpha}, ${s.residual_dfa_alpha}
+      ,${s.real_rqa_determinism}, ${s.avatar_rqa_determinism}, ${s.residual_rqa_determinism}
+      ,${s.real_rqa_laminarity}, ${s.avatar_rqa_laminarity}, ${s.residual_rqa_laminarity}
+      ,${s.real_te_dominance}, ${s.avatar_te_dominance}, ${s.residual_te_dominance}
+      ,${s.real_sample_entropy}, ${s.avatar_sample_entropy}, ${s.residual_sample_entropy}
+      ,${s.real_motor_jerk}, ${s.avatar_motor_jerk}, ${s.residual_motor_jerk}
+      ,${s.real_lapse_rate}, ${s.avatar_lapse_rate}, ${s.residual_lapse_rate}
+      ,${s.real_tempo_drift}, ${s.avatar_tempo_drift}, ${s.residual_tempo_drift}
+      ,${s.real_ex_gaussian_tau}, ${s.avatar_ex_gaussian_tau}, ${s.residual_ex_gaussian_tau}
+      ,${s.real_tau_proportion}, ${s.avatar_tau_proportion}, ${s.residual_tau_proportion}
+      ,${s.real_idea_density}, ${s.avatar_idea_density}, ${s.residual_idea_density}
+      ,${s.real_lexical_sophistication}, ${s.avatar_lexical_sophistication}, ${s.residual_lexical_sophistication}
+      ,${s.real_epistemic_stance}, ${s.avatar_epistemic_stance}, ${s.residual_epistemic_stance}
+      ,${s.real_integrative_complexity}, ${s.avatar_integrative_complexity}, ${s.residual_integrative_complexity}
+      ,${s.real_deep_cohesion}, ${s.avatar_deep_cohesion}, ${s.residual_deep_cohesion}
+      ,${s.real_text_compression_ratio}, ${s.avatar_text_compression_ratio}, ${s.residual_text_compression_ratio}
+      ,${s.dynamical_l2_norm}, ${s.motor_l2_norm}, ${s.semantic_l2_norm}, ${s.total_l2_norm}
+      ,${s.residual_count}
+    )
+    ON CONFLICT (question_id) DO NOTHING
+    RETURNING reconstruction_residual_id
+  `;
+  return (row as { reconstruction_residual_id: number })?.reconstruction_residual_id ?? 0;
+}
+
+export async function getReconstructionResidual(questionId: number): Promise<ReconstructionResidualInput | null> {
+  const rows = await sql`SELECT * FROM tb_reconstruction_residuals WHERE question_id = ${questionId}`;
+  return (rows[0] as ReconstructionResidualInput) ?? null;
+}
+
 export default sql;

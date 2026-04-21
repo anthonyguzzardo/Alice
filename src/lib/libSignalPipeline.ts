@@ -29,6 +29,7 @@ import type { KeystrokeEvent } from './libSignalsNative.ts';
 import { computeSemanticSignals } from './libSemanticSignals.ts';
 import { computeCrossSessionSignals } from './libCrossSessionSignals.ts';
 import { updateProfile } from './libProfile.ts';
+import { computeReconstructionResidual } from './libReconstruction.ts';
 import { logError } from './utlErrorLog.ts';
 
 async function getKeystrokeStream(questionId: number): Promise<KeystrokeEvent[] | null> {
@@ -202,5 +203,12 @@ export async function computeAndPersistDerivedSignals(questionId: number): Promi
     await updateProfile(questionId);
   } catch (err) {
     logError('signal-pipeline.profile', err, { questionId });
+  }
+
+  // ── Reconstruction residual (depends on profile being current) ──
+  try {
+    await computeReconstructionResidual(questionId);
+  } catch (err) {
+    logError('signal-pipeline.reconstruction', err, { questionId });
   }
 }
