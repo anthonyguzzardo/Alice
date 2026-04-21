@@ -158,12 +158,26 @@ pub struct AvatarOutput {
     pub text: String,
     /// Per-character delay in ms
     pub delays: Vec<f64>,
+    /// Synthetic keystroke stream as JSON (array of {c, d, u} events).
+    /// Can be passed directly to the signal pipeline for validation.
+    pub keystroke_stream_json: String,
     /// Word count of generated text
     pub word_count: i32,
     /// Markov order used (1 or 2)
     pub order: i32,
     /// Number of unique states in the chain
     pub chain_size: i32,
+}
+
+#[napi(object)]
+#[derive(Serialize, Default)]
+pub struct PerplexityOutput {
+    /// Per-word log2 perplexity (lower = model predicts the text better)
+    pub perplexity: f64,
+    /// Number of words evaluated
+    pub word_count: i32,
+    /// Fraction of transitions that were known to the chain (0.0 to 1.0)
+    pub known_fraction: f64,
 }
 
 /// Generate text from a personal corpus Markov chain with timing from a motor profile.
@@ -182,11 +196,42 @@ pub fn generate_avatar(
 ) -> AvatarOutput {
     let r = avatar::compute(&corpus_json, &topic, &profile_json, max_words.max(10) as usize);
 
+    // Serialize keystroke events into the wire format the signal pipeline expects
+    let stream: Vec<serde_json::Value> = r
+        .keystroke_events
+        .iter()
+        .map(|k| {
+            serde_json::json!({
+                "c": k.character.to_string(),
+                "d": k.key_down_ms,
+                "u": k.key_up_ms
+            })
+        })
+        .collect();
+    let keystroke_stream_json = serde_json::to_string(&stream).unwrap_or_default();
+
     AvatarOutput {
         text: r.text,
         delays: r.delays,
+        keystroke_stream_json,
         word_count: i32::try_from(r.word_count).unwrap_or(i32::MAX),
         order: i32::try_from(r.order).unwrap_or(0),
         chain_size: i32::try_from(r.chain_size).unwrap_or(0),
+    }
+}
+
+/// Compute perplexity of a text against the corpus Markov model.
+/// Tracks convergence: as the corpus grows, perplexity of real journal
+/// responses should decrease monotonically.
+#[napi]
+#[allow(clippy::needless_pass_by_value)]
+pub fn compute_perplexity(corpus_json: String, text: String) -> PerplexityOutput {
+    let r = avatar::compute_text_perplexity(&corpus_json, &text);
+    let total = (r.known_transitions + r.unknown_transitions).max(1) as f64;
+
+    PerplexityOutput {
+        perplexity: if r.perplexity.is_finite() { r.perplexity } else { -1.0 },
+        word_count: i32::try_from(r.word_count).unwrap_or(i32::MAX),
+        known_fraction: r.known_transitions as f64 / total,
     }
 }

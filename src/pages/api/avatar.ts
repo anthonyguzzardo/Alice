@@ -95,6 +95,7 @@ export const POST: APIRoute = async ({ request }) => {
   return new Response(JSON.stringify({
     text: result.text,
     delays: result.delays,
+    keystrokeStreamJson: result.keystrokeStreamJson,
     wordCount: result.wordCount,
     markovOrder: result.order,
     chainSize: result.chainSize,
