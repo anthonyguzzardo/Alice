@@ -1,10 +1,67 @@
-# Handoff: The Ghost (2026-04-20, Sessions 3-6)
+# Handoff: The Ghost (2026-04-20, Sessions 3-8)
 
 ## What happened
 
-Sessions 3-4 built the reconstruction residual pipeline, backfilled 20 sessions, built the Ghost observatory page, and wired live metadata into the research page. Sessions 5-6 (this session) completed the full ghost handoff: adaptive difficulty logging, coupling stability analysis, profile-based mediation detection, Rust migration of numerical cores, and revision of the Reconstruction Validity paper with empirical results.
+Sessions 3-4 built the reconstruction residual pipeline, backfilled 20 sessions, built the Ghost observatory page, and wired live metadata into the research page. Sessions 5-6 completed the full ghost handoff: adaptive difficulty logging, coupling stability analysis, profile-based mediation detection, Rust migration of numerical cores, and revision of the Reconstruction Validity paper with empirical results. Sessions 7-8 (this session) performed CLAUDE.md-level Rust diagnostics, enforced single-source-of-truth by removing TS fallbacks, restructured the research page's reconstruction section based on external review, fixed a timezone bug affecting all paper dates, upgraded the README, and verified the live pipeline on two new calibration sessions.
 
 The ghost handoff is complete. The instrument now validates itself, detects anomalous sessions, and tracks whether emotion-behavior coupling is stable. The Reconstruction Validity paper (v3) reports the first empirical results, including a falsified prediction that turned out to be the strongest finding.
+
+## What was built (Sessions 7-8)
+
+### Rust CLAUDE.md-level diagnostics
+- Clippy collapsible `if` warning fixed in `lib.rs`
+- Batch orchestration logic extracted from `lib.rs` to `stats::batch_lagged_correlations()` -- lib.rs is now a thin boundary again
+- TS fallbacks removed from `libIntegrity.ts` and `libCouplingStability.ts` -- single source of truth enforced; if Rust unavailable, computation returns null (consistent with dynamical/motor/process pattern)
+- Dead code removed: `signedPearson()` and `computeCouplingAtWindow()` from `libCouplingStability.ts`
+- Added `best_lagged_correlation_detects_shift` test (non-linear pattern, verifies lag=2 detection)
+- Added `batch_lagged_correlations_basic` test
+- 117 tests pass, 0 clippy warnings
+
+### Paper date timezone fix
+- `libPapers.ts`: YAML `date: 2026-04-20` parsed by gray-matter as midnight UTC Date object; `String()` converted to local CDT (UTC-5) rolling every date back one day. Every paper on the site showed April 19 instead of April 20.
+- Fix: `formatDate()` uses `getUTCDay()`, `getUTCMonth()`, `getUTCDate()` to format in UTC
+- Sort key preserved as ISO string for correct date ordering
+
+### Research page reconstruction section restructure
+- "running the instrument in reverse" replaced with "through adversarial synthesis"
+- "The gap is not noise. It is diagnostic." consolidated
+- "strongest possible adversary" softened to "strongest adversary the instrument's own measurements can construct"
+- Three residual cards restructured from Motor/Content/Cognitive to Content/Motor/Cognitive Load Signature:
+  - Old "Cognitive residual" showed `totalL2` which double-counted `motorL2` -- removed
+  - Motor card is now the key card with the central analytical claim: distributional equivalence is not behavioral equivalence, motor measures cognitive-motor coupling
+  - New "Cognitive load signature" card shows journal-vs-calibration L2 contrast (59.6 vs 50.7) -- the falsification test for whether the residual is cognitive
+- `instrument-status.ts` API extended with `journalL2` and `calibrationL2` from question-source breakdown
+- JS updated to populate new card structure (content shows semantic L2, motor shows motor L2, cognitive load shows journal/calibration contrast)
+- Reconstruction validity citation updated from v1 to v3
+- "Irreversible Loss" added as fourth published paper with link
+- Extensions section updated from "a framework paper in development" to referencing published paper
+- Viz caption updated from "schematic projections" to citing empirical results
+- Source list papers now linked to their pages
+
+### Paper frontmatter dates
+- `option_a_demographic_confound_paper.md` and `option_b_draft.md` dates changed from 2026-04-19 to 2026-04-20
+- Inline date reference in option A body text updated
+
+### README upgrade
+- Added reconstruction validity / ghost section with empirical results
+- Added session integrity section
+- Added coupling stability section
+- Added Published Papers section (4 papers)
+- Fixed 4 occurrences of "Automatic TypeScript fallback" -- replaced with single-source-of-truth language
+- Updated Observatory section with ghost page, coupling stability, integrity panel
+- Updated Key Modules with libReconstruction, libIntegrity, libCouplingStability, libProfile
+- Updated On Submission flow with signal pipeline, integrity, reconstruction
+- Updated Architecture section with reconstruction residuals, session integrity, coupling stability, adaptive difficulty
+- Added public-facing pages (research, papers, instrument, methodology, vision)
+- Updated backfill commands
+- Updated Philosophy section
+
+### Pipeline verification
+- Two new calibration sessions (82, 83) verified against full pipeline
+- Motor L2 dominance confirmed (90.8, 74.1)
+- Perplexity gap stable (real ~20-21, ghost ~60-63)
+- Session 83 correctly returned null for ex-Gaussian (insufficient data, 79 keystrokes)
+- Profile session count jump from 8 to 55 diagnosed as natural catchup (backfill scored integrity but didn't re-run profile update; first live session triggered the recalculation)
 
 ## What was built (Sessions 5-6)
 
@@ -72,6 +129,22 @@ The ghost handoff is complete. The instrument now validates itself, detects anom
 **TE dominance stability.** Mean residual = 0.350, CV = 3.08. Not yet stable. Needs more sessions.
 
 **Session integrity baseline.** 54 sessions scored, 10 flagged (18.5%). Distances range 0.89 to 43.82. The distribution establishes the baseline for real-time detection.
+
+## Files modified (Sessions 7-8)
+
+| File | Change |
+|------|--------|
+| `src-rs/src/stats.rs` | Extracted `batch_lagged_correlations()`, added 2 tests (shift detection, batch basic) |
+| `src-rs/src/lib.rs` | `compute_batch_correlations` thinned to deserialize + call + map |
+| `src/lib/libIntegrity.ts` | Removed TS z-score fallback; returns null if Rust unavailable |
+| `src/lib/libCouplingStability.ts` | Removed TS fallback, removed dead `signedPearson` and `computeCouplingAtWindow` |
+| `src/lib/libPapers.ts` | Fixed timezone bug: UTC date formatting, ISO sort key |
+| `src/pages/research.astro` | Restructured reconstruction section, updated citations, added Irreversible Loss |
+| `src/pages/api/instrument-status.ts` | Added `journalL2` and `calibrationL2` to convergence data |
+| `papers/option_a_demographic_confound_paper.md` | Date fixed to 2026-04-20 |
+| `papers/option_b_draft.md` | Date fixed to 2026-04-20 |
+| `README.md` | Major upgrade: ghost/reconstruction, integrity, coupling, papers, TS fallback fixes |
+| `GHOST_HANDOFF.md` | Added sessions 7-8 |
 
 ## Files created (Sessions 5-6)
 

@@ -1,8 +1,8 @@
-# Handoff: Avatar Engine Audit + Calibration (2026-04-20, Session 2)
+# Handoff: Avatar Engine Audit + Calibration (2026-04-20, Sessions 1-2)
 
 ## What happened this session
 
-Full engineering audit of the Avatar Markov chain engine (`src-rs/src/avatar.rs`), followed by market research, implementation of seven fixes, CLAUDE.md compliance pass, frontend integration, and paper/research page updates.
+Full engineering audit of the Avatar Markov chain engine (`src-rs/src/avatar.rs`), followed by market research, implementation of seven fixes, CLAUDE.md compliance pass, frontend integration, and paper/research page updates. Continued in GHOST_HANDOFF.md (sessions 3-8) which built the full reconstruction residual pipeline, session integrity, coupling stability, and brought the instrument to self-validation.
 
 ## Part 1: Audit Findings
 
@@ -105,11 +105,13 @@ Updated all sections affected by engine changes: forward production (interpolate
 
 ## What's next
 
-### Engineering priority: Close the adversarial validation loop
-The engineering prerequisites are now in place. The reconstruction produces signal-pipeline-compatible keystroke streams with revision events. The next step is comparison infrastructure: feed synthetic streams through `computeDynamicalSignals()` and `computeMotorSignals()`, compute per-dimension distance, report the first reconstruction validity profile. This produces the number the paper predicts.
+All three items below were completed in sessions 3-8. See `GHOST_HANDOFF.md` for the full accounting.
 
-### Engineering: Perplexity tracking
-Perplexity computation is implemented with Absolute Discounting. Next: call it after each session, store the trajectory, plot convergence, measure the order-1 to order-2 transition.
+### ~~Engineering priority: Close the adversarial validation loop~~ DONE
+Reconstruction residual pipeline built, 22 reconstructions computed across 56 sessions. Motor L2 = 89.3 (mean), dynamical L2 < 1.3, semantic L2 < 0.35. Motor prediction falsified; falsification is the strongest finding.
+
+### ~~Engineering: Perplexity tracking~~ DONE
+Perplexity computed per session. Real 21.3 vs ghost 78.5 (mean). Person is more internally consistent than the Markov model predicts. Ratio ~3x.
 
 ### Research: Condrey attack experiment
-Design transcription protocol. Run authentic + transcribed sessions through full pipeline. Test whether process signals distinguish composition from transcription.
+Design transcription protocol. Run authentic + transcribed sessions through full pipeline. Test whether process signals distinguish composition from transcription. **Still open.** The reconstruction residual provides the measurement; the Condrey attack provides the adversary.
