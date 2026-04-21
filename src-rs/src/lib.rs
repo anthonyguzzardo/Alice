@@ -167,6 +167,9 @@ pub struct AvatarOutput {
     pub order: i32,
     /// Number of unique states in the chain
     pub chain_size: i32,
+    /// Number of I-burst episodes injected. Cannot be detected from the
+    /// flat keystroke stream; must be returned as metadata.
+    pub i_burst_count: i32,
 }
 
 #[napi(object)]
@@ -221,6 +224,7 @@ pub fn generate_avatar(
         word_count: i32::try_from(r.word_count).unwrap_or(i32::MAX),
         order: i32::try_from(r.order).unwrap_or(0),
         chain_size: i32::try_from(r.chain_size).unwrap_or(0),
+        i_burst_count: i32::try_from(r.i_burst_count).unwrap_or(i32::MAX),
     }
 }
 

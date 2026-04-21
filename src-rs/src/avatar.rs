@@ -60,6 +60,10 @@ pub(crate) struct AvatarResult {
     pub(crate) order: usize,
     /// Number of unique states in the chain
     pub(crate) chain_size: usize,
+    /// Number of I-burst episodes injected. Cannot be detected from the
+    /// flat keystroke stream because position information is lost after
+    /// splice; must be returned as metadata.
+    pub(crate) i_burst_count: usize,
 }
 
 pub(crate) struct SyntheticKeystroke {
@@ -676,6 +680,7 @@ fn extract_word_spans(text: &str) -> Vec<(usize, usize, String)> {
 ///
 /// I-bursts show up in the process signal pipeline as mid-text insertions,
 /// which is a key marker of genuine composition vs. transcription.
+/// Returns the number of I-burst episodes injected.
 fn inject_i_bursts(
     keystrokes: &mut Vec<SyntheticKeystroke>,
     delays: &mut Vec<f64>,
@@ -683,12 +688,12 @@ fn inject_i_bursts(
     chain: &MarkovChain,
     word_freq: &HashMap<String, f64>,
     rng: &mut Rng,
-) {
+) -> usize {
     let r_ratio = profile.r_burst_ratio.unwrap_or(1.0);
     // i_burst_ratio = 1 - r_burst_ratio. If r_ratio is 0.8, 20% of bursts are I-bursts.
     let i_ratio = 1.0 - r_ratio.clamp(0.0, 1.0);
     if i_ratio < 0.05 || keystrokes.len() < 50 {
-        return; // Negligible I-burst rate or too short
+        return 0; // Negligible I-burst rate or too short
     }
 
     let base_mu = profile.mu.unwrap_or(120.0);
@@ -704,10 +709,11 @@ fn inject_i_bursts(
     let n_i_bursts = ((n_total_bursts as f64 * i_ratio) + 0.5) as usize;
 
     if n_i_bursts == 0 {
-        return;
+        return 0;
     }
 
     // Pick insertion targets in the first 70% of the text (you go BACK to insert)
+    let mut injected: usize = 0;
     for _ in 0..n_i_bursts {
         let target_range = (keystrokes.len() as f64 * 0.7) as usize;
         if target_range < 10 {
@@ -804,7 +810,11 @@ fn inject_i_bursts(
         if insert_at + ins_len < delays.len() {
             delays[insert_at + ins_len] = reorient_pause;
         }
+
+        injected += 1;
     }
+
+    injected
 }
 
 /// Find the nearest word boundary (space character) at or after `pos`.
@@ -1137,7 +1147,8 @@ pub(crate) fn compute(
     inject_revisions(&mut keystrokes, &mut delays, &profile, &chain, &mut rng);
 
     // Inject I-bursts (mid-text insertions) from the process profile
-    inject_i_bursts(&mut keystrokes, &mut delays, &profile, &chain, &word_freq, &mut rng);
+    let i_burst_count =
+        inject_i_bursts(&mut keystrokes, &mut delays, &profile, &chain, &word_freq, &mut rng);
 
     Ok(AvatarResult {
         text,
@@ -1146,6 +1157,7 @@ pub(crate) fn compute(
         word_count,
         order,
         chain_size,
+        i_burst_count,
     })
 }
 

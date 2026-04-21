@@ -97,6 +97,14 @@ export const POST: APIRoute = async ({ request }) => {
     maxWords,
   );
 
+  // Rust returns AvatarOutput::default() when SignalResult is an error
+  if (!result.text) {
+    return new Response(JSON.stringify({ error: 'Generation failed. Corpus may be insufficient.' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   return new Response(JSON.stringify({
     text: result.text,
     delays: result.delays,
@@ -104,6 +112,7 @@ export const POST: APIRoute = async ({ request }) => {
     wordCount: result.wordCount,
     markovOrder: result.order,
     chainSize: result.chainSize,
+    iBurstCount: result.iBurstCount,
     sessionCount: p.session_count ?? 0,
     corpusSize: textRows.length,
   }), {
