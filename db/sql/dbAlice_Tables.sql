@@ -104,6 +104,28 @@ CREATE TABLE IF NOT EXISTS te_context_dimension (
   ,name                  TEXT NOT NULL
 );
 
+-- --------------------------------------------------------------------------
+
+-- PURPOSE: static enumeration of ghost adversary strategies
+-- USE CASE: discriminator for reconstruction residual rows; each variant
+--           uses a different text generation + timing synthesis combination
+-- MUTABILITY: static after deploy
+-- REFERENCED BY: tb_reconstruction_residuals.adversary_variant_id
+-- FOOTER: none (enum table)
+CREATE TABLE IF NOT EXISTS te_adversary_variants (
+   adversary_variant_id  SMALLINT PRIMARY KEY
+  ,name                  TEXT NOT NULL UNIQUE
+  ,description           TEXT
+);
+
+INSERT INTO te_adversary_variants (adversary_variant_id, name, description) VALUES
+   (1, 'baseline',            'Order-2 Markov + independent ex-Gaussian timing')
+  ,(2, 'conditional_timing',  'Order-2 Markov + AR(1) conditioned IKI')
+  ,(3, 'copula_motor',        'Order-2 Markov + Gaussian copula hold/flight')
+  ,(4, 'ppm_text',            'Variable-order PPM + independent timing')
+  ,(5, 'full_adversary',      'PPM + AR(1) + copula')
+ON CONFLICT (adversary_variant_id) DO NOTHING;
+
 -- ============================================================================
 -- CORE MUTABLE TABLES
 -- ============================================================================
@@ -698,6 +720,7 @@ CREATE TABLE IF NOT EXISTS tb_motor_signals (
   ,ex_gaussian_sigma            DOUBLE PRECISION
   ,tau_proportion               DOUBLE PRECISION
   ,adjacent_hold_time_cov       DOUBLE PRECISION
+  ,hold_flight_rank_corr        DOUBLE PRECISION
   ,dttm_created_utc             TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
   ,created_by                   TEXT NOT NULL DEFAULT 'system'
 );
@@ -856,16 +879,95 @@ CREATE TABLE IF NOT EXISTS tb_paper_comments (
 
 -- --------------------------------------------------------------------------
 
--- PURPOSE: Per-session delta between real signals and Markov avatar signals.
+-- PURPOSE: Rolling behavioral profile aggregated from all journal sessions.
+-- USE CASE: Foundation for writing avatar / process reconstruction. Single row
+--           updated in place after each session. Feeds all adversary variants.
+-- MUTABILITY: Updated after each journal session.
+-- REFERENCED BY: reconstruction pipeline, mediation detection.
+-- FOOTER: dttm_updated_utc only.
+CREATE TABLE IF NOT EXISTS tb_personal_profile (
+   profile_id              SERIAL PRIMARY KEY
+  ,session_count           INT NOT NULL DEFAULT 0
+  ,last_question_id        INT
+
+  -- ── Motor fingerprint ──────────────────────────────────────────────
+  ,digraph_aggregate_json  JSONB
+  ,ex_gaussian_mu_mean     DOUBLE PRECISION
+  ,ex_gaussian_mu_std      DOUBLE PRECISION
+  ,ex_gaussian_sigma_mean  DOUBLE PRECISION
+  ,ex_gaussian_sigma_std   DOUBLE PRECISION
+  ,ex_gaussian_tau_mean    DOUBLE PRECISION
+  ,ex_gaussian_tau_std     DOUBLE PRECISION
+  ,iki_mean_mean           DOUBLE PRECISION
+  ,iki_mean_std            DOUBLE PRECISION
+  ,iki_std_mean            DOUBLE PRECISION
+  ,iki_skewness_mean       DOUBLE PRECISION
+  ,iki_kurtosis_mean       DOUBLE PRECISION
+  ,hold_time_mean_mean     DOUBLE PRECISION
+  ,hold_time_mean_std      DOUBLE PRECISION
+  ,flight_time_mean_mean   DOUBLE PRECISION
+  ,flight_time_mean_std    DOUBLE PRECISION
+  ,hold_time_cv_mean       DOUBLE PRECISION
+
+  -- ── Writing process shape ──────────────────────────────────────────
+  ,burst_count_mean        DOUBLE PRECISION
+  ,burst_count_std         DOUBLE PRECISION
+  ,burst_length_mean       DOUBLE PRECISION
+  ,burst_length_std        DOUBLE PRECISION
+  ,burst_consolidation     DOUBLE PRECISION
+  ,session_duration_mean   DOUBLE PRECISION
+  ,session_duration_std    DOUBLE PRECISION
+  ,word_count_mean         DOUBLE PRECISION
+  ,word_count_std          DOUBLE PRECISION
+
+  -- ── Pause architecture ─────────────────────────────────────────────
+  ,pause_within_word_pct   DOUBLE PRECISION
+  ,pause_between_word_pct  DOUBLE PRECISION
+  ,pause_between_sent_pct  DOUBLE PRECISION
+  ,pause_rate_mean         DOUBLE PRECISION
+  ,first_keystroke_mean    DOUBLE PRECISION
+  ,first_keystroke_std     DOUBLE PRECISION
+
+  -- ── Revision topology ──────────────────────────────────────────────
+  ,small_del_rate_mean     DOUBLE PRECISION
+  ,large_del_rate_mean     DOUBLE PRECISION
+  ,revision_timing_bias    DOUBLE PRECISION
+  ,r_burst_ratio_mean      DOUBLE PRECISION
+
+  -- ── Language signature ─────────────────────────────────────────────
+  ,trigram_model_json      JSONB
+  ,vocab_cumulative        INT
+  ,mattr_mean              DOUBLE PRECISION
+  ,mattr_std               DOUBLE PRECISION
+
+  -- ── R-burst aggregation (migration 009) ────────────────────────────
+  ,rburst_consolidation    DOUBLE PRECISION
+  ,rburst_mean_size        DOUBLE PRECISION
+  ,rburst_mean_duration    DOUBLE PRECISION
+  ,rburst_leading_edge_pct DOUBLE PRECISION
+
+  -- ── Adversary variant inputs (migration 010) ───────────────────────
+  ,iki_autocorrelation_lag1_mean  DOUBLE PRECISION
+  ,hold_flight_rank_correlation   DOUBLE PRECISION
+
+  ,dttm_updated_utc        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- --------------------------------------------------------------------------
+
+-- PURPOSE: Per-session per-variant delta between real signals and ghost signals.
 -- USE CASE: Measures what in a person's behavior cannot be predicted by their
---           own statistical profile. The residual is the cognitive signature.
--- MUTABILITY: Insert once per session after profile update. Recomputable.
--- REFERENCED BY: convergence tracking, observatory.
+--           own statistical profile. One row per (session, adversary variant).
+--           The residual is the cognitive signature.
+-- MUTABILITY: Insert once per session per variant after profile update. Recomputable.
+-- REFERENCED BY: convergence tracking, observatory, multi-adversary comparison.
 -- FOOTER: created only (append-only).
 CREATE TABLE IF NOT EXISTS tb_reconstruction_residuals (
    reconstruction_residual_id   INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
-  ,question_id                  INT NOT NULL UNIQUE
+  ,question_id                  INT NOT NULL
+  ,adversary_variant_id         SMALLINT NOT NULL DEFAULT 1
   ,question_source_id           SMALLINT
+  ,UNIQUE (question_id, adversary_variant_id)
 
   -- ── Avatar generation metadata ──────────────────────────────────────
   ,avatar_text                  TEXT
