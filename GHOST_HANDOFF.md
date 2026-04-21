@@ -1,186 +1,138 @@
-# Handoff: The Ghost (2026-04-20, Session 3)
+# Handoff: The Ghost (2026-04-20, Sessions 3-4)
 
-## What happened this session
+## What happened
 
-Cross-sectional examination of the entire project (papers, pages, data pipeline, avatar engine) revealed 10 hidden upside potentials living in the gaps between systems. The single largest: the avatar and signal pipeline had never touched each other. They do now. The reconstruction residual pipeline was designed and built in full. Your statistical ghost writes next to you starting with the next journal entry.
+Session 3 built the reconstruction residual pipeline. Session 4 brought it to life: backfilled all existing sessions, built the observatory page, wired live metadata into the research page, and added two-scale perplexity and TE dominance stability analysis.
 
-This might be the most important day of the entire project.
+The ghost is running. The research page and the instrument are now visibly the same project.
 
-## What was built
+## What was built (Session 4)
 
-### The Reconstruction Residual Pipeline
+### Migration 006: source column
+- Added `question_source_id SMALLINT` to `tb_reconstruction_residuals`
+- Schema file updated, type/save function updated, `libReconstruction.ts` looks up and passes source ID
+- Calibration (3) vs journal (1/2) filtering is now a direct column lookup
 
-After every journal and calibration session, Alice now:
-1. Generates a ghost response for the same question (Markov chain + motor profile)
-2. Runs the signal pipeline on the ghost's keystroke stream
-3. Computes the delta between real and ghost signals per family
-4. Computes Markov perplexity of both texts against the corpus model
-5. Stores per-signal triplets (real, ghost, residual) + L2 norms + PE spectrum residual
+### Backfill script
+- `src/scripts/backfill-reconstruction.ts`: iterates all question_ids with signal data, runs `computeReconstructionResidual()` on each
+- 20/20 sessions backfilled, zero failures
+- Idempotent (skips existing rows, ON CONFLICT DO NOTHING)
 
-The residual is what the ghost gets wrong. Everything it gets right is pattern. Everything it gets wrong is cognition.
+### L2 norm fix
+- `libReconstruction.ts`: `l2()` and `residualCount` now exclude non-finite values (Infinity, NaN)
+- Avatar produces Infinity TE dominance on ~40% of sessions (zero flight-to-hold TE). These are honest measurement failures, not signal magnitudes.
 
-### Files created
+### Ghost in the Shell observatory page
+- **Page**: `src/pages/observatory/ghost.astro`
+- **API**: `src/pages/api/observatory/ghost.ts`
+- **Nav**: ghost link added to all observatory pages (index, trajectory, coupling, entry)
+
+Page sections:
+1. KPI row (latest/mean total L2, journal/calibration means, perplexity averages)
+2. Convergence trajectory (total L2 norm over sessions)
+3. Per-family norms (dynamical, motor, semantic L2 as three charts)
+4. Calibration vs journal split (dot plot by source type)
+5. Perplexity (real vs ghost Markov + two-scale trigram divergence + ratio chart)
+6. PE spectrum residual (5 lines, orders 3-7)
+7. TE dominance stability (residual + real TE over sessions, KPI strip with mean/stddev/CV)
+8. Per-signal residual table (latest session breakdown, color-coded)
+
+### Research page live metadata
+- **API**: `src/pages/api/instrument-status.ts` (instrument-only statistics, never surfaces user data)
+- **Integration**: Research page reconstruction validity section now shows measured values alongside predictions on the three residual cards + instrument status strip
+- Motor: Expected small, Measured L2 = 90.0
+- Content: Expected decreasing, Measured perplexity gap = -57.2
+- Cognitive: Expected persistent, Measured total L2 = 52.4
+- Strip: 30 days active, 54 sessions, 5/5 signal families, 20 reconstruction residuals
+
+## Key findings from the data
+
+**Motor signals dominate the residual.** Dynamical L2 < 1.3, semantic L2 < 0.35, motor L2 ranges 46-144. The ghost can approximate temporal complexity and semantic content but cannot reconstruct motor execution. Motor execution is the signature.
+
+**Ghost perplexity is always higher than real perplexity.** Avg real = 21.3, avg ghost = 78.5. You are more internally consistent than your statistical profile predicts.
+
+**Journal vs calibration gap.** Journal avg L2 = 59.6, calibration avg L2 = 51.1. Cognitive contribution is larger when the question demands depth.
+
+**Two-scale divergence.** Markov perplexity avg = 21.3, trigram avg = 9.0, ratio ~2.4x. Familiar characters in unfamiliar word sequences.
+
+**TE dominance stability.** Mean residual = 0.350, CV = 3.08. Non-zero but high variability. Not yet stable enough for "consistent within-person" paper claim. More sessions will clarify.
+
+**Motor residual challenges the schematic prediction.** The research page predicted motor residual would be "small" (ghost draws from same distributions). Measured = 90.0, the largest family. This means motor execution goes beyond the statistical profile.
+
+## Files created this session
 
 | File | What |
 |------|------|
-| `src/lib/libReconstruction.ts` | Core module: `computeReconstructionResidual(questionId)` orchestrates ghost generation, signal comparison, residual computation |
-| `db/sql/migrations/005_add_reconstruction_residuals.sql` | New table with 17 signal triplets, perplexity comparison, PE spectrum JSONB, L2 norms |
-| `GHOST.md` | Design document explaining the full system |
+| `db/sql/migrations/006_add_source_to_residuals.sql` | Adds `question_source_id` column |
+| `src/scripts/backfill-reconstruction.ts` | Backfill script for reconstruction residuals |
+| `src/pages/observatory/ghost.astro` | Ghost in the Shell observatory page |
+| `src/pages/api/observatory/ghost.ts` | Ghost API endpoint |
+| `src/pages/api/instrument-status.ts` | Instrument metadata API for research page |
 
-### Files modified
+## Files modified this session
 
 | File | Change |
 |------|--------|
-| `src/lib/libSignalsNative.ts` | Wired `generateAvatar()` and `computePerplexity()` from Rust FFI into TypeScript. Added `PerplexityResult` and `AvatarResult` interfaces. |
-| `src/lib/libSignalPipeline.ts` | Reconstruction runs as final stage after `updateProfile()`. Both respond.ts and calibrate.ts get it automatically. |
-| `src/lib/libDb.ts` | Added `ReconstructionResidualInput` type, `saveReconstructionResidual()`, `getReconstructionResidual()` |
-| `db/sql/dbAlice_Tables.sql` | Added `tb_reconstruction_residuals` to schema file |
+| `db/sql/dbAlice_Tables.sql` | Added `question_source_id` to `tb_reconstruction_residuals` CREATE TABLE |
+| `src/lib/libDb.ts` | Added `question_source_id` to `ReconstructionResidualInput` type and INSERT |
+| `src/lib/libReconstruction.ts` | Looks up `question_source_id`, passes to save. L2 norm excludes non-finite values. |
+| `src/pages/observatory/index.astro` | Added ghost nav link |
+| `src/pages/observatory/trajectory.astro` | Added ghost nav link |
+| `src/pages/observatory/coupling.astro` | Added ghost nav link |
+| `src/pages/observatory/entry/[id].astro` | Added ghost nav link |
+| `src/pages/research.astro` | Added measured values to residual cards, instrument status strip, fetch script |
 
-### Verified
+## Priority order for next session
 
-- Migration applied: `CREATE TABLE` + `COMMENT` clean
-- Astro build: `Complete!` with zero new errors
-- Table structure confirmed in database (67 columns)
+### 1. Adaptive cognitive challenge (#6)
 
----
+Correlate question difficulty with residual magnitude. Does harder questioning produce larger ghosts?
 
-## What was NOT built yet (the remaining 9 potentials)
+**Work needed:**
+- Extend `libGenerate.ts` to log difficulty classification in `tb_prompt_traces`
+- **Log raw difficulty signal inputs** (MATTR, cognitive density, whatever feeds the classifier) alongside the final difficulty label. Classifiers change, measurements don't. Losing the inputs means losing the ability to re-analyze with a better classifier without re-running sessions.
+- Build observatory panel (on Ghost page or standalone) correlating difficulty with residual magnitude
+- Clear predicted direction: harder questions should produce larger residuals if the signals are cognitive
 
-Everything below comes from the cross-sectional analysis in `HIDDEN_UPSIDE.md`. Potential #1 (reconstruction residual) is done. The rest are ordered by leverage.
+### 2. Emotion-behavior coupling stability (prerequisite for #7)
 
-### IMMEDIATE: Backfill existing sessions
+**Do not build the ghost comparison yet.** The ghost has no emotion-behavior coupling by construction (its emotions are random Markov output). Comparing real coupling to a deliberately-decoupled generator is tautological. It will "fail" because it was built to fail. That is not a finding.
 
-**Priority: Do this first. Before anything else.**
+The actual falsifiable claim: real emotion-behavior coupling is stable within-person across sessions. If it is not stable, it is noise, and the ghost comparison is meaningless regardless.
 
-Write a script (`scripts/backfill-reconstruction.ts`) that iterates over all existing question_ids with signal data, runs `computeReconstructionResidual(questionId)` on each. This gives you a residual trajectory from day one instead of waiting for new entries. The function is idempotent (skips if row exists). Needs >= 3 entries in corpus to produce data.
+**Work needed:**
+- Compute within-person stability of emotion-behavior coupling across sessions using existing `tb_emotion_behavior_coupling` data
+- Establish whether coupling is consistent (low CV) or noisy
+- Only if stable: proceed to ghost comparison
 
-### IMMEDIATE: Observatory integration
+### 3. Profile-based mediation detection (#8)
 
-The residuals go into a table nobody can see yet. Surface them in the observatory:
-- Convergence trajectory: `total_l2_norm` over time (should decrease, then plateau)
-- Per-family norms: dynamical vs motor vs semantic L2 over time
-- Calibration vs journal gap: split by `question_source_id` (3 = calibration, 1/2 = journal) to show the cognitive contribution
-- Perplexity comparison: real vs ghost perplexity over time
-- PE spectrum heatmap: per-order residuals across sessions
+Real-time profile-match scoring on session submission. Flag sessions outside N standard deviations.
 
-Consider adding `question_source_id` to the residual table to avoid JOIN for this split.
+### 4. Research page live metadata enhancements (#9, ongoing)
 
-### IMMEDIATE: Source column on residual table
-
-Add `question_source_id SMALLINT` to `tb_reconstruction_residuals` so calibration vs journal filtering is trivial. Small migration, big query convenience.
-
----
-
-### MEDIUM: Two-scale perplexity tracking (Potential #2)
-
-Two independent perplexity measures exist and never talk:
-- **Cross-session** `selfPerplexity` in `libCrossSessionSignals.ts:83`: character-trigram model, measures how novel today's text is relative to all prior texts
-- **Ghost** `real_perplexity` in `tb_reconstruction_residuals`: word-level Markov with Absolute Discounting, measures generative model fit
-
-Their divergence is meaningful. If trigram perplexity stays flat but Markov perplexity rises, the person uses familiar characters in unfamiliar word sequences. If Markov perplexity drops faster, the word model overfits to surface patterns.
-
-**Work needed:** Observatory panel showing both perplexities over time. The data already exists in two tables; this is a visualization/query task.
-
-### MEDIUM: Transfer entropy as falsifiable reconstruction test (Potential #3)
-
-TE dominance (hold-to-flight vs flight-to-hold causality) is already stored as `residual_te_dominance` in the reconstruction table. The ghost synthesizes timing with content-process coupling, but genuine cognitive-motor coupling is more complex.
-
-**Work needed:** Track `residual_te_dominance` stability across sessions. If it's consistent within-person but the absolute value is non-zero, you've isolated a signal irreducible to statistical patterns. This is a novel claim for the Reconstruction Validity paper. Observatory panel + paper section.
-
-### MEDIUM: Calibration as publishable psychometric innovation (Potential #4)
-
-The within-day calibration design (neutral prompt before journal, same-day delta) eliminates most confounds in longitudinal behavioral studies. No existing keystroke study uses same-day baselines.
-
-**Work needed:** Mostly a paper argument, not code. The data infrastructure exists (`tb_calibration_context`, `tb_session_delta`, `tb_calibration_baselines_history`). The reconstruction residual now adds the calibration-vs-journal residual gap. Write this up as a standalone methodological contribution or weave it into the Closing Window paper.
-
-### MEDIUM: PE spectrum fingerprinting (Potential #5)
-
-PE spectrum (orders 3-7) residual is already stored as `residual_pe_spectrum` JSONB in the reconstruction table. The ghost's timing synthesis operates at the individual-event level, not the multi-scale structure level.
-
-**Work needed:** Visualize per-order residuals across sessions. The spectral shape of the residual is a higher-dimensional cognitive fingerprint. Observatory panel showing 5 lines (one per order) over time.
-
----
-
-### LARGER: Adaptive cognitive challenge protocol (Potential #6)
-
-Question generation already classifies complexity and adjusts difficulty (Bjork & Bjork). Track the relationship between question difficulty and response signal richness (residual magnitude, PE complexity, semantic depth) to build a dose-response curve for cognitive engagement.
-
-**Work needed:** Extend `libGenerate.ts` to log difficulty classification in `tb_prompt_traces`. Build observatory panel correlating difficulty with residual magnitude. This turns Alice from a measurement instrument into a cognitive training instrument.
-
-### LARGER: Emotion-behavior coupling as AI detector (Potential #7)
-
-`tb_emotion_behavior_coupling` stores how NRC emotions correlate with behavioral dimensions per person. How your emotions affect your typing is personal and not reproducible by mediated input.
-
-**Work needed:** Compare real emotion-behavior coupling to ghost emotion-behavior coupling. If the ghost shows no coupling (it shouldn't, since its emotional content is random), the coupling itself becomes a construct replacement detector. Surface in observatory + write up for Construct Replacement paper.
-
-### LARGER: Profile-based mediation detection (Potential #8)
-
-`tb_personal_profile` is a complete behavioral biometric template. Incoming keystroke streams diverging from the stored profile could flag construct replacement in real time.
-
-**Work needed:** Real-time comparison layer. On session submission, compute a profile-match score before running the full pipeline. Flag sessions that fall outside N standard deviations of the profile. This is the practical implementation of the Construct Replacement paper's thesis.
-
-### LARGER: Research page live metadata (Potential #9)
-
-The research page argues the theoretical case. The instrument produces data against those arguments. They barely cross-reference.
-
-**Work needed:** API endpoint returning instrument metadata (session count, signal families active, reconstruction convergence status, days of continuous data). Research page pulls this on load. Never surfaces user data, only instrument statistics.
-
-### ONGOING: Longitudinal DFA dataset (Potential #10)
-
-DFA alpha is already captured daily. Over months and years, this becomes the first longitudinal keystroke DFA time series in the literature. No code needed. Just time. The infrastructure is already running.
-
-**Work needed (eventually):** Paper describing the dataset and initial trajectory analysis once sufficient data exists (6+ months of daily entries).
-
----
+The metadata is wired. As new data accumulates and new capabilities come online, the research page will reflect them automatically. No additional code needed unless new metrics are added.
 
 ## Architecture reference
 
 ```
-src/lib/libReconstruction.ts     -- ghost generation + signal comparison
-src/lib/libSignalsNative.ts      -- generateAvatar() + computePerplexity() FFI
-src/lib/libSignalPipeline.ts     -- reconstruction as final pipeline stage
-src/lib/libDb.ts                 -- save/get reconstruction residuals
-src-rs/src/avatar.rs             -- Markov chain + timing synthesis (Rust)
-src-rs/src/lib.rs                -- napi boundary
-db/sql/migrations/005            -- tb_reconstruction_residuals
+src/lib/libReconstruction.ts      -- ghost generation + signal comparison + L2 norm
+src/lib/libSignalsNative.ts       -- generateAvatar() + computePerplexity() FFI
+src/lib/libSignalPipeline.ts      -- reconstruction as final pipeline stage
+src/lib/libDb.ts                  -- save/get reconstruction residuals
+src/scripts/backfill-reconstruction.ts -- backfill all existing sessions
+src/pages/observatory/ghost.astro -- Ghost in the Shell observatory page
+src/pages/api/observatory/ghost.ts     -- ghost data API
+src/pages/api/instrument-status.ts     -- research page metadata API
+src-rs/src/avatar.rs              -- Markov chain + timing synthesis (Rust)
+src-rs/src/lib.rs                 -- napi boundary
+db/sql/migrations/005             -- tb_reconstruction_residuals
+db/sql/migrations/006             -- question_source_id column
 ```
 
-### Data flow
+## Key design decisions
 
-```
-Session submission (journal or calibration)
-  |
-  v
-Signal pipeline (dynamical -> motor -> semantic -> process -> cross-session)
-  |
-  v
-Profile update (rolling behavioral aggregate)
-  |
-  v
-Ghost generation (same question, same profile, Markov + motor timing)
-  |
-  v
-Ghost signal computation (dynamical, motor, semantic on ghost stream/text)
-  |
-  v
-Residual computation (real - ghost per signal, L2 norms, perplexity delta)
-  |
-  v
-tb_reconstruction_residuals (one row per session, 67 columns)
-```
-
-## Priority order for next session
-
-1. **Backfill script** -- Run reconstruction on all existing sessions. Immediate data.
-2. **Source column** -- Add `question_source_id` to residual table.
-3. **Observatory panels** -- Convergence trajectory, per-family norms, calibration vs journal gap, perplexity comparison.
-4. **Two-scale perplexity panel** -- Trigram vs Markov perplexity divergence.
-5. **PE spectrum visualization** -- Per-order residual heatmap.
-6. Then: paper updates, adaptive challenge, emotion-behavior coupling, mediation detection.
-
-## Key documents
-
-- `GHOST.md` -- Design document explaining the full reconstruction residual system
-- `HIDDEN_UPSIDE.md` -- The original cross-sectional analysis with all 10 potentials
-- `AVATAR.md` -- Avatar engine documentation (updated last session)
-- `papers/option_f_draft.md` -- Reconstruction Validity paper (v2)
+- **Non-finite L2 exclusion**: Infinity TE dominance from avatar is an honest measurement failure. The aggregate norm excludes it, same as null. The per-signal residual preserves the raw value.
+- **Two-scale perplexity**: trigram (character-level, cross-session) and Markov (word-level, reconstruction) are independent measures. Their ratio characterizes the scale at which the person's writing is predictable.
+- **Tautology guard**: Never frame a ghost comparison as a finding when the ghost is decoupled on that dimension by construction. Establish within-person stability of the real signal first.
+- **Raw input logging**: When adding classifiers, always log the raw signal inputs alongside the label. The inputs are the durable asset.

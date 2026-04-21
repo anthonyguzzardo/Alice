@@ -11,7 +11,7 @@ import { logError } from '../../../lib/utlErrorLog.ts';
 
 export const GET: APIRoute = async () => {
   try {
-    // All residual rows joined with question date and source label
+    // All residual rows joined with question date, source, and cross-session perplexity
     const sessions = await sql`
       SELECT
         r.question_id            AS "questionId",
@@ -25,6 +25,7 @@ export const GET: APIRoute = async () => {
         r.real_perplexity        AS "realPerplexity",
         r.avatar_perplexity      AS "avatarPerplexity",
         r.perplexity_residual    AS "perplexityResidual",
+        cs.self_perplexity       AS "selfPerplexity",
         r.residual_pe_spectrum   AS "peSpectrumResidual",
         r.real_pe_spectrum       AS "peSpectrumReal",
         r.avatar_pe_spectrum     AS "peSpectrumAvatar",
@@ -33,6 +34,8 @@ export const GET: APIRoute = async () => {
         r.residual_rqa_determinism      AS "resRQADet",
         r.residual_rqa_laminarity       AS "resRQALam",
         r.residual_te_dominance         AS "resTEDom",
+        r.real_te_dominance             AS "realTEDom",
+        r.avatar_te_dominance           AS "avatarTEDom",
         r.residual_sample_entropy       AS "resSampEn",
         r.residual_motor_jerk           AS "resJerk",
         r.residual_lapse_rate           AS "resLapse",
@@ -51,6 +54,7 @@ export const GET: APIRoute = async () => {
         r.dttm_created_utc       AS "createdAt"
       FROM tb_reconstruction_residuals r
       LEFT JOIN tb_questions q ON r.question_id = q.question_id
+      LEFT JOIN tb_cross_session_signals cs ON r.question_id = cs.question_id
       ORDER BY COALESCE(q.scheduled_for, r.dttm_created_utc::date) ASC
     `;
 
@@ -65,6 +69,20 @@ export const GET: APIRoute = async () => {
 
     const latest = sessions.length > 0 ? sessions[sessions.length - 1] : null;
 
+    // TE dominance stability (finite values only)
+    const finiteTE = (sessions as any[])
+      .map((s: any) => s.resTEDom)
+      .filter((v: any) => v != null && Number.isFinite(v));
+    const teMean = finiteTE.length > 0
+      ? finiteTE.reduce((a: number, b: number) => a + b, 0) / finiteTE.length
+      : null;
+    const teStdDev = finiteTE.length > 1 && teMean != null
+      ? Math.sqrt(finiteTE.reduce((s: number, v: number) => s + (v - teMean) ** 2, 0) / (finiteTE.length - 1))
+      : null;
+    const teCV = teMean != null && teStdDev != null && Math.abs(teMean) > 0.001
+      ? teStdDev / Math.abs(teMean)
+      : null;
+
     const summary = {
       count: sessions.length,
       journalCount: journalSessions.length,
@@ -75,6 +93,13 @@ export const GET: APIRoute = async () => {
       latestTotalL2: (latest as any)?.totalL2 ?? null,
       avgRealPerplexity: avg(sessions as any[], 'realPerplexity'),
       avgAvatarPerplexity: avg(sessions as any[], 'avatarPerplexity'),
+      avgSelfPerplexity: avg(sessions as any[], 'selfPerplexity'),
+      te: {
+        finiteCount: finiteTE.length,
+        mean: teMean,
+        stdDev: teStdDev,
+        cv: teCV,
+      },
     };
 
     return new Response(JSON.stringify({ sessions, summary }), {

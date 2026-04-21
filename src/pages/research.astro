@@ -517,18 +517,29 @@ import PublicLayout from '../layouts/layPublic.astro';
       <div class="r-residual-card">
         <span class="r-residual-type">Motor residual</span>
         <span class="r-residual-expected">Expected: small</span>
+        <span class="r-residual-measured" id="measured-motor"></span>
         <p>Timing synthesis draws from the same ex-Gaussian and digraph distributions the instrument fits. Motor fidelity should converge within 15-20 sessions as the profile stabilizes.</p>
       </div>
       <div class="r-residual-card">
         <span class="r-residual-type">Content residual</span>
         <span class="r-residual-expected">Expected: decreasing</span>
+        <span class="r-residual-measured" id="measured-content"></span>
         <p>The Markov chain converges on the person's vocabulary and transitions as the corpus grows. Content fidelity improves monotonically. The rate of convergence characterizes how regular or context-dependent the person's language is.</p>
       </div>
       <div class="r-residual-card r-residual-card-key">
         <span class="r-residual-type">Cognitive residual</span>
         <span class="r-residual-expected">Expected: persistent</span>
+        <span class="r-residual-measured" id="measured-cognitive"></span>
         <p>The reconstruction cannot produce the coupling between what is being written and how it is being written. This residual persists regardless of corpus size. It IS the cognitive engagement that builds cognitive reserve, that AI mediation replaces, and that timing-only instruments cannot detect.</p>
       </div>
+    </div>
+
+    <div class="r-instrument-strip" id="instrument-strip" style="display: none;">
+      <span class="r-instrument-label">Instrument status</span>
+      <span class="r-instrument-stat" id="strip-days"></span>
+      <span class="r-instrument-stat" id="strip-sessions"></span>
+      <span class="r-instrument-stat" id="strip-families"></span>
+      <span class="r-instrument-stat" id="strip-residuals"></span>
     </div>
 
     <p>This framework also provides a direct empirical response to <a class="r-cite" href="https://arxiv.org/abs/2601.17280" target="_blank" rel="noopener">Condrey (2026a)</a>, who proved that keystroke timing alone cannot distinguish composition from transcription. The reconstruction is timing-perfect but meaning-absent. If the instrument's full signal set (including process and revision signals) can distinguish its own reconstruction from real sessions, it captures something beyond timing. It captures the content-process binding that Condrey's result says timing-only instruments cannot detect.</p>
@@ -926,6 +937,46 @@ import PublicLayout from '../layouts/layPublic.astro';
     ctx.lineTo(pad.left + barW * 0.7, axisY + 5);
     ctx.stroke();
   })();
+
+  // Instrument status: fetch live metadata and populate residual cards + strip
+  fetch('/api/instrument-status')
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) return;
+
+      const c = data.convergence;
+
+      // Populate measured values on residual cards
+      const motorEl = document.getElementById('measured-motor');
+      if (motorEl && c.motorL2 != null) {
+        motorEl.textContent = `Measured: L2 = ${c.motorL2} (n=${data.reconstructionResiduals})`;
+      }
+
+      const contentEl = document.getElementById('measured-content');
+      if (contentEl && c.perpResidual != null) {
+        contentEl.textContent = `Measured: perplexity gap = ${c.perpResidual} (n=${data.reconstructionResiduals})`;
+      }
+
+      const cogEl = document.getElementById('measured-cognitive');
+      if (cogEl && c.totalL2 != null) {
+        cogEl.textContent = `Measured: total L2 = ${c.totalL2} (n=${data.reconstructionResiduals})`;
+      }
+
+      // Populate instrument strip
+      const strip = document.getElementById('instrument-strip');
+      if (strip) {
+        strip.style.display = 'flex';
+        const days = document.getElementById('strip-days');
+        if (days) days.textContent = `${data.daysActive} days active`;
+        const sess = document.getElementById('strip-sessions');
+        if (sess) sess.textContent = `${data.sessions} sessions`;
+        const fam = document.getElementById('strip-families');
+        if (fam) fam.textContent = `${data.signalFamilies.active}/${data.signalFamilies.total} signal families`;
+        const res = document.getElementById('strip-residuals');
+        if (res) res.textContent = `${data.reconstructionResiduals} reconstruction residuals`;
+      }
+    })
+    .catch(() => {});
 </script>
 
 <style is:global>
@@ -1616,6 +1667,43 @@ import PublicLayout from '../layouts/layPublic.astro';
     font-size: 0.65rem;
     color: var(--text-faint);
     letter-spacing: 0.04em;
+  }
+
+  .r-residual-measured {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--accent);
+    letter-spacing: 0.04em;
+  }
+
+  .r-residual-measured:empty {
+    display: none;
+  }
+
+  .r-instrument-strip {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    padding: 0.9rem 1.25rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin: 1.5rem 0 2rem;
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+  }
+
+  .r-instrument-label {
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-faint);
+    font-size: 0.6rem;
+  }
+
+  .r-instrument-stat {
+    font-variant-numeric: tabular-nums;
   }
 
   .r-residual-card p {

@@ -610,15 +610,16 @@ import '../../styles/styObservatory.css';
         `;
 
         // ── Perplexity comparison ────────────────────────────────────
+        const hasTrigram = sessions.some(s => s.selfPerplexity != null);
         html += `
-          <div class="section-label">Perplexity · real vs ghost (Markov model)</div>
+          <div class="section-label">Perplexity · two independent measures</div>
           <div class="chart-row">
             <div class="chart-panel">
-              <h3>Perplexity over time</h3>
+              <h3>Markov perplexity · real vs ghost</h3>
               <canvas class="ghost-chart tall" id="chart-perplexity"></canvas>
               <div class="legend">
-                <span><span class="legend-dot" style="background: var(--accent);"></span> real</span>
-                <span><span class="legend-dot" style="background: var(--negative);"></span> ghost</span>
+                <span><span class="legend-dot" style="background: var(--accent);"></span> real (word-level)</span>
+                <span><span class="legend-dot" style="background: var(--negative);"></span> ghost (word-level)</span>
               </div>
             </div>
             <div class="chart-panel">
@@ -627,6 +628,30 @@ import '../../styles/styObservatory.css';
               <div class="latest-reading">latest: <span class="val">${fmtVal(latest.perplexityResidual, 1)}</span></div>
             </div>
           </div>
+          ${hasTrigram ? `
+          <div class="chart-row">
+            <div class="chart-panel">
+              <h3>Two-scale divergence · trigram vs Markov</h3>
+              <canvas class="ghost-chart tall" id="chart-two-scale"></canvas>
+              <div class="legend">
+                <span><span class="legend-dot" style="background: var(--accent);"></span> Markov (word-level, real)</span>
+                <span><span class="legend-dot" style="background: var(--positive);"></span> trigram (char-level, cross-session)</span>
+              </div>
+              <div class="latest-reading">
+                markov: <span class="val">${fmtVal(latest.realPerplexity, 1)}</span>
+                · trigram: <span class="val">${fmtVal(latest.selfPerplexity, 1)}</span>
+                · ratio: <span class="val">${latest.realPerplexity && latest.selfPerplexity ? fmtVal(latest.realPerplexity / latest.selfPerplexity, 2) : '—'}x</span>
+              </div>
+            </div>
+            <div class="chart-panel">
+              <h3>Markov / trigram ratio over time</h3>
+              <canvas class="ghost-chart tall" id="chart-perp-ratio"></canvas>
+              <div class="latest-reading">
+                avg ratio: <span class="val">${fmtVal(summary.avgRealPerplexity && summary.avgSelfPerplexity ? summary.avgRealPerplexity / summary.avgSelfPerplexity : null, 2)}x</span>
+              </div>
+            </div>
+          </div>
+          ` : ''}
         `;
 
         // ── PE spectrum residual ─────────────────────────────────────
@@ -643,6 +668,48 @@ import '../../styles/styObservatory.css';
                 <span><span class="legend-dot" style="background: #7a5a44;"></span> order 5</span>
                 <span><span class="legend-dot" style="background: #6b8e6b;"></span> order 6</span>
                 <span><span class="legend-dot" style="background: #7a5a7a;"></span> order 7</span>
+              </div>
+            </div>
+          `;
+        }
+
+        // ── TE dominance stability ─────────────────────────────────
+        const teFinite = sessions.filter(s => s.resTEDom != null && Number.isFinite(s.resTEDom));
+        if (teFinite.length > 0) {
+          html += `
+            <div class="section-label">TE dominance · causal motor coupling residual</div>
+            <div class="chart-row">
+              <div class="chart-panel">
+                <h3>Residual TE dominance across sessions</h3>
+                <canvas class="ghost-chart tall" id="chart-te-residual"></canvas>
+                <div class="latest-reading">
+                  finite readings: <span class="val">${teFinite.length}/${sessions.length}</span>
+                </div>
+              </div>
+              <div class="chart-panel">
+                <h3>Real TE dominance (hold→flight causality)</h3>
+                <canvas class="ghost-chart tall" id="chart-te-real"></canvas>
+                <div class="latest-reading">
+                  latest: <span class="val">${fmtVal(latest.realTEDom, 3)}</span>
+                </div>
+              </div>
+            </div>
+            <div class="kpi-row" style="margin: 0.75rem 0 0.5rem;">
+              <div class="kpi">
+                <div class="k">residual mean</div>
+                <div class="v">${fmtVal(summary.te.mean, 3)}</div>
+              </div>
+              <div class="kpi">
+                <div class="k">residual std dev</div>
+                <div class="v">${fmtVal(summary.te.stdDev, 3)}</div>
+              </div>
+              <div class="kpi">
+                <div class="k">coefficient of variation</div>
+                <div class="v">${summary.te.cv != null ? fmtVal(summary.te.cv, 2) : '—'}</div>
+              </div>
+              <div class="kpi">
+                <div class="k">finite / total</div>
+                <div class="v">${teFinite.length} / ${sessions.length}</div>
               </div>
             </div>
           `;
@@ -763,14 +830,14 @@ import '../../styles/styObservatory.css';
         );
 
         // PE spectrum
+        const spectrumData = sessions.map(s => {
+          if (!s.peSpectrumResidual) return [null, null, null, null, null];
+          const arr = typeof s.peSpectrumResidual === 'string'
+            ? JSON.parse(s.peSpectrumResidual)
+            : s.peSpectrumResidual;
+          return Array.isArray(arr) ? arr : [null, null, null, null, null];
+        });
         if (hasSpectrum) {
-          const spectrumData = sessions.map(s => {
-            if (!s.peSpectrumResidual) return [null, null, null, null, null];
-            const arr = typeof s.peSpectrumResidual === 'string'
-              ? JSON.parse(s.peSpectrumResidual)
-              : s.peSpectrumResidual;
-            return Array.isArray(arr) ? arr : [null, null, null, null, null];
-          });
           drawSpectrumChart(
             document.getElementById('chart-spectrum'),
             spectrumData,
@@ -778,27 +845,79 @@ import '../../styles/styObservatory.css';
           );
         }
 
-        // Resize handler
+        // Two-scale perplexity
+        if (hasTrigram) {
+          drawDualChart(
+            document.getElementById('chart-two-scale'),
+            sessions.map(s => s.realPerplexity),
+            sessions.map(s => s.selfPerplexity),
+            'var(--accent)',
+            'var(--positive)',
+            labels
+          );
+          // Ratio chart
+          const perpRatio = sessions.map(s =>
+            (s.realPerplexity != null && s.selfPerplexity != null && s.selfPerplexity > 0)
+              ? s.realPerplexity / s.selfPerplexity
+              : null
+          );
+          drawRawChart(
+            document.getElementById('chart-perp-ratio'),
+            perpRatio,
+            'var(--warn)',
+            labels
+          );
+        }
+
+        // TE dominance
+        if (teFinite.length > 0) {
+          // Residual TE (only finite values, nulls for non-finite)
+          const teResidualSafe = sessions.map(s =>
+            (s.resTEDom != null && Number.isFinite(s.resTEDom)) ? s.resTEDom : null
+          );
+          drawRawChart(
+            document.getElementById('chart-te-residual'),
+            teResidualSafe,
+            'var(--warn)',
+            labels
+          );
+          // Real TE dominance
+          const teRealSafe = sessions.map(s =>
+            (s.realTEDom != null && Number.isFinite(s.realTEDom)) ? s.realTEDom : null
+          );
+          drawRawChart(
+            document.getElementById('chart-te-real'),
+            teRealSafe,
+            'var(--accent)',
+            labels
+          );
+        }
+
+        // ── Redraw all on resize ─────────────────────────────────────
+        function drawAll() {
+          drawRawChart(document.getElementById('chart-convergence'), sessions.map(s => s.totalL2), 'var(--accent)', labels);
+          drawRawChart(document.getElementById('chart-dyn'), sessions.map(s => s.dynL2), 'var(--warn)', labels);
+          drawRawChart(document.getElementById('chart-mot'), sessions.map(s => s.motL2), 'var(--negative)', labels);
+          drawRawChart(document.getElementById('chart-sem'), sessions.map(s => s.semL2), 'var(--semantic)', labels);
+          drawSplitChart(document.getElementById('chart-split'), journalVals, journalIdx, calVals, calIdx, sessions.length, labels);
+          drawDualChart(document.getElementById('chart-perplexity'), sessions.map(s => s.realPerplexity), sessions.map(s => s.avatarPerplexity), 'var(--accent)', 'var(--negative)', labels);
+          drawRawChart(document.getElementById('chart-perp-residual'), sessions.map(s => s.perplexityResidual), 'var(--negative)', labels);
+          if (hasSpectrum) drawSpectrumChart(document.getElementById('chart-spectrum'), spectrumData, labels);
+          if (hasTrigram) {
+            drawDualChart(document.getElementById('chart-two-scale'), sessions.map(s => s.realPerplexity), sessions.map(s => s.selfPerplexity), 'var(--accent)', 'var(--positive)', labels);
+            const perpRatio = sessions.map(s => (s.realPerplexity != null && s.selfPerplexity != null && s.selfPerplexity > 0) ? s.realPerplexity / s.selfPerplexity : null);
+            drawRawChart(document.getElementById('chart-perp-ratio'), perpRatio, 'var(--warn)', labels);
+          }
+          if (teFinite.length > 0) {
+            drawRawChart(document.getElementById('chart-te-residual'), sessions.map(s => (s.resTEDom != null && Number.isFinite(s.resTEDom)) ? s.resTEDom : null), 'var(--warn)', labels);
+            drawRawChart(document.getElementById('chart-te-real'), sessions.map(s => (s.realTEDom != null && Number.isFinite(s.realTEDom)) ? s.realTEDom : null), 'var(--accent)', labels);
+          }
+        }
+
         let resizeTimer;
         window.addEventListener('resize', () => {
           clearTimeout(resizeTimer);
-          resizeTimer = setTimeout(() => {
-            drawRawChart(document.getElementById('chart-convergence'), sessions.map(s => s.totalL2), 'var(--accent)', labels);
-            drawRawChart(document.getElementById('chart-dyn'), sessions.map(s => s.dynL2), 'var(--warn)', labels);
-            drawRawChart(document.getElementById('chart-mot'), sessions.map(s => s.motL2), 'var(--negative)', labels);
-            drawRawChart(document.getElementById('chart-sem'), sessions.map(s => s.semL2), 'var(--semantic)', labels);
-            drawSplitChart(document.getElementById('chart-split'), journalVals, journalIdx, calVals, calIdx, sessions.length, labels);
-            drawDualChart(document.getElementById('chart-perplexity'), sessions.map(s => s.realPerplexity), sessions.map(s => s.avatarPerplexity), 'var(--accent)', 'var(--negative)', labels);
-            drawRawChart(document.getElementById('chart-perp-residual'), sessions.map(s => s.perplexityResidual), 'var(--negative)', labels);
-            if (hasSpectrum) {
-              const spectrumData = sessions.map(s => {
-                if (!s.peSpectrumResidual) return [null, null, null, null, null];
-                const arr = typeof s.peSpectrumResidual === 'string' ? JSON.parse(s.peSpectrumResidual) : s.peSpectrumResidual;
-                return Array.isArray(arr) ? arr : [null, null, null, null, null];
-              });
-              drawSpectrumChart(document.getElementById('chart-spectrum'), spectrumData, labels);
-            }
-          }, 150);
+          resizeTimer = setTimeout(drawAll, 150);
         });
 
       }).catch(err => {
