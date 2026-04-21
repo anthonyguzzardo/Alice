@@ -47,6 +47,7 @@ export interface MotorSignals {
   exGaussianSigma: number | null;
   tauProportion: number | null;
   adjacentHoldTimeCov: number | null;
+  holdFlightRankCorr: number | null;
 }
 
 export interface RBurstEntry {
@@ -84,6 +85,7 @@ export interface AvatarResult {
   markovOrder: number;
   chainSize: number;
   iBurstCount: number;
+  variant: number;
 }
 
 // ─── Null coercion helpers ────────────────────────────────────────
@@ -128,6 +130,7 @@ interface NativeModule {
     exGaussianSigma: number | null;
     tauProportion: number | null;
     adjacentHoldTimeCov: number | null;
+    holdFlightRankCorr: number | null;
   };
   computeProcessSignals(eventLogJson: string): {
     pauseWithinWord: number | null;
@@ -157,6 +160,7 @@ interface NativeModule {
     topic: string,
     profileJson: string,
     maxWords: number,
+    variant: number,
   ): {
     text: string;
     delays: number[];
@@ -165,6 +169,7 @@ interface NativeModule {
     order: number;
     chainSize: number;
     iBurstCount: number;
+    variant: number;
   };
   computeProfileDistance(
     valuesJson: string,
@@ -259,6 +264,7 @@ export function computeMotorSignals(
       exGaussianSigma: n(result.exGaussianSigma),
       tauProportion: n(result.tauProportion),
       adjacentHoldTimeCov: n(result.adjacentHoldTimeCov),
+      holdFlightRankCorr: n(result.holdFlightRankCorr),
     };
   } catch (err) {
     logError('signalsNative.motor', err, { eventCount: stream.length });
@@ -321,13 +327,14 @@ export function generateAvatar(
   topic: string,
   profileJson: string,
   maxWords: number,
+  variant: number = 1,
 ): AvatarResult | null {
   if (!native) return null;
 
   try {
     const t0 = performance.now();
-    const result = native.generateAvatar(corpusJson, topic, profileJson, maxWords);
-    console.log(`[signals] rust avatar: ${(performance.now() - t0).toFixed(1)}ms (${result.wordCount} words)`);
+    const result = native.generateAvatar(corpusJson, topic, profileJson, maxWords, variant);
+    console.log(`[signals] rust avatar v${variant}: ${(performance.now() - t0).toFixed(1)}ms (${result.wordCount} words)`);
     if (!result.text) return null;
     const stream: KeystrokeEvent[] = result.keystrokeStreamJson
       ? JSON.parse(result.keystrokeStreamJson) as KeystrokeEvent[]
@@ -340,6 +347,7 @@ export function generateAvatar(
       markovOrder: result.order,
       chainSize: result.chainSize,
       iBurstCount: result.iBurstCount,
+      variant: result.variant,
     };
   } catch (err) {
     logError('signalsNative.avatar', err);

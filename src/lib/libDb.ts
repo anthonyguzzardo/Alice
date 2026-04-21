@@ -1848,6 +1848,7 @@ export interface MotorSignalRow {
   ex_gaussian_sigma: number | null;
   tau_proportion: number | null;
   adjacent_hold_time_cov: number | null;
+  hold_flight_rank_corr: number | null;
 }
 
 export async function saveMotorSignals(questionId: number, s: Omit<MotorSignalRow, 'motor_signal_id' | 'question_id'>): Promise<number> {
@@ -1857,13 +1858,13 @@ export async function saveMotorSignals(questionId: number, s: Omit<MotorSignalRo
        motor_jerk, lapse_rate, tempo_drift,
        iki_compression_ratio, digraph_latency_json,
        ex_gaussian_tau, ex_gaussian_mu, ex_gaussian_sigma,
-       tau_proportion, adjacent_hold_time_cov
+       tau_proportion, adjacent_hold_time_cov, hold_flight_rank_corr
     ) VALUES (
       ${questionId}, ${s.sample_entropy}, ${s.iki_autocorrelation_json},
       ${s.motor_jerk}, ${s.lapse_rate}, ${s.tempo_drift},
       ${s.iki_compression_ratio}, ${s.digraph_latency_json},
       ${s.ex_gaussian_tau}, ${s.ex_gaussian_mu}, ${s.ex_gaussian_sigma},
-      ${s.tau_proportion}, ${s.adjacent_hold_time_cov}
+      ${s.tau_proportion}, ${s.adjacent_hold_time_cov}, ${s.hold_flight_rank_corr}
     )
     ON CONFLICT (question_id) DO NOTHING
     RETURNING motor_signal_id
@@ -2010,6 +2011,7 @@ export async function getCrossSessionSignals(questionId: number): Promise<CrossS
 // ----------------------------------------------------------------------------
 
 export interface ReconstructionResidualInput {
+  adversary_variant_id: number;
   question_source_id: number | null;
   avatar_text: string | null;
   avatar_word_count: number | null;
@@ -2092,6 +2094,7 @@ export async function saveReconstructionResidual(
   const [row] = await sql`
     INSERT INTO tb_reconstruction_residuals (
        question_id
+      ,adversary_variant_id
       ,question_source_id
       ,avatar_text, avatar_word_count, avatar_markov_order, avatar_chain_size
       ,avatar_i_burst_count, real_word_count, corpus_size, session_count
@@ -2119,6 +2122,7 @@ export async function saveReconstructionResidual(
       ,residual_count
     ) VALUES (
        ${questionId}
+      ,${s.adversary_variant_id}
       ,${s.question_source_id}
       ,${s.avatar_text}, ${s.avatar_word_count}, ${s.avatar_markov_order}, ${s.avatar_chain_size}
       ,${s.avatar_i_burst_count}, ${s.real_word_count}, ${s.corpus_size}, ${s.session_count}
@@ -2145,14 +2149,17 @@ export async function saveReconstructionResidual(
       ,${s.dynamical_l2_norm}, ${s.motor_l2_norm}, ${s.semantic_l2_norm}, ${s.total_l2_norm}
       ,${s.residual_count}
     )
-    ON CONFLICT (question_id) DO NOTHING
+    ON CONFLICT (question_id, adversary_variant_id) DO NOTHING
     RETURNING reconstruction_residual_id
   `;
   return (row as { reconstruction_residual_id: number })?.reconstruction_residual_id ?? 0;
 }
 
-export async function getReconstructionResidual(questionId: number): Promise<ReconstructionResidualInput | null> {
-  const rows = await sql`SELECT * FROM tb_reconstruction_residuals WHERE question_id = ${questionId}`;
+export async function getReconstructionResidual(questionId: number, variantId: number = 1): Promise<ReconstructionResidualInput | null> {
+  const rows = await sql`
+    SELECT * FROM tb_reconstruction_residuals
+    WHERE question_id = ${questionId} AND adversary_variant_id = ${variantId}
+  `;
   return (rows[0] as ReconstructionResidualInput) ?? null;
 }
 

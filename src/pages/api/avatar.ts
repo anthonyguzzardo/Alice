@@ -29,7 +29,7 @@ export const POST: APIRoute = async ({ request }) => {
     });
   }
 
-  const body = await parseBody<{ topic: string; maxWords?: number }>(request);
+  const body = await parseBody<{ topic: string; maxWords?: number; variant?: number }>(request);
   if (!body?.topic?.trim()) {
     return new Response(JSON.stringify({ error: 'Missing topic' }), {
       status: 400,
@@ -62,7 +62,10 @@ export const POST: APIRoute = async ({ request }) => {
            small_del_rate_mean, large_del_rate_mean,
            revision_timing_bias, r_burst_ratio_mean,
            rburst_mean_size, rburst_leading_edge_pct,
-           session_count
+           session_count,
+           iki_autocorrelation_lag1_mean, hold_flight_rank_correlation,
+           hold_time_mean_mean, hold_time_mean_std,
+           flight_time_mean_mean, flight_time_mean_std
     FROM tb_personal_profile
     LIMIT 1
   `;
@@ -88,9 +91,16 @@ export const POST: APIRoute = async ({ request }) => {
     r_burst_ratio: p.r_burst_ratio_mean ?? null,
     rburst_mean_size: p.rburst_mean_size ?? null,
     rburst_leading_edge_pct: p.rburst_leading_edge_pct ?? null,
+    iki_autocorrelation_lag1: p.iki_autocorrelation_lag1_mean ?? null,
+    hold_flight_rank_correlation: p.hold_flight_rank_correlation ?? null,
+    hold_time_mean: p.hold_time_mean_mean ?? null,
+    hold_time_std: p.hold_time_mean_std ?? null,
+    flight_time_mean: p.flight_time_mean_mean ?? null,
+    flight_time_std: p.flight_time_mean_std ?? null,
   });
 
   const maxWords = body.maxWords ?? 150;
+  const variant = body.variant ?? 1;
 
   // Call Rust
   const result = nativeModule.generateAvatar(
@@ -98,6 +108,7 @@ export const POST: APIRoute = async ({ request }) => {
     body.topic.trim(),
     profileJson,
     maxWords,
+    variant,
   );
 
   // Rust returns AvatarOutput::default() when SignalResult is an error
@@ -116,6 +127,7 @@ export const POST: APIRoute = async ({ request }) => {
     markovOrder: result.order,
     chainSize: result.chainSize,
     iBurstCount: result.iBurstCount,
+    variant: result.variant,
     sessionCount: p.session_count ?? 0,
     corpusSize: textRows.length,
   }), {

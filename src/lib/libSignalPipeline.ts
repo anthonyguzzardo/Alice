@@ -123,6 +123,7 @@ export async function computeAndPersistDerivedSignals(questionId: number): Promi
         ex_gaussian_sigma: ms.exGaussianSigma,
         tau_proportion: ms.tauProportion,
         adjacent_hold_time_cov: ms.adjacentHoldTimeCov,
+        hold_flight_rank_corr: ms.holdFlightRankCorr,
       });
     } catch (err) {
       logError('signal-pipeline.motor', err, { questionId });

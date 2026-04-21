@@ -33,6 +33,7 @@ pub(crate) struct MotorResult {
     pub(crate) digraph_latency_profile: Option<String>,
     pub(crate) ex_gaussian: Option<ExGaussianValues>,
     pub(crate) adjacent_hold_time_cov: Option<f64>,
+    pub(crate) hold_flight_rank_corr: Option<f64>,
 }
 
 // ─── Sample Entropy helpers ───────────────────────────────────────
@@ -493,6 +494,87 @@ fn adjacent_hold_time_cov(stream: &[KeystrokeEvent]) -> SignalResult<f64> {
     Ok(cov / (n as f64 * sx * sy))
 }
 
+// ─── Hold-Flight Rank Correlation (Spearman) ─────────────────────
+//
+// Spearman rank correlation between hold times and flight times for
+// paired keystroke events. Measures the strength of motor-cognitive
+// coupling: how much does pressing a key predict the gap to the next.
+// Used by the Gaussian copula adversary variant to synthesize joint
+// hold/flight distributions.
+//
+// Spearman rho = Pearson correlation of the ranks.
+// Citation: Spearman (1904); Killourhy & Maxion (2009) for keystroke context.
+
+/// Assign fractional ranks to a slice, handling ties via mean rank.
+fn fractional_ranks(data: &[f64]) -> Vec<f64> {
+    let n = data.len();
+    let mut indexed: Vec<(usize, f64)> = data.iter().copied().enumerate().collect();
+    indexed.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    let mut ranks = vec![0.0_f64; n];
+    let mut i = 0;
+    while i < n {
+        let mut j = i;
+        while j < n && (indexed[j].1 - indexed[i].1).abs() < f64::EPSILON {
+            j += 1;
+        }
+        // Mean rank for tied group: average of positions (i+1) through j
+        let mean_rank = (i + 1 + j) as f64 / 2.0;
+        for item in indexed.iter().take(j).skip(i) {
+            ranks[item.0] = mean_rank;
+        }
+        i = j;
+    }
+    ranks
+}
+
+/// Spearman rank correlation between paired hold times and flight times.
+///
+/// For each keystroke event i (i > 0), pairs the hold time of event i
+/// with the flight time from event i-1 to event i. Requires both to
+/// be valid (hold: 0-2000ms, flight: 0-5000ms).
+fn hold_flight_rank_correlation(stream: &[KeystrokeEvent]) -> SignalResult<f64> {
+    let mut holds = Vec::with_capacity(stream.len());
+    let mut flights = Vec::with_capacity(stream.len());
+
+    for i in 1..stream.len() {
+        let ht = stream[i].key_up_ms - stream[i].key_down_ms;
+        let ft = stream[i].key_down_ms - stream[i - 1].key_up_ms;
+        if ht > 0.0 && ht < 2000.0 && ft > 0.0 && ft < 5000.0 {
+            holds.push(ht);
+            flights.push(ft);
+        }
+    }
+
+    if holds.len() < 30 {
+        return Err(SignalError::InsufficientData {
+            needed: 30,
+            got: holds.len(),
+        });
+    }
+
+    let hold_ranks = fractional_ranks(&holds);
+    let flight_ranks = fractional_ranks(&flights);
+
+    let n = hold_ranks.len();
+    let mh = mean(&hold_ranks);
+    let mf = mean(&flight_ranks);
+    let sh = std_dev(&hold_ranks, Some(mh));
+    let sf = std_dev(&flight_ranks, Some(mf));
+
+    if sh == 0.0 || sf == 0.0 {
+        return Err(SignalError::ZeroVariance { len: n });
+    }
+
+    let cov: f64 = hold_ranks
+        .iter()
+        .zip(flight_ranks.iter())
+        .map(|(h, f)| (h - mh) * (f - mf))
+        .sum();
+
+    Ok(cov / (n as f64 * sh * sf))
+}
+
 // ─── Public API ───────────────────────────────────────────────────
 
 pub(crate) fn compute(stream: &[KeystrokeEvent], total_duration_ms: f64) -> MotorResult {
@@ -509,6 +591,7 @@ pub(crate) fn compute(stream: &[KeystrokeEvent], total_duration_ms: f64) -> Moto
         digraph_latency_profile: digraph_latency_profile(stream),
         ex_gaussian: ex_gaussian_fit(&flights).ok(),
         adjacent_hold_time_cov: adjacent_hold_time_cov(stream).ok(),
+        hold_flight_rank_corr: hold_flight_rank_correlation(stream).ok(),
     }
 }
 
@@ -642,5 +725,82 @@ mod tests {
             rate.abs() < 1e-10,
             "Lapse rate should be 0 when no values exceed threshold, got {rate}"
         );
+    }
+
+    #[test]
+    fn hold_flight_rank_corr_perfect_positive() {
+        // Construct stream where both hold and flight increase together.
+        // hold[i] = key_up[i] - key_down[i], flight[i] = key_down[i] - key_up[i-1]
+        // Both should increase monotonically for positive Spearman rho.
+        let mut stream = Vec::with_capacity(50);
+        let mut time = 0.0;
+        for i in 0..50 {
+            let hold = 50.0 + (i as f64) * 2.0; // increasing hold
+            let flight = if i == 0 { 0.0 } else { 50.0 + (i as f64) * 3.0 }; // increasing flight
+            let key_down = time + flight;
+            let key_up = key_down + hold;
+            stream.push(KeystrokeEvent {
+                character: "a".to_string(),
+                key_down_ms: key_down,
+                key_up_ms: key_up,
+            });
+            time = key_up;
+        }
+        let rho = hold_flight_rank_correlation(&stream).unwrap();
+        assert!(
+            rho > 0.8,
+            "Spearman rho for co-increasing series should be > 0.8, got {rho}"
+        );
+    }
+
+    #[test]
+    fn hold_flight_rank_corr_bounded() {
+        // Any valid result must be in [-1, 1]
+        let stream: Vec<KeystrokeEvent> = (0..60)
+            .map(|i| {
+                let base = i as f64 * 150.0;
+                let hold = 60.0 + ((i as f64) * 0.7).sin() * 30.0;
+                KeystrokeEvent {
+                    character: "a".to_string(),
+                    key_down_ms: base,
+                    key_up_ms: base + hold,
+                }
+            })
+            .collect();
+        let rho = hold_flight_rank_correlation(&stream).unwrap();
+        assert!(
+            (-1.0..=1.0).contains(&rho),
+            "Spearman rho must be in [-1, 1], got {rho}"
+        );
+    }
+
+    #[test]
+    fn hold_flight_rank_corr_insufficient_data() {
+        let stream: Vec<KeystrokeEvent> = (0..10)
+            .map(|i| KeystrokeEvent {
+                character: "a".to_string(),
+                key_down_ms: i as f64 * 200.0,
+                key_up_ms: i as f64 * 200.0 + 80.0,
+            })
+            .collect();
+        assert!(matches!(
+            hold_flight_rank_correlation(&stream),
+            Err(SignalError::InsufficientData { .. })
+        ));
+    }
+
+    #[test]
+    fn fractional_ranks_no_ties() {
+        let data = vec![30.0, 10.0, 20.0];
+        let ranks = fractional_ranks(&data);
+        assert_eq!(ranks, vec![3.0, 1.0, 2.0]);
+    }
+
+    #[test]
+    fn fractional_ranks_with_ties() {
+        let data = vec![10.0, 20.0, 20.0, 30.0];
+        let ranks = fractional_ranks(&data);
+        // 20.0 appears at positions 2 and 3, mean rank = 2.5
+        assert_eq!(ranks, vec![1.0, 2.5, 2.5, 4.0]);
     }
 }

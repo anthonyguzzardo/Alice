@@ -1,25 +1,22 @@
 /**
  * Reconstruction Residual Computation
  *
- * After each session (once the personal profile is updated), generates a
- * Markov avatar response for the same question, runs the signal pipeline
- * on the avatar's keystroke stream, and computes per-family deltas.
+ * After each session (once the personal profile is updated), generates
+ * avatar responses for each adversary variant, runs the signal pipeline
+ * on each avatar's keystroke stream, and computes per-family deltas.
  *
  * The residual is what CANNOT be reconstructed from the statistical profile.
  * It is the cognitive signature.
  *
+ * Adversary variants (te_adversary_variants):
+ *   1. Baseline:           Order-2 Markov + independent ex-Gaussian
+ *   2. Conditional Timing: Order-2 Markov + AR(1) conditioned IKI
+ *   3. Copula Motor:       Order-2 Markov + Gaussian copula hold/flight
+ *   4. PPM Text:           Variable-order PPM + independent timing
+ *   5. Full Adversary:     PPM + AR(1) + copula
+ *
  * Requires >= 3 prior entries (Markov chain minimum).
  * Runs AFTER updateProfile() in the signal pipeline.
- *
- * Signal families compared:
- *   Dynamical: PE, DFA, RQA determinism/laminarity, TE dominance
- *   Motor: sample entropy, jerk, lapse rate, tempo drift, ex-Gaussian tau, tau proportion
- *   Semantic: idea density, lexical sophistication, epistemic stance,
- *             integrative complexity, deep cohesion, text compression ratio
- *
- * NOT compared (by design):
- *   Process signals (avatar has no event_log format)
- *   Cross-session signals (compare current-to-prior, not real-to-avatar)
  */
 
 import sql, {
@@ -41,7 +38,11 @@ import {
 import { computeSemanticSignals, type SemanticSignals } from './libSemanticSignals.ts';
 import { logError } from './utlErrorLog.ts';
 
-// ─── Helpers ────────────────────────────────────────────────────────
+// ─── Constants ─────────────────────────────────────────────────────
+
+const ALL_VARIANTS = [1, 2, 3, 4, 5] as const;
+
+// ─── Helpers ───────────────────────────────────────────────────────
 
 function delta(real: number | null | undefined, avatar: number | null | undefined): number | null {
   if (real == null || avatar == null) return null;
@@ -75,80 +76,28 @@ function l2(values: (number | null)[]): number | null {
   return Math.sqrt(valid.reduce((s, v) => s + v * v, 0) / valid.length);
 }
 
-// ─── Main ───────────────────────────────────────────────────────────
+// ─── Per-variant computation ───────────────────────────────────────
 
-export async function computeReconstructionResidual(questionId: number): Promise<void> {
-  // Gate: idempotent
-  if (await getReconstructionResidual(questionId)) return;
+async function computeForVariant(
+  questionId: number,
+  variantId: number,
+  corpusJson: string,
+  questionText: string,
+  questionSourceId: number,
+  realWordCount: number,
+  realText: string,
+  profileJson: string,
+  corpusSize: number,
+  sessionCount: number,
+  realDyn: Awaited<ReturnType<typeof getDynamicalSignals>>,
+  realMot: Awaited<ReturnType<typeof getMotorSignals>>,
+  realSem: Awaited<ReturnType<typeof getSemanticSignals>>,
+): Promise<void> {
+  // Gate: idempotent per variant
+  if (await getReconstructionResidual(questionId, variantId)) return;
 
-  // Fetch corpus (same query as avatar.ts)
-  const textRows = await sql`
-    SELECT r.text
-    FROM tb_responses r
-    JOIN tb_questions q ON r.question_id = q.question_id
-    ORDER BY q.scheduled_for ASC
-  ` as Array<{ text: string }>;
-
-  if (textRows.length < 3) return; // Need minimum corpus for Markov chain
-
-  // Fetch question text + source (topic seed for avatar)
-  const qRows = await sql`SELECT text, question_source_id FROM tb_questions WHERE question_id = ${questionId}`;
-  const qRow = qRows[0] as { text: string; question_source_id: number } | undefined;
-  const questionText = qRow?.text;
-  if (!questionText) return;
-  const questionSourceId = qRow.question_source_id;
-
-  // Fetch real response text + word count
-  const summaryRows = await sql`
-    SELECT s.word_count, r.text AS response_text
-    FROM tb_session_summaries s
-    JOIN tb_responses r ON s.question_id = r.question_id
-    WHERE s.question_id = ${questionId}
-  ` as Array<{ word_count: number | null; response_text: string }>;
-  const realWordCount = summaryRows[0]?.word_count ?? 150;
-  const realText = summaryRows[0]?.response_text;
-  if (!realText) return;
-
-  // Fetch personal profile (same fields as avatar.ts)
-  const profileRows = await sql`
-    SELECT digraph_aggregate_json,
-           ex_gaussian_mu_mean, ex_gaussian_sigma_mean, ex_gaussian_tau_mean,
-           burst_length_mean,
-           pause_between_word_pct, pause_between_sent_pct,
-           first_keystroke_mean,
-           small_del_rate_mean, large_del_rate_mean,
-           revision_timing_bias, r_burst_ratio_mean,
-           rburst_mean_size, rburst_leading_edge_pct,
-           session_count
-    FROM tb_personal_profile
-    LIMIT 1
-  `;
-  const p = profileRows[0] as Record<string, unknown> | undefined;
-  if (!p) return;
-
-  // Build inputs (same construction as avatar.ts lines 72-88)
-  const corpusJson = JSON.stringify(textRows.map(r => r.text));
-  const profileJson = JSON.stringify({
-    digraph: typeof p.digraph_aggregate_json === 'string'
-      ? JSON.parse(p.digraph_aggregate_json as string)
-      : p.digraph_aggregate_json || null,
-    mu: p.ex_gaussian_mu_mean ?? null,
-    sigma: p.ex_gaussian_sigma_mean ?? null,
-    tau: p.ex_gaussian_tau_mean ?? null,
-    burst_length: p.burst_length_mean ?? null,
-    pause_between_pct: p.pause_between_word_pct ?? null,
-    pause_sent_pct: p.pause_between_sent_pct ?? null,
-    first_keystroke: p.first_keystroke_mean ?? null,
-    small_del_rate: p.small_del_rate_mean ?? null,
-    large_del_rate: p.large_del_rate_mean ?? null,
-    revision_timing_bias: p.revision_timing_bias ?? null,
-    r_burst_ratio: p.r_burst_ratio_mean ?? null,
-    rburst_mean_size: p.rburst_mean_size ?? null,
-    rburst_leading_edge_pct: p.rburst_leading_edge_pct ?? null,
-  });
-
-  // Generate avatar for the same question
-  const avatar = generateAvatar(corpusJson, questionText, profileJson, realWordCount);
+  // Generate avatar for this variant
+  const avatar = generateAvatar(corpusJson, questionText, profileJson, realWordCount, variantId);
   if (!avatar) return;
 
   // Compute avatar total duration from keystroke stream
@@ -156,7 +105,7 @@ export async function computeReconstructionResidual(questionId: number): Promise
     ? avatar.keystrokeStream[avatar.keystrokeStream.length - 1]!.u
     : 0;
 
-  // ── Compute avatar signals ──────────────────────────────────────
+  // Compute avatar signals
   let avatarDyn: DynamicalSignals | null = null;
   let avatarMot: MotorSignals | null = null;
   let avatarSem: SemanticSignals | null = null;
@@ -169,22 +118,17 @@ export async function computeReconstructionResidual(questionId: number): Promise
     avatarSem = computeSemanticSignals(avatar.text, 0);
   }
 
-  // ── Fetch real signals (already persisted by pipeline) ──────────
-  const realDyn = await getDynamicalSignals(questionId);
-  const realMot = await getMotorSignals(questionId);
-  const realSem = await getSemanticSignals(questionId);
-
-  // ── Compute perplexity for both texts ───────────────────────────
+  // Compute perplexity for both texts
   const realPerp = computePerplexity(corpusJson, realText);
   const avatarPerp = computePerplexity(corpusJson, avatar.text);
 
-  // ── PE spectrum comparison ──────────────────────────────────────
+  // PE spectrum comparison
   const { realParsed: realPeSpec, residual: peSpecResidual } = spectrumDelta(
     realDyn?.pe_spectrum,
     avatarDyn?.peSpectrum,
   );
 
-  // ── Compute per-signal residuals ────────────────────────────────
+  // Per-signal residuals
   const dynResiduals = {
     pe: delta(realDyn?.permutation_entropy, avatarDyn?.permutationEntropy),
     dfa: delta(realDyn?.dfa_alpha, avatarDyn?.dfaAlpha),
@@ -211,7 +155,7 @@ export async function computeReconstructionResidual(questionId: number): Promise
     compress: delta(realSem?.text_compression_ratio, avatarSem?.textCompressionRatio),
   };
 
-  // ── Aggregate norms ─────────────────────────────────────────────
+  // Aggregate norms
   const dynNorm = l2(Object.values(dynResiduals));
   const motNorm = l2(Object.values(motResiduals));
   const semNorm = l2(Object.values(semResiduals));
@@ -224,8 +168,9 @@ export async function computeReconstructionResidual(questionId: number): Promise
   const totalNorm = l2(allResiduals);
   const residualCount = allResiduals.filter(isFiniteNum).length;
 
-  // ── Persist ─────────────────────────────────────────────────────
+  // Persist
   const row: ReconstructionResidualInput = {
+    adversary_variant_id: variantId,
     question_source_id: questionSourceId,
     avatar_text: avatar.text,
     avatar_word_count: avatar.wordCount,
@@ -233,8 +178,8 @@ export async function computeReconstructionResidual(questionId: number): Promise
     avatar_chain_size: avatar.chainSize,
     avatar_i_burst_count: avatar.iBurstCount,
     real_word_count: realWordCount,
-    corpus_size: textRows.length,
-    session_count: (p.session_count as number) ?? 0,
+    corpus_size: corpusSize,
+    session_count: sessionCount,
 
     real_perplexity: realPerp?.perplexity ?? null,
     real_known_fraction: realPerp?.knownFraction ?? null,
@@ -324,6 +269,105 @@ export async function computeReconstructionResidual(questionId: number): Promise
   try {
     await saveReconstructionResidual(questionId, row);
   } catch (err) {
-    logError('reconstruction.save', err, { questionId });
+    logError('reconstruction.save', err, { questionId, variantId });
+  }
+}
+
+// ─── Main ──────────────────────────────────────────────────────────
+
+export async function computeReconstructionResidual(questionId: number): Promise<void> {
+  // Fetch corpus (shared across all variants)
+  const textRows = await sql`
+    SELECT r.text
+    FROM tb_responses r
+    JOIN tb_questions q ON r.question_id = q.question_id
+    ORDER BY q.scheduled_for ASC
+  ` as Array<{ text: string }>;
+
+  if (textRows.length < 3) return;
+
+  // Fetch question text + source
+  const qRows = await sql`SELECT text, question_source_id FROM tb_questions WHERE question_id = ${questionId}`;
+  const qRow = qRows[0] as { text: string; question_source_id: number } | undefined;
+  const questionText = qRow?.text;
+  if (!questionText) return;
+  const questionSourceId = qRow.question_source_id;
+
+  // Fetch real response text + word count
+  const summaryRows = await sql`
+    SELECT s.word_count, r.text AS response_text
+    FROM tb_session_summaries s
+    JOIN tb_responses r ON s.question_id = r.question_id
+    WHERE s.question_id = ${questionId}
+  ` as Array<{ word_count: number | null; response_text: string }>;
+  const realWordCount = summaryRows[0]?.word_count ?? 150;
+  const realText = summaryRows[0]?.response_text;
+  if (!realText) return;
+
+  // Fetch personal profile (extended with variant-specific fields)
+  const profileRows = await sql`
+    SELECT digraph_aggregate_json,
+           ex_gaussian_mu_mean, ex_gaussian_sigma_mean, ex_gaussian_tau_mean,
+           burst_length_mean,
+           pause_between_word_pct, pause_between_sent_pct,
+           first_keystroke_mean,
+           small_del_rate_mean, large_del_rate_mean,
+           revision_timing_bias, r_burst_ratio_mean,
+           rburst_mean_size, rburst_leading_edge_pct,
+           session_count,
+           iki_autocorrelation_lag1_mean, hold_flight_rank_correlation,
+           hold_time_mean_mean, hold_time_mean_std,
+           flight_time_mean_mean, flight_time_mean_std
+    FROM tb_personal_profile
+    LIMIT 1
+  `;
+  const p = profileRows[0] as Record<string, unknown> | undefined;
+  if (!p) return;
+
+  const corpusJson = JSON.stringify(textRows.map(r => r.text));
+  const profileJson = JSON.stringify({
+    digraph: typeof p.digraph_aggregate_json === 'string'
+      ? JSON.parse(p.digraph_aggregate_json as string)
+      : p.digraph_aggregate_json || null,
+    mu: p.ex_gaussian_mu_mean ?? null,
+    sigma: p.ex_gaussian_sigma_mean ?? null,
+    tau: p.ex_gaussian_tau_mean ?? null,
+    burst_length: p.burst_length_mean ?? null,
+    pause_between_pct: p.pause_between_word_pct ?? null,
+    pause_sent_pct: p.pause_between_sent_pct ?? null,
+    first_keystroke: p.first_keystroke_mean ?? null,
+    small_del_rate: p.small_del_rate_mean ?? null,
+    large_del_rate: p.large_del_rate_mean ?? null,
+    revision_timing_bias: p.revision_timing_bias ?? null,
+    r_burst_ratio: p.r_burst_ratio_mean ?? null,
+    rburst_mean_size: p.rburst_mean_size ?? null,
+    rburst_leading_edge_pct: p.rburst_leading_edge_pct ?? null,
+    iki_autocorrelation_lag1: p.iki_autocorrelation_lag1_mean ?? null,
+    hold_flight_rank_correlation: p.hold_flight_rank_correlation ?? null,
+    hold_time_mean: p.hold_time_mean_mean ?? null,
+    hold_time_std: p.hold_time_mean_std ?? null,
+    flight_time_mean: p.flight_time_mean_mean ?? null,
+    flight_time_std: p.flight_time_mean_std ?? null,
+  });
+
+  // Fetch real signals ONCE (shared across all variants)
+  const realDyn = await getDynamicalSignals(questionId);
+  const realMot = await getMotorSignals(questionId);
+  const realSem = await getSemanticSignals(questionId);
+
+  const corpusSize = textRows.length;
+  const sessionCount = (p.session_count as number) ?? 0;
+
+  // Run all 5 variants sequentially
+  for (const variantId of ALL_VARIANTS) {
+    try {
+      await computeForVariant(
+        questionId, variantId, corpusJson, questionText, questionSourceId,
+        realWordCount, realText, profileJson, corpusSize, sessionCount,
+        realDyn, realMot, realSem,
+      );
+    } catch (err) {
+      logError('reconstruction.variant', err, { questionId, variantId });
+    }
   }
 }

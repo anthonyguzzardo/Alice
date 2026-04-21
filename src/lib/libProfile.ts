@@ -62,7 +62,8 @@ export async function updateProfile(questionId: number): Promise<void> {
     // ── Motor signals (ex-Gaussian, digraph) ──
     const motorRows = await sql`
       SELECT ms.ex_gaussian_mu, ms.ex_gaussian_sigma, ms.ex_gaussian_tau,
-             ms.digraph_latency_json
+             ms.digraph_latency_json, ms.iki_autocorrelation_json,
+             ms.hold_flight_rank_corr
       FROM tb_motor_signals ms
     ` as any[];
 
@@ -117,6 +118,21 @@ export async function updateProfile(questionId: number): Promise<void> {
     for (const [key, { holds }] of Object.entries(digraphAgg)) {
       digraphAggregate[key] = mean(holds);
     }
+
+    // ── Compute IKI autocorrelation lag-1 mean ──
+    const autoLag1Vals: number[] = [];
+    for (const row of motorRows) {
+      if (!row.iki_autocorrelation_json) continue;
+      const acf = typeof row.iki_autocorrelation_json === 'string'
+        ? JSON.parse(row.iki_autocorrelation_json)
+        : row.iki_autocorrelation_json;
+      if (Array.isArray(acf) && acf.length > 0 && typeof acf[0] === 'number' && isFinite(acf[0])) {
+        autoLag1Vals.push(acf[0]);
+      }
+    }
+
+    // ── Compute hold-flight rank correlation mean ──
+    const holdFlightCorrVals = nn(motorRows.map((r: any) => r.hold_flight_rank_corr));
 
     // ── Compute writing process shape ──
     const burstCounts = nn(summaries.map((s: any) => s.p_burst_count));
@@ -283,6 +299,7 @@ export async function updateProfile(questionId: number): Promise<void> {
           rburst_consolidation, rburst_mean_size, rburst_mean_duration, rburst_leading_edge_pct,
           trigram_model_json, vocab_cumulative,
           mattr_mean, mattr_std,
+          iki_autocorrelation_lag1_mean, hold_flight_rank_correlation,
           dttm_updated_utc
         ) VALUES (
           ${summaries.length}, ${questionId},
@@ -318,6 +335,8 @@ export async function updateProfile(questionId: number): Promise<void> {
           ${rburstTotalCount > 0 ? rburstLeadingEdgeCount / rburstTotalCount : null},
           ${trigramJson}, ${allWords.size},
           ${mattrs.length > 0 ? mean(mattrs) : null}, ${mattrs.length > 1 ? std(mattrs) : null},
+          ${autoLag1Vals.length > 0 ? mean(autoLag1Vals) : null},
+          ${holdFlightCorrVals.length > 0 ? mean(holdFlightCorrVals) : null},
           NOW()
         )
       `;

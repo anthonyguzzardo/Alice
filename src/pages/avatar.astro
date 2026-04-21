@@ -14,6 +14,13 @@ import PublicLayout from '../layouts/layPublic.astro';
   <section class="av-section">
     <form class="av-form" id="avatar-form">
       <input type="text" id="topic-input" class="av-input" placeholder="Enter a topic..." required />
+      <select id="variant-select" class="av-input" style="width:auto; min-width:160px; margin-left:0.5rem;">
+        <option value="1">Baseline</option>
+        <option value="2">Conditional Timing</option>
+        <option value="3">Copula Motor</option>
+        <option value="4">PPM Text</option>
+        <option value="5">Full Adversary</option>
+      </select>
       <button type="submit" class="av-btn" id="generate-btn">Generate</button>
     </form>
 
@@ -135,10 +142,12 @@ import PublicLayout from '../layouts/layPublic.astro';
     var oldDone = document.querySelector('.av-done');
     if (oldDone) oldDone.remove();
 
+    var variant = parseInt(document.getElementById('variant-select').value, 10) || 1;
+
     fetch('/api/avatar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ topic: topic }),
+      body: JSON.stringify({ topic: topic, variant: variant }),
     })
       .then(function (res) { return res.json(); })
       .then(function (data) {

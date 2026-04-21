@@ -14,6 +14,50 @@ use serde::Deserialize;
 
 use crate::types::{SignalError, SignalResult};
 
+// ─── Adversary Variants ─────────────────────────────────────────
+//
+// Each variant uses a different combination of text generation and
+// timing synthesis strategies to test which statistical improvement
+// closes the most reconstruction residual.
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum AdversaryVariant {
+    /// Order-2 Markov + independent ex-Gaussian timing (current ghost)
+    Baseline = 1,
+    /// Order-2 Markov + AR(1) conditioned IKI preserving serial dependence
+    ConditionalTiming = 2,
+    /// Order-2 Markov + Gaussian copula joint hold/flight sampling
+    CopulaMotor = 3,
+    /// Variable-order PPM + independent ex-Gaussian timing
+    PpmText = 4,
+    /// PPM + AR(1) + copula (strongest adversary within measurement space)
+    FullAdversary = 5,
+}
+
+impl AdversaryVariant {
+    pub(crate) fn from_i32(v: i32) -> Self {
+        match v {
+            2 => Self::ConditionalTiming,
+            3 => Self::CopulaMotor,
+            4 => Self::PpmText,
+            5 => Self::FullAdversary,
+            _ => Self::Baseline,
+        }
+    }
+
+    fn uses_ppm(self) -> bool {
+        matches!(self, Self::PpmText | Self::FullAdversary)
+    }
+
+    fn uses_conditional_timing(self) -> bool {
+        matches!(self, Self::ConditionalTiming | Self::FullAdversary)
+    }
+
+    fn uses_copula(self) -> bool {
+        matches!(self, Self::CopulaMotor | Self::FullAdversary)
+    }
+}
+
 // ─── Types ──────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
@@ -50,6 +94,24 @@ pub(crate) struct TimingProfile {
     /// Fraction of R-bursts at the leading edge of text (Lindgren & Sullivan 2006).
     /// Used to bias revision placement toward point of inscription vs back in text.
     pub(crate) rburst_leading_edge_pct: Option<f64>,
+    // ── Variant-specific fields ──
+    /// IKI autocorrelation at lag 1 (mean across sessions).
+    /// AR(1) coefficient for conditional timing variant.
+    pub(crate) iki_autocorrelation_lag1: Option<f64>,
+    /// Spearman rank correlation between hold and flight times.
+    /// Copula parameter for joint hold/flight sampling variant.
+    pub(crate) hold_flight_rank_correlation: Option<f64>,
+    /// Mean hold time across sessions (for copula marginal).
+    pub(crate) hold_time_mean: Option<f64>,
+    /// Std of hold time across sessions (for copula marginal).
+    pub(crate) hold_time_std: Option<f64>,
+    /// Mean flight time across sessions (for copula marginal). Reserved for
+    /// future copula refinement where flight is sampled from its own marginal.
+    #[allow(dead_code)]
+    pub(crate) flight_time_mean: Option<f64>,
+    /// Std of flight time across sessions (for copula marginal). Reserved.
+    #[allow(dead_code)]
+    pub(crate) flight_time_std: Option<f64>,
 }
 
 pub(crate) struct AvatarResult {
@@ -70,6 +132,8 @@ pub(crate) struct AvatarResult {
     /// flat keystroke stream because position information is lost after
     /// splice; must be returned as metadata.
     pub(crate) i_burst_count: usize,
+    /// Which adversary variant produced this result.
+    pub(crate) variant: u8,
 }
 
 pub(crate) struct SyntheticKeystroke {
@@ -1031,6 +1095,508 @@ fn pick_revision_position(total: usize, midpoint: usize, bias: f64, rng: &mut Rn
     }
 }
 
+// ─── Conditional Timing: AR(1) IKI Process ──────────────────────
+//
+// Instead of sampling each IKI independently from ex-Gaussian(mu, sigma, tau),
+// generate a correlated sequence via an AR(1) process calibrated from the
+// profile's measured lag-1 autocorrelation.
+//
+// AR(1): IKI[t] = mu + phi * (IKI[t-1] - mu) + epsilon
+// where phi = iki_autocorrelation_lag1, epsilon ~ ex-Gaussian(0, sigma_adj, tau)
+// sigma_adj = sigma * sqrt(1 - phi^2) preserves marginal variance.
+//
+// Citation: Box, Jenkins & Reinsel (2008). Time Series Analysis.
+
+/// AR(1) conditioned timing synthesis. Same pause/burst/digraph/tempo-drift
+/// logic as baseline, but base IKI sampling uses AR(1) instead of independent
+/// ex-Gaussian. Falls back to baseline if phi is None.
+fn synthesize_timing_conditional(
+    text: &str,
+    profile: &TimingProfile,
+    word_freq: &HashMap<String, f64>,
+    use_copula: bool,
+    rng: &mut Rng,
+) -> TimingOutput {
+    let chars: Vec<char> = text.chars().collect();
+    let total_chars = chars.len();
+    let mut delays = Vec::with_capacity(total_chars + total_chars / 10);
+    let mut keystrokes = Vec::with_capacity(total_chars + total_chars / 10);
+
+    let base_mu = profile.mu.unwrap_or(120.0);
+    let sigma = profile.sigma.unwrap_or(40.0);
+    let tau = profile.tau.unwrap_or(80.0);
+    let burst_length = profile.burst_length.unwrap_or(150.0) as usize;
+    let pause_sent_pct = profile.pause_sent_pct.unwrap_or(0.07);
+    let pause_between_pct = profile.pause_between_pct.unwrap_or(0.69);
+
+    // AR(1) coefficient from profile
+    let phi = profile.iki_autocorrelation_lag1.unwrap_or(0.0).clamp(-0.99, 0.99);
+    // Adjusted sigma to preserve marginal variance under AR(1)
+    let sigma_adj = sigma * (1.0 - phi * phi).max(0.01).sqrt();
+
+    // Copula parameters (used when use_copula is true)
+    let copula_rho = if use_copula {
+        profile.hold_flight_rank_correlation.unwrap_or(0.0)
+    } else {
+        0.0
+    };
+    // Convert Spearman rho to Pearson for Gaussian copula (Kruskal 1958)
+    let copula_pearson = 2.0 * (std::f64::consts::FRAC_PI_6 * copula_rho).sin();
+    let hold_mean = profile.hold_time_mean.unwrap_or(95.0);
+    let hold_std = profile.hold_time_std.unwrap_or(20.0);
+
+    let mut chars_since_burst: usize = 0;
+    let mut clock: f64 = 0.0;
+    #[allow(unused_assignments)] // initialized before AR(1) loop reads it
+    let mut prev_iki: f64 = base_mu;
+
+    // Tempo drift closure (same as baseline)
+    let tempo_mu = |char_idx: usize| -> f64 {
+        let progress = char_idx as f64 / total_chars.max(1) as f64;
+        let drift = if progress < 0.2 {
+            1.3 - (progress / 0.2) * 0.45
+        } else if progress < 0.75 {
+            0.85
+        } else {
+            0.85 + ((progress - 0.75) / 0.25) * 0.25
+        };
+        base_mu * drift
+    };
+
+    let words = extract_word_spans(text);
+    let mut word_idx = 0;
+    let mut bursts_since_eval: usize = 0;
+    let eval_interval = 3 + (rng.f64() * 3.0) as usize;
+
+    // AR(1) IKI sampler: conditioned on previous IKI
+    let ar1_sample = |prev: f64, mu: f64, rng: &mut Rng| -> f64 {
+        let innovation = rng.ex_gaussian(0.0, sigma_adj, tau) - tau; // center the exponential
+        let iki = mu + phi * (prev - mu) + innovation;
+        iki.max(30.0)
+    };
+
+    // Copula hold/flight sampler
+    let sample_hold_flight = |rng: &mut Rng| -> (f64, f64) {
+        if !use_copula || copula_rho.abs() < 0.01 {
+            let hold = rng.gaussian(hold_mean, hold_std).clamp(40.0, 200.0);
+            return (hold, 0.0); // flight determined by delay
+        }
+        // Bivariate Gaussian with correlation copula_pearson
+        let z1 = rng.gaussian(0.0, 1.0);
+        let z2 = rng.gaussian(0.0, 1.0);
+        let u1 = z1;
+        let u2 = copula_pearson.mul_add(z1, (1.0 - copula_pearson * copula_pearson).max(0.01).sqrt() * z2);
+        let hold = (hold_mean + hold_std * u1).clamp(40.0, 200.0);
+        // Flight modulation: scale the base delay by a factor derived from u2
+        // Positive u2 = longer flight, preserving rank correlation with hold
+        let flight_factor = 1.0 + 0.2 * u2; // modest modulation
+        (hold, flight_factor)
+    };
+
+    // First character
+    let fk = profile.first_keystroke.unwrap_or(3000.0);
+    let first_delay = fk * (0.7 + rng.f64() * 0.6);
+    clock += first_delay;
+    let (hold, _) = sample_hold_flight(rng);
+    delays.push(first_delay);
+    keystrokes.push(SyntheticKeystroke {
+        character: chars[0],
+        key_down_ms: clock,
+        key_up_ms: clock + hold,
+    });
+    prev_iki = first_delay;
+
+    for i in 1..total_chars {
+        let prev_char = chars[i - 1];
+        let curr = chars[i];
+        chars_since_burst += 1;
+
+        while word_idx + 1 < words.len() && i >= words[word_idx + 1].0 {
+            word_idx += 1;
+        }
+
+        let mu = tempo_mu(i);
+        let delay;
+
+        // P-burst pause
+        if chars_since_burst >= burst_length && prev_char == ' ' {
+            chars_since_burst = 0;
+            bursts_since_eval += 1;
+            if bursts_since_eval >= eval_interval {
+                bursts_since_eval = 0;
+                delay = 4000.0 + rng.f64() * 4000.0;
+            } else {
+                delay = 2000.0 + rng.f64() * 2000.0;
+            }
+        }
+        // Sentence boundary
+        else if matches!(prev_char, '.' | '!' | '?') && curr == ' ' {
+            if rng.f64() < pause_sent_pct.min(1.0) * 3.5 {
+                delay = 800.0 + rng.f64() * 2200.0;
+            } else {
+                delay = ar1_sample(prev_iki, mu, rng);
+            }
+        }
+        // Word boundary with content-process coupling
+        else if prev_char == ' ' {
+            let difficulty = if word_idx < words.len() {
+                word_difficulty_multiplier(&words[word_idx].2, word_freq, rng)
+            } else {
+                1.0
+            };
+            if rng.f64() < (pause_between_pct * 0.12 * difficulty).min(0.25) {
+                delay = (300.0 + rng.f64() * 900.0) * difficulty.min(2.0);
+            } else {
+                delay = ar1_sample(prev_iki, mu, rng);
+            }
+        }
+        // Digraph-specific
+        else if let Some(latency) = profile.digraph.as_ref().and_then(|d| {
+            let bigram = format!("{}{}", prev_char, curr);
+            d.get(&bigram).copied()
+        }) {
+            delay = (latency + (rng.f64() - 0.5) * 40.0).max(30.0);
+        }
+        // Fallback: AR(1) conditioned ex-Gaussian
+        else {
+            delay = ar1_sample(prev_iki, mu, rng);
+        }
+
+        prev_iki = delay;
+        let (hold, flight_factor) = sample_hold_flight(rng);
+        let adjusted_delay = if use_copula && flight_factor > 0.0 {
+            (delay * flight_factor).max(30.0)
+        } else {
+            delay
+        };
+
+        clock += adjusted_delay;
+        delays.push(adjusted_delay);
+        keystrokes.push(SyntheticKeystroke {
+            character: curr,
+            key_down_ms: clock,
+            key_up_ms: clock + hold,
+        });
+    }
+
+    TimingOutput { delays, keystrokes }
+}
+
+// ─── PPM Text Generation (Prediction by Partial Matching) ───────
+//
+// Variable-order Markov model using PPM Method C (Cleary & Witten 1984,
+// Moffat 1990). Adaptively selects the longest context with predictive
+// power for each position, rather than fixed order-2.
+//
+// The PPM trie stores word-level contexts up to max_depth. At generation
+// time, the longest matching context is tried first. On escape (novel
+// continuation), the model backs off to shorter contexts until order-0
+// (unigram) or uniform distribution.
+
+struct PpmNode {
+    children: HashMap<String, PpmNode>,
+    counts: HashMap<String, u32>,
+    total: u32,
+}
+
+impl PpmNode {
+    fn new() -> Self {
+        Self {
+            children: HashMap::new(),
+            counts: HashMap::new(),
+            total: 0,
+        }
+    }
+}
+
+struct PpmTrie {
+    root: PpmNode,
+    max_depth: usize,
+    unigram_probs: HashMap<String, f64>,
+    vocab_size: usize,
+    starters: Vec<(String, u32)>,
+    total_starters: u32,
+}
+
+fn build_ppm_trie(texts: &[String], max_depth: usize) -> PpmTrie {
+    let mut root = PpmNode::new();
+    let mut unigram_counts: HashMap<String, u32> = HashMap::new();
+    let mut total_words: u32 = 0;
+    let mut starters: HashMap<String, u32> = HashMap::new();
+
+    for text in texts {
+        let tokens = tokenize(text);
+        if tokens.is_empty() {
+            continue;
+        }
+
+        // Record sentence starters
+        *starters.entry(tokens[0].clone()).or_default() += 1;
+        for i in 1..tokens.len() {
+            if i > 0 && matches!(tokens[i - 1].as_str(), "." | "!" | "?") {
+                *starters.entry(tokens[i].clone()).or_default() += 1;
+            }
+        }
+
+        for i in 0..tokens.len() {
+            let next = &tokens[i];
+            *unigram_counts.entry(next.clone()).or_default() += 1;
+            total_words += 1;
+
+            // Insert contexts of all lengths from 1 to max_depth
+            for depth in 1..=max_depth.min(i + 1) {
+                let ctx_start = i.saturating_sub(depth);
+                let ctx_tokens = &tokens[ctx_start..i];
+
+                // Navigate to the correct node
+                let mut node = &mut root;
+                for tok in ctx_tokens {
+                    node = node.children.entry(tok.clone()).or_insert_with(PpmNode::new);
+                }
+                *node.counts.entry(next.clone()).or_default() += 1;
+                node.total += 1;
+            }
+        }
+    }
+
+    let total_f = total_words.max(1) as f64;
+    let unigram_probs: HashMap<String, f64> = unigram_counts
+        .iter()
+        .map(|(w, c)| (w.clone(), *c as f64 / total_f))
+        .collect();
+
+    let starter_vec: Vec<(String, u32)> = starters.into_iter().collect();
+    let total_starters: u32 = starter_vec.iter().map(|(_, c)| *c).sum();
+
+    PpmTrie {
+        root,
+        max_depth,
+        unigram_probs,
+        vocab_size: unigram_counts.len(),
+        starters: starter_vec,
+        total_starters,
+    }
+}
+
+/// PPM Method C: P(escape|context) = unique_successors / (unique_successors + total)
+/// Returns the probability mass after escape for backoff.
+fn ppm_sample(trie: &PpmTrie, context: &[String], rng: &mut Rng) -> String {
+    // Try longest matching context first, backoff on escape
+    for depth in (1..=trie.max_depth.min(context.len())).rev() {
+        let ctx_start = context.len().saturating_sub(depth);
+        let ctx = &context[ctx_start..];
+
+        // Navigate to the node for this context
+        let mut node = &trie.root;
+        let mut found = true;
+        for tok in ctx {
+            match node.children.get(tok) {
+                Some(child) => node = child,
+                None => {
+                    found = false;
+                    break;
+                }
+            }
+        }
+
+        if !found || node.total == 0 {
+            continue;
+        }
+
+        let unique = node.counts.len() as f64;
+        let total = node.total as f64;
+        // PPM-C escape probability
+        let p_escape = unique / (unique + total);
+
+        if rng.f64() < p_escape {
+            continue; // escape to shorter context
+        }
+
+        // Sample from this context's distribution
+        let r = rng.f64() * total;
+        let mut cumulative = 0.0;
+        for (word, count) in &node.counts {
+            cumulative += *count as f64;
+            if r < cumulative {
+                return word.clone();
+            }
+        }
+        // Shouldn't reach here, but safety fallback
+        if let Some((word, _)) = node.counts.iter().next() {
+            return word.clone();
+        }
+    }
+
+    // Order-0 fallback: sample from unigram distribution
+    if !trie.unigram_probs.is_empty() {
+        let r = rng.f64();
+        let mut cumulative = 0.0;
+        for (word, prob) in &trie.unigram_probs {
+            cumulative += prob;
+            if r < cumulative {
+                return word.clone();
+            }
+        }
+    }
+
+    // Absolute fallback
+    String::from("the")
+}
+
+fn generate_text_ppm(trie: &PpmTrie, seed: &str, max_words: usize, rng: &mut Rng) -> String {
+    let seed_lower = seed.to_lowercase();
+    let seed_tokens: Vec<String> = tokenize(&seed_lower);
+
+    // Try to find a starter containing the seed
+    let mut current_context: Vec<String> = Vec::new();
+    let mut found_seed = false;
+
+    for token in &seed_tokens {
+        for (starter, _) in &trie.starters {
+            if starter.contains(token.as_str()) {
+                current_context.push(starter.clone());
+                found_seed = true;
+                break;
+            }
+        }
+        if found_seed {
+            break;
+        }
+    }
+
+    if !found_seed && trie.total_starters > 0 {
+        // Random starter
+        if let Some(starter) = weighted_pick(&trie.starters, rng) {
+            current_context.push(starter);
+        }
+    }
+
+    let mut output = current_context.clone();
+    let target = max_words.max(5);
+
+    for _ in output.len()..target {
+        let next = ppm_sample(trie, &current_context, rng);
+
+        output.push(next.clone());
+        current_context.push(next.clone());
+        if current_context.len() > trie.max_depth {
+            current_context.remove(0);
+        }
+
+        // Sentence boundaries: capitalize next word
+        if matches!(next.as_str(), "." | "!" | "?")
+            && trie.total_starters > 0
+            && let Some(starter) = weighted_pick(&trie.starters, rng)
+        {
+            output.push(starter.clone());
+            current_context.push(starter);
+            if current_context.len() > trie.max_depth {
+                current_context.remove(0);
+            }
+        }
+    }
+
+    // Reassemble with spacing
+    let mut result = String::new();
+    for (i, token) in output.iter().enumerate() {
+        if i > 0
+            && !matches!(token.as_str(), "." | "," | "!" | "?" | ";" | ":" | "'" | "\"")
+            && let Some(prev) = output.get(i - 1)
+            && !matches!(prev.as_str(), "'" | "\"")
+        {
+            result.push(' ');
+        }
+        if i == 0 {
+            // Capitalize first word
+            let mut chars = token.chars();
+            if let Some(first) = chars.next() {
+                result.push(first.to_uppercase().next().unwrap_or(first));
+                result.extend(chars);
+            }
+        } else {
+            result.push_str(token);
+        }
+    }
+
+    result
+}
+
+/// Compute perplexity of text under the PPM model.
+#[cfg(test)]
+fn compute_ppm_perplexity(trie: &PpmTrie, text: &str) -> SignalResult<PerplexityResult> {
+    let tokens = tokenize(text);
+    if tokens.len() < 2 {
+        return Err(SignalError::InsufficientData {
+            needed: 2,
+            got: tokens.len(),
+        });
+    }
+
+    let mut log_prob_sum: f64 = 0.0;
+    let mut known: usize = 0;
+    let mut unknown: usize = 0;
+    let vocab = trie.vocab_size.max(1) as f64;
+
+    for i in 0..tokens.len() {
+        let next = &tokens[i];
+        let mut found_context = false;
+
+        // Try longest matching context first
+        for depth in (1..=trie.max_depth.min(i)).rev() {
+            let ctx_start = i.saturating_sub(depth);
+            let ctx = &tokens[ctx_start..i];
+
+            let mut node = &trie.root;
+            let mut valid = true;
+            for tok in ctx {
+                match node.children.get(tok) {
+                    Some(child) => node = child,
+                    None => {
+                        valid = false;
+                        break;
+                    }
+                }
+            }
+
+            if !valid || node.total == 0 {
+                continue;
+            }
+
+            let unique = node.counts.len() as f64;
+            let total = node.total as f64;
+            let p_escape = unique / (unique + total);
+
+            if let Some(count) = node.counts.get(next) {
+                // Non-escape probability * word probability within context
+                let prob = (1.0 - p_escape) * (*count as f64 / total);
+                log_prob_sum += prob.max(1e-20).log2();
+                known += 1;
+                found_context = true;
+                break;
+            }
+            // Word not in this context, escape to shorter
+        }
+
+        if !found_context {
+            // Unigram fallback
+            let prob = trie.unigram_probs.get(next).copied().unwrap_or(1.0 / vocab);
+            log_prob_sum += prob.max(1e-20).log2();
+            unknown += 1;
+        }
+    }
+
+    let n = (known + unknown).max(1) as f64;
+    let avg_log_prob = log_prob_sum / n;
+    let perplexity = (-avg_log_prob).exp2();
+
+    Ok(PerplexityResult {
+        perplexity,
+        word_count: known + unknown,
+        known_transitions: known,
+        unknown_transitions: unknown,
+    })
+}
+
 // ─── Perplexity ─────────────────────────────────────────────────
 
 /// Compute the per-word log2 perplexity of `text` under the Markov chain
@@ -1125,6 +1691,12 @@ fn default_profile() -> TimingProfile {
         r_burst_ratio: None,
         rburst_mean_size: None,
         rburst_leading_edge_pct: None,
+        iki_autocorrelation_lag1: None,
+        hold_flight_rank_correlation: None,
+        hold_time_mean: None,
+        hold_time_std: None,
+        flight_time_mean: None,
+        flight_time_std: None,
     }
 }
 
@@ -1133,6 +1705,7 @@ pub(crate) fn compute(
     topic: &str,
     profile_json: &str,
     max_words: usize,
+    variant: AdversaryVariant,
 ) -> SignalResult<AvatarResult> {
     // Parse inputs
     let texts: Vec<String> = serde_json::from_str(corpus_json).unwrap_or_default();
@@ -1143,14 +1716,6 @@ pub(crate) fn compute(
         return Err(SignalError::InsufficientData { needed: 1, got: 0 });
     }
 
-    // Choose order based on corpus size
-    let order = if texts.len() >= 10 { 2 } else { 1 };
-
-    // Build chain + word frequency map for content-process coupling
-    let chain = build_chain(&texts, order);
-    let chain_size = chain.transitions.len();
-    let word_freq = build_word_freq(&texts);
-
     // Generate with time-based seed for variety
     let seed_val = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -1158,13 +1723,40 @@ pub(crate) fn compute(
         .unwrap_or(42);
     let mut rng = Rng::from_seed(seed_val);
 
-    let text = generate_text(&chain, topic, max_words, &mut rng);
+    // Choose order based on corpus size (used for Markov variants)
+    let order = if texts.len() >= 10 { 2 } else { 1 };
+
+    // Build word frequency map for content-process coupling (all variants)
+    let word_freq = build_word_freq(&texts);
+
+    // ── Text generation: Markov or PPM ──
+    let (text, chain_size, effective_order) = if variant.uses_ppm() && texts.len() >= 5 {
+        let max_depth = if texts.len() >= 20 { 5 } else { 3 };
+        let trie = build_ppm_trie(&texts, max_depth);
+        let chain_size = trie.vocab_size;
+        let text = generate_text_ppm(&trie, topic, max_words, &mut rng);
+        (text, chain_size, max_depth)
+    } else {
+        let chain = build_chain(&texts, order);
+        let chain_size = chain.transitions.len();
+        let text = generate_text(&chain, topic, max_words, &mut rng);
+        (text, chain_size, order)
+    };
+
     let word_count = text.split_whitespace().count();
 
-    // Synthesize timing with tempo drift + content-process coupling + eval pauses
-    let timing = synthesize_timing(&text, &profile, &word_freq, &mut rng);
+    // ── Timing synthesis: baseline or conditional (with optional copula) ──
+    let timing = if variant.uses_conditional_timing() || variant.uses_copula() {
+        synthesize_timing_conditional(&text, &profile, &word_freq, variant.uses_copula(), &mut rng)
+    } else {
+        synthesize_timing(&text, &profile, &word_freq, &mut rng)
+    };
     let mut delays = timing.delays;
     let mut keystrokes = timing.keystrokes;
+
+    // Build a Markov chain for revision/I-burst text generation
+    // (revisions need the chain even if PPM was used for primary text)
+    let chain = build_chain(&texts, order);
 
     // Inject revision episodes (deletions + retypes) from the revision profile
     inject_revisions(&mut keystrokes, &mut delays, &profile, &chain, &mut rng);
@@ -1178,9 +1770,10 @@ pub(crate) fn compute(
         delays,
         keystroke_events: keystrokes,
         word_count,
-        order,
+        order: effective_order,
         chain_size,
         i_burst_count,
+        variant: variant as u8,
     })
 }
 
@@ -1578,7 +2171,7 @@ mod tests {
     fn compute_produces_output() {
         let corpus = serde_json::to_string(&sample_corpus()).unwrap();
         let profile = "{}";
-        let result = compute(&corpus, "morning", profile, 20).unwrap();
+        let result = compute(&corpus, "morning", profile, 20, AdversaryVariant::Baseline).unwrap();
         assert!(!result.text.is_empty(), "Should produce text");
         assert!(!result.delays.is_empty(), "Should produce delays");
         assert!(!result.keystroke_events.is_empty(), "Should produce keystroke events");
@@ -1588,7 +2181,7 @@ mod tests {
     #[test]
     fn compute_empty_corpus_insufficient_data() {
         assert!(matches!(
-            compute("[]", "anything", "{}", 20),
+            compute("[]", "anything", "{}", 20, AdversaryVariant::Baseline),
             Err(SignalError::InsufficientData { needed: 1, got: 0 })
         ));
     }
@@ -1597,7 +2190,7 @@ mod tests {
     fn compute_with_revision_profile() {
         let corpus = serde_json::to_string(&sample_corpus()).unwrap();
         let profile = r#"{"small_del_rate": 2.0, "large_del_rate": 1.0, "revision_timing_bias": 0.6}"#;
-        let result = compute(&corpus, "think", profile, 30).unwrap();
+        let result = compute(&corpus, "think", profile, 30, AdversaryVariant::Baseline).unwrap();
         // With revisions, keystrokes should include backspace characters
         let has_backspace = result.keystroke_events.iter().any(|k| k.character == '\u{0008}');
         assert!(has_backspace, "Revision profile should inject backspace events");
@@ -1606,7 +2199,7 @@ mod tests {
     #[test]
     fn compute_keystroke_stream_has_wire_format() {
         let corpus = serde_json::to_string(&sample_corpus()).unwrap();
-        let result = compute(&corpus, "time", "{}", 10).unwrap();
+        let result = compute(&corpus, "time", "{}", 10, AdversaryVariant::Baseline).unwrap();
         // Every keystroke event should have valid character, key_down, key_up
         for (i, k) in result.keystroke_events.iter().enumerate() {
             assert!(
@@ -1650,5 +2243,94 @@ mod tests {
             result.perplexity,
             uniform_ppl
         );
+    }
+
+    // ── Adversary variant tests ──
+
+    #[test]
+    fn variant_from_i32_roundtrip() {
+        assert_eq!(AdversaryVariant::from_i32(1) as u8, 1);
+        assert_eq!(AdversaryVariant::from_i32(2) as u8, 2);
+        assert_eq!(AdversaryVariant::from_i32(3) as u8, 3);
+        assert_eq!(AdversaryVariant::from_i32(4) as u8, 4);
+        assert_eq!(AdversaryVariant::from_i32(5) as u8, 5);
+        assert_eq!(AdversaryVariant::from_i32(99) as u8, 1); // unknown -> baseline
+    }
+
+    #[test]
+    fn compute_conditional_timing_produces_output() {
+        let corpus = serde_json::to_string(&sample_corpus()).unwrap();
+        let profile = r#"{"iki_autocorrelation_lag1": 0.4}"#;
+        let result = compute(&corpus, "morning", profile, 20, AdversaryVariant::ConditionalTiming).unwrap();
+        assert!(!result.text.is_empty());
+        assert_eq!(result.variant, 2);
+    }
+
+    #[test]
+    fn compute_copula_motor_produces_output() {
+        let corpus = serde_json::to_string(&sample_corpus()).unwrap();
+        let profile = r#"{"hold_flight_rank_correlation": 0.3, "hold_time_mean": 90.0, "hold_time_std": 18.0}"#;
+        let result = compute(&corpus, "morning", profile, 20, AdversaryVariant::CopulaMotor).unwrap();
+        assert!(!result.text.is_empty());
+        assert_eq!(result.variant, 3);
+    }
+
+    #[test]
+    fn compute_ppm_text_produces_output() {
+        let corpus = serde_json::to_string(&sample_corpus()).unwrap();
+        let result = compute(&corpus, "morning", "{}", 20, AdversaryVariant::PpmText).unwrap();
+        assert!(!result.text.is_empty());
+        assert_eq!(result.variant, 4);
+    }
+
+    #[test]
+    fn compute_full_adversary_produces_output() {
+        let corpus = serde_json::to_string(&sample_corpus()).unwrap();
+        let profile = r#"{"iki_autocorrelation_lag1": 0.3, "hold_flight_rank_correlation": 0.2, "hold_time_mean": 95.0, "hold_time_std": 20.0}"#;
+        let result = compute(&corpus, "morning", profile, 20, AdversaryVariant::FullAdversary).unwrap();
+        assert!(!result.text.is_empty());
+        assert_eq!(result.variant, 5);
+    }
+
+    #[test]
+    fn all_variants_produce_valid_keystrokes() {
+        let corpus = serde_json::to_string(&sample_corpus()).unwrap();
+        let profile = r#"{"iki_autocorrelation_lag1": 0.3, "hold_flight_rank_correlation": 0.2, "hold_time_mean": 95.0, "hold_time_std": 20.0}"#;
+        for v in [
+            AdversaryVariant::Baseline,
+            AdversaryVariant::ConditionalTiming,
+            AdversaryVariant::CopulaMotor,
+            AdversaryVariant::PpmText,
+            AdversaryVariant::FullAdversary,
+        ] {
+            let result = compute(&corpus, "morning", profile, 15, v).unwrap();
+            for (i, k) in result.keystroke_events.iter().enumerate() {
+                assert!(
+                    k.key_up_ms >= k.key_down_ms,
+                    "Variant {:?} keystroke {i}: key_up ({}) < key_down ({})",
+                    v,
+                    k.key_up_ms,
+                    k.key_down_ms
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn ppm_trie_builds_correctly() {
+        let texts = sample_corpus();
+        let trie = build_ppm_trie(&texts, 3);
+        assert!(trie.vocab_size > 0);
+        assert!(!trie.starters.is_empty());
+        assert!(trie.total_starters > 0);
+    }
+
+    #[test]
+    fn ppm_perplexity_computable() {
+        let texts = sample_corpus();
+        let trie = build_ppm_trie(&texts, 3);
+        let result = compute_ppm_perplexity(&trie, "I think about what matters").unwrap();
+        assert!(result.perplexity > 0.0);
+        assert!(result.perplexity.is_finite());
     }
 }

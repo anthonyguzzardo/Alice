@@ -300,8 +300,8 @@
         const dateEl = document.getElementById('gallery-date')!;
         if (entries.length > 0) {
           const latest = entries[entries.length - 1];
-          const d = new Date(latest.createdAt + 'Z');
-          dateEl.textContent = d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }).toLowerCase();
+          const d = new Date(latest.createdAt);
+          dateEl.textContent = d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).toLowerCase();
         }
 
         // Only show filters when there's more than one Alice Negative
@@ -319,8 +319,8 @@
           // Labels
           const label = document.createElement('div');
           label.className = 'alice-negative-label';
-          const scheduled = new Date(entry.scheduledFor + 'T00:00:00');
-          const dateStr = scheduled.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toLowerCase();
+          const scheduled = new Date(entry.scheduledFor);
+          const dateStr = scheduled.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }).toLowerCase();
           label.innerHTML = `
             <div class="version">alice-negative ${entry.version}</div>
             <div class="meta">${dateStr}</div>

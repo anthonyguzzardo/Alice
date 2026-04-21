@@ -2,19 +2,77 @@
  * Observatory Ghost API
  *
  * Returns reconstruction residual data: per-session deltas between
- * real signals and the Markov avatar's signals, plus aggregates.
+ * real signals and the avatar's signals, plus aggregates.
  * Powers the "Ghost in the Shell" observatory page.
+ *
+ * Query params:
+ *   ?variant=all  (default) - returns data grouped by variant
+ *   ?variant=1..5           - returns data for a single variant
  */
 import type { APIRoute } from 'astro';
 import sql from '../../../lib/libDb.ts';
 import { logError } from '../../../lib/utlErrorLog.ts';
 
-export const GET: APIRoute = async () => {
+const VARIANT_NAMES: Record<number, string> = {
+  1: 'baseline',
+  2: 'conditional_timing',
+  3: 'copula_motor',
+  4: 'ppm_text',
+  5: 'full_adversary',
+};
+
+function buildSummary(sessions: any[]) {
+  const journalSessions = sessions.filter((s: any) => s.sourceId !== 3);
+  const calSessions = sessions.filter((s: any) => s.sourceId === 3);
+
+  const avg = (arr: any[], key: string) => {
+    const vals = arr.map((s: any) => s[key]).filter((v: any) => v != null && Number.isFinite(v));
+    return vals.length ? vals.reduce((a: number, b: number) => a + b, 0) / vals.length : null;
+  };
+
+  const latest = sessions.length > 0 ? sessions[sessions.length - 1] : null;
+
+  const finiteTE = sessions
+    .map((s: any) => s.resTEDom)
+    .filter((v: any) => v != null && Number.isFinite(v));
+  const teMean = finiteTE.length > 0
+    ? finiteTE.reduce((a: number, b: number) => a + b, 0) / finiteTE.length
+    : null;
+  const teStdDev = finiteTE.length > 1 && teMean != null
+    ? Math.sqrt(finiteTE.reduce((s: number, v: number) => s + (v - teMean) ** 2, 0) / (finiteTE.length - 1))
+    : null;
+  const teCV = teMean != null && teStdDev != null && Math.abs(teMean) > 0.001
+    ? teStdDev / Math.abs(teMean)
+    : null;
+
+  return {
+    count: sessions.length,
+    journalCount: journalSessions.length,
+    calibrationCount: calSessions.length,
+    avgTotalL2: avg(sessions, 'totalL2'),
+    avgDynL2: avg(sessions, 'dynL2'),
+    avgMotL2: avg(sessions, 'motL2'),
+    avgSemL2: avg(sessions, 'semL2'),
+    journalAvgL2: avg(journalSessions, 'totalL2'),
+    calibrationAvgL2: avg(calSessions, 'totalL2'),
+    latestTotalL2: latest?.totalL2 ?? null,
+    avgRealPerplexity: avg(sessions, 'realPerplexity'),
+    avgAvatarPerplexity: avg(sessions, 'avatarPerplexity'),
+    avgSelfPerplexity: avg(sessions, 'selfPerplexity'),
+    te: { finiteCount: finiteTE.length, mean: teMean, stdDev: teStdDev, cv: teCV },
+  };
+}
+
+export const GET: APIRoute = async ({ request }) => {
   try {
+    const url = new URL(request.url);
+    const variantParam = url.searchParams.get('variant') ?? 'all';
+
     // All residual rows joined with question date, source, and cross-session perplexity
-    const sessions = await sql`
+    const allRows = await sql`
       SELECT
         r.question_id            AS "questionId",
+        r.adversary_variant_id   AS "variantId",
         q.scheduled_for::text    AS date,
         r.question_source_id     AS "sourceId",
         r.total_l2_norm          AS "totalL2",
@@ -55,54 +113,55 @@ export const GET: APIRoute = async () => {
       FROM tb_reconstruction_residuals r
       LEFT JOIN tb_questions q ON r.question_id = q.question_id
       LEFT JOIN tb_cross_session_signals cs ON r.question_id = cs.question_id
-      ORDER BY COALESCE(q.scheduled_for, r.dttm_created_utc::date) ASC
+      ORDER BY COALESCE(q.scheduled_for, r.dttm_created_utc::date) ASC, r.adversary_variant_id ASC
     `;
 
-    // Aggregate stats
-    const journalSessions = sessions.filter((s: any) => s.sourceId !== 3);
-    const calSessions = sessions.filter((s: any) => s.sourceId === 3);
+    // Single variant mode (backward compatible)
+    if (variantParam !== 'all') {
+      const vId = parseInt(variantParam, 10) || 1;
+      const sessions = (allRows as any[]).filter((r: any) => r.variantId === vId);
+      return new Response(JSON.stringify({
+        sessions,
+        summary: buildSummary(sessions),
+      }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
 
-    const avg = (arr: any[], key: string) => {
-      const vals = arr.map((s: any) => s[key]).filter((v: any) => v != null && Number.isFinite(v));
-      return vals.length ? vals.reduce((a: number, b: number) => a + b, 0) / vals.length : null;
-    };
+    // All variants mode: group by variant
+    const variantGroups: Record<number, any[]> = {};
+    for (const row of allRows as any[]) {
+      const vid = row.variantId ?? 1;
+      if (!variantGroups[vid]) variantGroups[vid] = [];
+      variantGroups[vid].push(row);
+    }
 
-    const latest = sessions.length > 0 ? sessions[sessions.length - 1] : null;
+    const variants = Object.entries(variantGroups).map(([idStr, sessions]) => {
+      const id = parseInt(idStr, 10);
+      return {
+        id,
+        name: VARIANT_NAMES[id] ?? `variant_${id}`,
+        sessions,
+        summary: buildSummary(sessions),
+      };
+    });
 
-    // TE dominance stability (finite values only)
-    const finiteTE = (sessions as any[])
-      .map((s: any) => s.resTEDom)
-      .filter((v: any) => v != null && Number.isFinite(v));
-    const teMean = finiteTE.length > 0
-      ? finiteTE.reduce((a: number, b: number) => a + b, 0) / finiteTE.length
-      : null;
-    const teStdDev = finiteTE.length > 1 && teMean != null
-      ? Math.sqrt(finiteTE.reduce((s: number, v: number) => s + (v - teMean) ** 2, 0) / (finiteTE.length - 1))
-      : null;
-    const teCV = teMean != null && teStdDev != null && Math.abs(teMean) > 0.001
-      ? teStdDev / Math.abs(teMean)
-      : null;
+    // Comparison: avg L2 norms per variant
+    const comparison: Record<number, { avgTotal: number | null; avgDyn: number | null; avgMot: number | null; avgSem: number | null }> = {};
+    for (const v of variants) {
+      const avg = (key: string) => {
+        const vals = v.sessions.map((s: any) => s[key]).filter((x: any) => x != null && Number.isFinite(x));
+        return vals.length ? vals.reduce((a: number, b: number) => a + b, 0) / vals.length : null;
+      };
+      comparison[v.id] = {
+        avgTotal: avg('totalL2'),
+        avgDyn: avg('dynL2'),
+        avgMot: avg('motL2'),
+        avgSem: avg('semL2'),
+      };
+    }
 
-    const summary = {
-      count: sessions.length,
-      journalCount: journalSessions.length,
-      calibrationCount: calSessions.length,
-      avgTotalL2: avg(sessions as any[], 'totalL2'),
-      journalAvgL2: avg(journalSessions as any[], 'totalL2'),
-      calibrationAvgL2: avg(calSessions as any[], 'totalL2'),
-      latestTotalL2: (latest as any)?.totalL2 ?? null,
-      avgRealPerplexity: avg(sessions as any[], 'realPerplexity'),
-      avgAvatarPerplexity: avg(sessions as any[], 'avatarPerplexity'),
-      avgSelfPerplexity: avg(sessions as any[], 'selfPerplexity'),
-      te: {
-        finiteCount: finiteTE.length,
-        mean: teMean,
-        stdDev: teStdDev,
-        cv: teCV,
-      },
-    };
-
-    return new Response(JSON.stringify({ sessions, summary }), {
+    return new Response(JSON.stringify({ variants, comparison }), {
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (err) {

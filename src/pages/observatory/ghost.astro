@@ -81,6 +81,28 @@ import '../../styles/styObservatory.css';
         padding-bottom: 0.5rem;
         border-bottom: 1px solid var(--border);
       }
+      .variant-tab {
+        font-family: var(--mono);
+        font-size: 10px;
+        font-weight: 500;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--text-faint);
+        text-decoration: none;
+        padding: 0.4rem 0.75rem;
+        margin-right: 0.25rem;
+        border-radius: 2px;
+        transition: color 0.15s, background 0.15s;
+      }
+      .variant-tab:hover {
+        color: var(--text-muted);
+        background: var(--bg-panel);
+      }
+      .variant-tab.active {
+        color: var(--text);
+        background: var(--bg-panel);
+        border: 1px solid var(--border);
+      }
       .insufficient {
         font-family: var(--sans);
         font-size: 13px;
@@ -143,6 +165,15 @@ import '../../styles/styObservatory.css';
       <div class="meta-row" id="meta-row">
         <span id="counts">loading…</span>
       </div>
+
+      <nav id="variant-tabs" style="display:none; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
+        <a href="#baseline" class="variant-tab active" data-variant="1">BASELINE</a>
+        <a href="#conditional" class="variant-tab" data-variant="2">CONDITIONAL</a>
+        <a href="#copula" class="variant-tab" data-variant="3">COPULA</a>
+        <a href="#ppm" class="variant-tab" data-variant="4">PPM</a>
+        <a href="#full" class="variant-tab" data-variant="5">FULL</a>
+        <a href="#comparison" class="variant-tab" data-variant="0">COMPARISON</a>
+      </nav>
 
       <div id="ghost-content">
         <div class="empty">loading…</div>
@@ -654,16 +685,101 @@ import '../../styles/styObservatory.css';
 
       // ── Render ───────────────────────────────────────────────────────
 
-      fetch('/api/observatory/ghost').then(r => r.json()).then(data => {
-        if (data.error) {
-          document.getElementById('ghost-content').innerHTML = `<div class="empty">${data.error}</div>`;
+      let allVariantData = null;
+      let activeVariant = 1;
+
+      const VARIANT_LABELS = { 1: 'Baseline', 2: 'Conditional', 3: 'Copula', 4: 'PPM', 5: 'Full' };
+      const VARIANT_COLORS = {
+        1: 'var(--accent)',
+        2: 'var(--accent-blue, #5b8fb9)',
+        3: 'var(--accent-green, #7daa6d)',
+        4: 'var(--accent-purple, #9b7eb8)',
+        5: 'var(--accent-red, #c2635f)',
+      };
+
+      function renderComparison(data) {
+        const { variants, comparison } = data;
+        if (!variants || variants.length === 0) {
+          document.getElementById('ghost-content').innerHTML = '<div class="insufficient">No variant data yet.</div>';
           return;
         }
 
-        const { sessions, summary } = data;
+        let html = '<p class="section-label">Variant Comparison</p>';
+
+        // Summary table
+        html += '<div class="chart-panel"><h3>Mean L2 Norms by Variant</h3>';
+        html += '<table class="signal-table" style="width:100%"><thead><tr>';
+        html += '<td class="signal-name">variant</td><td class="residual-val">total</td><td class="residual-val">motor</td><td class="residual-val">dynamical</td><td class="residual-val">semantic</td><td class="residual-val">sessions</td>';
+        html += '</tr></thead><tbody>';
+        for (const v of variants) {
+          const c = comparison[v.id] || {};
+          const isBest = variants.every(other => (c.avgTotal ?? Infinity) <= (comparison[other.id]?.avgTotal ?? Infinity));
+          const style = isBest ? 'font-weight:600;color:var(--text)' : '';
+          html += `<tr style="${style}"><td class="signal-name">${v.name}</td>`;
+          html += `<td class="residual-val">${fmtVal(c.avgTotal, 1)}</td>`;
+          html += `<td class="residual-val">${fmtVal(c.avgMot, 1)}</td>`;
+          html += `<td class="residual-val">${fmtVal(c.avgDyn, 2)}</td>`;
+          html += `<td class="residual-val">${fmtVal(c.avgSem, 3)}</td>`;
+          html += `<td class="residual-val">${v.summary.count}</td></tr>`;
+        }
+        html += '</tbody></table></div>';
+
+        // Convergence overlay chart
+        html += '<div class="chart-panel"><h3>Total L2 Convergence (All Variants)</h3>';
+        html += '<canvas class="ghost-chart tall" id="comparison-convergence"></canvas>';
+        html += '<div class="legend">';
+        for (const v of variants) {
+          html += `<span><span class="legend-dot" style="background:${VARIANT_COLORS[v.id] || 'var(--text-faint)'}"></span>${v.name}</span>`;
+        }
+        html += '</div></div>';
+
+        // Motor L2 overlay
+        html += '<div class="chart-panel"><h3>Motor L2 (Key Question: Which Variant Closes the Gap?)</h3>';
+        html += '<canvas class="ghost-chart tall" id="comparison-motor"></canvas></div>';
+
+        document.getElementById('ghost-content').innerHTML = html;
+
+        // Draw convergence overlay
+        setTimeout(() => {
+          const convCanvas = document.getElementById('comparison-convergence');
+          if (convCanvas) {
+            const allDates = new Set();
+            for (const v of variants) for (const s of v.sessions) if (s.date) allDates.add(s.date);
+            const sortedDates = [...allDates].sort();
+            const labels = sortedDates.map(d => d.slice(5));
+
+            for (const v of variants) {
+              const vals = sortedDates.map(d => {
+                const s = v.sessions.find(s => s.date === d);
+                return s ? s.totalL2 : null;
+              });
+              const col = VARIANT_COLORS[v.id] || 'var(--text-faint)';
+              drawRawChart(convCanvas, vals, col, labels);
+            }
+          }
+
+          const motCanvas = document.getElementById('comparison-motor');
+          if (motCanvas) {
+            const allDates = new Set();
+            for (const v of variants) for (const s of v.sessions) if (s.date) allDates.add(s.date);
+            const sortedDates = [...allDates].sort();
+
+            for (const v of variants) {
+              const vals = sortedDates.map(d => {
+                const s = v.sessions.find(s => s.date === d);
+                return s ? s.motL2 : null;
+              });
+              const col = VARIANT_COLORS[v.id] || 'var(--text-faint)';
+              drawRawChart(motCanvas, vals, col, sortedDates.map(d => d.slice(5)));
+            }
+          }
+        }, 50);
+      }
+
+      function renderVariant(sessions, summary) {
         if (sessions.length === 0) {
           document.getElementById('ghost-content').innerHTML =
-            '<div class="insufficient">No reconstruction residuals yet. The ghost appears after your next session.</div>';
+            '<div class="insufficient">No data for this variant yet. Run the backfill or wait for the next session.</div>';
           return;
         }
 
@@ -1065,6 +1181,75 @@ import '../../styles/styObservatory.css';
           resizeTimer = setTimeout(drawAll, 150);
         });
 
+      } // end renderVariant
+
+      // ── Tab switching ─────────────────────────────────────────────
+      document.querySelectorAll('.variant-tab').forEach(tab => {
+        tab.addEventListener('click', (e) => {
+          e.preventDefault();
+          document.querySelectorAll('.variant-tab').forEach(t => t.classList.remove('active'));
+          tab.classList.add('active');
+          const vid = parseInt(tab.dataset.variant, 10);
+          activeVariant = vid;
+
+          if (!allVariantData) return;
+
+          if (vid === 0) {
+            renderComparison(allVariantData);
+          } else {
+            const v = allVariantData.variants?.find(v => v.id === vid);
+            if (v) {
+              renderVariant(v.sessions, v.summary);
+            } else {
+              document.getElementById('ghost-content').innerHTML =
+                '<div class="insufficient">No data for this variant yet.</div>';
+            }
+          }
+        });
+      });
+
+      // ── Initial fetch ─────────────────────────────────────────────
+      fetch('/api/observatory/ghost?variant=all').then(r => r.json()).then(data => {
+        if (data.error) {
+          document.getElementById('ghost-content').innerHTML = `<div class="empty">${data.error}</div>`;
+          return;
+        }
+
+        allVariantData = data;
+
+        // Show tabs if any variant has data
+        const hasData = data.variants?.some(v => v.sessions.length > 0);
+        if (hasData) {
+          document.getElementById('variant-tabs').style.display = 'flex';
+        }
+
+        // Check hash for initial tab
+        const hash = window.location.hash.replace('#', '');
+        const hashMap = { baseline: 1, conditional: 2, copula: 3, ppm: 4, full: 5, comparison: 0 };
+        if (hash && hashMap[hash] !== undefined) {
+          activeVariant = hashMap[hash];
+          document.querySelectorAll('.variant-tab').forEach(t => {
+            t.classList.toggle('active', parseInt(t.dataset.variant, 10) === activeVariant);
+          });
+        }
+
+        if (activeVariant === 0) {
+          renderComparison(data);
+        } else {
+          const v = data.variants?.find(v => v.id === activeVariant);
+          if (v && v.sessions.length > 0) {
+            renderVariant(v.sessions, v.summary);
+          } else {
+            // Fall back to baseline
+            const baseline = data.variants?.find(v => v.id === 1);
+            if (baseline && baseline.sessions.length > 0) {
+              renderVariant(baseline.sessions, baseline.summary);
+            } else {
+              document.getElementById('ghost-content').innerHTML =
+                '<div class="insufficient">No reconstruction residuals yet. The ghost appears after your next session.</div>';
+            }
+          }
+        }
       }).catch(err => {
         document.getElementById('ghost-content').innerHTML = `<div class="empty">failed to load: ${err?.message ?? err}</div>`;
       });

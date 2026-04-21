@@ -87,6 +87,7 @@ pub struct MotorSignals {
     pub ex_gaussian_sigma: Option<f64>,
     pub tau_proportion: Option<f64>,
     pub adjacent_hold_time_cov: Option<f64>,
+    pub hold_flight_rank_corr: Option<f64>,
 }
 
 #[napi]
@@ -112,6 +113,7 @@ pub fn compute_motor_signals(stream_json: String, total_duration_ms: f64) -> Mot
         ex_gaussian_sigma: r.ex_gaussian.as_ref().map(|e| e.sigma),
         tau_proportion: r.ex_gaussian.as_ref().map(|e| e.tau_proportion),
         adjacent_hold_time_cov: r.adjacent_hold_time_cov,
+        hold_flight_rank_corr: r.hold_flight_rank_corr,
     }
 }
 
@@ -185,13 +187,15 @@ pub struct AvatarOutput {
     pub keystroke_stream_json: String,
     /// Word count of generated text
     pub word_count: i32,
-    /// Markov order used (1 or 2)
+    /// Markov order used (1 or 2, or PPM max_depth for PPM variants)
     pub order: i32,
     /// Number of unique states in the chain
     pub chain_size: i32,
     /// Number of I-burst episodes injected. Cannot be detected from the
     /// flat keystroke stream; must be returned as metadata.
     pub i_burst_count: i32,
+    /// Which adversary variant produced this result (1-5).
+    pub variant: i32,
 }
 
 #[napi(object)]
@@ -218,9 +222,16 @@ pub fn generate_avatar(
     topic: String,
     profile_json: String,
     max_words: i32,
+    variant: i32,
 ) -> AvatarOutput {
-    let r = match avatar::compute(&corpus_json, &topic, &profile_json, max_words.max(10) as usize)
-    {
+    let av = avatar::AdversaryVariant::from_i32(variant);
+    let r = match avatar::compute(
+        &corpus_json,
+        &topic,
+        &profile_json,
+        max_words.max(10) as usize,
+        av,
+    ) {
         Ok(r) => r,
         Err(_) => return AvatarOutput::default(),
     };
@@ -247,6 +258,7 @@ pub fn generate_avatar(
         order: i32::try_from(r.order).unwrap_or(0),
         chain_size: i32::try_from(r.chain_size).unwrap_or(0),
         i_burst_count: i32::try_from(r.i_burst_count).unwrap_or(i32::MAX),
+        variant: r.variant as i32,
     }
 }
 
