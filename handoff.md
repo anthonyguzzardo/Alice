@@ -1,117 +1,136 @@
-# Handoff: Avatar Engine Audit + Calibration (2026-04-20, Sessions 1-2)
+# Handoff: Alice Instrument State (2026-04-21)
 
-## What happened this session
+## Current state
 
-Full engineering audit of the Avatar Markov chain engine (`src-rs/src/avatar.rs`), followed by market research, implementation of seven fixes, CLAUDE.md compliance pass, frontend integration, and paper/research page updates. Continued in GHOST_HANDOFF.md (sessions 3-8) which built the full reconstruction residual pipeline, session integrity, coupling stability, and brought the instrument to self-validation.
+Daily journaling instrument with 57 entries, 23 sessions with full five-variant reconstruction residuals (115 total), five signal families active (dynamical, motor, semantic, process, cross-session). Rust signal engine is the single source of truth for all signal computation and avatar synthesis.
 
-## Part 1: Audit Findings
+The instrument validates itself. Five adversary ghosts, each one the strongest statistical reconstruction possible along a different axis, all fail to reproduce what the instrument detects in real writing. The motor floor holds at L2 = 86-102 across every variant.
 
-### Critical flaws (fixed)
+## What was built (most recent session, 2026-04-21)
 
-| Flaw | Impact | Fix |
-|------|--------|-----|
-| PRNG `f64()` could return exactly 1.0 | Violated `[0, 1)` contract, biased `weighted_pick` | Divisor changed from `(u32::MAX >> 1)` to `(1u64 << 31)` |
-| `word_difficulty_multiplier` formula inverted | Common words got 2.6x multiplier (should be ~0.7x), rare words got ~1.0x (should be ~1.8x). Every avatar session had backwards content-process coupling | Rewrote with log-frequency scaling (Inhoff & Rayner 1986) |
-| Laplace smoothing in perplexity | Worst-in-class for small corpora (Chen & Goodman 1999). Systematically inflated convergence metric | Replaced with Absolute Discounting: d = n1/(n1 + 2*n2), unigram backoff |
-| Zero tests | Only module in the crate without `#[cfg(test)]`. Violated crate's own mandate | 39 tests added covering every subsystem |
-| No `SignalResult`/`SignalError` | Only module not using the crate's error system. Silent failures returned empty defaults | `compute()` and `compute_text_perplexity()` now return `SignalResult<T>` with `InsufficientData` variants |
+### Multi-adversary system for reconstruction residuals
 
-### Significant flaws (fixed)
+Five ghost variants run on every session. Each adds one statistical improvement to the baseline Markov ghost. If the improvement closes the residual, that component of the gap was statistical. Whatever remains is cognitive.
 
-| Flaw | Fix |
-|------|-----|
-| Hard order-2/order-1 fallback | Witten-Bell interpolated backoff: lambda = T(h) / (T(h) + C(h)) blends both orders probabilistically |
-| R-burst retype identical to deleted text | Large deletions now generate variant text from Markov chain (genuine reformulation) |
-| I-burst timing flat (no tempo drift or word difficulty) | Inserted text now carries tempo drift and word difficulty coupling, matching forward production |
-| `rng_jitter()` dead function returning constant 0.3 | Deleted. Unseen-word jitter is now stochastic via `rng.f64()` |
-| Stale `#[allow(dead_code)]` on `r_burst_ratio` | Removed. Field is actively used by I-burst synthesis |
-| Missing citations on PRNG/statistical functions | Added: SplitMix64 (Steele, Lea & Flood 2014), xoshiro128+ (Blackman & Vigna 2018), Box-Muller (Box & Muller 1958), ex-Gaussian (Lacouture & Cousineau 2008) |
-| No `mul_add` in numerical code | Box-Muller `mu + sigma * z` changed to `sigma.mul_add(z, mu)` per crate convention |
+| Variant | Text | Timing | Motor L2 |
+|---------|------|--------|----------|
+| 1. Baseline | Order-2 Markov | Independent ex-Gaussian | 90.7 |
+| 2. Conditional Timing | Order-2 Markov | AR(1) conditioned IKI | 86.2 |
+| 3. Copula Motor | Order-2 Markov | Gaussian copula hold/flight | 102.4 |
+| 4. PPM Text | Variable-order PPM | Independent ex-Gaussian | 99.7 |
+| 5. Full Adversary | PPM | AR(1) + copula | 89.3 |
 
-## Part 2: Market Research
+Key findings:
+- AR(1) modestly closes motor but creates dynamical artifacts (L2 = 83.4)
+- Copula makes motor worse (coupling artifact)
+- PPM closes semantic (0.131 vs 0.159) and dynamical (0.26 vs 1.51) without affecting motor
+- Text and timing axes are independent in the measurement
+- The motor floor is not an artifact of weak synthesis
 
-Surveyed state of the art in non-LLM text generation for behavioral reconstruction. Key findings applied:
+### R-burst revision calibration
 
-- **Smoothing**: Absolute Discounting (Chen & Goodman 1999) over Laplace. Optimal single-discount estimator for small corpora.
-- **Backoff**: Witten-Bell interpolation (Jelinek & Mercer 1980) over hard fallback. Context-sensitive blending.
-- **Word difficulty**: Log-frequency scaling (Inhoff & Rayner 1986). Psycholinguistic standard for word retrieval latency.
-- **PRNG**: xoshiro128+ is fine for upper-bit float conversion. Low-bit artifacts only affect modular arithmetic (not used).
-- **Reconstruction validity**: KS test, Jensen-Shannon divergence, MMD per signal family for future adversarial validation (Hamaker, Dolan & Molenaar 2005).
+Ghost R-burst episodes now use measured profile data instead of hardcoded timing:
+- `rburst_mean_duration` (9338ms) calibrates total episode timing via budget allocation (25% deliberation, 35% deletion, 10% transition, 30% retype)
+- `rburst_consolidation` (null, awaiting density) scales R-burst size by session position via log-linear interpolation
+- `rburst_mean_size` (20.7 chars) and `rburst_leading_edge_pct` (1.0) were already wired
 
-## Part 3: Frontend Integration
+### Schema file sync
 
-### I-burst counter was permanently zero
-The frontend defined `sigIbursts` but never incremented it. I-bursts can't be detected from the flat keystroke stream because position information is lost after Rust splices them.
+`dbAlice_Tables.sql` was out of sync with migrations 009 and 010:
+- Added `te_adversary_variants` enum table with 5 variant INSERTs
+- Added `tb_personal_profile` as complete CREATE TABLE (was only in migration 004)
+- Added `adversary_variant_id` and composite unique to `tb_reconstruction_residuals`
+- Added `hold_flight_rank_corr` to `tb_motor_signals`
 
-**Fix**: Added `i_burst_count` field to `AvatarResult` (Rust) -> `AvatarOutput` (napi) -> API response -> frontend. The count comes from Rust, which knows exactly how many it injected.
+### Instrument status API
 
-### API empty-result guard
-Added check for empty `result.text` after Rust call, returning a proper error response when `SignalResult` returns `InsufficientData` and napi converts to `AvatarOutput::default()`.
+`instrument-status.ts` now returns per-variant convergence data:
+- `convergence`: baseline (variant 1) for backward compat with published paper numbers
+- `fullAdversary`: variant 5 for the strongest claim
+- `variants`: per-variant summary array with motor/dynamical/semantic/total L2
 
-## Part 4: Paper F Updated to v2
+### Research page updated
 
-`papers/option_f_draft.md` bumped from v1 to v2. Sections rewritten:
+Reconstruction validity section rewritten for multi-adversary framing. No longer describes a single ghost. Names the five strategies (AR(1), copula, PPM, full adversary). Motor residual card shows L2 range across variants. Instrument strip shows variant count. Paper citation updated to v4.
 
-| Section | v1 | v2 |
-|---------|----|----|
-| 4.2 Text generation | Hard fallback, no smoothing spec | Witten-Bell interpolated backoff, Absolute Discounting perplexity |
-| 4.2 Timing synthesis | 6-item priority list, forward-only | Seven named dimensions: forward timing, tempo drift, content-process coupling, evaluation pauses, revision synthesis, I-burst synthesis, PRNG citations |
-| 4.3 Validation loop | "minus deletions and cursor movements" | Signal-pipeline-compatible `{c, d, u}` stream including backspaces and insertions |
-| 6.3 Predictions | "Process signals will show large distance regardless of corpus size" | "Process signal partial convergence" since reconstruction now attempts revision |
-| 9 Limitations | "Reconstruction omits revision" (false) | "Revision synthesis is statistical, not cognitive" (true) |
-| 10.1-10.2 Research program | "Implement perplexity" (future) | "Perplexity implemented with Absolute Discounting" (done) |
-| References | 22 references | 27 references (+Box & Muller, Chen & Goodman, Inhoff & Rayner, Jelinek & Mercer, Steele/Lea/Flood) |
+### Reconstruction Validity paper (v3 to v4)
 
-## Part 5: Research Page Updated
+`papers/option_f_draft.md` updated:
+- Abstract rewritten with five-variant motor floor (86-102)
+- New Section 4.2a: full adversary variant table, AR(1)/copula/PPM descriptions, citations
+- Revision synthesis updated: budget-allocated R-burst timing, consolidation scaling, Lindgren & Sullivan leading-edge
+- Section 6.4 added: multi-adversary empirical results table
+- Section 6.5 updated: dimensional validity profile across all variants
+- Section 7.1 updated: motor residual replicated across five strategies
+- Limitations updated: generative model ceiling partially tested, no-LLM constraint validated
+- Section 10.6 marked completed (model progression implemented)
+- Conclusion rewritten with multi-adversary evidence
+- Seven new references added (Box/Jenkins/Reinsel, Cleary/Witten, Killourhy/Maxion, Kruskal, Lindgren/Sullivan, Moffat, Nelsen)
 
-### New section: "The instrument can validate itself"
-Added between "Validity requirements" and "Theoretical extensions" in both nav and content.
+### Avatar page dropdown
 
-Contents:
-- **Canvas visualization**: Horizontal fidelity bar chart showing projected reconstruction fidelity per signal family (motor 93%, pause 84%, temporal 55%, revision 45%, semantic 4%). Filled bars in accent color, residual gaps visible, bracket labeling "the residual."
-- **Callout**: "Where the reconstruction matches reality, the instrument captures that dimension. Where it diverges, it does not. The gap is not noise. It is diagnostic."
-- **Three residual cards**: Motor (expected small), content (expected decreasing), cognitive (expected persistent, highlighted). The cognitive residual IS the finding.
-- **Condrey response**: The reconstruction is timing-perfect but meaning-absent. If the full signal set distinguishes it from real sessions, content-process binding is in the measurements.
-- Caption explicitly notes schematic projections, not measured values.
+Replaced native `<select>` with custom dropdown matching observatory aesthetic (mono, uppercase, bg/bg-dim hover contrast pattern from nav).
 
-### Validation open question updated
-Previously: "The validation must come from the data, not precede it."
-Now: Acknowledges reconstruction validity as complementary pathway computable from n=1 today, while preserving honest statement that external-criterion validation still requires longitudinal outcome data.
+### GHOST.md updated
 
-### Sources updated
-From "two preprints" to "three papers." Paper F (Reconstruction Validity) added with full title. Key citations list updated with Chen & Goodman, Inhoff & Rayner, Jelinek & Mercer.
+Architecture, data flow, engineering decisions (R-burst duration budget, consolidation log-linear interpolation), backfill section (added rburst-sequences, updated order), profile fields table (added rburst_consolidation, rburst_mean_duration).
 
-## Part 6: Documentation Updated
+## Stale data note
 
-### AVATAR.md
-Updated all sections affected by engine changes: forward production (interpolated backoff), motor timing (ex-Gaussian citation), content-process coupling (log-frequency formula), R-bursts (variant text), I-bursts (timing coupling), napi boundary (SignalResult), development guidelines (SignalResult requirement, citation requirement, PRNG invariant, test count).
-
-## Files modified this session
-
-| File | Change |
-|------|--------|
-| `src-rs/src/avatar.rs` | 7 bug fixes, Absolute Discounting, interpolated backoff, R-burst reformulation, I-burst timing coupling, `SignalResult`, citations, `mul_add`, `i_burst_count`, 39 tests (1041 -> ~1650 lines) |
-| `src-rs/src/lib.rs` | `SignalResult` handling at napi boundary, `i_burst_count` field on `AvatarOutput` |
-| `src/pages/api/avatar.ts` | Returns `iBurstCount`, empty-result guard for `SignalError` |
-| `src/pages/avatar.astro` | I-burst counter initialized from API, displayed in signal update loop |
-| `src/pages/research.astro` | New "Reconstruction validity" section with canvas viz + residual cards, updated validation open question, paper F in sources |
-| `papers/option_f_draft.md` | v1 -> v2: sections 4.2, 4.3, 6.3, 9, 10.1, 10.2 rewritten, 5 references added |
-| `avatar.md` | All seven sections updated for engine changes |
-
-## Test results
-
-- **Rust**: 107 tests pass (39 new in avatar module), zero clippy warnings
-- **Astro**: Build succeeds
+The 115 existing residual rows (23 sessions x 5 variants) were computed before R-burst duration calibration (2026-04-21). New sessions use calibrated values. To recompute:
+```
+DELETE FROM alice.tb_reconstruction_residuals;
+npx tsx src/scripts/backfill-adversary-variants.ts
+```
+Code comments in `avatar.rs` and `libReconstruction.ts` document this cutover.
 
 ## What's next
 
-All three items below were completed in sessions 3-8. See `GHOST_HANDOFF.md` for the full accounting.
+### Difficulty-residual correlation (data accumulating)
+Difficulty classification began at session 54. Once enough generated questions have reconstruction residuals, the correlation between difficulty and motor residual is testable.
 
-### ~~Engineering priority: Close the adversarial validation loop~~ DONE
-Reconstruction residual pipeline built, 22 reconstructions computed across 56 sessions. Motor L2 = 89.3 (mean), dynamical L2 < 1.3, semantic L2 < 0.35. Motor prediction falsified; falsification is the strongest finding.
+### Condrey attack (from paper Section 10.3)
+Transcription protocol: same user transcribes LLM-generated text under the journaling interface. Direct test of whether the instrument detects content-process binding.
 
-### ~~Engineering: Perplexity tracking~~ DONE
-Perplexity computed per session. Real 21.3 vs ghost 78.5 (mean). Person is more internally consistent than the Markov model predicts. Ratio ~3x.
+### TE dominance stability (monitoring)
+CV = 3.08 at 20 sessions. Not yet stable. More sessions needed.
 
-### Research: Condrey attack experiment
-Design transcription protocol. Run authentic + transcribed sessions through full pipeline. Test whether process signals distinguish composition from transcription. **Still open.** The reconstruction residual provides the measurement; the Condrey attack provides the adversary.
+## Architecture reference
+
+```
+src/lib/libReconstruction.ts           -- orchestrates all 5 variants per session
+src/lib/libSignalsNative.ts            -- napi boundary (all Rust FFI calls)
+src/lib/libSignalPipeline.ts           -- orchestrates all derived signals per session
+src/lib/libIntegrity.ts                -- profile distance computation (uses Rust)
+src/lib/libCouplingStability.ts        -- rolling-window coupling stability (uses Rust)
+src/lib/libProfile.ts                  -- rolling behavioral profile (variant inputs + R-burst calibration)
+src/lib/libDb.ts                       -- all database functions (variant-aware residuals)
+src/lib/libGenerate.ts                 -- question generation with difficulty logging
+src-rs/src/avatar.rs                   -- AdversaryVariant enum, Markov + PPM text, baseline + conditional + copula timing, revision calibration
+src-rs/src/stats.rs                    -- Rust stats (pearson, z-scores, linreg, batch correlations)
+src-rs/src/lib.rs                      -- napi boundary
+src-rs/src/dynamical.rs                -- PE, DFA, RQA, transfer entropy
+src-rs/src/motor.rs                    -- sample entropy, ex-Gaussian, motor jerk, hold_flight_rank_corr
+src-rs/src/process.rs                  -- text reconstruction, pause/burst analysis, R-burst detail
+db/sql/dbAlice_Tables.sql              -- complete schema (synced through migration 010)
+db/sql/migrations/010                  -- te_adversary_variants, variant column, profile extensions
+src/pages/api/instrument-status.ts     -- per-variant convergence data for research page
+papers/option_f_draft.md               -- Reconstruction Validity paper (v4)
+GHOST.md                               -- ghost system documentation (multi-adversary, R-burst calibration)
+```
+
+## Key design decisions
+
+- **Five variants, not one.** A single ghost invites the objection that the generator is weak. Five variants, each targeting a specific limitation, close that objection empirically.
+- **Measurement-bounded reconstruction.** No neural models. The ghost can only use what the instrument measures. The ceiling of statistical reconstruction IS the point.
+- **R-burst duration budget, not single sample.** Episode timing split across phases preserves the temporal signature the dynamical signals detect.
+- **Consolidation via log-linear interpolation.** Multiplicative ratios require log-space interpolation to preserve the mean.
+- **Distributions vs sequences.** The motor residual falsification reveals that distributional equivalence is not behavioral equivalence. Condrey attacked distributions. The instrument measures sequences. The distinction is where the cognitive signal lives.
+- **Integrity before profile update.** Session integrity runs before `updateProfile()` to compare against the prior profile state.
+- **Single source of truth.** Rust is the only signal implementation. No TS fallback. If Rust is unavailable, the measurement does not happen.
+
+## Test results
+
+- **Rust**: 136 tests pass, zero clippy warnings
+- **TypeScript**: no new type errors in changed files
+- **Pipeline**: all 5 variants producing correct residuals for new sessions
