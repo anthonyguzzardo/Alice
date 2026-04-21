@@ -53,6 +53,7 @@ import PublicLayout from '../layouts/layPublic.astro';
       <a href="#landscape" class="r-nav-link" data-section="landscape">Existing instruments</a>
       <a href="#observer" class="r-nav-link" data-section="observer">The observer effect</a>
       <a href="#design" class="r-nav-link" data-section="design">Validity requirements</a>
+      <a href="#reconstruction" class="r-nav-link" data-section="reconstruction">Reconstruction validity</a>
       <a href="#extensions" class="r-nav-link" data-section="extensions">Theoretical extensions</a>
       <a href="#open" class="r-nav-link" data-section="open">Open questions</a>
     </div>
@@ -493,7 +494,48 @@ import PublicLayout from '../layouts/layPublic.astro';
   </section>
 
 
-  <!-- ===== SECTION 12: THEORETICAL EXTENSIONS ===== -->
+  <!-- ===== SECTION 12: RECONSTRUCTION VALIDITY ===== -->
+  <section class="r-section" id="reconstruction">
+    <h2>The instrument can validate itself</h2>
+
+    <p>External-criterion validity requires correlating extracted features with clinical outcomes. That requires longitudinal data that does not yet exist. But there is a second validity question that is answerable now: are the measurements <em>informationally sufficient</em>?</p>
+
+    <p>Reconstruction validity (<a class="r-cite" href="/papers/reconstruction-validity">Guzzardo 2026c</a>) tests this by running the instrument in reverse. Take the behavioral profile the instrument has extracted across all sessions. Use it to reconstruct a synthetic writing session: text from the person's vocabulary and transition probabilities, timing from their motor fingerprint, revision from their deletion profile. Then feed the synthetic session back through the same signal pipeline. Compare the extracted signals to those from real sessions, dimension by dimension.</p>
+
+    <div class="r-callout">
+      <p>Where the reconstruction matches reality, the instrument captures that dimension. Where it diverges, it does not. The gap is not noise. It is diagnostic.</p>
+    </div>
+
+    <div class="r-reconstruction-viz-wrap">
+      <canvas id="reconstruction-viz" width="620" height="340" aria-hidden="true"></canvas>
+      <p class="r-caption">Projected reconstruction fidelity by signal family. Motor dimensions converge quickly because the reconstruction draws from the same distributions the instrument fits. Semantic dimensions remain near zero because the Markov chain generates statistically plausible but meaningless text. The persistent gap is the cognitive residual. Schematic projections, not measured values.</p>
+    </div>
+
+    <p>The reconstruction is the strongest possible adversary that operates within the instrument's own measurement space. It has the person's vocabulary, their motor fingerprint, their pause architecture, their revision profile. What it lacks is the cognitive engagement that couples meaning to process: the pause before a difficult idea, the burst through a familiar argument, the deletion that reformulates rather than corrects.</p>
+
+    <div class="r-residual-grid">
+      <div class="r-residual-card">
+        <span class="r-residual-type">Motor residual</span>
+        <span class="r-residual-expected">Expected: small</span>
+        <p>Timing synthesis draws from the same ex-Gaussian and digraph distributions the instrument fits. Motor fidelity should converge within 15-20 sessions as the profile stabilizes.</p>
+      </div>
+      <div class="r-residual-card">
+        <span class="r-residual-type">Content residual</span>
+        <span class="r-residual-expected">Expected: decreasing</span>
+        <p>The Markov chain converges on the person's vocabulary and transitions as the corpus grows. Content fidelity improves monotonically. The rate of convergence characterizes how regular or context-dependent the person's language is.</p>
+      </div>
+      <div class="r-residual-card r-residual-card-key">
+        <span class="r-residual-type">Cognitive residual</span>
+        <span class="r-residual-expected">Expected: persistent</span>
+        <p>The reconstruction cannot produce the coupling between what is being written and how it is being written. This residual persists regardless of corpus size. It IS the cognitive engagement that builds cognitive reserve, that AI mediation replaces, and that timing-only instruments cannot detect.</p>
+      </div>
+    </div>
+
+    <p>This framework also provides a direct empirical response to <a class="r-cite" href="https://arxiv.org/abs/2601.17280" target="_blank" rel="noopener">Condrey (2026a)</a>, who proved that keystroke timing alone cannot distinguish composition from transcription. The reconstruction is timing-perfect but meaning-absent. If the instrument's full signal set (including process and revision signals) can distinguish its own reconstruction from real sessions, it captures something beyond timing. It captures the content-process binding that Condrey's result says timing-only instruments cannot detect.</p>
+  </section>
+
+
+  <!-- ===== SECTION 13: THEORETICAL EXTENSIONS ===== -->
   <section class="r-section" id="extensions">
     <h2>Theoretical extensions (working frameworks, not published findings)</h2>
 
@@ -745,6 +787,144 @@ import PublicLayout from '../layouts/layPublic.astro';
     ctx.rotate(-Math.PI / 2);
     ctx.fillText('SIGNAL VALIDITY', 0, 0);
     ctx.restore();
+  })();
+
+  // ── Reconstruction fidelity visualization ──
+  // Horizontal bar chart showing projected per-dimension fidelity.
+  // Filled = what the instrument captures. Gap = the residual.
+  (() => {
+    const canvas = document.getElementById('reconstruction-viz') as HTMLCanvasElement;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.width;
+    const h = canvas.height;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+    ctx.scale(dpr, dpr);
+
+    const style = getComputedStyle(document.documentElement);
+    const textFaint = style.getPropertyValue('--text-faint').trim() || '#999';
+    const text = style.getPropertyValue('--text').trim() || '#333';
+    const border = style.getPropertyValue('--border').trim() || '#ddd';
+    const accent = style.getPropertyValue('--accent').trim() || '#8b7355';
+    const negative = style.getPropertyValue('--negative').trim() || '#c44';
+    const bgDim = style.getPropertyValue('--bg-dim').trim() || '#f5f5f3';
+
+    const pad = { top: 30, right: 80, bottom: 30, left: 180 };
+    const barH = 28;
+    const gap = 22;
+
+    // Signal families with projected fidelity (schematic, not measured)
+    const dimensions = [
+      { label: 'MOTOR FINGERPRINT', sub: 'ex-Gaussian, digraph latency', fidelity: 0.93 },
+      { label: 'PAUSE ARCHITECTURE', sub: 'P-burst, sentence, word', fidelity: 0.84 },
+      { label: 'TEMPORAL DYNAMICS', sub: 'PE spectrum, DFA, autocorrelation', fidelity: 0.55 },
+      { label: 'REVISION TOPOLOGY', sub: 'R-burst, I-burst, timing bias', fidelity: 0.45 },
+      { label: 'SEMANTIC COHERENCE', sub: 'argument structure, meaning', fidelity: 0.04 },
+    ];
+
+    const barW = w - pad.left - pad.right;
+
+    for (let i = 0; i < dimensions.length; i++) {
+      const d = dimensions[i];
+      const y = pad.top + i * (barH + gap);
+
+      // Label
+      ctx.fillStyle = text;
+      ctx.font = '10px monospace';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'top';
+      ctx.fillText(d.label, pad.left - 14, y + 2);
+
+      // Sub-label
+      ctx.fillStyle = textFaint;
+      ctx.font = '9px monospace';
+      ctx.fillText(d.sub, pad.left - 14, y + 16);
+
+      // Background bar (the gap / residual)
+      ctx.fillStyle = bgDim;
+      ctx.fillRect(pad.left, y, barW, barH);
+
+      // Residual fill (subtle)
+      ctx.fillStyle = negative;
+      ctx.globalAlpha = 0.06;
+      ctx.fillRect(pad.left + barW * d.fidelity, y, barW * (1 - d.fidelity), barH);
+      ctx.globalAlpha = 1;
+
+      // Fidelity bar
+      ctx.fillStyle = accent;
+      ctx.globalAlpha = 0.45 + d.fidelity * 0.35; // brighter for higher fidelity
+      ctx.fillRect(pad.left, y, barW * d.fidelity, barH);
+      ctx.globalAlpha = 1;
+
+      // Border around full bar
+      ctx.strokeStyle = border;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(pad.left, y, barW, barH);
+
+      // Fidelity divider line
+      if (d.fidelity > 0.02 && d.fidelity < 0.98) {
+        ctx.strokeStyle = accent;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(pad.left + barW * d.fidelity, y);
+        ctx.lineTo(pad.left + barW * d.fidelity, y + barH);
+        ctx.stroke();
+      }
+
+      // Percentage label
+      ctx.fillStyle = d.fidelity > 0.5 ? text : textFaint;
+      ctx.font = '11px monospace';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(Math.round(d.fidelity * 100) + '%', pad.left + barW + 10, y + barH / 2);
+    }
+
+    // Residual bracket on the right side spanning the bottom rows
+    const bracketTop = pad.top + 2 * (barH + gap) + barH * 0.3;
+    const bracketBot = pad.top + 4 * (barH + gap) + barH * 0.7;
+    const bracketX = pad.left + barW + 52;
+
+    ctx.strokeStyle = textFaint;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(bracketX - 6, bracketTop);
+    ctx.lineTo(bracketX, bracketTop);
+    ctx.lineTo(bracketX, bracketBot);
+    ctx.lineTo(bracketX - 6, bracketBot);
+    ctx.stroke();
+
+    // Bracket label
+    ctx.save();
+    ctx.fillStyle = textFaint;
+    ctx.font = 'italic 10px serif';
+    ctx.textAlign = 'center';
+    ctx.translate(bracketX + 14, (bracketTop + bracketBot) / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText('the residual', 0, 0);
+    ctx.restore();
+
+    // Axis labels
+    ctx.fillStyle = textFaint;
+    ctx.font = '9px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    const axisY = pad.top + dimensions.length * (barH + gap) - gap + 10;
+    ctx.fillText('CAPTURED', pad.left + barW * 0.25, axisY);
+    ctx.fillText('RESIDUAL', pad.left + barW * 0.82, axisY);
+
+    // Arrow between them
+    ctx.strokeStyle = textFaint;
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(pad.left + barW * 0.38, axisY + 5);
+    ctx.lineTo(pad.left + barW * 0.7, axisY + 5);
+    ctx.stroke();
   })();
 </script>
 
@@ -1389,6 +1569,63 @@ import PublicLayout from '../layouts/layPublic.astro';
     border-top: 1px solid var(--border);
   }
 
+  /* --- Reconstruction validity viz --- */
+  .r-reconstruction-viz-wrap {
+    margin: 2rem 0;
+  }
+
+  .r-reconstruction-viz-wrap canvas {
+    width: 100%;
+    max-width: 620px;
+    height: auto;
+    border-radius: 6px;
+  }
+
+  /* --- Residual cards --- */
+  .r-residual-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1.25rem;
+    margin: 2rem 0;
+  }
+
+  .r-residual-card {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .r-residual-card-key {
+    border-color: var(--accent);
+    background: var(--bg-dim);
+  }
+
+  .r-residual-type {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text);
+  }
+
+  .r-residual-expected {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--text-faint);
+    letter-spacing: 0.04em;
+  }
+
+  .r-residual-card p {
+    font-family: var(--serif-body);
+    font-size: 0.9rem;
+    line-height: 1.55;
+    color: var(--text);
+    margin: 0;
+  }
+
   /* --- Design constraints list --- */
   .r-design-list {
     margin: 2rem 0;
@@ -1556,6 +1793,7 @@ import PublicLayout from '../layouts/layPublic.astro';
     .r-stat-row { grid-template-columns: 1fr; }
     .r-comparison { grid-template-columns: 1fr; }
     .r-landscape-grid { grid-template-columns: 1fr; }
+    .r-residual-grid { grid-template-columns: 1fr; }
 
     .r-silos { grid-template-columns: 1fr; }
     .r-silo-gap { padding: 0.5rem 0; }
