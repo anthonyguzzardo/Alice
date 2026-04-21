@@ -32,6 +32,17 @@ pub(crate) struct TimingProfile {
     pub(crate) pause_sent_pct: Option<f64>,
     /// First keystroke latency in ms
     pub(crate) first_keystroke: Option<f64>,
+    // ── Revision profile ──
+    /// Small deletions per 100 chars typed
+    pub(crate) small_del_rate: Option<f64>,
+    /// Large deletions per 100 chars typed
+    pub(crate) large_del_rate: Option<f64>,
+    /// Proportion of deletions in second half vs total (0.5 = even, >0.5 = back-loaded)
+    pub(crate) revision_timing_bias: Option<f64>,
+    /// R-burst ratio: r_bursts / (r_bursts + i_bursts).
+    /// Available for future I-burst synthesis (mid-text insertions).
+    #[allow(dead_code)]
+    pub(crate) r_burst_ratio: Option<f64>,
 }
 
 pub(crate) struct AvatarResult {
@@ -458,6 +469,168 @@ fn synthesize_timing(text: &str, profile: &TimingProfile, rng: &mut Rng) -> Timi
     TimingOutput { delays, keystrokes }
 }
 
+// ─── Revision synthesis ─────────────────────────────────────────
+
+/// Inject revision episodes into the keystroke stream.
+///
+/// Walks through the forward-only stream and stochastically inserts
+/// deletion + retype sequences at rates matching the person's profile.
+///
+/// Two kinds of revision:
+/// - Small deletions (1-3 chars): typo corrections, rethinking a word ending
+/// - Large deletions (4-15 chars): word or phrase reformulation (R-bursts)
+///
+/// Revision timing bias controls whether deletions cluster in the first
+/// or second half of the session.
+fn inject_revisions(
+    keystrokes: &mut Vec<SyntheticKeystroke>,
+    delays: &mut Vec<f64>,
+    profile: &TimingProfile,
+    rng: &mut Rng,
+) {
+    let small_rate = profile.small_del_rate.unwrap_or(0.0);
+    let large_rate = profile.large_del_rate.unwrap_or(0.0);
+
+    // No revision data: skip
+    if small_rate <= 0.0 && large_rate <= 0.0 {
+        return;
+    }
+
+    let timing_bias = profile.revision_timing_bias.unwrap_or(0.5);
+    let mu = profile.mu.unwrap_or(120.0);
+    let sigma = profile.sigma.unwrap_or(40.0);
+    let tau = profile.tau.unwrap_or(80.0);
+    let hold_mu = 95.0;
+    let hold_sigma = 20.0;
+
+    let total_chars = keystrokes.len();
+    if total_chars < 20 {
+        return;
+    }
+
+    let midpoint = total_chars / 2;
+
+    // Compute how many revisions to inject based on rates (per 100 chars)
+    let n_small = ((small_rate * total_chars as f64 / 100.0) + 0.5) as usize;
+    let n_large = ((large_rate * total_chars as f64 / 100.0) + 0.5) as usize;
+
+    // Pick insertion positions, biased by revision_timing_bias
+    let mut positions: Vec<(usize, bool)> = Vec::new(); // (index, is_large)
+
+    for _ in 0..n_small {
+        let pos = pick_revision_position(total_chars, midpoint, timing_bias, rng);
+        positions.push((pos, false));
+    }
+    for _ in 0..n_large {
+        let pos = pick_revision_position(total_chars, midpoint, timing_bias, rng);
+        positions.push((pos, true));
+    }
+
+    // Sort descending so insertions don't shift earlier indices
+    positions.sort_by_key(|p| std::cmp::Reverse(p.0));
+
+    for (pos, is_large) in positions {
+        if pos < 2 || pos >= keystrokes.len() {
+            continue;
+        }
+
+        let del_count = if is_large {
+            // R-burst: delete 4-15 chars (a word or phrase)
+            4 + (rng.f64() * 11.0) as usize
+        } else {
+            // Small deletion: 1-3 chars
+            1 + (rng.f64() * 2.0) as usize
+        };
+
+        let del_count = del_count.min(pos); // Don't delete past start
+        if del_count == 0 {
+            continue;
+        }
+
+        // Clock position: start from the keystroke we're revising at
+        let mut clock = keystrokes[pos].key_up_ms;
+
+        // Pre-deletion pause (recognition that something is wrong)
+        let pre_pause = if is_large {
+            400.0 + rng.f64() * 1200.0 // R-burst: longer deliberation
+        } else {
+            100.0 + rng.f64() * 300.0 // Small: quick correction
+        };
+        clock += pre_pause;
+
+        // Collect the characters we're about to "delete" (for retyping)
+        let deleted_chars: Vec<char> = keystrokes[pos - del_count..pos]
+            .iter()
+            .map(|k| k.character)
+            .collect();
+
+        // Generate Backspace events
+        let mut revision_keys: Vec<SyntheticKeystroke> = Vec::new();
+        let mut revision_delays: Vec<f64> = Vec::new();
+
+        for _ in 0..del_count {
+            let bs_delay = rng.gaussian(80.0, 25.0).clamp(40.0, 200.0);
+            clock += bs_delay;
+            let hold = rng.gaussian(60.0, 15.0).clamp(30.0, 120.0);
+            revision_keys.push(SyntheticKeystroke {
+                character: '\u{0008}', // Backspace
+                key_down_ms: clock,
+                key_up_ms: clock + hold,
+            });
+            revision_delays.push(bs_delay);
+        }
+
+        // Brief pause before retyping
+        let retype_pause = 150.0 + rng.f64() * 400.0;
+        clock += retype_pause;
+
+        // Retype the deleted characters (possibly with a variant for large deletions)
+        for ch in &deleted_chars {
+            let delay = rng.ex_gaussian(mu, sigma, tau);
+            clock += delay;
+            let hold = rng.gaussian(hold_mu, hold_sigma).clamp(40.0, 200.0);
+            revision_keys.push(SyntheticKeystroke {
+                character: *ch,
+                key_down_ms: clock,
+                key_up_ms: clock + hold,
+            });
+            revision_delays.push(delay);
+        }
+
+        // Splice revision events into the stream after position `pos`
+        let splice_at = pos;
+        let time_shift = clock - keystrokes[pos].key_up_ms;
+
+        // Shift all subsequent keystrokes forward in time
+        for k in keystrokes.iter_mut().skip(splice_at) {
+            k.key_down_ms += time_shift;
+            k.key_up_ms += time_shift;
+        }
+
+        // Insert revision keystrokes and delays
+        let rev_len = revision_keys.len();
+        keystrokes.splice(splice_at..splice_at, revision_keys);
+        delays.splice(splice_at..splice_at, revision_delays);
+
+        // Delays for shifted keystrokes need no change (they're relative to previous)
+        // but we do need to fix the delay of the keystroke right after the splice
+        if splice_at + rev_len < delays.len() {
+            delays[splice_at + rev_len] = rng.ex_gaussian(mu, sigma, tau);
+        }
+    }
+}
+
+/// Pick a revision position biased by timing_bias.
+/// timing_bias > 0.5 means more revisions in the second half.
+fn pick_revision_position(total: usize, midpoint: usize, bias: f64, rng: &mut Rng) -> usize {
+    let in_second_half = rng.f64() < bias;
+    if in_second_half {
+        midpoint + (rng.f64() * (total - midpoint) as f64) as usize
+    } else {
+        2 + (rng.f64() * (midpoint - 2).max(1) as f64) as usize
+    }
+}
+
 // ─── Perplexity ─────────────────────────────────────────────────
 
 /// Compute the per-word log2 perplexity of `text` under the Markov chain
@@ -531,6 +704,10 @@ fn default_profile() -> TimingProfile {
         pause_between_pct: None,
         pause_sent_pct: None,
         first_keystroke: None,
+        small_del_rate: None,
+        large_del_rate: None,
+        revision_timing_bias: None,
+        r_burst_ratio: None,
     }
 }
 
@@ -575,11 +752,16 @@ pub(crate) fn compute(
 
     // Synthesize timing (produces both delays and full keystroke events)
     let timing = synthesize_timing(&text, &profile, &mut rng);
+    let mut delays = timing.delays;
+    let mut keystrokes = timing.keystrokes;
+
+    // Inject revision episodes (deletions + retypes) from the revision profile
+    inject_revisions(&mut keystrokes, &mut delays, &profile, &mut rng);
 
     AvatarResult {
         text,
-        delays: timing.delays,
-        keystroke_events: timing.keystrokes,
+        delays,
+        keystroke_events: keystrokes,
         word_count,
         order,
         chain_size,

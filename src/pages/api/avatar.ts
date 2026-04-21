@@ -52,13 +52,15 @@ export const POST: APIRoute = async ({ request }) => {
     });
   }
 
-  // Fetch timing profile
+  // Fetch timing + revision profile
   const profileRows = await sql`
     SELECT digraph_aggregate_json,
            ex_gaussian_mu_mean, ex_gaussian_sigma_mean, ex_gaussian_tau_mean,
            burst_length_mean,
            pause_between_word_pct, pause_between_sent_pct,
            first_keystroke_mean,
+           small_del_rate_mean, large_del_rate_mean,
+           revision_timing_bias, r_burst_ratio_mean,
            session_count
     FROM tb_personal_profile
     LIMIT 1
@@ -79,6 +81,10 @@ export const POST: APIRoute = async ({ request }) => {
     pause_between_pct: p.pause_between_word_pct ?? null,
     pause_sent_pct: p.pause_between_sent_pct ?? null,
     first_keystroke: p.first_keystroke_mean ?? null,
+    small_del_rate: p.small_del_rate_mean ?? null,
+    large_del_rate: p.large_del_rate_mean ?? null,
+    revision_timing_bias: p.revision_timing_bias ?? null,
+    r_burst_ratio: p.r_burst_ratio_mean ?? null,
   });
 
   const maxWords = body.maxWords ?? 150;
