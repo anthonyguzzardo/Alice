@@ -2,7 +2,7 @@
 title: "Construct Replacement: When AI-Mediated Input Invalidates Behavioral Measurement"
 slug: construct-replacement
 author: Anthony Guzzardo
-date: 2026-04-19
+date: 2026-04-20
 status: published
 version: 2
 target_venue: Trends in Cognitive Sciences (Perspective)

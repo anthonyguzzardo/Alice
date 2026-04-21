@@ -2,7 +2,7 @@
 title: "A Closing Window: The Demographic Confound in Keystroke-Based Cognitive Biomarkers and the AI-Mediation Threat to the Paradigm That Would Replace It"
 slug: closing-window
 author: Anthony Guzzardo
-date: 2026-04-19
+date: 2026-04-20
 status: published
 version: 2
 abstract: "Keystroke dynamics have emerged as a promising modality for passive cognitive assessment, but the keystroke-cognition studies targeting neurodegeneration identified in this review have drawn their participants from a population that largely did not achieve the typing automaticity required for keystroke timing to reflect cognitive processes rather than motor execution."
@@ -11,7 +11,7 @@ abstract: "Keystroke dynamics have emerged as a promising modality for passive c
 # A Closing Window: The Demographic Confound in Keystroke-Based Cognitive Biomarkers and the AI-Mediation Threat to the Paradigm That Would Replace It
 
 **Anthony Guzzardo**
-April 2026 (v2, updated April 19)
+April 2026 (v2, updated April 20)
 
 ---
 
