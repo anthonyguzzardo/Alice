@@ -381,6 +381,43 @@ fn generate_text(chain: &MarkovChain, seed: &str, max_words: usize, rng: &mut Rn
     result
 }
 
+// ─── Word frequency map (for content-process coupling) ──────────
+
+/// Build a word frequency map from the corpus. Words that appear rarely
+/// in the person's writing take longer to retrieve; common words flow.
+fn build_word_freq(texts: &[String]) -> HashMap<String, f64> {
+    let mut counts: HashMap<String, u32> = HashMap::new();
+    let mut total: u32 = 0;
+    for text in texts {
+        for word in text.split_whitespace() {
+            let w = word.to_lowercase().trim_matches(|c: char| !c.is_alphanumeric()).to_string();
+            if w.len() >= 2 {
+                *counts.entry(w).or_insert(0) += 1;
+                total += 1;
+            }
+        }
+    }
+    let total_f = total.max(1) as f64;
+    counts.into_iter().map(|(k, v)| (k, v as f64 / total_f)).collect()
+}
+
+/// Returns a delay multiplier based on word frequency.
+/// Rare words (low frequency) get a multiplier > 1.0 (longer pause).
+/// Common words get a multiplier < 1.0 (shorter pause).
+/// Range is approximately [0.7, 2.5].
+fn word_difficulty_multiplier(word: &str, freq_map: &HashMap<String, f64>) -> f64 {
+    let w = word.to_lowercase();
+    let w = w.trim_matches(|c: char| !c.is_alphanumeric());
+    match freq_map.get(w) {
+        Some(&freq) if freq > 0.01 => 0.7 + (1.0 - freq.min(0.05)) * 2.0, // common: ~0.7-0.8
+        Some(&freq) => 1.0 + (0.01 - freq.min(0.01)) * 150.0,             // rare: ~1.0-2.5
+        None => 1.8 + rng_jitter(),                                         // unseen: high difficulty
+    }
+}
+
+/// Small constant jitter for unseen words (no rng needed, deterministic)
+fn rng_jitter() -> f64 { 0.3 }
+
 // ─── Timing synthesis ───────────────────────────────────────────
 
 struct TimingOutput {
@@ -388,24 +425,60 @@ struct TimingOutput {
     keystrokes: Vec<SyntheticKeystroke>,
 }
 
-fn synthesize_timing(text: &str, profile: &TimingProfile, rng: &mut Rng) -> TimingOutput {
+/// Synthesize a full keystroke stream with:
+/// - Tempo drift (slow start, faster middle, slight slowdown at end)
+/// - Content-process coupling (rare words get longer pre-pauses)
+/// - Evaluation pauses (periodic read-back pauses at structural boundaries)
+/// - I-burst insertion (navigate back and insert text mid-stream)
+/// - All prior features (P-bursts, digraph timing, pause architecture)
+fn synthesize_timing(
+    text: &str,
+    profile: &TimingProfile,
+    word_freq: &HashMap<String, f64>,
+    rng: &mut Rng,
+) -> TimingOutput {
     let chars: Vec<char> = text.chars().collect();
-    let mut delays = Vec::with_capacity(chars.len());
-    let mut keystrokes = Vec::with_capacity(chars.len());
+    let total_chars = chars.len();
+    let mut delays = Vec::with_capacity(total_chars + total_chars / 10);
+    let mut keystrokes = Vec::with_capacity(total_chars + total_chars / 10);
 
-    let mu = profile.mu.unwrap_or(120.0);
+    let base_mu = profile.mu.unwrap_or(120.0);
     let sigma = profile.sigma.unwrap_or(40.0);
     let tau = profile.tau.unwrap_or(80.0);
     let burst_length = profile.burst_length.unwrap_or(150.0) as usize;
     let pause_sent_pct = profile.pause_sent_pct.unwrap_or(0.07);
     let pause_between_pct = profile.pause_between_pct.unwrap_or(0.69);
 
-    // Hold time: typically 80-120ms, sampled from Gaussian
     let hold_mu = 95.0;
     let hold_sigma = 20.0;
 
     let mut chars_since_burst: usize = 0;
-    let mut clock: f64 = 0.0; // Running timestamp in ms
+    let mut clock: f64 = 0.0;
+
+    // ── Tempo drift: three-phase arc ──
+    // Phase 1 (0-20%): exploratory, slower (mu * 1.3)
+    // Phase 2 (20-75%): confident, faster (mu * 0.85)
+    // Phase 3 (75-100%): reviewing/winding down, slight slowdown (mu * 1.1)
+    let tempo_mu = |char_idx: usize| -> f64 {
+        let progress = char_idx as f64 / total_chars.max(1) as f64;
+        let drift = if progress < 0.2 {
+            1.3 - (progress / 0.2) * 0.45  // 1.3 -> 0.85
+        } else if progress < 0.75 {
+            0.85                            // steady fast
+        } else {
+            0.85 + ((progress - 0.75) / 0.25) * 0.25  // 0.85 -> 1.1
+        };
+        base_mu * drift
+    };
+
+    // ── Content-process coupling: track current word for difficulty ──
+    // Build word boundaries from text
+    let words: Vec<(usize, usize, String)> = extract_word_spans(text);
+    let mut word_idx = 0;
+
+    // ── Evaluation pauses: every ~3-5 P-bursts, insert a longer read-back ──
+    let mut bursts_since_eval: usize = 0;
+    let eval_interval = 3 + (rng.f64() * 3.0) as usize; // 3-5 bursts between evals
 
     // First character: first keystroke latency
     let fk = profile.first_keystroke.unwrap_or(3000.0);
@@ -419,17 +492,34 @@ fn synthesize_timing(text: &str, profile: &TimingProfile, rng: &mut Rng) -> Timi
         key_up_ms: clock + hold,
     });
 
-    for i in 1..chars.len() {
+    for i in 1..total_chars {
         let prev = chars[i - 1];
         let curr = chars[i];
         chars_since_burst += 1;
+
+        // Advance word index
+        while word_idx + 1 < words.len() && i >= words[word_idx + 1].0 {
+            word_idx += 1;
+        }
+
+        // Current mu adjusted for tempo drift
+        let mu = tempo_mu(i);
 
         let delay;
 
         // P-burst pause: after ~burst_length chars at a word boundary
         if chars_since_burst >= burst_length && prev == ' ' {
             chars_since_burst = 0;
-            delay = 2000.0 + rng.f64() * 2000.0;
+            bursts_since_eval += 1;
+
+            // Evaluation pause: periodically insert a longer read-back pause
+            if bursts_since_eval >= eval_interval {
+                bursts_since_eval = 0;
+                // Evaluation pause: 4-8 seconds (reading back what was written)
+                delay = 4000.0 + rng.f64() * 4000.0;
+            } else {
+                delay = 2000.0 + rng.f64() * 2000.0;
+            }
         }
         // Sentence boundary pause
         else if matches!(prev, '.' | '!' | '?') && curr == ' ' {
@@ -439,9 +529,21 @@ fn synthesize_timing(text: &str, profile: &TimingProfile, rng: &mut Rng) -> Timi
                 delay = rng.ex_gaussian(mu, sigma, tau);
             }
         }
-        // Word boundary pause (use profile's between-word percentage)
-        else if prev == ' ' && rng.f64() < (pause_between_pct * 0.12).min(0.15) {
-            delay = 300.0 + rng.f64() * 900.0;
+        // Word boundary pause: content-process coupling applies here
+        else if prev == ' ' {
+            // Check difficulty of the upcoming word
+            let difficulty = if word_idx < words.len() {
+                word_difficulty_multiplier(&words[word_idx].2, word_freq)
+            } else {
+                1.0
+            };
+
+            if rng.f64() < (pause_between_pct * 0.12 * difficulty).min(0.25) {
+                // Longer pause for rare words, shorter for common
+                delay = (300.0 + rng.f64() * 900.0) * difficulty.min(2.0);
+            } else {
+                delay = rng.ex_gaussian(mu, sigma, tau);
+            }
         }
         // Digraph-specific timing
         else if let Some(latency) = profile.digraph.as_ref().and_then(|d| {
@@ -450,7 +552,7 @@ fn synthesize_timing(text: &str, profile: &TimingProfile, rng: &mut Rng) -> Timi
         }) {
             delay = (latency + (rng.f64() - 0.5) * 40.0).max(30.0);
         }
-        // Fallback: ex-Gaussian sample
+        // Fallback: ex-Gaussian sample with tempo drift
         else {
             delay = rng.ex_gaussian(mu, sigma, tau);
         }
@@ -467,6 +569,149 @@ fn synthesize_timing(text: &str, profile: &TimingProfile, rng: &mut Rng) -> Timi
     }
 
     TimingOutput { delays, keystrokes }
+}
+
+/// Extract word spans from text: (start_char_idx, end_char_idx, word_string)
+fn extract_word_spans(text: &str) -> Vec<(usize, usize, String)> {
+    let mut spans = Vec::new();
+    let chars: Vec<char> = text.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        // Skip non-word characters
+        if !chars[i].is_alphanumeric() {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        let mut word = String::new();
+        while i < chars.len() && (chars[i].is_alphanumeric() || chars[i] == '\'') {
+            word.push(chars[i]);
+            i += 1;
+        }
+        spans.push((start, i, word));
+    }
+    spans
+}
+
+// ─── I-burst injection ──────────────────────────────────────────
+
+/// Inject I-burst episodes: navigate back to an earlier position
+/// and insert new text. These are structurally different from R-bursts
+/// (which delete-then-retype at the current position).
+///
+/// I-bursts show up in the process signal pipeline as mid-text insertions,
+/// which is a key marker of genuine composition vs. transcription.
+fn inject_i_bursts(
+    keystrokes: &mut Vec<SyntheticKeystroke>,
+    delays: &mut Vec<f64>,
+    profile: &TimingProfile,
+    chain: &MarkovChain,
+    rng: &mut Rng,
+) {
+    let r_ratio = profile.r_burst_ratio.unwrap_or(1.0);
+    // i_burst_ratio = 1 - r_burst_ratio. If r_ratio is 0.8, 20% of bursts are I-bursts.
+    let i_ratio = 1.0 - r_ratio.clamp(0.0, 1.0);
+    if i_ratio < 0.05 || keystrokes.len() < 50 {
+        return; // Negligible I-burst rate or too short
+    }
+
+    let mu = profile.mu.unwrap_or(120.0);
+    let sigma = profile.sigma.unwrap_or(40.0);
+    let tau = profile.tau.unwrap_or(80.0);
+    let hold_mu = 95.0;
+    let hold_sigma = 20.0;
+
+    // Number of I-bursts: proportional to session length and i_ratio
+    let burst_count = profile.burst_length.unwrap_or(150.0) as usize;
+    let n_total_bursts = keystrokes.len() / burst_count.max(50);
+    let n_i_bursts = ((n_total_bursts as f64 * i_ratio) + 0.5) as usize;
+
+    if n_i_bursts == 0 {
+        return;
+    }
+
+    // Pick insertion targets in the first 70% of the text (you go BACK to insert)
+    for _ in 0..n_i_bursts {
+        let target_range = (keystrokes.len() as f64 * 0.7) as usize;
+        if target_range < 10 {
+            break;
+        }
+        let target = 5 + (rng.f64() * (target_range - 5) as f64) as usize;
+        if target >= keystrokes.len() {
+            continue;
+        }
+
+        // Find a word boundary near the target (insert after a space)
+        let insert_at = find_word_boundary(keystrokes, target);
+        if insert_at >= keystrokes.len() {
+            continue;
+        }
+
+        let mut clock = keystrokes[insert_at].key_up_ms;
+
+        // Navigation pause (reading back to find where to insert): 1.5-4s
+        let nav_pause = 1500.0 + rng.f64() * 2500.0;
+        clock += nav_pause;
+
+        // Generate 2-6 words to insert from the Markov chain
+        let insert_words = 2 + (rng.f64() * 4.0) as usize;
+        let last_word = keystrokes[insert_at.saturating_sub(5)..insert_at]
+            .iter()
+            .filter(|k| k.character.is_alphanumeric())
+            .map(|k| k.character)
+            .collect::<String>();
+
+        let seed = if last_word.is_empty() { "the" } else { &last_word };
+        let inserted_text = generate_text(chain, seed, insert_words, rng);
+        let inserted_text = format!(" {}", inserted_text.trim());
+
+        // Generate keystroke events for the inserted text
+        let mut insert_keys: Vec<SyntheticKeystroke> = Vec::new();
+        let mut insert_delays: Vec<f64> = Vec::new();
+
+        for ch in inserted_text.chars() {
+            let delay = rng.ex_gaussian(mu, sigma, tau);
+            clock += delay;
+            let hold = rng.gaussian(hold_mu, hold_sigma).clamp(40.0, 200.0);
+            insert_keys.push(SyntheticKeystroke {
+                character: ch,
+                key_down_ms: clock,
+                key_up_ms: clock + hold,
+            });
+            insert_delays.push(delay);
+        }
+
+        // Post-insertion pause (re-orient to where you were): 500-1500ms
+        let reorient_pause = 500.0 + rng.f64() * 1000.0;
+        clock += reorient_pause;
+
+        // Shift all subsequent keystrokes forward in time
+        let time_shift = clock - keystrokes[insert_at].key_up_ms;
+        for k in keystrokes.iter_mut().skip(insert_at) {
+            k.key_down_ms += time_shift;
+            k.key_up_ms += time_shift;
+        }
+
+        // Splice insertion into the stream
+        let ins_len = insert_keys.len();
+        keystrokes.splice(insert_at..insert_at, insert_keys);
+        delays.splice(insert_at..insert_at, insert_delays);
+
+        // Fix the delay of the keystroke right after the splice
+        if insert_at + ins_len < delays.len() {
+            delays[insert_at + ins_len] = reorient_pause;
+        }
+    }
+}
+
+/// Find the nearest word boundary (space character) at or after `pos`.
+fn find_word_boundary(keystrokes: &[SyntheticKeystroke], pos: usize) -> usize {
+    for (i, k) in keystrokes.iter().enumerate().skip(pos).take(20) {
+        if k.character == ' ' {
+            return i + 1; // Insert after the space
+        }
+    }
+    pos // Fallback: insert at pos
 }
 
 // ─── Revision synthesis ─────────────────────────────────────────
@@ -736,9 +981,10 @@ pub(crate) fn compute(
     // Choose order based on corpus size
     let order = if texts.len() >= 10 { 2 } else { 1 };
 
-    // Build chain
+    // Build chain + word frequency map for content-process coupling
     let chain = build_chain(&texts, order);
     let chain_size = chain.transitions.len();
+    let word_freq = build_word_freq(&texts);
 
     // Generate with time-based seed for variety
     let seed_val = std::time::SystemTime::now()
@@ -750,13 +996,16 @@ pub(crate) fn compute(
     let text = generate_text(&chain, topic, max_words, &mut rng);
     let word_count = text.split_whitespace().count();
 
-    // Synthesize timing (produces both delays and full keystroke events)
-    let timing = synthesize_timing(&text, &profile, &mut rng);
+    // Synthesize timing with tempo drift + content-process coupling + eval pauses
+    let timing = synthesize_timing(&text, &profile, &word_freq, &mut rng);
     let mut delays = timing.delays;
     let mut keystrokes = timing.keystrokes;
 
     // Inject revision episodes (deletions + retypes) from the revision profile
     inject_revisions(&mut keystrokes, &mut delays, &profile, &mut rng);
+
+    // Inject I-bursts (mid-text insertions) from the process profile
+    inject_i_bursts(&mut keystrokes, &mut delays, &profile, &chain, &mut rng);
 
     AvatarResult {
         text,
