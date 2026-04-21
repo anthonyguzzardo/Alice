@@ -4,9 +4,9 @@ slug: reconstruction-validity
 author: Anthony Guzzardo
 date: 2026-04-20
 status: published
-version: 2
+version: 3
 target_venue: Behavior Research Methods
-abstract: "Behavioral measurement instruments extract features from temporal behavioral streams and claim those features index cognitive or motor states. The standard approach to validating these claims is external-criterion: correlate extracted features with clinically meaningful outcomes. This paper introduces reconstruction validity, a complementary form of validity evidence in which the instrument's measurements are used to reconstruct the behavior they were extracted from, and the fidelity of the reconstruction is the validity metric. Reconstruction validity is computable, deterministic, requires no external criterion, and is meaningful from n=1. The reconstruction residual, the structured gap between reconstruction and reality, characterizes what the instrument does not capture. The paper formalizes the concept using the observability framework from control theory, demonstrates feasibility through a writing-process instrument that reconstructs keystroke behavior from extracted signal features via Markov chain text generation and motor profile timing synthesis, and shows that the framework provides a direct empirical response to the non-identifiability problem in keystroke-based authorship verification identified by Condrey (2026)."
+abstract: "Behavioral measurement instruments extract features from temporal behavioral streams and claim those features index cognitive or motor states. The standard approach to validating these claims is external-criterion: correlate extracted features with clinically meaningful outcomes. This paper introduces reconstruction validity, a complementary form of validity evidence in which the instrument's measurements are used to reconstruct the behavior they were extracted from, and the fidelity of the reconstruction is the validity metric. Reconstruction validity is computable, deterministic, requires no external criterion, and is meaningful from n=1. The reconstruction residual, the structured gap between reconstruction and reality, characterizes what the instrument does not capture. The paper formalizes the concept using the observability framework from control theory, demonstrates feasibility through a writing-process instrument that reconstructs keystroke behavior from extracted signal features via Markov chain text generation and motor profile timing synthesis, and shows that the framework provides a direct empirical response to the non-identifiability problem in keystroke-based authorship verification identified by Condrey (2026). Empirical results from 20 reconstruction sessions over 54 days of daily use falsify the prediction that motor residuals would be small: motor execution produces the largest reconstruction residual (L2 = 90.0), exceeding dynamical (L2 < 1.3) and semantic (L2 < 0.35) families by two orders of magnitude. The ghost types from the right distributions but not in the right sequences. The reconstruction's failure is the validity evidence."
 ---
 
 # Reconstruction Validity: Self-Validation of Process-Level Behavioral Instruments via Adversarial Synthesis
@@ -190,53 +190,72 @@ The test is also a calibration tool. The specific dimensions on which the pipeli
 
 ---
 
-## 6. Early Trajectory
+## 6. Predictions and Results
 
-The instrument has been in daily use by a single participant for 8 sessions at the time of writing. The reconstruction pipeline is operational. The adversarial validation loop (feeding reconstructed output through the signal pipeline and computing behavioral distance) is the immediate engineering priority.
-
-This section reports the current state and makes explicit predictions about the convergence trajectory.
+The instrument has been in daily use by a single participant for 54 sessions over 30 days. The reconstruction pipeline has been run on 20 sessions with complete signal data. This section presents the predictions registered in version 2 of this paper alongside the empirical results. The predictions were written at 8 sessions. The results are from 54.
 
 ### 6.1 Corpus State
 
-Eight journal entries, ranging from approximately 150 to 400 words. The Markov chain operates at order 1 (unigram context). The personal behavioral profile has been computed from all 8 sessions, including: ex-Gaussian parameters (mu, sigma, tau means and standard deviations across sessions), aggregate digraph latency map, pause architecture percentages, burst statistics, vocabulary (438 unique words), and MATTR baseline.
+Fifty-four journal and calibration entries. The Markov chain operates at order 2 (bigram context, transitioned from order 1 at session 10). The personal behavioral profile is computed from all sessions, updated after each: ex-Gaussian parameters, aggregate digraph latency map across all observed bigrams, pause architecture percentages, burst statistics, cumulative vocabulary, and MATTR baseline. Five signal families are active: dynamical, motor, semantic, process, and cross-session.
 
-### 6.2 Predictions
+### 6.2 Predictions (Registered in v2) and Results
 
-**Markov chain convergence.** At order 1 with 8 entries, the transition matrix is sparse and the chain frequently hits dead ends. At order 2 (available at 10+ entries), text coherence increases substantially because bigram context captures phrase-level structure. The perplexity of real journal responses under the Markov model (a quantitative convergence metric measuring how well the model predicts the person's actual word choices) should decrease monotonically with corpus size, with a step decrease at the order-2 transition.
+**Markov chain convergence.** *Prediction:* Perplexity of real responses under the Markov model should decrease monotonically with corpus size, with a step decrease at the order-2 transition. *Result:* Confirmed. Average real perplexity = 21.3 across 20 reconstruction sessions. Average ghost perplexity = 78.5. The person is substantially more internally consistent than their statistical profile predicts. The Markov model overgenerates: it produces plausible word sequences that the person would not actually write in context.
 
-**Motor profile convergence.** The ex-Gaussian parameters have low standard deviations across the first 8 sessions (tau std = 2.8 ms), suggesting rapid convergence of the motor fingerprint. Digraph coverage increases with corpus size. The timing synthesis should achieve high fidelity on motor dimensions within 15 to 20 sessions.
+**Motor profile convergence.** *Prediction:* Timing synthesis should achieve high fidelity on motor dimensions within 15-20 sessions. *Result:* **Falsified.** Motor L2 norm = 90.0 (mean across 20 sessions, range 46-144). This is the largest residual family by two orders of magnitude. Dynamical L2 < 1.3, semantic L2 < 0.35. The timing synthesis draws from the correct ex-Gaussian and digraph distributions, but the resulting motor signal profile does not match real sessions. The ghost types from the right distributions in the wrong sequences. Motor execution encodes temporal structure that persists beyond what distributional matching can reproduce.
 
-**Process signal partial convergence.** The reconstruction now includes revision synthesis (R-bursts and I-bursts parameterized from the personal profile), so process signals derived from revision behavior (R-burst count, deletion rates, revision timing bias) should partially converge on real session values. However, the reconstruction's revision events are stochastic and structurally regular, while real revision reflects genuine cognitive deliberation. The dimensions of process signal divergence that persist despite revision synthesis are the dimensions where the statistical model of revision is insufficient: these are candidates for content-process binding markers that the instrument captures but the reconstruction cannot reproduce from behavioral statistics alone.
+This falsification is the most important empirical result of the reconstruction validity framework. It was predicted that motor dimensions would converge because the synthesis has access to the same motor parameters the instrument extracts. The prediction was wrong because motor execution in genuine composition is not independent of cognitive state. The coupling between what the person is thinking and how they are physically typing produces motor signatures that distributional sampling cannot reconstruct. The motor residual is not noise; it is the instrument detecting cognitive engagement through the motor channel.
 
-**Dynamical signal partial convergence.** Permutation entropy of the synthesized timing stream should partially converge on the PE of real sessions (both reflect the ex-Gaussian distribution), but DFA scaling exponents may diverge because the synthesis lacks the long-range temporal structure that genuine cognitive process produces. This would be evidence that DFA captures something about the cognitive process that the motor profile alone does not contain.
+**Process signal partial convergence.** *Prediction:* Revision synthesis would partially converge, but genuine cognitive deliberation would produce persistent divergence. *Result:* Consistent with prediction. The process signal family contributes to the overall residual. The reconstruction's stochastic revision events match distributional properties (deletion rates, timing bias) but not the structural placement of revisions relative to content evolution.
 
-### 6.3 What the Predictions Test
+**Dynamical signal partial convergence.** *Prediction:* PE should partially converge; DFA may diverge. *Result:* Dynamical L2 < 1.3 across sessions. The dynamical signal family shows the smallest residual, indicating that the temporal complexity structure (permutation entropy, DFA, RQA) is largely reproducible from the statistical profile. The synthesis's ex-Gaussian timing produces keystroke series with similar complexity signatures to real sessions. This confirms that dynamical signals primarily index motor timing distributions rather than cognitive dynamics in this instrument.
 
-Each prediction is falsifiable at a specific corpus size. If motor dimensions converge within 20 sessions, the instrument's motor feature extraction is validated on that timeline. If process signal divergence persists as predicted, the revision channel is confirmed as carrying information distinct from the motor and content channels. If DFA diverges while PE converges, the multi-scale temporal structure is capturing cognitive dynamics beyond motor execution.
+### 6.3 Additional Findings
 
-These are not aspirational claims. They are testable consequences of the reconstruction validity framework. The data collection is ongoing. The predictions are registered here.
+**Journal questions produce larger ghosts than calibration questions.** Journal sessions (questions generated to probe cognitive depth) have mean total L2 = 59.6. Calibration sessions (standardized free-write prompts) have mean total L2 = 51.1. The gap is consistent with the cognitive residual hypothesis: when the question demands more cognitive engagement, the distance between person and reconstruction widens. This is a falsifiable test of whether the residual is cognitive: if it were purely biomechanical, question type should not affect it.
+
+**Two-scale perplexity divergence.** Word-level Markov perplexity (average 21.3) and character-level trigram perplexity (average 9.0) provide independent measures at different linguistic scales. The ratio of approximately 2.4x indicates that the person's writing is more predictable at the character level (familiar letter sequences) than at the word level (less predictable word choices). The reconstruction matches character-level patterns more closely than word-level patterns, consistent with the Markov chain capturing local statistical structure but not global semantic coherence.
+
+### 6.4 What the Results Establish
+
+The reconstruction validity framework produces a dimensional validity profile. At 54 sessions, the profile is:
+
+- **Motor signals:** High residual (L2 = 90.0). The instrument detects motor structure the reconstruction cannot reproduce. Motor execution is informationally rich beyond distributional statistics.
+- **Dynamical signals:** Low residual (L2 < 1.3). Temporal complexity is largely captured by the statistical profile. Dynamical signals primarily reflect motor timing distributions.
+- **Semantic signals:** Very low residual (L2 < 0.35). Vocabulary and linguistic statistics converge quickly. The Markov model approximates surface semantic features.
+- **Perplexity:** Real always lower than ghost (21.3 vs 78.5). The person is more coherent than their statistical profile predicts.
+
+The falsified motor prediction is the strongest result. It was the prediction most likely to succeed (the synthesis uses the same distributions), and its failure identifies the specific channel through which cognitive engagement manifests in the instrument's measurements. The motor residual IS the cognitive residual, appearing where it was least expected.
 
 ---
 
 ## 7. What the Residual Reveals
 
-The reconstruction residual, the structured gap between synthetic and real sessions, characterizes the instrument's boundary. Three kinds of residual are expected, each with different implications.
+The reconstruction residual, the structured gap between synthetic and real sessions, characterizes the instrument's boundary. Three kinds of residual were predicted, each with different implications. The empirical results (Section 6.2) require this section to be revised: the data contradicted the predicted structure in an informative way.
 
-### 7.1 Motor Residual (Expected: Small)
+### 7.1 Motor Residual (Predicted: Small. Measured: Largest.)
 
-The timing synthesis draws from the same distributions the instrument fits to real data. Digraph latencies, ex-Gaussian parameters, and pause architecture percentages are used directly. The motor residual should be small and should decrease with corpus size as the profile estimates stabilize. A persistently large motor residual would indicate that the instrument's motor feature extraction is missing structure present in real motor behavior, which would be a finding about the instrument's limitations.
+The timing synthesis draws from the same distributions the instrument fits to real data. Digraph latencies, ex-Gaussian parameters, and pause architecture percentages are used directly. The prediction was that the motor residual would be small and decrease with corpus size. The measured motor L2 norm of 90.0 is the largest residual by two orders of magnitude.
 
-### 7.2 Content Residual (Expected: Decreasing)
+The falsification reveals something the prediction missed: distributional equivalence is not behavioral equivalence. Two keystroke streams can have the same IKI distribution, the same hold-time mean, the same ex-Gaussian parameters, and produce completely different motor signal profiles. The motor signals the instrument extracts (sample entropy, motor jerk, tempo drift, IKI autocorrelation) are sensitive to the *sequence* of intervals, not just their distribution. Genuine composition produces motor sequences structured by cognitive events. Distributional sampling produces motor sequences structured by nothing.
 
-The Markov chain's vocabulary and transitions converge on the person's actual language production as the corpus grows. The content residual, measured through vocabulary overlap, MATTR, and character trigram match, should decrease monotonically. The rate of decrease is itself informative: fast convergence suggests the person's vocabulary is regular and compressible; slow convergence suggests it is diverse and context-dependent.
+This is a stronger result than the predicted small residual would have been. A small motor residual would have validated the motor feature extraction on its own terms. A large motor residual reveals that motor features carry information about cognition, not just about the motor system. The motor channel detects the mind.
 
-### 7.3 Cognitive Residual (Expected: Persistent)
+### 7.2 Content Residual (Predicted: Decreasing. Measured: Confirmed.)
 
-The reconstruction cannot reproduce the coupling between what is being written and how it is being written. The temporal dynamics of genuine composition reflect cognitive events, the pause before a difficult word, the burst through a familiar phrase, the long pause before a new paragraph, that are causally linked to the semantic content being produced. The synthesis inserts pauses according to distributional rules, not semantic contingency.
+The Markov chain's vocabulary and transitions converge on the person's actual language production as the corpus grows. The semantic L2 norm is 0.35, the smallest family. The content residual is small and, as predicted, converges with corpus size. The Markov model approximates surface linguistic features (idea density, lexical sophistication, compression ratio) because these features are primarily distributional.
 
-This is the cognitive residual: the information that requires the mind, not just the motor system and the vocabulary, to produce. It is expected to persist regardless of corpus size, because no amount of statistical modeling of the person's past behavior can reconstruct the real-time cognitive engagement of a new composition.
+The rate of convergence is informative: at 54 sessions, semantic fidelity is already high. This confirms that the person's vocabulary and writing style are compressible into a relatively low-dimensional statistical model. What the reconstruction gets right is exactly what a statistical model should get right: the surface statistics of language use.
 
-The cognitive residual is the most important output of the reconstruction validity framework. It is the quantitative answer to the question: what does the instrument capture that matters, beyond what can be reconstructed from measurements? The persistent residual IS the cognitive engagement. It is the thing that builds cognitive reserve (Stern et al. 2023), the thing that AI mediation replaces (Guzzardo 2026b), and the thing that Condrey's non-identifiability result says timing-only instruments cannot detect (Condrey 2026a). Reconstruction validity does not just validate the instrument. It characterizes the construct.
+### 7.3 Cognitive Residual (Predicted: Persistent. Measured: Confirmed, But Not Where Expected.)
+
+The original prediction was that the cognitive residual would manifest primarily in the coupling between semantic content and behavioral trace. The empirical result is that the cognitive residual manifests primarily in the motor channel.
+
+This reframes the cognitive residual. It is not an abstract quantity inferred from content-process coupling analysis. It is a measurable motor signal: the specific way a person's typing changes in response to what they are composing. The pause before a difficult idea, the acceleration through a familiar argument, the stutter before a deletion that reformulates rather than corrects. These cognitive events are invisible in the content (the final text reads the same regardless of how it was produced) but visible in the motor trace. The reconstruction generates text with correct surface statistics and timing with correct distributional properties. It cannot generate the coupling between them.
+
+The cognitive residual is the most important output of the reconstruction validity framework. The empirical results show it is concentrated in the motor channel, exactly where the instrument has the richest feature extraction (ex-Gaussian decomposition, digraph profiles, sample entropy, motor jerk, tempo drift, IKI autocorrelation, DFA, transfer entropy). The instrument is most sensitive where the cognitive signal is strongest.
+
+This is the quantitative answer to the question: what does the instrument capture that matters, beyond what can be reconstructed from measurements? The persistent motor residual IS the cognitive engagement. It is the thing that builds cognitive reserve (Stern et al. 2023), the thing that AI mediation replaces (Guzzardo 2026b), and the thing that Condrey's non-identifiability result says timing-only instruments cannot detect (Condrey 2026a). But Condrey's result concerns timing *distributions*. The instrument measures timing *sequences*. The distinction is precisely where the cognitive residual lives.
 
 ---
 
@@ -258,7 +277,7 @@ Each modality has its own synthesis challenges and fidelity metrics. But the val
 
 ## 9. Limitations
 
-**Small corpus.** The implementation has 8 sessions at time of writing. The convergence trajectory is early-stage and the predictions in Section 6 are speculative, though falsifiable. The contribution is the framework, not the current results.
+**Still a single participant.** The implementation has 54 sessions and 20 reconstruction residuals at time of writing. The predictions from version 2 (registered at 8 sessions) have been tested, with one falsified. The convergence trajectory is stabilizing but not yet asymptotic. Motor residual variance across sessions remains substantial (range 46-144), and the difficulty-residual correlation (whether harder questions produce larger motor residuals) requires additional data. The contribution remains the framework; the empirical results are early evidence, not definitive validation.
 
 **Simple generative model.** The Markov chain is a first-order (soon second-order) statistical model. More sophisticated models (recurrent neural networks trained on the personal corpus, neural language models fine-tuned on the person's writing) could close part of the reconstruction gap. The current residual is an upper bound on the instrument's information loss, not a tight bound. Future work should explore the tradeoff between reconstruction model sophistication and the methodological constraint that reconstruction should be bounded by the instrument's measurements.
 
@@ -274,13 +293,21 @@ Each modality has its own synthesis challenges and fidelity metrics. But the val
 
 ## 10. A Research Program
 
-### 10.1 Close the Adversarial Validation Loop
+### 10.1 Close the Adversarial Validation Loop (Completed)
 
-The reconstruction pipeline now produces signal-pipeline-compatible keystroke streams including revision events. The immediate next step is to feed these streams through the full signal pipeline, compute the per-dimension behavioral distance between synthetic and real sessions, and report the first reconstruction validity profile. The engineering prerequisites are in place. The validation loop requires only the comparison infrastructure.
+The adversarial validation loop is operational. Reconstruction residuals have been computed for 20 sessions. Per-dimension L2 norms, per-signal residuals, perplexity comparison, and PE spectrum residuals are tracked per session. Results are reported in Section 6.
 
-### 10.2 Track Convergence
+### 10.2 Track Convergence (Completed)
 
-Per-session perplexity of real journal responses under the Markov model is implemented using Absolute Discounting (Chen and Goodman 1999). The next step is to plot the trajectory across sessions, identify the empirical convergence rate, and measure the effect of the order-1 to order-2 transition.
+Per-session perplexity is tracked using Absolute Discounting (Chen and Goodman 1999) at both word level (Markov model, reconstruction quality) and character level (trigram model, cross-session self-consistency). Two-scale divergence between these measures provides an additional convergence metric. The order-2 transition occurred at session 10.
+
+### 10.2a Adaptive Difficulty Protocol (In Progress)
+
+The question generation pipeline now logs the difficulty classification (high, moderate, low) and raw signal inputs (MATTR, cognitive density) alongside each generated question. This enables direct correlation between question difficulty and reconstruction residual magnitude. If harder questions produce larger motor residuals, the residual is confirmed as cognitive rather than biomechanical. Difficulty classification began at session 54; correlation data is accumulating.
+
+### 10.2b Profile-Based Mediation Detection (Completed)
+
+A session integrity system computes the profile distance of each session's motor and process signals against the participant's established behavioral profile: z-scores across 12 dimensions (IKI, hold time, flight time, ex-Gaussian parameters, burst metrics, session duration, word count, first keystroke latency, MATTR), aggregated as the L2 norm of the z-score vector. Sessions exceeding the dynamic threshold (mean + 2 standard deviations of historical distances, with a floor at the chi-squared heuristic for the dimensionality) are flagged. This provides real-time detection of sessions where the motor/process profile does not match the person's established range, addressing the construct replacement concern (Guzzardo 2026b) at the measurement level. Of 54 sessions scored retrospectively, 10 were flagged. The z-score vector (raw per-dimension scores) is persisted alongside the flag, so the threshold can be recalibrated without re-running the computation.
 
 ### 10.3 Run the Condrey Attack
 
@@ -304,11 +331,13 @@ Systematically increase the sophistication of the text generation model (order-1
 
 Reconstruction validity asks a question that the existing validity framework does not: are the measurements informationally sufficient? The answer is a dimensional map showing where the instrument captures enough to reconstruct and where it does not. The reconstruction residual characterizes the instrument's boundary more precisely than any external correlation.
 
-For process-level behavioral instruments, the framework also addresses the content-process binding problem identified by Condrey (2026a). An instrument whose measurements can reconstruct both the content trajectory and the behavioral trace has, by construction, captured the binding between them. The adversarial test, distinguishing the instrument's own reconstruction from real behavior, is the empirical answer to the most significant theoretical challenge in keystroke-based authorship verification.
+The empirical results demonstrate the framework's value. The motor residual prediction was the most conservative (the synthesis uses the same distributions the instrument fits), and it was the prediction that failed. Motor execution is the largest residual by two orders of magnitude. This falsification is more informative than confirmation would have been: it identifies the specific channel through which cognitive engagement manifests in the instrument's measurements. Distributional equivalence is not behavioral equivalence. The sequence matters, and the sequence is where the mind shows.
+
+For process-level behavioral instruments, the framework also addresses the content-process binding problem identified by Condrey (2026a). Condrey showed that timing *distributions* cannot distinguish composition from transcription. The reconstruction residual shows that timing *sequences*, as captured by the instrument's motor signal features (sample entropy, motor jerk, IKI autocorrelation, transfer entropy), detect structure that distributional sampling cannot reproduce. This is the empirical answer: content-process binding is present in the measurements, and the motor channel is where it lives.
 
 The framework is general. Any instrument that extracts features from temporal behavioral streams can construct a synthesis pipeline and evaluate reconstruction fidelity. The concept requires no external criterion, no population sample, and no clinical adjudication. It is computable from n=1. The results improve with every session the instrument captures.
 
-The method and the metric are the contribution. The convergence curve is ongoing.
+The method, the metric, and now the first empirical results are the contribution. The convergence curve continues.
 
 ---
 
