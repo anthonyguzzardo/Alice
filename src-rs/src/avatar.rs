@@ -12,6 +12,8 @@ use std::collections::HashMap;
 
 use serde::Deserialize;
 
+use crate::types::{SignalError, SignalResult};
+
 // ─── Types ──────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
@@ -40,8 +42,7 @@ pub(crate) struct TimingProfile {
     /// Proportion of deletions in second half vs total (0.5 = even, >0.5 = back-loaded)
     pub(crate) revision_timing_bias: Option<f64>,
     /// R-burst ratio: r_bursts / (r_bursts + i_bursts).
-    /// Available for future I-burst synthesis (mid-text insertions).
-    #[allow(dead_code)]
+    /// Used by I-burst synthesis to derive insertion rate (1 - r_burst_ratio).
     pub(crate) r_burst_ratio: Option<f64>,
 }
 
@@ -79,15 +80,21 @@ pub(crate) struct PerplexityResult {
     pub(crate) unknown_transitions: usize,
 }
 
-// ─── PRNG (xoshiro128+ for speed, no external dep) ─────────────
+// ─── PRNG (xoshiro128+, no external dep) ───────���──────────────
+//
+// xoshiro128+: Blackman & Vigna (2018). Fast, small-state generator.
+// Passes BigCrush on the full 32-bit output. Low bits have linear
+// artifacts but f64() uses the upper 31 bits only.
+//
+// State initialization via SplitMix64: Steele, Lea & Flood (2014).
 
 struct Rng {
     s: [u32; 4],
 }
 
 impl Rng {
+    /// Initialize from a 64-bit seed via SplitMix64 (Steele, Lea & Flood 2014).
     fn from_seed(seed: u64) -> Self {
-        // SplitMix64 to initialize state
         let mut z = seed;
         let mut s = [0u32; 4];
         for slot in &mut s {
@@ -101,6 +108,7 @@ impl Rng {
         Self { s }
     }
 
+    /// xoshiro128+ step (Blackman & Vigna 2018).
     fn next_u32(&mut self) -> u32 {
         let result = self.s[0].wrapping_add(self.s[3]);
         let t = self.s[1] << 9;
@@ -120,19 +128,23 @@ impl Rng {
         (self.next_u32() >> 1) as f64 / (1u64 << 31) as f64
     }
 
-    /// Gaussian via Box-Muller
+    /// Gaussian sample via the Box-Muller transform (Box & Muller 1958).
+    /// Exact for continuous uniform inputs; no approximation error.
     fn gaussian(&mut self, mu: f64, sigma: f64) -> f64 {
         let u1 = self.f64().max(1e-10);
         let u2 = self.f64();
         let z = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos();
-        mu + sigma * z
+        sigma.mul_add(z, mu)
     }
 
-    /// Ex-Gaussian sample: N(mu, sigma) + Exp(tau)
+    /// Ex-Gaussian sample: N(mu, sigma) + Exp(tau).
+    /// Convolution of Gaussian and exponential components
+    /// (Lacouture & Cousineau 2008). The tau component models the
+    /// right tail (attentional lapses in keystroke timing). Floor at 30ms.
     fn ex_gaussian(&mut self, mu: f64, sigma: f64, tau: f64) -> f64 {
         let gauss = self.gaussian(mu, sigma);
         let exp = -tau * self.f64().max(1e-10).ln();
-        (gauss + exp).max(30.0) // floor at 30ms
+        (gauss + exp).max(30.0)
     }
 }
 
@@ -999,15 +1011,13 @@ fn pick_revision_position(total: usize, midpoint: usize, bias: f64, rng: &mut Rn
 /// assigning too much mass to impossible transitions. Absolute Discounting
 /// subtracts a fixed discount d from observed counts and redistributes
 /// the freed mass via a unigram backoff, producing tighter estimates.
-fn compute_perplexity(chain: &MarkovChain, text: &str) -> PerplexityResult {
+fn compute_perplexity(chain: &MarkovChain, text: &str) -> SignalResult<PerplexityResult> {
     let tokens = tokenize(text);
     if tokens.len() < chain.order + 1 {
-        return PerplexityResult {
-            perplexity: f64::INFINITY,
-            word_count: tokens.len(),
-            known_transitions: 0,
-            unknown_transitions: tokens.len(),
-        };
+        return Err(SignalError::InsufficientData {
+            needed: chain.order + 1,
+            got: tokens.len(),
+        });
     }
 
     let mut log_prob_sum: f64 = 0.0;
@@ -1058,12 +1068,12 @@ fn compute_perplexity(chain: &MarkovChain, text: &str) -> PerplexityResult {
     let avg_log_prob = log_prob_sum / n;
     let perplexity = (-avg_log_prob).exp2();
 
-    PerplexityResult {
+    Ok(PerplexityResult {
         perplexity,
         word_count: known + unknown,
         known_transitions: known,
         unknown_transitions: unknown,
-    }
+    })
 }
 
 // ─── Public API ─────────────────────────────────────────────────
@@ -1090,21 +1100,14 @@ pub(crate) fn compute(
     topic: &str,
     profile_json: &str,
     max_words: usize,
-) -> AvatarResult {
+) -> SignalResult<AvatarResult> {
     // Parse inputs
     let texts: Vec<String> = serde_json::from_str(corpus_json).unwrap_or_default();
     let profile: TimingProfile =
         serde_json::from_str(profile_json).unwrap_or_else(|_| default_profile());
 
     if texts.is_empty() {
-        return AvatarResult {
-            text: String::new(),
-            delays: Vec::new(),
-            keystroke_events: Vec::new(),
-            word_count: 0,
-            order: 0,
-            chain_size: 0,
-        };
+        return Err(SignalError::InsufficientData { needed: 1, got: 0 });
     }
 
     // Choose order based on corpus size
@@ -1136,14 +1139,14 @@ pub(crate) fn compute(
     // Inject I-bursts (mid-text insertions) from the process profile
     inject_i_bursts(&mut keystrokes, &mut delays, &profile, &chain, &word_freq, &mut rng);
 
-    AvatarResult {
+    Ok(AvatarResult {
         text,
         delays,
         keystroke_events: keystrokes,
         word_count,
         order,
         chain_size,
-    }
+    })
 }
 
 /// Compute perplexity of a new text against the corpus Markov model.
@@ -1152,15 +1155,10 @@ pub(crate) fn compute(
 pub(crate) fn compute_text_perplexity(
     corpus_json: &str,
     text: &str,
-) -> PerplexityResult {
+) -> SignalResult<PerplexityResult> {
     let texts: Vec<String> = serde_json::from_str(corpus_json).unwrap_or_default();
     if texts.is_empty() {
-        return PerplexityResult {
-            perplexity: f64::INFINITY,
-            word_count: 0,
-            known_transitions: 0,
-            unknown_transitions: 0,
-        };
+        return Err(SignalError::InsufficientData { needed: 1, got: 0 });
     }
 
     let order = if texts.len() >= 10 { 2 } else { 1 };
@@ -1409,9 +1407,10 @@ mod tests {
         let texts = sample_corpus();
         let chain = build_chain(&texts, 1);
         // Text from the corpus should have low perplexity
-        let known = compute_perplexity(&chain, "I think about the way things change");
+        let known = compute_perplexity(&chain, "I think about the way things change").unwrap();
         // Random text should have higher perplexity
-        let unknown = compute_perplexity(&chain, "Purple elephants dance on quantum strings");
+        let unknown =
+            compute_perplexity(&chain, "Purple elephants dance on quantum strings").unwrap();
         assert!(
             known.perplexity < unknown.perplexity,
             "Known text perplexity ({}) should be lower than unknown ({})",
@@ -1424,7 +1423,7 @@ mod tests {
     fn perplexity_finite_for_nonempty() {
         let texts = sample_corpus();
         let chain = build_chain(&texts, 1);
-        let result = compute_perplexity(&chain, "The morning felt different.");
+        let result = compute_perplexity(&chain, "The morning felt different.").unwrap();
         assert!(
             result.perplexity.is_finite(),
             "Perplexity should be finite, got {}",
@@ -1433,22 +1432,21 @@ mod tests {
     }
 
     #[test]
-    fn perplexity_infinite_for_too_short() {
+    fn perplexity_insufficient_data() {
         let texts = sample_corpus();
         let chain = build_chain(&texts, 2);
-        // Fewer tokens than order+1 should return infinity
-        let result = compute_perplexity(&chain, "Hi");
-        assert!(
-            result.perplexity.is_infinite(),
-            "Too-short text should yield infinite perplexity"
-        );
+        // Fewer tokens than order+1 should return InsufficientData
+        assert!(matches!(
+            compute_perplexity(&chain, "Hi"),
+            Err(SignalError::InsufficientData { .. })
+        ));
     }
 
     #[test]
     fn perplexity_known_fraction_tracks() {
         let texts = sample_corpus();
         let chain = build_chain(&texts, 1);
-        let result = compute_perplexity(&chain, "I think about the way things change");
+        let result = compute_perplexity(&chain, "I think about the way things change").unwrap();
         assert!(
             result.known_transitions > 0,
             "Text from corpus should have known transitions"
@@ -1545,7 +1543,7 @@ mod tests {
     fn compute_produces_output() {
         let corpus = serde_json::to_string(&sample_corpus()).unwrap();
         let profile = "{}";
-        let result = compute(&corpus, "morning", profile, 20);
+        let result = compute(&corpus, "morning", profile, 20).unwrap();
         assert!(!result.text.is_empty(), "Should produce text");
         assert!(!result.delays.is_empty(), "Should produce delays");
         assert!(!result.keystroke_events.is_empty(), "Should produce keystroke events");
@@ -1553,18 +1551,18 @@ mod tests {
     }
 
     #[test]
-    fn compute_empty_corpus() {
-        let result = compute("[]", "anything", "{}", 20);
-        assert!(result.text.is_empty());
-        assert_eq!(result.word_count, 0);
-        assert_eq!(result.chain_size, 0);
+    fn compute_empty_corpus_insufficient_data() {
+        assert!(matches!(
+            compute("[]", "anything", "{}", 20),
+            Err(SignalError::InsufficientData { needed: 1, got: 0 })
+        ));
     }
 
     #[test]
     fn compute_with_revision_profile() {
         let corpus = serde_json::to_string(&sample_corpus()).unwrap();
         let profile = r#"{"small_del_rate": 2.0, "large_del_rate": 1.0, "revision_timing_bias": 0.6}"#;
-        let result = compute(&corpus, "think", profile, 30);
+        let result = compute(&corpus, "think", profile, 30).unwrap();
         // With revisions, keystrokes should include backspace characters
         let has_backspace = result.keystroke_events.iter().any(|k| k.character == '\u{0008}');
         assert!(has_backspace, "Revision profile should inject backspace events");
@@ -1573,7 +1571,7 @@ mod tests {
     #[test]
     fn compute_keystroke_stream_has_wire_format() {
         let corpus = serde_json::to_string(&sample_corpus()).unwrap();
-        let result = compute(&corpus, "time", "{}", 10);
+        let result = compute(&corpus, "time", "{}", 10).unwrap();
         // Every keystroke event should have valid character, key_down, key_up
         for (i, k) in result.keystroke_events.iter().enumerate() {
             assert!(
@@ -1609,7 +1607,7 @@ mod tests {
     fn perplexity_abs_discount_lower_than_uniform() {
         let texts = sample_corpus();
         let chain = build_chain(&texts, 1);
-        let result = compute_perplexity(&chain, "I think about the way things");
+        let result = compute_perplexity(&chain, "I think about the way things").unwrap();
         let uniform_ppl = chain.vocab_size as f64; // uniform distribution perplexity = vocab size
         assert!(
             result.perplexity < uniform_ppl,

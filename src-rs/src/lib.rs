@@ -194,7 +194,11 @@ pub fn generate_avatar(
     profile_json: String,
     max_words: i32,
 ) -> AvatarOutput {
-    let r = avatar::compute(&corpus_json, &topic, &profile_json, max_words.max(10) as usize);
+    let r = match avatar::compute(&corpus_json, &topic, &profile_json, max_words.max(10) as usize)
+    {
+        Ok(r) => r,
+        Err(_) => return AvatarOutput::default(),
+    };
 
     // Serialize keystroke events into the wire format the signal pipeline expects
     let stream: Vec<serde_json::Value> = r
@@ -226,7 +230,10 @@ pub fn generate_avatar(
 #[napi]
 #[allow(clippy::needless_pass_by_value)]
 pub fn compute_perplexity(corpus_json: String, text: String) -> PerplexityOutput {
-    let r = avatar::compute_text_perplexity(&corpus_json, &text);
+    let r = match avatar::compute_text_perplexity(&corpus_json, &text) {
+        Ok(r) => r,
+        Err(_) => return PerplexityOutput { perplexity: -1.0, ..PerplexityOutput::default() },
+    };
     let total = (r.known_transitions + r.unknown_transitions).max(1) as f64;
 
     PerplexityOutput {
