@@ -1032,11 +1032,17 @@ fn inject_revisions(
         // R-bursts generate variant text from the Markov chain (reformulation).
         // Real R-bursts delete to rephrase, not to re-emit identical text.
         let retype_chars: Vec<char> = if is_large {
-            let context: String = keystrokes[pos.saturating_sub(20)..pos.saturating_sub(del_count)]
-                .iter()
-                .filter(|k| k.character.is_alphanumeric() || k.character == ' ')
-                .map(|k| k.character)
-                .collect();
+            let ctx_end = pos.saturating_sub(del_count);
+            let ctx_start = pos.saturating_sub(del_count + 20);
+            let context: String = if ctx_start < ctx_end {
+                keystrokes[ctx_start..ctx_end]
+                    .iter()
+                    .filter(|k| k.character.is_alphanumeric() || k.character == ' ')
+                    .map(|k| k.character)
+                    .collect()
+            } else {
+                String::new()
+            };
             let seed = context.split_whitespace().last().unwrap_or("the");
             let target_words = (del_count / 5).max(1);
             let replacement = generate_text(chain, seed, target_words, rng);
