@@ -126,24 +126,31 @@ All signal computation is performed in Rust. The Rust crate is the single implem
 
 The reconstruction pipeline takes the instrument's accumulated outputs (the personal behavioral profile and the journal corpus) and generates a synthetic writing session: both the text and the per-character timing.
 
-**Text generation.** A word-level Markov chain is trained on the full journal corpus. The tokenizer preserves punctuation as separate tokens. Sentence-initial tokens are recorded as chain starters. At fewer than 10 corpus entries, the chain operates at order 1 (unigram context). At 10 or more entries, it upgrades to order 2 (bigram context). Text generation is seeded with a topic word: the chain searches for a starting state containing the seed, falling back to a random starter. Generation proceeds by weighted random walk through the transition matrix until the target word count is reached. Dead ends (states with no outgoing transitions) trigger a jump to a random starter.
+**Text generation.** A word-level Markov chain is trained on the full journal corpus. The tokenizer preserves punctuation as separate tokens. Sentence-initial tokens are recorded as chain starters. At fewer than 10 corpus entries, the chain operates at order 1 (unigram context). At 10 or more entries, it upgrades to order 2 (bigram context). Text generation is seeded with a topic word: the chain searches for a starting state containing the seed, falling back to a random starter. Generation uses Witten-Bell interpolated backoff (Jelinek and Mercer 1980): at each step, the order-2 and order-1 distributions are blended probabilistically, with the interpolation weight proportional to the number of unique continuations observed in the higher-order context. Dead ends at both orders trigger a jump to a random starter. This produces smoother generation than hard fallback because every sample incorporates evidence from both context lengths.
+
+**Convergence metric.** Per-word log2 perplexity of real responses under the Markov model, computed using Absolute Discounting (Chen and Goodman 1999) with unigram backoff. Discount parameter d = n1 / (n1 + 2*n2). Absolute Discounting produces tighter estimates than Laplace smoothing on small personal corpora because it avoids assigning excess mass to impossible transitions. Perplexity should decrease monotonically with corpus size.
 
 The choice of a Markov chain over a neural language model is methodologically load-bearing. The reconstruction must be bounded by what the instrument captures. The personal behavioral profile includes vocabulary, word transition probabilities (implicitly, through the corpus), and statistical properties of the writing process. It does not include a model of meaning, argument structure, or narrative coherence. An LLM trained on the corpus would introduce coherence from the model's own capabilities, not from the instrument's measurements. The Markov chain generates text using only the statistical structure the instrument can observe: which words follow which other words in this person's writing. The incoherence of the output at low corpus sizes is informative, not a failure. It shows the ceiling of text reconstruction from the instrument's measurement set.
 
-**Timing synthesis.** Each character in the generated text is assigned a delay in milliseconds, synthesized from the personal motor profile. The synthesis proceeds through a priority hierarchy:
+**Timing synthesis.** Each character in the generated text is assigned a delay in milliseconds, synthesized from the personal motor profile. The synthesis models seven dimensions of writing behavior:
 
-1. The first character receives a delay sampled from the first-keystroke latency distribution (mean from profile, with uniform jitter).
-2. P-burst pauses: after approximately burst-length characters at a word boundary, a pause of 2000 to 4000 ms is inserted, mimicking the production burst structure.
-3. Sentence boundary pauses: after sentence-ending punctuation followed by a space, a pause of 800 to 3000 ms is inserted with probability proportional to the between-sentence pause percentage from the profile.
-4. Word boundary pauses: at spaces following words, a short pause of 300 to 1200 ms is inserted at the population base rate of approximately 8%.
-5. Digraph-specific timing: if the preceding and current character form a bigram present in the aggregate digraph latency map, the mean latency for that bigram is used, with Gaussian jitter (standard deviation 20 ms).
-6. Fallback: an ex-Gaussian sample from the personal IKI distribution (mu, sigma, tau), floored at 30 ms.
+*Forward timing.* The base delay for each character follows a priority hierarchy: (1) first-keystroke latency from the profile, with uniform jitter; (2) P-burst pauses of 2000 to 4000 ms after approximately burst-length characters at word boundaries; (3) sentence boundary pauses of 800 to 3000 ms with probability proportional to the between-sentence pause percentage from the profile; (4) word boundary pauses of 300 to 1200 ms, modulated by the content-process coupling described below; (5) digraph-specific latency from the aggregate digraph map with Gaussian jitter (standard deviation 20 ms); (6) fallback ex-Gaussian sample from the personal IKI distribution (mu, sigma, tau), floored at 30 ms.
 
-The synthesis uses a self-contained pseudorandom number generator (xoshiro128+, Blackman and Vigna 2018) seeded from system time, with no external dependencies. Box-Muller transform for Gaussian sampling. The exponential component of the ex-Gaussian is sampled via inverse CDF.
+*Tempo drift.* The ex-Gaussian mu parameter varies across the session in a three-phase arc grounded in Wengelin (2006) writing process phases: an exploratory phase (first 20% of the session, mu scaled to 1.3x), a confident production phase (20% to 75%, mu scaled to 0.85x), and a winding-down phase (final 25%, mu scaling from 0.85x to 1.1x). This produces the characteristic velocity profile of genuine composition sessions.
+
+*Content-process coupling.* Pause duration at word boundaries is modulated by the difficulty of the upcoming word. A word frequency map built from the corpus during chain construction provides per-word frequency. Difficulty follows a log-frequency scaling (Inhoff and Rayner 1986): common words receive a multiplier of approximately 0.7x (shorter pause), rare words approximately 1.8x (longer pause), capped at 2.5x. This couples the content trajectory to the behavioral trace, which is the content-process binding that Condrey (2026a) identifies as necessary for authorship verification.
+
+*Evaluation pauses.* Every 3 to 5 P-bursts, the synthesis inserts a longer evaluation pause (4000 to 8000 ms) representing a read-back episode. These are structurally distinct from production pauses in the signal pipeline and model the periodic re-evaluation of what has been written.
+
+*Revision synthesis.* The reconstruction injects stochastic deletion and retype episodes matching the person's revision profile. Small deletions (1 to 3 characters) model typo corrections and are retyped identically. Large deletions (4 to 15 characters, R-bursts) model phrase reformulation: the deleted text is replaced with variant text generated from the Markov chain using nearby context as seed, producing structurally honest revision patterns rather than delete-and-retype-identical sequences. Deletion rates, timing bias (first-half vs. second-half clustering), and pre-deletion deliberation pauses are all parameterized from the personal profile.
+
+*I-burst synthesis.* Mid-text insertion episodes are injected at a rate derived from the R-burst ratio in the profile. Each I-burst navigates to a position in the first 70% of the text (1.5 to 4 second navigation pause), generates 2 to 6 words from the Markov chain seeded on nearby context, and returns (0.5 to 1.5 second reorientation pause). Inserted text timing includes tempo drift and word difficulty coupling matching forward production, so insertions are not trivially distinguishable from production in the signal pipeline. I-bursts are a key marker distinguishing genuine composition from transcription (Condrey 2026a).
+
+The synthesis uses a self-contained pseudorandom number generator (xoshiro128+, Blackman and Vigna 2018) seeded via SplitMix64 (Steele, Lea, and Flood 2014) from system time, with no external dependencies. Gaussian sampling via Box-Muller (Box and Muller 1958). Ex-Gaussian sampling via Gaussian plus exponential decomposition (Lacouture and Cousineau 2008).
 
 ### 4.3 The Validation Loop
 
-The reconstruction produces a synthetic character sequence with per-character timing. This is structurally identical to a real keystroke stream (a sequence of characters with inter-event intervals), minus deletions and cursor movements. The synthetic stream can be passed through the same signal pipeline that processes real sessions.
+The reconstruction produces a synthetic keystroke stream: a sequence of characters with key-down and key-up timestamps in the signal pipeline's wire format (`{c, d, u}` events), including backspace characters for deletions and insertion events for I-bursts. The synthetic stream can be passed directly through the same signal pipeline that processes real sessions, including the process signal module that reconstructs text from the editing history.
 
 The pipeline produces a feature vector for the synthetic session. This vector is compared to the feature vectors of real sessions. The distance between them, computed dimension by dimension, is the reconstruction validity metric.
 
@@ -199,7 +206,7 @@ Eight journal entries, ranging from approximately 150 to 400 words. The Markov c
 
 **Motor profile convergence.** The ex-Gaussian parameters have low standard deviations across the first 8 sessions (tau std = 2.8 ms), suggesting rapid convergence of the motor fingerprint. Digraph coverage increases with corpus size. The timing synthesis should achieve high fidelity on motor dimensions within 15 to 20 sessions.
 
-**Process signal divergence.** The reconstruction lacks deletions, cursor movements, and non-monotonic text evolution. Process signals derived from revision behavior (R-burst count, deletion rates, revision timing bias) should show large distance between reconstructed and real sessions regardless of corpus size. This divergence is expected and informative: it identifies the revision channel as carrying information the reconstruction cannot reproduce.
+**Process signal partial convergence.** The reconstruction now includes revision synthesis (R-bursts and I-bursts parameterized from the personal profile), so process signals derived from revision behavior (R-burst count, deletion rates, revision timing bias) should partially converge on real session values. However, the reconstruction's revision events are stochastic and structurally regular, while real revision reflects genuine cognitive deliberation. The dimensions of process signal divergence that persist despite revision synthesis are the dimensions where the statistical model of revision is insufficient: these are candidates for content-process binding markers that the instrument captures but the reconstruction cannot reproduce from behavioral statistics alone.
 
 **Dynamical signal partial convergence.** Permutation entropy of the synthesized timing stream should partially converge on the PE of real sessions (both reflect the ex-Gaussian distribution), but DFA scaling exponents may diverge because the synthesis lacks the long-range temporal structure that genuine cognitive process produces. This would be evidence that DFA captures something about the cognitive process that the motor profile alone does not contain.
 
@@ -261,7 +268,7 @@ Each modality has its own synthesis challenges and fidelity metrics. But the val
 
 **Single participant.** The implementation is a single-subject longitudinal study. Generalizability to other individuals requires replication. However, the framework itself does not depend on population-level statistics and is designed for n=1 evaluation.
 
-**Reconstruction omits revision.** The current synthesis generates text forward-only, without deletions, insertions, or cursor movements. Process signals derived from revision behavior will show large reconstructed-vs-real distances by construction, not because those signals are uncapturable but because the reconstruction pipeline does not yet attempt to synthesize revision. Extending the pipeline to include stochastic revision is feasible but not yet implemented.
+**Revision synthesis is statistical, not cognitive.** The reconstruction now includes revision episodes (R-bursts and I-bursts) parameterized from the personal revision profile. However, the placement and content of revisions are stochastic: the reconstruction deletes at profile-matching rates and retypes Markov-generated variant text. Real revision reflects cognitive deliberation about meaning. The gap between stochastic and genuine revision is itself a component of the cognitive residual, but this limitation means the revision channel's contribution to reconstruction validity is bounded by the expressiveness of the statistical revision model.
 
 ---
 
@@ -269,11 +276,11 @@ Each modality has its own synthesis challenges and fidelity metrics. But the val
 
 ### 10.1 Close the Adversarial Validation Loop
 
-The immediate next step is to feed the reconstruction's output through the full signal pipeline, compute the per-dimension behavioral distance between synthetic and real sessions, and report the first reconstruction validity profile. This transforms the framework from conceptual to empirical.
+The reconstruction pipeline now produces signal-pipeline-compatible keystroke streams including revision events. The immediate next step is to feed these streams through the full signal pipeline, compute the per-dimension behavioral distance between synthetic and real sessions, and report the first reconstruction validity profile. The engineering prerequisites are in place. The validation loop requires only the comparison infrastructure.
 
 ### 10.2 Track Convergence
 
-Implement per-session perplexity of real journal responses under the Markov model. Plot the trajectory across sessions. Identify the empirical convergence rate and the effect of the order-1 to order-2 transition.
+Per-session perplexity of real journal responses under the Markov model is implemented using Absolute Discounting (Chen and Goodman 1999). The next step is to plot the trajectory across sessions, identify the empirical convergence rate, and measure the effect of the order-1 to order-2 transition.
 
 ### 10.3 Run the Condrey Attack
 
@@ -313,6 +320,10 @@ Bandt, C., & Pompe, B. (2002). Permutation entropy: A natural complexity measure
 
 Blackman, D., & Vigna, S. (2018). Scrambled linear pseudorandom number generators. arXiv:1805.01407.
 
+Box, G. E. P., & Muller, M. E. (1958). A note on the generation of random normal deviates. *Annals of Mathematical Statistics*, 29(2), 610-611.
+
+Chen, S. F., & Goodman, J. (1999). An empirical study of smoothing techniques for language modeling. *Computer Speech and Language*, 13(4), 359-394.
+
 Chenoweth, N. A., & Hayes, J. R. (2001). Fluency in writing: Generating text in L1 and L2. *Written Communication*, 18(1), 80-98.
 
 Condrey, D. (2026a). On the insecurity of keystroke-based AI authorship detection: Timing-forgery attacks against motor-signal verification. arXiv:2601.17280.
@@ -333,7 +344,11 @@ Hausdorff, J. M. (2007). Gait dynamics, fractals and falls: Finding meaning in t
 
 Hinton, G. E., & Salakhutdinov, R. R. (2006). Reducing the dimensionality of data with neural networks. *Science*, 313(5786), 504-507.
 
+Inhoff, A. W., & Rayner, K. (1986). Parafoveal word processing during eye fixations in reading: Effects of word frequency. *Perception and Psychophysics*, 40(6), 431-439.
+
 Itakura, F. (1968). Analysis synthesis telephony based upon the maximum likelihood method. *Reports of the 6th International Congress on Acoustics*, C-17-C-20.
+
+Jelinek, F., & Mercer, R. L. (1980). Interpolated estimation of Markov source parameters from sparse data. In E. S. Gelsema & L. N. Kanal (Eds.), *Pattern Recognition in Practice* (pp. 381-397). North-Holland.
 
 Kalman, R. E. (1960). A new approach to linear filtering and prediction problems. *Journal of Basic Engineering*, 82(1), 35-45.
 
@@ -352,6 +367,8 @@ Marwan, N., Romano, M. C., Thiel, M., & Kurths, J. (2007). Recurrence plots for 
 Messick, S. (1995). Validity of psychological assessment: Validation of inferences from persons' responses and performances as scientific inquiry into score meaning. *American Psychologist*, 50(9), 741-749.
 
 Peng, C.-K., Buldyrev, S. V., Havlin, S., Simons, M., Stanley, H. E., & Goldberger, A. L. (1994). Mosaic organization of DNA nucleotides. *Physical Review E*, 49(2), 1685-1689.
+
+Steele, G., Lea, D., & Flood, C. H. (2014). Fast splittable pseudorandom number generators. *ACM SIGPLAN Notices*, 49(10), 453-472.
 
 Stern, Y., et al. (2023). A framework for concepts of reserve and resilience in aging. *Neurobiology of Aging*, 124, 100-103.
 
