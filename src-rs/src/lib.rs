@@ -316,39 +316,24 @@ pub fn compute_batch_correlations(
         Ok(v) => v,
         Err(_) => return Vec::new(),
     };
-    let window_sizes: Vec<i32> = match serde_json::from_str(&window_sizes_json) {
+    let window_sizes_i32: Vec<i32> = match serde_json::from_str(&window_sizes_json) {
         Ok(v) => v,
         Err(_) => return Vec::new(),
     };
 
     let ml = max_lag.max(0) as usize;
-    let mut results = Vec::new();
+    let ws: Vec<usize> = window_sizes_i32.iter().map(|&w| w.max(0) as usize).collect();
 
-    for ws in &window_sizes {
-        let w = (*ws).max(0) as usize;
-
-        for (ai, a_series) in series_a.iter().enumerate() {
-            let a_win: Vec<f64> = a_series.iter().take(w).copied().collect();
-
-            for (bi, b_series) in series_b.iter().enumerate() {
-                let b_win: Vec<f64> = b_series.iter().take(w).copied().collect();
-
-                if let Some((corr, lag)) = stats::best_lagged_correlation(&a_win, &b_win, ml) {
-                    if corr.abs() >= threshold {
-                        results.push(CorrelationResult {
-                            a_index: i32::try_from(ai).unwrap_or(i32::MAX),
-                            b_index: i32::try_from(bi).unwrap_or(i32::MAX),
-                            window_size: *ws,
-                            correlation: corr,
-                            lag: i32::try_from(lag).unwrap_or(i32::MAX),
-                        });
-                    }
-                }
-            }
-        }
-    }
-
-    results
+    stats::batch_lagged_correlations(&series_a, &series_b, &ws, ml, threshold)
+        .into_iter()
+        .map(|(ai, bi, w, corr, lag)| CorrelationResult {
+            a_index: i32::try_from(ai).unwrap_or(i32::MAX),
+            b_index: i32::try_from(bi).unwrap_or(i32::MAX),
+            window_size: i32::try_from(w).unwrap_or(i32::MAX),
+            correlation: corr,
+            lag: i32::try_from(lag).unwrap_or(i32::MAX),
+        })
+        .collect()
 }
 
 /// Compute perplexity of a text against the corpus Markov model.

@@ -71,83 +71,6 @@ export interface CouplingStabilityResult {
   allPairs: CouplingTrajectory[];
 }
 
-// ─── Signed Pearson (matches libEmotionProfile.ts) ──────────────────
-
-function signedPearson(a: number[], b: number[]): number {
-  if (a.length < 3 || a.length !== b.length) return 0;
-  const n = a.length;
-  let sumA = 0, sumB = 0;
-  for (let i = 0; i < n; i++) { sumA += a[i]!; sumB += b[i]!; }
-  const ma = sumA / n, mb = sumB / n;
-  let num = 0, da = 0, db = 0;
-  for (let i = 0; i < n; i++) {
-    const ai = a[i]! - ma;
-    const bi = b[i]! - mb;
-    num += ai * bi;
-    da += ai * ai;
-    db += bi * bi;
-  }
-  const denom = Math.sqrt(da * db);
-  return denom < 1e-10 ? 0 : num / denom;
-}
-
-// ─── Compute coupling at a single window size ───────────────────────
-
-function computeCouplingAtWindow(
-  emotionEntries: EmotionEntry[],
-  behaviorStates: EntryState[],
-  windowSize: number,
-): Map<string, { correlation: number; lag: number; direction: number }> {
-  const n = Math.min(windowSize, emotionEntries.length, behaviorStates.length);
-  const result = new Map<string, { correlation: number; lag: number; direction: number }>();
-
-  if (n < MIN_WINDOW) return result;
-
-  const emotionSeries: Record<string, number[]> = {};
-  for (const dim of EMOTION_DIMENSIONS) {
-    emotionSeries[dim] = emotionEntries.slice(0, n).map(e => e[dim]);
-  }
-
-  const behaviorSeries: Record<string, number[]> = {};
-  for (const dim of STATE_DIMENSIONS) {
-    behaviorSeries[dim] = behaviorStates.slice(0, n).map(s => s[dim] as number);
-  }
-
-  for (const eDim of EMOTION_DIMENSIONS) {
-    for (const bDim of STATE_DIMENSIONS) {
-      const eValues = emotionSeries[eDim]!;
-      const bValues = behaviorSeries[bDim]!;
-
-      if (n < MAX_LAG * 2 + 3) continue;
-
-      let bestCorr = 0;
-      let bestLag = 0;
-
-      for (let lag = 0; lag <= MAX_LAG; lag++) {
-        const end = n - lag;
-        const a = eValues.slice(0, end);
-        const b = bValues.slice(lag, lag + end);
-        const r = signedPearson(a, b);
-        if (Math.abs(r) > Math.abs(bestCorr)) {
-          bestCorr = r;
-          bestLag = lag;
-        }
-      }
-
-      if (Math.abs(bestCorr) >= COUPLING_THRESHOLD) {
-        const key = `${eDim}|${bDim}`;
-        result.set(key, {
-          correlation: bestCorr,
-          lag: bestLag,
-          direction: bestCorr >= 0 ? 1 : -1,
-        });
-      }
-    }
-  }
-
-  return result;
-}
-
 // ─── Linear regression slope ────────────────────────────────────────
 
 function linregSlope(xs: number[], ys: number[]): number {
@@ -201,32 +124,34 @@ export async function computeCouplingStability(): Promise<CouplingStabilityResul
     behaviorStates.slice(0, maxN).map(s => s[dim] as number)
   );
 
-  // Try Rust batch computation; fall back to TS if unavailable
+  // Rust batch computation. Single source of truth.
   const rustResults = rustBatchCorrelations(
     emotionSeries, behaviorSeries, windowSizes, MAX_LAG, COUPLING_THRESHOLD
   );
+
+  if (!rustResults) {
+    return {
+      entryCount: maxN,
+      windowCount: windowSizes.length,
+      stablePairs: [],
+      unstablePairs: [],
+      stabilityRate: 0,
+      allPairs: [],
+    };
+  }
 
   // Index results by key+window for trajectory building
   type CorrEntry = { correlation: number; lag: number };
   const windowResults: Map<string, CorrEntry>[] = windowSizes.map(() => new Map());
 
-  if (rustResults && rustResults.length > 0) {
-    // Rust results: flat list of (aIndex, bIndex, windowSize, correlation, lag)
-    for (const r of rustResults) {
-      const eDim = EMOTION_DIMENSIONS[r.aIndex];
-      const bDim = STATE_DIMENSIONS[r.bIndex];
-      if (!eDim || !bDim) continue;
-      const key = `${eDim}|${bDim}`;
-      const wsIdx = windowSizes.indexOf(r.windowSize);
-      if (wsIdx >= 0) {
-        windowResults[wsIdx]!.set(key, { correlation: r.correlation, lag: r.lag });
-      }
-    }
-  } else {
-    // TS fallback
-    for (let wi = 0; wi < windowSizes.length; wi++) {
-      const wr = computeCouplingAtWindow(emotionEntries, behaviorStates, windowSizes[wi]!);
-      windowResults[wi] = wr;
+  for (const r of rustResults) {
+    const eDim = EMOTION_DIMENSIONS[r.aIndex];
+    const bDim = STATE_DIMENSIONS[r.bIndex];
+    if (!eDim || !bDim) continue;
+    const key = `${eDim}|${bDim}`;
+    const wsIdx = windowSizes.indexOf(r.windowSize);
+    if (wsIdx >= 0) {
+      windowResults[wsIdx]!.set(key, { correlation: r.correlation, lag: r.lag });
     }
   }
 

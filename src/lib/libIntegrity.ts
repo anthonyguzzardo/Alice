@@ -161,26 +161,15 @@ export async function computeSessionIntegrity(questionId: number): Promise<Integ
 
   if (dimNames.length < 3) return null;
 
-  // Rust computes z-scores and L2 distance; TS fallback if engine unavailable
-  let zScores: Record<string, number> = {};
-  let distance: number;
-
+  // Rust computes z-scores and L2 distance. Single source of truth.
   const rustResult = rustProfileDistance(values, means, stds);
-  if (rustResult && rustResult.zScores.length === dimNames.length) {
-    for (let i = 0; i < dimNames.length; i++) {
-      zScores[dimNames[i]!] = rustResult.zScores[i]!;
-    }
-    distance = rustResult.distance;
-  } else {
-    // TS fallback
-    let sumSq = 0;
-    for (let i = 0; i < dimNames.length; i++) {
-      const z = (values[i]! - means[i]!) / stds[i]!;
-      zScores[dimNames[i]!] = z;
-      sumSq += z * z;
-    }
-    distance = Math.sqrt(sumSq);
+  if (!rustResult || rustResult.zScores.length !== dimNames.length) return null;
+
+  const zScores: Record<string, number> = {};
+  for (let i = 0; i < dimNames.length; i++) {
+    zScores[dimNames[i]!] = rustResult.zScores[i]!;
   }
+  const distance = rustResult.distance;
 
   const dimCount = dimNames.length;
 

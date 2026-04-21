@@ -185,6 +185,39 @@ pub(crate) fn best_lagged_correlation(
     Some((best_corr, best_lag))
 }
 
+/// Batch-compute best lagged correlations between all pairs of two
+/// series groups at multiple window sizes. Returns only pairs where
+/// |r| >= threshold.
+///
+/// Used for coupling stability: emotion_dims x behavior_dims x windows.
+pub(crate) fn batch_lagged_correlations(
+    series_a: &[Vec<f64>],
+    series_b: &[Vec<f64>],
+    window_sizes: &[usize],
+    max_lag: usize,
+    threshold: f64,
+) -> Vec<(usize, usize, usize, f64, usize)> {
+    let mut results = Vec::new();
+
+    for &w in window_sizes {
+        for (ai, a_series) in series_a.iter().enumerate() {
+            let a_win: Vec<f64> = a_series.iter().take(w).copied().collect();
+
+            for (bi, b_series) in series_b.iter().enumerate() {
+                let b_win: Vec<f64> = b_series.iter().take(w).copied().collect();
+
+                if let Some((corr, lag)) = best_lagged_correlation(&a_win, &b_win, max_lag)
+                    && corr.abs() >= threshold
+                {
+                    results.push((ai, bi, w, corr, lag));
+                }
+            }
+        }
+    }
+
+    results
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -379,9 +412,31 @@ mod tests {
     }
 
     #[test]
+    fn best_lagged_correlation_detects_shift() {
+        // Non-linear pattern so only the exact shift gives r=1.0
+        let a = vec![1.0, 4.0, 2.0, 7.0, 3.0, 8.0, 5.0, 9.0, 6.0, 10.0];
+        // b = a shifted right by 2, with filler at start
+        let b = vec![0.0, 0.0, 1.0, 4.0, 2.0, 7.0, 3.0, 8.0, 5.0, 9.0];
+        let (corr, lag) = best_lagged_correlation(&a, &b, 3).unwrap();
+        assert!((corr - 1.0).abs() < 1e-6, "shifted series should correlate near 1.0, got {corr}");
+        assert_eq!(lag, 2, "shifted series should have lag 2, got {lag}");
+    }
+
+    #[test]
     fn best_lagged_correlation_insufficient() {
         let a = vec![1.0, 2.0, 3.0];
         let b = vec![1.0, 2.0, 3.0];
         assert!(best_lagged_correlation(&a, &b, 3).is_none());
+    }
+
+    #[test]
+    fn batch_lagged_correlations_basic() {
+        let a = vec![vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]];
+        let b = vec![vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]];
+        let results = batch_lagged_correlations(&a, &b, &[10], 3, 0.5);
+        assert_eq!(results.len(), 1);
+        let (ai, bi, w, corr, lag) = results[0];
+        assert_eq!((ai, bi, w, lag), (0, 0, 10, 0));
+        assert!((corr - 1.0).abs() < 1e-10);
     }
 }
