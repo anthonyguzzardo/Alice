@@ -1,125 +1,175 @@
-# Handoff: Public Surfaces + Avatar Foundation (2026-04-20)
+# Handoff: Avatar Engine + Research Papers + Landscape Survey (2026-04-20)
 
 ## What happened this session
 
-Deep investigation of the full codebase, then two rounds of building: public-facing pages inspired by anthropic.com patterns, and the foundation for a writing process avatar.
+Three major workstreams in one session: (1) comprehensive research landscape survey via four parallel agents, (2) two papers drafted and published (Options F and G), (3) Avatar engine upgraded from a forward-only text generator to a full writing process reconstruction engine with seven behavioral modes.
 
-## Part 1: Public Surface Expansion
+## Part 1: Research Landscape Survey
 
-### Email capture
-- **Migration**: `db/sql/migrations/003_add_subscribers.sql` -- `tb_subscribers` table (email, source, timestamp)
-- **API**: `src/pages/api/subscribe.ts` -- POST endpoint, validates email, handles duplicates (409 returns ok)
-- **Forms added to**: `src/pages/collaborate.astro` (contact section), `src/pages/vision.astro` (closing section)
-- Inline JS handles submit, replaces form with "You're on the list." on success
+Four parallel research agents surveyed the field. Key findings:
 
-### Build log (`/log`)
-- **Library**: `src/lib/libLog.ts` -- reuses papers pattern (gray-matter + marked), reads from `/log/` directory
-- **Pages**: `src/pages/log/index.astro` (list), `src/pages/log/[slug].astro` (detail)
-- **Sample entry**: `log/why-rust.md` (published, tagged rust/signals/engineering)
-- Front matter: title, slug, date, status, tags array. Excerpt auto-extracted from first paragraph.
+### Joint text+timing synthesis is genuinely novel
+The field is split into two non-overlapping lanes: timing synthesis (given text, generate timing) and text generation (given history, generate text). Nobody has bridged them. Closest prior art: Condrey (2026) bolts synthetic timing onto LLM text, but as separate stages. Alice's Avatar is the only system that jointly generates content from a personal corpus AND timing from a motor profile.
 
-### Methodology page (`/methodology`)
-- **Page**: `src/pages/methodology.astro`
-- All 6 signal families with individual signals: name, description, citation, validation badge
-- Three validation tiers: Validated (replicated method), Adapted (published method in new context), Experimental (novel to Alice)
-- Known limitations section (n=1, signal-to-construct mapping, linguistic depth, question confound, device sensitivity)
+### "Reconstruction validity" does not exist in psychometrics
+Structural parallels exist in signal processing (analysis-by-synthesis, Stevens & Halle 1962), control theory (observability, Kalman 1960), and ML (autoencoder reconstruction loss). Nobody has applied reconstruction fidelity as a validation metric for a behavioral measurement instrument. The term and the method are genuinely new.
 
-### For-researchers page (`/for-researchers`)
-- **Page**: `src/pages/for-researchers.astro`
-- NOT in nav. Direct-link for cold outreach.
-- Sections: dual-channel capture, signal pipeline (6 families), current state, partnership model, email + subscribe
+### Condrey (2026) is the critical paper
+Proved timing alone cannot distinguish composition from transcription (99.8% evasion). His solution requirement: "content-process binding." Alice already captures both channels via process signals (text reconstruction, revision coherence, burst semantics) + dynamical signals (PE, DFA, RQA). Published constructive follow-ups: ZK-PoP (zero-knowledge process attestation) and TEE-based architecture. Alice provides the measurement-side answer to his cryptographic proposals.
 
-### About page (`/about`)
-- **Page**: `src/pages/about.astro`
-- First-person narrative of how Alice came about: science forum -> Einstein machine -> circular flaw -> measurement instrument -> closing window
-- Written to match Anthony's actual voice (informed by journal entries for style, not content)
-- Methodological disclosure: builder = sole participant, confound named openly
+### Field structure (three independent tracks)
+- **Authentication**: UAM BiDA Lab, TypeFormer, 185K-subject benchmarks, 3.25% EER. Mature, not Alice's game.
+- **Clinical phenotyping**: BiAffect (phone, simple stats), MCI detection (97.9% sensitivity), PD diagnosis (96.97%). Fragmented, no standardization. Alice's signal depth is differentiated.
+- **AI detection**: Kundu/IIIT Delhi + ETS/Vanderbilt. Expanding but broken by Condrey's attack. Needs content-process binding.
 
-### Navigation update
-`src/components/cmpPublicNav.astro` now reads:
-Home, Vision, Questions, Research, Instrument, **Methodology**, Papers, **Log**, Collaborate, **About** | **Avatar** | Journal, Observatory | Signal Sandbox
+### No major AI lab involvement
+Anthropic, OpenAI, DeepMind have zero published work on process-level detection. DARPA/IARPA have moved away from keystroke biometrics.
 
-## Part 2: Avatar Foundation
+### Key researchers identified
+- **Condrey** (theorist, attacks + constructive crypto)
+- **Crossley at Vanderbilt** (99% transcription detection, EDM 2024)
+- **Acien/Fierrez/Morales at UAM** (KeyGAN for PD phenotyping)
+- **Kumar/Kundu at IIIT Delhi** (TypeNet for AI detection)
+- **Leow at UIC** (BiAffect mood/cognition)
 
-### Personal behavioral profile
-- **Migration**: `db/sql/migrations/004_add_personal_profile.sql` -- `tb_personal_profile` single-row table
-- **Module**: `src/lib/libProfile.ts` -- computes rolling aggregates from all journal sessions
-- **Backfill**: `src/scripts/backfill-profile.ts` -- initial population from existing data
-- **Pipeline**: wired into `src/lib/libSignalPipeline.ts` as final step after cross-session signals
+Research saved to memory: `research_avatar_landscape.md`
 
-Profile dimensions stored:
-- Motor fingerprint: aggregate digraph latencies, ex-Gaussian params (mu/sigma/tau means + stds), IKI distribution shape, hold/flight baselines
-- Writing process: burst count/length, consolidation ratio, session duration/word count
-- Pause architecture: within-word/between-word/between-sentence percentages, pause rate, first keystroke latency
-- Revision topology: deletion rates, timing bias, R-burst ratio
-- Language signature: character trigram model (JSONB), cumulative vocabulary, MATTR baseline
+## Part 2: Papers Drafted and Published
 
-Current profile (8 sessions): 438 unique words, tau=85.6ms (std=2.8ms), 8.75 bursts/session at 147 chars, 69% between-word pauses, MATTR=0.89
+### Option F: Reconstruction Validity
+**File**: `papers/option_f_draft.md` (status: published, slug: `reconstruction-validity`)
 
-### Avatar (Rust Markov chain + timing synthesis)
-- **Rust module**: `src-rs/src/avatar.rs` -- word-level Markov chain builder, topic-seeded text generation, per-character timing synthesis from motor profile
-- **napi boundary**: `generate_avatar()` in `src-rs/src/lib.rs` -- takes corpus JSON, topic, profile JSON, max words; returns text + delays array
-- **API**: `src/pages/api/avatar.ts` -- reads journal texts + profile from Postgres, passes to Rust, returns text + pre-computed delays
-- **Page**: `src/pages/avatar.astro` -- topic input, keystroke-by-keystroke replay with live signal counters (chars, bursts, pauses, avg IKI, elapsed), done state on completion
+Introduces reconstruction validity as a new form of validity evidence in measurement theory. Core argument: if an instrument's extracted measurements contain enough structured information to reconstruct the measured behavior, the measurements are demonstrably sufficient. The reconstruction residual characterizes what the instrument does not capture.
 
-How it works:
-1. Rust tokenizes the journal corpus, builds word transition probability matrix
-2. Seeds the chain with topic words, walks transitions to generate ~150 words
-3. For each character: looks up digraph-specific latency, falls back to ex-Gaussian sampling from personal distribution
-4. Inserts P-burst pauses (~2-4s every ~150 chars), sentence pauses, word boundary pauses based on pause architecture percentages
-5. Returns text + full delay array to client
-6. Client replays character by character at exact Rust-computed timing
+- Formalizes via observability (Kalman 1960) and analysis-by-synthesis (Stevens & Halle 1962)
+- Responds directly to Condrey's non-identifiability result
+- Defines three residual types: motor (expected small), content (expected decreasing), cognitive (expected persistent)
+- Registers falsifiable predictions about convergence trajectory
+- 30+ citations, full reference list
+- Sits in arc as "the instrument works" paper
 
-No LLM anywhere. Words from Markov chain on personal corpus. Timing from motor profile. Math from Rust.
+### Option G: Irreversible Loss
+**File**: `papers/option_g_draft.md` (status: published, slug: `irreversible-loss`)
 
-Internal PRNG: xoshiro128+ seeded from system time. No external dependency.
+Information-theoretic argument for process-level cognitive preservation. Core argument: the artifact is a lossy compression of the process, lossy compression is one-way (Shannon 1948), therefore the loss of process data is mathematically irreversible.
 
-## Research leads for avatar development
+- Historical demonstrations: Franklin (cognitive architecture), Dickinson (revision process), Ramanujan (mathematical reasoning), Darwin (idea development)
+- Three entropy rates: artifacts (near-zero), genomes (low, self-replicating), process records (maximum, ephemeral)
+- Avatar as existence proof that process data is information-rich
+- Closing window argument: AI mediation makes unmediated process data uncollectable
+- Essayistic register targeting Aeon/Noema
 
-Closest existing work:
-- **BiAffect** (Dr. Alex Leow, UIC) -- keystroke dynamics for mood detection, validated ex-Gaussian tau as biomarker. Phone-based, process channel only. Highest-value research outreach.
-- **Dillon & Arushi (2025)** -- agent-based modeling of typing profiles, synthetic keystroke data. arXiv 2505.05015.
-- **Eizaguirre-Peral et al. (2022)** -- conditional GAN for synthetic keystroke generation to attack authentication. arXiv 2212.08445.
-- **Kundu et al. (IJCB 2024)** -- TypeNet-based detection of AI-assisted vs genuine writing from keystrokes. 75-86% accuracy. arXiv 2406.15335.
-- **TypeNet group (UAM Madrid)** -- Fierrez, Vera-Rodriguez, Morales. Largest keystroke biometrics benchmarks.
+### Option G Skeleton
+**File**: `papers/option_g_skeleton.md`
 
-Nobody is combining content generation (Markov from personal corpus) with process reconstruction (timing from behavioral profile). The bridge is what Alice is building.
+Full skeleton with pre-drafting work, literature engagement plan, open questions.
+
+### Paper Arc (complete)
+- **B**: names the threat (construct replacement)
+- **A**: demonstrates it in one domain (keystrokes)
+- **C**: establishes the stakes (cognitive reserve)
+- **D**: derives the design constraints
+- **F**: proves the instrument works (reconstruction validity)
+- **E**: articulates the philosophical value (the process record)
+- **G**: argues the loss is irreversible (information-theoretic urgency)
+
+## Part 3: Avatar Engine Upgrades
+
+### Seven reconstruction modes (up from three)
+
+| Mode | What it reconstructs | Profile source |
+|------|---------------------|----------------|
+| Forward production | Text from Markov chain | Corpus (journal + calibration) |
+| Motor timing | Per-character delays + hold times | ex-Gaussian + digraph map |
+| Tempo drift | Slow start, fast middle, slight slowdown | Three-phase arc on mu |
+| Content-process coupling | Rare words get longer pauses | Word frequency from corpus |
+| Evaluation pauses | Periodic read-back pauses (4-8s) | Every 3-5 P-bursts |
+| R-bursts (destruction) | Delete + retype episodes | small/large_del_rate, timing_bias |
+| I-bursts (insertion) | Navigate back, insert mid-text | r_burst_ratio (inverse) |
+
+### New Rust capabilities
+- **Perplexity computation** (`compute_text_perplexity` + `computePerplexity` napi export): scores text against corpus Markov model for convergence tracking
+- **Order-1 backoff chain**: order-2 falls back to order-1 before random restart
+- **Sentence structure**: capitalization after periods, period insertion before dead-end restarts
+- **Full keystroke event generation**: `key_down_ms` + `key_up_ms` for every character including Backspace events, serialized as `{c, d, u}` wire format
+- **Revision synthesis**: Backspace events at profile deletion rates, timing-bias-aware positioning, R-burst deliberation pauses
+- **I-burst synthesis**: Navigate-back + insert from Markov chain, reorientation pauses
+- **Word frequency map**: built during chain construction for content-process coupling
+- **Tempo drift**: three-phase arc (exploring/composing/finishing) modulating ex-Gaussian mu
+
+### Data source fix
+Avatar corpus and behavioral profile now include ALL sessions (seed, generated, calibration). Previously excluded `question_source_id = 3` (calibration). Calibration sessions produce equally valid keystroke data and substantially denser Markov chains.
+
+### Clippy clean, 68 tests pass
+
+## Part 4: UI and Infrastructure
+
+### Avatar page updated
+- Signal readout split into two rows: row 1 (chars, bursts, pauses, avg iki, elapsed) + row 2 (deletions, r-bursts, i-bursts, eval pauses, tempo)
+- Replay handles Backspace events (visible delete + retype)
+- Phase indicator showing tempo drift phase (exploring/composing/finishing/done)
+- Rolling tempo readout (fast/steady/slow)
+- Replays from full `keystrokeStreamJson` instead of text + delays
+
+### Navigation restructured
+Two-column dropdown grid replacing the single-column list:
+- Left column (Project): Home, Vision, About, Research, Questions, Collaborate
+- Right column (Instrument): Overview, Methodology, Papers, Log, Avatar
+- Footer row: Journal, Observatory, Sandbox
+
+### Papers index tightened
+- Abstracts truncated to first sentence (max 160 chars) on index page
+- Tighter spacing: smaller margins, smaller fonts, reduced padding
+- Full abstracts still appear on individual paper pages
+
+### AVATAR.md created
+Full documentation of the Avatar engine: all seven modes, profile dependencies, napi boundary, adversarial validation loop (scoped), Condrey response (scoped), what the Avatar cannot reconstruct, development guidelines.
 
 ## Files created this session
 
 | File | Purpose |
 |------|---------|
-| `db/sql/migrations/003_add_subscribers.sql` | Email subscriber table |
-| `db/sql/migrations/004_add_personal_profile.sql` | Rolling behavioral profile |
-| `src/pages/api/subscribe.ts` | Email capture endpoint |
-| `src/pages/api/avatar.ts` | Avatar generation endpoint (calls Rust) |
-| `src/lib/libLog.ts` | Build log markdown reader |
-| `src/lib/libProfile.ts` | Profile computation + persistence |
-| `src/pages/log/index.astro` | Log list page |
-| `src/pages/log/[slug].astro` | Log entry detail page |
-| `src/pages/methodology.astro` | Signal methodology / instrument card |
-| `src/pages/for-researchers.astro` | Researcher landing page |
-| `src/pages/about.astro` | About / origin story |
-| `src/pages/avatar.astro` | Avatar demo page |
-| `src/scripts/backfill-profile.ts` | One-time profile backfill |
-| `src-rs/src/avatar.rs` | Rust Markov chain + timing synthesis |
-| `log/why-rust.md` | First build log entry |
+| `papers/option_f_skeleton.md` | Reconstruction validity skeleton |
+| `papers/option_f_draft.md` | Reconstruction validity paper (published) |
+| `papers/option_g_skeleton.md` | Irreversible loss skeleton |
+| `papers/option_g_draft.md` | Irreversible loss paper (published) |
+| `AVATAR.md` | Avatar engine documentation |
 
 ## Files modified this session
 
 | File | Change |
 |------|--------|
-| `src/components/cmpPublicNav.astro` | Added Methodology, Log, About, Avatar links |
-| `src/pages/collaborate.astro` | Added subscribe form + styles + script |
-| `src/pages/vision.astro` | Added subscribe form + styles + script |
-| `src/lib/libSignalPipeline.ts` | Added profile update as final pipeline step |
-| `src-rs/src/lib.rs` | Added avatar module + `generate_avatar` napi export |
+| `src-rs/src/avatar.rs` | Seven reconstruction modes, perplexity, backoff, revision, I-bursts, tempo drift, content-process coupling, word frequency (117 -> 1040 lines) |
+| `src-rs/src/lib.rs` | Added `keystrokeStreamJson` to AvatarOutput, added `computePerplexity` napi export, PerplexityOutput struct |
+| `src/pages/api/avatar.ts` | Returns keystrokeStreamJson, passes revision profile to Rust, includes calibration sessions |
+| `src/lib/libProfile.ts` | Includes all sessions (removed calibration exclusion from 5 queries) |
+| `src/pages/avatar.astro` | Two-row signals, backspace replay, phase indicator, tempo readout, stream-based replay |
+| `src/components/cmpPublicNav.astro` | Two-column dropdown grid layout |
+| `src/pages/papers/index.astro` | Truncated abstracts, tighter list spacing |
 
 ## What's next
 
-- **Avatar accuracy**: improves automatically with each journal entry (Markov chain gets denser, profile gets more precise)
-- **Markov order upgrade**: at 10+ entries, chain bumps to bigram (order 2). Text coherence jumps significantly.
-- **Instrument scoring**: run the avatar's output through the signal pipeline and compare 7D behavioral state to real sessions. This is the adversarial validation.
-- **PE spectrum consumption**: `pe_spectrum` is stored but state engine still uses single PE. Wire spectral slope into deliberation dimension.
-- **Cross-space coupling**: semantic x behavioral dimension correlation. Architecture supports it, not yet implemented.
-- **Deploy the site**: all public pages are built but the site needs to be live for any outreach to work.
+### Engineering priority: Adversarial validation loop
+1. Wire `keystrokeStreamJson` from Avatar output into `computeDynamicalSignals()` and `computeMotorSignals()`
+2. Compare synthetic signal vectors to real session signal vectors
+3. Per-dimension distance = first reconstruction validity profile
+4. This is the number the paper predicts and the engineering the field needs
+
+### Engineering: Perplexity tracking
+- After each journal/calibration session, compute perplexity of the response under the Markov model
+- Store and plot the trajectory
+- Track convergence rate and the order-1 to order-2 transition effect
+
+### Research: Condrey attack experiment
+- Design transcription protocol: user transcribes LLM text in the journal interface
+- Run authentic + transcribed sessions through full signal pipeline
+- Test whether process signals (not just timing) distinguish composition from transcription
+
+### Research: Outreach
+- Condrey is the most theoretically aligned researcher. His attack paper identifies the problem; Alice's architecture provides the measurement-side answer.
+- BiAffect (Leow at UIC) for clinical phenotyping conversation
+- Crossley at Vanderbilt for educational assessment angle
+
+### Papers: Pre-drafting work for remaining options
+- Option F needs the adversarial validation number before final version
+- Options A, D, E skeletons exist but drafts need the same landscape context now available

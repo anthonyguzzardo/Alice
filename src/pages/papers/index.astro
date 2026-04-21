@@ -2,6 +2,19 @@
 import { listPapers } from '../../lib/libPapers.ts';
 
 const papers = listPapers('published');
+
+function truncateAbstract(text: string, maxLen = 160): string {
+  if (!text) return '';
+  // Try to cut at first sentence
+  const firstSentence = text.match(/^[^.!?]+[.!?]/);
+  if (firstSentence && firstSentence[0].length <= maxLen) {
+    return firstSentence[0];
+  }
+  // Fall back to character limit at word boundary
+  if (text.length <= maxLen) return text;
+  const cut = text.slice(0, maxLen).replace(/\s+\S*$/, '');
+  return cut + '...';
+}
 ---
 
 <html lang="en">
@@ -198,15 +211,15 @@ const papers = listPapers('published');
       }
 
       .paper-item {
-        margin-bottom: 3rem;
+        margin-bottom: 1.8rem;
       }
 
       .paper-item a {
         text-decoration: none;
         color: inherit;
         display: block;
-        padding: 1.5rem;
-        margin: -1.5rem;
+        padding: 1.2rem;
+        margin: -1.2rem;
         border-radius: 6px;
         transition: background 0.2s ease;
       }
@@ -220,33 +233,33 @@ const papers = listPapers('published');
       }
 
       .paper-date {
-        font-size: 0.85rem;
+        font-size: 0.75rem;
         color: var(--text-faint);
         text-transform: uppercase;
         letter-spacing: 0.15em;
-        margin-bottom: 0.5rem;
+        margin-bottom: 0.3rem;
       }
 
       .paper-version {
-        font-size: 0.85rem;
+        font-size: 0.75rem;
         color: var(--text-faint);
         letter-spacing: 0.05em;
       }
 
       .paper-title {
         font-family: 'Cormorant Garamond', Georgia, serif;
-        font-size: 1.6rem;
+        font-size: 1.4rem;
         font-weight: 400;
         font-style: italic;
-        line-height: 1.4;
+        line-height: 1.35;
         color: var(--text-muted);
-        margin-bottom: 0.6rem;
+        margin-bottom: 0.4rem;
         transition: color 0.2s ease;
       }
 
       .paper-abstract {
-        font-size: 1.1rem;
-        line-height: 1.7;
+        font-size: 0.95rem;
+        line-height: 1.6;
         color: var(--text-faint);
       }
 
@@ -288,7 +301,7 @@ const papers = listPapers('published');
               <a href={`/papers/${paper.slug}`}>
                 <div class="paper-date">{paper.date} <span class="paper-version">&middot; v{paper.version}</span></div>
                 <div class="paper-title">{paper.title}</div>
-                <div class="paper-abstract">{paper.abstract}</div>
+                <div class="paper-abstract">{truncateAbstract(paper.abstract)}</div>
               </a>
             </li>
           ))}
