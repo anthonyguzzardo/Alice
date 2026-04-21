@@ -7,6 +7,17 @@ import { marked } from 'marked';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PAPERS_DIR = path.resolve(__dirname, '../../papers');
 
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** Format a date in UTC to avoid timezone shift (YAML dates are midnight UTC). */
+function formatDate(raw: unknown): string {
+  if (raw instanceof Date) {
+    return `${DAYS[raw.getUTCDay()]} ${MONTHS[raw.getUTCMonth()]} ${raw.getUTCDate()}`;
+  }
+  return String(raw).slice(0, 10);
+}
+
 export interface PaperMeta {
   title: string;
   slug: string;
@@ -24,7 +35,7 @@ export interface Paper extends PaperMeta {
 /** List all papers with the given status, sorted by date descending. */
 export function listPapers(status: 'published' | 'draft' | 'all' = 'published'): PaperMeta[] {
   const files = fs.readdirSync(PAPERS_DIR).filter(f => f.endsWith('.md'));
-  const papers: PaperMeta[] = [];
+  const entries: { meta: PaperMeta; sortKey: string }[] = [];
 
   for (const file of files) {
     const raw = fs.readFileSync(path.join(PAPERS_DIR, file), 'utf-8');
@@ -32,18 +43,27 @@ export function listPapers(status: 'published' | 'draft' | 'all' = 'published'):
     if (!data.slug || !data.title) continue;
     if (status !== 'all' && data.status !== status) continue;
 
-    papers.push({
-      title: data.title,
-      slug: data.slug,
-      author: data.author || 'Anthony Guzzardo',
-      date: String(data.date).slice(0, 10),
-      status: data.status || 'draft',
-      version: data.version || 1,
-      abstract: data.abstract || '',
+    const sortKey = data.date instanceof Date
+      ? data.date.toISOString().slice(0, 10)
+      : String(data.date).slice(0, 10);
+
+    entries.push({
+      meta: {
+        title: data.title,
+        slug: data.slug,
+        author: data.author || 'Anthony Guzzardo',
+        date: formatDate(data.date),
+        status: data.status || 'draft',
+        version: data.version || 1,
+        abstract: data.abstract || '',
+      },
+      sortKey,
     });
   }
 
-  return papers.sort((a, b) => b.date.localeCompare(a.date));
+  return entries
+    .sort((a, b) => b.sortKey.localeCompare(a.sortKey))
+    .map(e => e.meta);
 }
 
 /** Load a single paper by slug, rendered to HTML. */
@@ -70,7 +90,7 @@ export function getPaper(slug: string): Paper | null {
       title: data.title,
       slug: data.slug,
       author: data.author || 'Anthony Guzzardo',
-      date: String(data.date).slice(0, 10),
+      date: formatDate(data.date),
       status: data.status || 'draft',
       version: data.version || 1,
       abstract: data.abstract || '',
