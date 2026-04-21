@@ -115,7 +115,9 @@ impl Rng {
 
     /// Uniform [0, 1)
     fn f64(&mut self) -> f64 {
-        (self.next_u32() >> 1) as f64 / (u32::MAX >> 1) as f64
+        // Divide by 2^31 (not 2^31 - 1) so the maximum value is
+        // (2^31 - 1) / 2^31 < 1.0, guaranteeing the half-open interval.
+        (self.next_u32() >> 1) as f64 / (1u64 << 31) as f64
     }
 
     /// Gaussian via Box-Muller
@@ -148,6 +150,11 @@ struct MarkovChain {
     backoff: Option<HashMap<String, Vec<(String, u32)>>>,
     /// Total word count across all training texts (for perplexity vocab size)
     vocab_size: usize,
+    /// Absolute discounting parameter d = n1 / (n1 + 2*n2).
+    /// Chen & Goodman (1999): optimal single-discount estimator.
+    discount: f64,
+    /// Unigram probability distribution for backoff: word -> P(word).
+    unigram_probs: HashMap<String, f64>,
 }
 
 fn tokenize(text: &str) -> Vec<String> {
@@ -231,6 +238,38 @@ fn build_chain(texts: &[String], order: usize) -> MarkovChain {
         }
     }
 
+    // ── Absolute Discounting parameter (Chen & Goodman 1999) ──
+    // d = n1 / (n1 + 2*n2) where n1 = count of n-grams appearing once,
+    // n2 = count of n-grams appearing twice. Optimal single-discount estimator.
+    let (n1, n2) = transitions
+        .values()
+        .flat_map(|v| v.values())
+        .fold((0u32, 0u32), |(n1, n2), &count| match count {
+            1 => (n1 + 1, n2),
+            2 => (n1, n2 + 1),
+            _ => (n1, n2),
+        });
+    let discount = if n1 + 2 * n2 > 0 {
+        n1 as f64 / (n1 as f64 + 2.0 * n2 as f64)
+    } else {
+        0.5 // safe default when corpus is too small to estimate
+    };
+
+    // ── Unigram probabilities for backoff ──
+    let mut unigram_counts: HashMap<String, u32> = HashMap::new();
+    let mut unigram_total: u32 = 0;
+    for text in texts {
+        for token in tokenize(text) {
+            *unigram_counts.entry(token).or_insert(0) += 1;
+            unigram_total += 1;
+        }
+    }
+    let unigram_total_f = unigram_total.max(1) as f64;
+    let unigram_probs: HashMap<String, f64> = unigram_counts
+        .into_iter()
+        .map(|(k, v)| (k, v as f64 / unigram_total_f))
+        .collect();
+
     // Flatten to vecs for weighted sampling
     let transitions = transitions
         .into_iter()
@@ -260,6 +299,8 @@ fn build_chain(texts: &[String], order: usize) -> MarkovChain {
         order,
         backoff,
         vocab_size,
+        discount,
+        unigram_probs,
     }
 }
 
@@ -276,6 +317,35 @@ fn weighted_pick(dist: &[(String, u32)], rng: &mut Rng) -> Option<String> {
         r -= count;
     }
     dist.last().map(|(k, _)| k.clone())
+}
+
+/// Witten-Bell interpolated pick: blend higher and lower order distributions
+/// rather than hard-fallback. Produces smoother generation because every
+/// sample incorporates evidence from both context lengths.
+///
+/// lambda = T(h) / (T(h) + C(h)) where T = unique successors, C = total count.
+/// With probability (1-lambda), sample from higher order; else from lower order.
+/// Jelinek & Mercer (1980); Witten-Bell weight estimation.
+fn interpolated_pick(
+    primary: Option<&Vec<(String, u32)>>,
+    backoff: Option<&Vec<(String, u32)>>,
+    rng: &mut Rng,
+) -> Option<String> {
+    match (primary, backoff) {
+        (Some(d_hi), Some(d_lo)) => {
+            let t = d_hi.len() as f64;
+            let c: f64 = d_hi.iter().map(|(_, count)| *count as f64).sum();
+            // lambda: probability of escaping to lower order
+            let lambda = t / (t + c);
+            if rng.f64() >= lambda {
+                weighted_pick(d_hi, rng).or_else(|| weighted_pick(d_lo, rng))
+            } else {
+                weighted_pick(d_lo, rng).or_else(|| weighted_pick(d_hi, rng))
+            }
+        }
+        (Some(d), None) | (None, Some(d)) => weighted_pick(d, rng),
+        (None, None) => None,
+    }
 }
 
 fn generate_text(chain: &MarkovChain, seed: &str, max_words: usize, rng: &mut Rng) -> String {
@@ -318,27 +388,18 @@ fn generate_text(chain: &MarkovChain, seed: &str, max_words: usize, rng: &mut Rn
     for _ in 0..max_words {
         let key = tokens[tokens.len().saturating_sub(chain.order)..]
             .join(" ");
+        let last_token = &tokens[tokens.len() - 1];
 
-        // Try primary chain first
-        if let Some(dist) = chain.transitions.get(&key)
-            && let Some(next) = weighted_pick(dist, rng)
-        {
+        // Interpolated backoff: blend order-N and order-1 distributions
+        let primary = chain.transitions.get(&key);
+        let lower = chain.backoff.as_ref().and_then(|b| b.get(last_token.as_str()));
+
+        if let Some(next) = interpolated_pick(primary, lower, rng) {
             tokens.push(next);
             continue;
         }
 
-        // Backoff: try order-1 chain using just the last token
-        if let Some(ref backoff) = chain.backoff {
-            let last_token = &tokens[tokens.len() - 1];
-            if let Some(dist) = backoff.get(last_token)
-                && let Some(next) = weighted_pick(dist, rng)
-            {
-                tokens.push(next);
-                continue;
-            }
-        }
-
-        // Dead end: jump to random starter (insert sentence break first)
+        // Dead end at both orders: jump to random starter
         let last = tokens.last().map(|s| s.as_str()).unwrap_or("");
         if !matches!(last, "." | "!" | "?") {
             tokens.push(".".to_string());
@@ -401,22 +462,24 @@ fn build_word_freq(texts: &[String]) -> HashMap<String, f64> {
     counts.into_iter().map(|(k, v)| (k, v as f64 / total_f)).collect()
 }
 
-/// Returns a delay multiplier based on word frequency.
+/// Returns a delay multiplier based on word frequency in the person's corpus.
+/// Common words (high frequency) get a multiplier < 1.0 (shorter pause).
 /// Rare words (low frequency) get a multiplier > 1.0 (longer pause).
-/// Common words get a multiplier < 1.0 (shorter pause).
-/// Range is approximately [0.7, 2.5].
-fn word_difficulty_multiplier(word: &str, freq_map: &HashMap<String, f64>) -> f64 {
+/// Uses log-frequency scaling per Inhoff & Rayner (1986): fixation time
+/// scales linearly with -log(frequency). Range approximately [0.7, 2.5].
+fn word_difficulty_multiplier(word: &str, freq_map: &HashMap<String, f64>, rng: &mut Rng) -> f64 {
     let w = word.to_lowercase();
     let w = w.trim_matches(|c: char| !c.is_alphanumeric());
     match freq_map.get(w) {
-        Some(&freq) if freq > 0.01 => 0.7 + (1.0 - freq.min(0.05)) * 2.0, // common: ~0.7-0.8
-        Some(&freq) => 1.0 + (0.01 - freq.min(0.01)) * 150.0,             // rare: ~1.0-2.5
-        None => 1.8 + rng_jitter(),                                         // unseen: high difficulty
+        Some(&freq) if freq > 0.0 => {
+            // -ln(0.05) ≈ 3.0 (very common), -ln(0.0005) ≈ 7.6 (rare)
+            // Map to [0.7, 2.5] via linear scaling on log-frequency.
+            let log_diff = (-freq.ln() - 3.0).max(0.0);
+            (0.7 + log_diff * 0.28).min(2.5)
+        }
+        _ => 1.8 + rng.f64() * 0.5, // unseen: high difficulty + stochastic jitter
     }
 }
-
-/// Small constant jitter for unseen words (no rng needed, deterministic)
-fn rng_jitter() -> f64 { 0.3 }
 
 // ─── Timing synthesis ───────────────────────────────────────────
 
@@ -533,7 +596,7 @@ fn synthesize_timing(
         else if prev == ' ' {
             // Check difficulty of the upcoming word
             let difficulty = if word_idx < words.len() {
-                word_difficulty_multiplier(&words[word_idx].2, word_freq)
+                word_difficulty_multiplier(&words[word_idx].2, word_freq, rng)
             } else {
                 1.0
             };
@@ -606,6 +669,7 @@ fn inject_i_bursts(
     delays: &mut Vec<f64>,
     profile: &TimingProfile,
     chain: &MarkovChain,
+    word_freq: &HashMap<String, f64>,
     rng: &mut Rng,
 ) {
     let r_ratio = profile.r_burst_ratio.unwrap_or(1.0);
@@ -615,11 +679,12 @@ fn inject_i_bursts(
         return; // Negligible I-burst rate or too short
     }
 
-    let mu = profile.mu.unwrap_or(120.0);
+    let base_mu = profile.mu.unwrap_or(120.0);
     let sigma = profile.sigma.unwrap_or(40.0);
     let tau = profile.tau.unwrap_or(80.0);
     let hold_mu = 95.0;
     let hold_sigma = 20.0;
+    let total_session_chars = keystrokes.len();
 
     // Number of I-bursts: proportional to session length and i_ratio
     let burst_count = profile.burst_length.unwrap_or(150.0) as usize;
@@ -665,12 +730,38 @@ fn inject_i_bursts(
         let inserted_text = generate_text(chain, seed, insert_words, rng);
         let inserted_text = format!(" {}", inserted_text.trim());
 
-        // Generate keystroke events for the inserted text
+        // Generate keystroke events with tempo drift + word difficulty coupling
+        // so inserted text is not trivially distinguishable from forward production.
+        let insert_words_spans = extract_word_spans(&inserted_text);
         let mut insert_keys: Vec<SyntheticKeystroke> = Vec::new();
         let mut insert_delays: Vec<f64> = Vec::new();
+        let mut iw_idx = 0;
 
-        for ch in inserted_text.chars() {
-            let delay = rng.ex_gaussian(mu, sigma, tau);
+        for (ci, ch) in inserted_text.chars().enumerate() {
+            // Advance word index for difficulty lookup
+            while iw_idx + 1 < insert_words_spans.len() && ci >= insert_words_spans[iw_idx + 1].0 {
+                iw_idx += 1;
+            }
+
+            // Tempo drift based on position within the overall session
+            let progress = insert_at as f64 / total_session_chars.max(1) as f64;
+            let drift = if progress < 0.2 {
+                1.3 - (progress / 0.2) * 0.45
+            } else if progress < 0.75 {
+                0.85
+            } else {
+                0.85 + ((progress - 0.75) / 0.25) * 0.25
+            };
+            let mu = base_mu * drift;
+
+            // Word difficulty at word boundaries
+            let delay = if ch == ' ' && iw_idx < insert_words_spans.len() {
+                let diff = word_difficulty_multiplier(&insert_words_spans[iw_idx].2, word_freq, rng);
+                rng.ex_gaussian(mu * diff.min(1.5), sigma, tau)
+            } else {
+                rng.ex_gaussian(mu, sigma, tau)
+            };
+
             clock += delay;
             let hold = rng.gaussian(hold_mu, hold_sigma).clamp(40.0, 200.0);
             insert_keys.push(SyntheticKeystroke {
@@ -731,6 +822,7 @@ fn inject_revisions(
     keystrokes: &mut Vec<SyntheticKeystroke>,
     delays: &mut Vec<f64>,
     profile: &TimingProfile,
+    chain: &MarkovChain,
     rng: &mut Rng,
 ) {
     let small_rate = profile.small_del_rate.unwrap_or(0.0);
@@ -829,8 +921,28 @@ fn inject_revisions(
         let retype_pause = 150.0 + rng.f64() * 400.0;
         clock += retype_pause;
 
-        // Retype the deleted characters (possibly with a variant for large deletions)
-        for ch in &deleted_chars {
+        // Retype: small deletions re-emit the same chars (typo fix).
+        // R-bursts generate variant text from the Markov chain (reformulation).
+        // Real R-bursts delete to rephrase, not to re-emit identical text.
+        let retype_chars: Vec<char> = if is_large {
+            let context: String = keystrokes[pos.saturating_sub(20)..pos.saturating_sub(del_count)]
+                .iter()
+                .filter(|k| k.character.is_alphanumeric() || k.character == ' ')
+                .map(|k| k.character)
+                .collect();
+            let seed = context.split_whitespace().last().unwrap_or("the");
+            let target_words = (del_count / 5).max(1);
+            let replacement = generate_text(chain, seed, target_words, rng);
+            if replacement.is_empty() {
+                deleted_chars.clone()
+            } else {
+                replacement.chars().collect()
+            }
+        } else {
+            deleted_chars.clone()
+        };
+
+        for ch in &retype_chars {
             let delay = rng.ex_gaussian(mu, sigma, tau);
             clock += delay;
             let hold = rng.gaussian(hold_mu, hold_sigma).clamp(40.0, 200.0);
@@ -881,6 +993,12 @@ fn pick_revision_position(total: usize, midpoint: usize, bias: f64, rng: &mut Rn
 /// Compute the per-word log2 perplexity of `text` under the Markov chain
 /// built from `corpus_texts`. Lower perplexity = the model predicts the
 /// text better = the corpus has converged on the person's language.
+///
+/// Uses Absolute Discounting (Chen & Goodman 1999) instead of Laplace
+/// smoothing. Laplace over-smooths small-vocabulary personal corpora by
+/// assigning too much mass to impossible transitions. Absolute Discounting
+/// subtracts a fixed discount d from observed counts and redistributes
+/// the freed mass via a unigram backoff, producing tighter estimates.
 fn compute_perplexity(chain: &MarkovChain, text: &str) -> PerplexityResult {
     let tokens = tokenize(text);
     if tokens.len() < chain.order + 1 {
@@ -895,6 +1013,7 @@ fn compute_perplexity(chain: &MarkovChain, text: &str) -> PerplexityResult {
     let mut log_prob_sum: f64 = 0.0;
     let mut known: usize = 0;
     let mut unknown: usize = 0;
+    let d = chain.discount;
     let vocab = chain.vocab_size.max(1) as f64;
 
     for i in chain.order..tokens.len() {
@@ -902,24 +1021,34 @@ fn compute_perplexity(chain: &MarkovChain, text: &str) -> PerplexityResult {
         let next = &tokens[i];
 
         if let Some(dist) = chain.transitions.get(&key) {
-            let total: u32 = dist.iter().map(|(_, c)| c).sum();
-            let count = dist.iter().find(|(w, _)| w == next).map(|(_, c)| *c).unwrap_or(0);
+            let total: f64 = dist.iter().map(|(_, c)| *c as f64).sum();
+            let count = dist
+                .iter()
+                .find(|(w, _)| w == next)
+                .map(|(_, c)| *c as f64)
+                .unwrap_or(0.0);
+            // Number of unique successors for this context
+            let unique_successors = dist.len() as f64;
+            // Interpolation weight for backoff: lambda = d * N1+(h) / c(h)
+            let lambda = (d * unique_successors) / total.max(1.0);
+            // Unigram backoff probability for the next word
+            let p_backoff = chain.unigram_probs.get(next).copied().unwrap_or(1.0 / vocab);
 
-            if count > 0 {
-                // Laplace-smoothed probability
-                let prob = (count as f64 + 1.0) / (total as f64 + vocab);
-                log_prob_sum += prob.log2();
+            if count > 0.0 {
+                // P(w|h) = max(c(h,w) - d, 0) / c(h) + lambda * P_bo(w)
+                let prob = (count - d).max(0.0) / total + lambda * p_backoff;
+                log_prob_sum += prob.max(1e-20).log2();
                 known += 1;
             } else {
-                // Word exists in chain but this transition unseen: smoothed
-                let prob = 1.0 / (total as f64 + vocab);
-                log_prob_sum += prob.log2();
+                // Transition unseen in this context: all mass from backoff
+                let prob = lambda * p_backoff;
+                log_prob_sum += prob.max(1e-20).log2();
                 unknown += 1;
             }
         } else {
-            // State not in chain at all: uniform over vocab
-            let prob = 1.0 / vocab;
-            log_prob_sum += prob.log2();
+            // Context not in chain: fall through to unigram
+            let prob = chain.unigram_probs.get(next).copied().unwrap_or(1.0 / vocab);
+            log_prob_sum += prob.max(1e-20).log2();
             unknown += 1;
         }
     }
@@ -1002,10 +1131,10 @@ pub(crate) fn compute(
     let mut keystrokes = timing.keystrokes;
 
     // Inject revision episodes (deletions + retypes) from the revision profile
-    inject_revisions(&mut keystrokes, &mut delays, &profile, &mut rng);
+    inject_revisions(&mut keystrokes, &mut delays, &profile, &chain, &mut rng);
 
     // Inject I-bursts (mid-text insertions) from the process profile
-    inject_i_bursts(&mut keystrokes, &mut delays, &profile, &chain, &mut rng);
+    inject_i_bursts(&mut keystrokes, &mut delays, &profile, &chain, &word_freq, &mut rng);
 
     AvatarResult {
         text,
@@ -1037,4 +1166,456 @@ pub(crate) fn compute_text_perplexity(
     let order = if texts.len() >= 10 { 2 } else { 1 };
     let chain = build_chain(&texts, order);
     compute_perplexity(&chain, text)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── Helper ──
+
+    fn make_rng() -> Rng {
+        Rng::from_seed(12345)
+    }
+
+    fn sample_corpus() -> Vec<String> {
+        vec![
+            "I think about the way things change over time.".into(),
+            "The morning felt different today, like something shifted.".into(),
+            "I keep returning to the same questions about meaning.".into(),
+            "There is something about writing that reveals what I think.".into(),
+            "The question made me pause and consider my assumptions.".into(),
+        ]
+    }
+
+    // ── PRNG tests ──
+
+    #[test]
+    fn prng_f64_never_reaches_one() {
+        let mut rng = make_rng();
+        for _ in 0..100_000 {
+            let v = rng.f64();
+            assert!(v >= 0.0, "f64() returned negative: {v}");
+            assert!(v < 1.0, "f64() reached 1.0: {v}");
+        }
+    }
+
+    #[test]
+    fn prng_gaussian_bounded_mean() {
+        let mut rng = make_rng();
+        let samples: Vec<f64> = (0..10_000).map(|_| rng.gaussian(100.0, 20.0)).collect();
+        let mean = samples.iter().sum::<f64>() / samples.len() as f64;
+        assert!(
+            (mean - 100.0).abs() < 2.0,
+            "Gaussian mean should be ~100, got {mean}"
+        );
+    }
+
+    #[test]
+    fn prng_ex_gaussian_floor() {
+        let mut rng = make_rng();
+        for _ in 0..10_000 {
+            let v = rng.ex_gaussian(50.0, 10.0, 30.0);
+            assert!(v >= 30.0, "ex-Gaussian below 30ms floor: {v}");
+        }
+    }
+
+    // ── Tokenizer tests ──
+
+    #[test]
+    fn tokenize_basic() {
+        let tokens = tokenize("Hello world.");
+        assert_eq!(tokens, vec!["Hello", "world", "."]);
+    }
+
+    #[test]
+    fn tokenize_punctuation_splits() {
+        let tokens = tokenize("Wait, what? Yes!");
+        assert_eq!(tokens, vec!["Wait", ",", "what", "?", "Yes", "!"]);
+    }
+
+    #[test]
+    fn tokenize_preserves_contractions() {
+        // Apostrophe is not in the punctuation split set
+        let tokens = tokenize("I don't know");
+        assert_eq!(tokens, vec!["I", "don't", "know"]);
+    }
+
+    #[test]
+    fn tokenize_empty() {
+        assert!(tokenize("").is_empty());
+        assert!(tokenize("   ").is_empty());
+    }
+
+    // ── Chain building tests ──
+
+    #[test]
+    fn build_chain_order1_has_transitions() {
+        let texts = sample_corpus();
+        let chain = build_chain(&texts, 1);
+        assert!(!chain.transitions.is_empty());
+        assert!(!chain.starters.is_empty());
+        assert_eq!(chain.order, 1);
+    }
+
+    #[test]
+    fn build_chain_order2_has_backoff() {
+        let texts = sample_corpus();
+        let chain = build_chain(&texts, 2);
+        assert!(chain.backoff.is_some(), "Order-2 chain must have backoff");
+        assert_eq!(chain.order, 2);
+    }
+
+    #[test]
+    fn build_chain_discount_in_range() {
+        let texts = sample_corpus();
+        let chain = build_chain(&texts, 1);
+        assert!(
+            chain.discount > 0.0 && chain.discount < 1.0,
+            "Discount should be in (0, 1), got {}",
+            chain.discount
+        );
+    }
+
+    #[test]
+    fn build_chain_unigram_probs_sum_to_one() {
+        let texts = sample_corpus();
+        let chain = build_chain(&texts, 1);
+        let sum: f64 = chain.unigram_probs.values().sum();
+        assert!(
+            (sum - 1.0).abs() < 1e-6,
+            "Unigram probs should sum to ~1.0, got {sum}"
+        );
+    }
+
+    // ── Weighted pick tests ──
+
+    #[test]
+    fn weighted_pick_empty() {
+        let mut rng = make_rng();
+        assert!(weighted_pick(&[], &mut rng).is_none());
+    }
+
+    #[test]
+    fn weighted_pick_single() {
+        let mut rng = make_rng();
+        let dist = vec![("only".to_string(), 1)];
+        assert_eq!(weighted_pick(&dist, &mut rng).unwrap(), "only");
+    }
+
+    #[test]
+    fn weighted_pick_respects_weights() {
+        let mut rng = make_rng();
+        let dist = vec![("heavy".to_string(), 9999), ("light".to_string(), 1)];
+        let mut heavy_count = 0;
+        for _ in 0..1000 {
+            if weighted_pick(&dist, &mut rng).unwrap() == "heavy" {
+                heavy_count += 1;
+            }
+        }
+        assert!(heavy_count > 900, "Heavy item should dominate, got {heavy_count}/1000");
+    }
+
+    // ── Text generation tests ──
+
+    #[test]
+    fn generate_text_nonempty() {
+        let texts = sample_corpus();
+        let chain = build_chain(&texts, 1);
+        let mut rng = make_rng();
+        let text = generate_text(&chain, "morning", 20, &mut rng);
+        assert!(!text.is_empty(), "Generated text should not be empty");
+    }
+
+    #[test]
+    fn generate_text_respects_max_words_approximately() {
+        let texts = sample_corpus();
+        let chain = build_chain(&texts, 1);
+        let mut rng = make_rng();
+        let text = generate_text(&chain, "think", 10, &mut rng);
+        let words = text.split_whitespace().count();
+        // max_words is approximate (starter + up to max_words iterations)
+        assert!(words <= 25, "Word count {words} far exceeds max_words=10");
+    }
+
+    #[test]
+    fn generate_text_capitalizes_after_period() {
+        let texts = sample_corpus();
+        let chain = build_chain(&texts, 1);
+        let mut rng = make_rng();
+        let text = generate_text(&chain, "things", 50, &mut rng);
+        // First character should be capitalized
+        let first = text.chars().next().unwrap();
+        assert!(first.is_uppercase(), "First char should be capitalized, got '{first}'");
+    }
+
+    #[test]
+    fn generate_text_empty_chain() {
+        let chain = build_chain(&[], 1);
+        let mut rng = make_rng();
+        let text = generate_text(&chain, "anything", 10, &mut rng);
+        assert!(text.is_empty(), "Empty corpus should produce empty text");
+    }
+
+    // ── Word difficulty tests ──
+
+    #[test]
+    fn word_difficulty_common_words_fast() {
+        let mut freq = HashMap::new();
+        freq.insert("the".to_string(), 0.05);
+        freq.insert("and".to_string(), 0.03);
+        let mut rng = make_rng();
+        let d = word_difficulty_multiplier("the", &freq, &mut rng);
+        assert!(d < 1.0, "Very common word should have multiplier < 1.0, got {d}");
+    }
+
+    #[test]
+    fn word_difficulty_rare_words_slow() {
+        let mut freq = HashMap::new();
+        freq.insert("ephemeral".to_string(), 0.0005);
+        let mut rng = make_rng();
+        let d = word_difficulty_multiplier("ephemeral", &freq, &mut rng);
+        assert!(d > 1.0, "Rare word should have multiplier > 1.0, got {d}");
+    }
+
+    #[test]
+    fn word_difficulty_unseen_high() {
+        let freq = HashMap::new();
+        let mut rng = make_rng();
+        let d = word_difficulty_multiplier("xyzzy", &freq, &mut rng);
+        assert!(d >= 1.8, "Unseen word should have multiplier >= 1.8, got {d}");
+        assert!(d <= 2.3, "Unseen word should have multiplier <= 2.3, got {d}");
+    }
+
+    #[test]
+    fn word_difficulty_monotonic() {
+        // Higher frequency should mean lower difficulty
+        let mut freq = HashMap::new();
+        freq.insert("common".to_string(), 0.04);
+        freq.insert("rare".to_string(), 0.001);
+        let mut rng = make_rng();
+        let d_common = word_difficulty_multiplier("common", &freq, &mut rng);
+        let d_rare = word_difficulty_multiplier("rare", &freq, &mut rng);
+        assert!(
+            d_common < d_rare,
+            "Common ({d_common}) should be easier than rare ({d_rare})"
+        );
+    }
+
+    // ── Perplexity tests ──
+
+    #[test]
+    fn perplexity_known_text_lower() {
+        let texts = sample_corpus();
+        let chain = build_chain(&texts, 1);
+        // Text from the corpus should have low perplexity
+        let known = compute_perplexity(&chain, "I think about the way things change");
+        // Random text should have higher perplexity
+        let unknown = compute_perplexity(&chain, "Purple elephants dance on quantum strings");
+        assert!(
+            known.perplexity < unknown.perplexity,
+            "Known text perplexity ({}) should be lower than unknown ({})",
+            known.perplexity,
+            unknown.perplexity
+        );
+    }
+
+    #[test]
+    fn perplexity_finite_for_nonempty() {
+        let texts = sample_corpus();
+        let chain = build_chain(&texts, 1);
+        let result = compute_perplexity(&chain, "The morning felt different.");
+        assert!(
+            result.perplexity.is_finite(),
+            "Perplexity should be finite, got {}",
+            result.perplexity
+        );
+    }
+
+    #[test]
+    fn perplexity_infinite_for_too_short() {
+        let texts = sample_corpus();
+        let chain = build_chain(&texts, 2);
+        // Fewer tokens than order+1 should return infinity
+        let result = compute_perplexity(&chain, "Hi");
+        assert!(
+            result.perplexity.is_infinite(),
+            "Too-short text should yield infinite perplexity"
+        );
+    }
+
+    #[test]
+    fn perplexity_known_fraction_tracks() {
+        let texts = sample_corpus();
+        let chain = build_chain(&texts, 1);
+        let result = compute_perplexity(&chain, "I think about the way things change");
+        assert!(
+            result.known_transitions > 0,
+            "Text from corpus should have known transitions"
+        );
+    }
+
+    // ── Interpolated pick tests ──
+
+    #[test]
+    fn interpolated_pick_primary_only() {
+        let mut rng = make_rng();
+        let primary = vec![("word".to_string(), 10)];
+        let result = interpolated_pick(Some(&primary), None, &mut rng);
+        assert_eq!(result.unwrap(), "word");
+    }
+
+    #[test]
+    fn interpolated_pick_backoff_only() {
+        let mut rng = make_rng();
+        let backoff = vec![("fallback".to_string(), 10)];
+        let result = interpolated_pick(None, Some(&backoff), &mut rng);
+        assert_eq!(result.unwrap(), "fallback");
+    }
+
+    #[test]
+    fn interpolated_pick_both_produces_mix() {
+        let mut rng = make_rng();
+        let primary = vec![("hi".to_string(), 100)];
+        let backoff = vec![("lo".to_string(), 100)];
+        let mut hi_count = 0;
+        let mut lo_count = 0;
+        for _ in 0..1000 {
+            match interpolated_pick(Some(&primary), Some(&backoff), &mut rng)
+                .unwrap()
+                .as_str()
+            {
+                "hi" => hi_count += 1,
+                "lo" => lo_count += 1,
+                _ => {}
+            }
+        }
+        assert!(hi_count > 0, "Should sometimes pick from primary");
+        assert!(lo_count > 0, "Should sometimes pick from backoff");
+    }
+
+    // ── Timing synthesis tests ──
+
+    #[test]
+    fn timing_delays_all_positive() {
+        let texts = sample_corpus();
+        let word_freq = build_word_freq(&texts);
+        let profile = default_profile();
+        let mut rng = make_rng();
+        let result = synthesize_timing("Hello world, this is a test.", &profile, &word_freq, &mut rng);
+        for (i, d) in result.delays.iter().enumerate() {
+            assert!(*d > 0.0, "Delay at index {i} should be positive, got {d}");
+        }
+    }
+
+    #[test]
+    fn timing_keystrokes_monotonic_clock() {
+        let texts = sample_corpus();
+        let word_freq = build_word_freq(&texts);
+        let profile = default_profile();
+        let mut rng = make_rng();
+        let result = synthesize_timing("Some words to type out.", &profile, &word_freq, &mut rng);
+        for i in 1..result.keystrokes.len() {
+            assert!(
+                result.keystrokes[i].key_down_ms >= result.keystrokes[i - 1].key_down_ms,
+                "Clock should be monotonically increasing at index {i}"
+            );
+        }
+    }
+
+    #[test]
+    fn timing_hold_within_bounds() {
+        let texts = sample_corpus();
+        let word_freq = build_word_freq(&texts);
+        let profile = default_profile();
+        let mut rng = make_rng();
+        let result = synthesize_timing("Testing hold times.", &profile, &word_freq, &mut rng);
+        for (i, k) in result.keystrokes.iter().enumerate() {
+            let hold = k.key_up_ms - k.key_down_ms;
+            assert!(
+                hold >= 40.0 && hold <= 200.0,
+                "Hold time at index {i} should be in [40, 200], got {hold}"
+            );
+        }
+    }
+
+    // ── Full pipeline (compute) tests ──
+
+    #[test]
+    fn compute_produces_output() {
+        let corpus = serde_json::to_string(&sample_corpus()).unwrap();
+        let profile = "{}";
+        let result = compute(&corpus, "morning", profile, 20);
+        assert!(!result.text.is_empty(), "Should produce text");
+        assert!(!result.delays.is_empty(), "Should produce delays");
+        assert!(!result.keystroke_events.is_empty(), "Should produce keystroke events");
+        assert!(result.word_count > 0, "Should have words");
+    }
+
+    #[test]
+    fn compute_empty_corpus() {
+        let result = compute("[]", "anything", "{}", 20);
+        assert!(result.text.is_empty());
+        assert_eq!(result.word_count, 0);
+        assert_eq!(result.chain_size, 0);
+    }
+
+    #[test]
+    fn compute_with_revision_profile() {
+        let corpus = serde_json::to_string(&sample_corpus()).unwrap();
+        let profile = r#"{"small_del_rate": 2.0, "large_del_rate": 1.0, "revision_timing_bias": 0.6}"#;
+        let result = compute(&corpus, "think", profile, 30);
+        // With revisions, keystrokes should include backspace characters
+        let has_backspace = result.keystroke_events.iter().any(|k| k.character == '\u{0008}');
+        assert!(has_backspace, "Revision profile should inject backspace events");
+    }
+
+    #[test]
+    fn compute_keystroke_stream_has_wire_format() {
+        let corpus = serde_json::to_string(&sample_corpus()).unwrap();
+        let result = compute(&corpus, "time", "{}", 10);
+        // Every keystroke event should have valid character, key_down, key_up
+        for (i, k) in result.keystroke_events.iter().enumerate() {
+            assert!(
+                k.key_up_ms > k.key_down_ms,
+                "Keystroke {i}: key_up ({}) must be > key_down ({})",
+                k.key_up_ms,
+                k.key_down_ms
+            );
+        }
+    }
+
+    // ── Extract word spans ──
+
+    #[test]
+    fn extract_word_spans_basic() {
+        let spans = extract_word_spans("hello world");
+        assert_eq!(spans.len(), 2);
+        assert_eq!(spans[0].2, "hello");
+        assert_eq!(spans[1].2, "world");
+    }
+
+    #[test]
+    fn extract_word_spans_with_punctuation() {
+        let spans = extract_word_spans("wait, what?");
+        assert_eq!(spans.len(), 2);
+        assert_eq!(spans[0].2, "wait");
+        assert_eq!(spans[1].2, "what");
+    }
+
+    // ── Absolute Discounting properties ──
+
+    #[test]
+    fn perplexity_abs_discount_lower_than_uniform() {
+        let texts = sample_corpus();
+        let chain = build_chain(&texts, 1);
+        let result = compute_perplexity(&chain, "I think about the way things");
+        let uniform_ppl = chain.vocab_size as f64; // uniform distribution perplexity = vocab size
+        assert!(
+            result.perplexity < uniform_ppl,
+            "Model perplexity ({}) should beat uniform ({})",
+            result.perplexity,
+            uniform_ppl
+        );
+    }
 }
