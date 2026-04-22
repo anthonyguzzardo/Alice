@@ -6,7 +6,73 @@ Daily journaling instrument with 57 entries, 23 sessions with full five-variant 
 
 The instrument validates itself. Five adversary ghosts, each one the strongest statistical reconstruction possible along a different axis, all fail to reproduce what the instrument detects in real writing. The motor floor holds at L2 = 86-102 across every variant.
 
-## What was built (most recent session, 2026-04-21)
+## Strategic paper plan (2026-04-21)
+
+A four-phase plan to position reconstruction validity as a general paradigm and Alice's dataset as a structural moat. The leverage chain: B creates urgency in the widest audience, F provides the paradigm, the standalone ghost crate hands researchers the tool, and Alice's longitudinal unmediated dataset becomes irreplaceable by information-theoretic guarantee.
+
+### Phase 1: Compressed Option B (DONE)
+`papers/option_b_compressed.md` -- ~1500-word Science Perspective draft. Core move: construct replacement vs measurement noise distinction. Bathroom scale analogy. Three empirical anchors (Arnold et al., Doshi & Hauser, Zhou & Liu). Three-part research program close. Cuts measurement theory scaffolding from the full paper. Ready for author review.
+
+### Phase 2: Tighten Option F to v5 (DONE)
+`papers/option_f_draft.md` bumped to v5. Changes:
+- Abstract rewritten: leads with paradigm (informational sufficiency as validity evidence), not implementation
+- Generalizability foreshadowed in introduction (keystroke, speech, gait, handwriting, eye tracking)
+- Section 5 collapsed from 3 subsections to 1, reframed as "Application" not co-equal motivation
+- Section 9: removed duplicate "single participant" limitation, compressed No-LLM paragraph
+- Section 10: removed 4 completed status-report items, kept 4 forward-looking items (cross-modality first)
+- Section 11: restructured to lead with generality before empirical results
+- Method 4.2: PRNG/sampling details moved to supplementary material
+- 3 references removed (Blackman & Vigna, Box & Muller, Steele et al.)
+
+### Phase 3: Dataset (owner's legwork)
+The irreversible moat. A+G together prove: unmediated longitudinal behavioral data becomes impossible to replicate as AI mediation saturates. Every day of collection increases the value. Key decision still open: scale Alice to multi-user (auth, multi-tenancy, IRB) or keep Alice monastic and let the ghost framework propagate through other instruments.
+
+### Phase 4: Ghost crate extraction (PLANNED, not started)
+Standalone Rust crate `reconstruction-validity` published to crates.io. Extracts the algorithmic core from `avatar.rs` into a generic library other instruments can use. Alice keeps its avatar.rs unchanged.
+
+**Architecture plan:**
+- Separate repo (not a workspace in Einstein). Different audience, different release cycle.
+- Generic traits: `BehavioralProfile`, `TextModel`, `TimingModel`, `AdversaryVariant`
+- Keystroke module as feature-gated reference implementation
+- Residual computation in Rust (no TypeScript dependency)
+- Five implementation phases:
+  1. Extract pure algorithms (Markov, PPM, AR(1), copula, PRNG, stats, perplexity)
+  2. Define traits and refactor into generic interface
+  3. Keystroke reference implementation (port Alice's specific synthesis)
+  4. Publish (README, examples, docs, CI, crates.io)
+  5. Alice migration (optional, future -- swap inline algorithms for crate dependency)
+
+**Crate structure:**
+```
+reconstruction-validity/
+  src/
+    lib.rs              # pub API surface
+    traits.rs           # BehavioralProfile, TextModel, TimingModel, AdversaryVariant
+    adversary.rs        # ReconstructionEngine orchestrator
+    text/
+      markov.rs         # MarkovChain (order-1/2, Witten-Bell, absolute discounting)
+      ppm.rs            # PpmModel (variable-order, Method C escape)
+    timing/
+      baseline.rs       # Independent ex-Gaussian
+      ar1.rs            # AR(1) conditioned timing
+      copula.rs         # Gaussian copula joint sampling
+    residual.rs         # Per-dimension delta, L2 norms, family aggregation
+    rng.rs              # xoshiro128+, Box-Muller, ex-Gaussian sampling
+    stats.rs            # mean, std_dev, pearson, normalize
+    keystroke.rs        # Reference implementation (feature-gated)
+    revision.rs         # R-burst/I-burst injection (keystroke-specific)
+  examples/
+    keystroke_example.rs
+    custom_modality.rs  # skeleton for gait/speech/etc
+```
+
+**Key design decisions:**
+- Traits use associated types (`type Event`, `type CorpusEntry`) not generics
+- Rng is deterministic and seedable (reproducibility for research)
+- No flate2/napi dependencies in core
+- Alice doesn't change until Phase 5 (optional)
+
+## What was built (prior session, 2026-04-21)
 
 ### Multi-adversary system for reconstruction residuals
 
@@ -86,6 +152,9 @@ Code comments in `avatar.rs` and `libReconstruction.ts` document this cutover.
 
 ## What's next
 
+### Ghost crate extraction (Phase 4)
+Next concrete engineering task. Start with Phase 1: extract pure algorithms into new repo.
+
 ### Difficulty-residual correlation (data accumulating)
 Difficulty classification began at session 54. Once enough generated questions have reconstruction residuals, the correlation between difficulty and motor residual is testable.
 
@@ -115,7 +184,8 @@ src-rs/src/process.rs                  -- text reconstruction, pause/burst analy
 db/sql/dbAlice_Tables.sql              -- complete schema (synced through migration 010)
 db/sql/migrations/010                  -- te_adversary_variants, variant column, profile extensions
 src/pages/api/instrument-status.ts     -- per-variant convergence data for research page
-papers/option_f_draft.md               -- Reconstruction Validity paper (v4)
+papers/option_b_compressed.md          -- Compressed Option B for Science (Phase 1, DONE)
+papers/option_f_draft.md               -- Reconstruction Validity paper (v5, Phase 2, DONE)
 GHOST.md                               -- ghost system documentation (multi-adversary, R-burst calibration)
 ```
 
@@ -128,6 +198,7 @@ GHOST.md                               -- ghost system documentation (multi-adve
 - **Distributions vs sequences.** The motor residual falsification reveals that distributional equivalence is not behavioral equivalence. Condrey attacked distributions. The instrument measures sequences. The distinction is where the cognitive signal lives.
 - **Integrity before profile update.** Session integrity runs before `updateProfile()` to compare against the prior profile state.
 - **Single source of truth.** Rust is the only signal implementation. No TS fallback. If Rust is unavailable, the measurement does not happen.
+- **Ghost extraction is additive.** The standalone crate publishes the paradigm. Alice keeps its avatar.rs unchanged. Phase 5 migration is optional.
 
 ## Test results
 

@@ -2,11 +2,11 @@
 title: "Reconstruction Validity: Self-Validation of Process-Level Behavioral Instruments via Adversarial Synthesis"
 slug: reconstruction-validity
 author: Anthony Guzzardo
-date: 2026-04-20
+date: 2026-04-21
 status: published
-version: 4
+version: 5
 target_venue: Behavior Research Methods
-abstract: "Behavioral measurement instruments extract features from temporal behavioral streams and claim those features index cognitive or motor states. The standard approach to validating these claims is external-criterion: correlate extracted features with clinically meaningful outcomes. This paper introduces reconstruction validity, a complementary form of validity evidence in which the instrument's measurements are used to reconstruct the behavior they were extracted from, and the fidelity of the reconstruction is the validity metric. Reconstruction validity is computable, deterministic, requires no external criterion, and is meaningful from n=1. The reconstruction residual, the structured gap between reconstruction and reality, characterizes what the instrument does not capture. The paper formalizes the concept using the observability framework from control theory, demonstrates feasibility through a writing-process instrument that reconstructs keystroke behavior from extracted signal features, and shows that the framework provides a direct empirical response to the non-identifiability problem in keystroke-based authorship verification identified by Condrey (2026). Version 4 extends the single-ghost baseline to a five-variant adversary system: each variant adds exactly one statistical improvement (AR(1) conditioned timing, Gaussian copula hold-flight coupling, variable-order PPM text generation, or all three combined) to test whether the motor residual is an artifact of weak synthesis. Empirical results from 23 sessions across all five variants show the motor floor holds at L2 = 86-102 regardless of the statistical strategy. Better timing does not close the motor gap. Better text closes the semantic gap without affecting motor. The strongest possible reconstruction the instrument's own measurements can build still cannot reproduce what the instrument detects in real writing. The reconstruction's failure, replicated across five independent strategies, is the validity evidence."
+abstract: "Every behavioral measurement instrument implicitly claims that its extracted features preserve meaningful information about the person who produced the behavior. The standard test of this claim is external-criterion validity: do the features predict outcomes? This paper introduces reconstruction validity, a complementary form of validity evidence that asks a different question: are the features sufficient? Reconstruction validity operationalizes sufficiency by using the instrument's own measurements to regenerate the behavior they were extracted from. The fidelity of the reconstruction is the validity metric. The structured gap between reconstruction and reality, the reconstruction residual, is a dimensional map of what the instrument captures and what it does not. The framework requires no external criterion, no population sample, and no clinical gold standard. It is computable from a single participant's data and applicable to any instrument that extracts features from temporal behavioral streams, including keystroke dynamics, speech, gait, handwriting, and eye tracking. An empirical demonstration using a writing-process instrument and a five-variant adversarial reconstruction system shows that the motor residual, the gap between statistically faithful reconstruction and real writing, holds at L2 = 86-102 across all five strategies. The reconstruction's failure, replicated across five independent approaches, is the validity evidence: the instrument detects structure in real behavior that its own measurements cannot reproduce through statistical synthesis."
 ---
 
 # Reconstruction Validity: Self-Validation of Process-Level Behavioral Instruments via Adversarial Synthesis
@@ -30,7 +30,7 @@ This paper introduces a second kind of validity question: are the extracted feat
 
 The concept, which this paper terms *reconstruction validity*, is not new in other fields. Signal processing has used analysis-by-synthesis since Stevens and Halle (1962). Control theory has formalized observability since Kalman (1960). Machine learning uses autoencoder reconstruction loss to validate latent representations (Hinton and Salakhutdinov 2006). What is new is applying the framework to behavioral measurement instruments, where the "signal" is a person's behavior and the "analysis" is the instrument's feature extraction pipeline. The contribution is the application and its implications, not the mathematical structure.
 
-The paper also addresses a specific open problem. Condrey (2026a) demonstrated that keystroke timing features alone cannot distinguish genuine composition from transcription of AI-generated text. His non-identifiability result showed that the mutual information between motor timing features and content provenance is zero: timing confirms that a human operated the keyboard, not that the human originated the text. His proposed solution is "content-process binding," architectures that couple the semantic trajectory of a text to the behavioral trace of its production. Reconstruction validity provides the empirical test for whether an instrument achieves content-process binding. If the instrument's features are sufficient to reconstruct both the content trajectory and the behavioral trace, the binding is captured in the measurements. The validation framework and the authorship verification problem turn out to require the same thing.
+The framework is modality-general. Any instrument that extracts features from a temporal behavioral stream can construct a synthesis pipeline and evaluate reconstruction fidelity: keystroke dynamics, speech prosody, gait kinematics, handwriting trajectories, eye-tracking scanpaths. This paper demonstrates feasibility through a keystroke-based writing-process instrument, but the concept requires only a feature extraction pipeline and a reconstruction target. Section 8 develops the cross-modality applications in detail.
 
 ---
 
@@ -146,7 +146,7 @@ The choice of a Markov chain over a neural language model is methodologically lo
 
 *I-burst synthesis.* Mid-text insertion episodes are injected at a rate derived from the R-burst ratio in the profile. Each I-burst navigates to a position in the first 70% of the text (1.5 to 4 second navigation pause), generates 2 to 6 words from the Markov chain seeded on nearby context, and returns (0.5 to 1.5 second reorientation pause). Inserted text timing includes tempo drift and word difficulty coupling matching forward production, so insertions are not trivially distinguishable from production in the signal pipeline. I-bursts are a key marker distinguishing genuine composition from transcription (Condrey 2026a).
 
-The synthesis uses a self-contained pseudorandom number generator (xoshiro128+, Blackman and Vigna 2018) seeded via SplitMix64 (Steele, Lea, and Flood 2014) from system time, with no external dependencies. Gaussian sampling via Box-Muller (Box and Muller 1958). Ex-Gaussian sampling via Gaussian plus exponential decomposition (Lacouture and Cousineau 2008).
+The synthesis is self-contained with no external dependencies. Implementation details (PRNG selection, sampling algorithms) are documented in the supplementary material.
 
 ### 4.2a Multi-Adversary Variant System (v4)
 
@@ -182,33 +182,13 @@ The per-dimension distance profile is the reconstruction validity report. It rep
 
 ---
 
-## 5. The Condrey Response
+## 5. Application: The Authorship Verification Problem
 
-### 5.1 The Non-Identifiability Result
+Reconstruction validity also resolves a specific open problem in keystroke-based authorship verification, illustrating the framework's diagnostic power beyond instrument validation.
 
-Condrey (2026a) demonstrated a fundamental limitation of keystroke-timing-based authorship verification. Using three attack variants (histogram sampling, statistical impersonation, and a generative LSTM) tested against five classifiers on 13,000 sessions from the SBU keystroke corpus, he achieved evasion rates of 99.8% or higher. The simple copy-type attack, in which a human transcribes AI-generated text keystroke by keystroke, achieves 100% evasion by construction: the timing trace is genuine human motor output. The motor system does not know or care whether the person is composing or copying.
+Condrey (2026a) demonstrated that keystroke timing features alone cannot distinguish genuine composition from transcription of AI-generated text. Using three attack variants against five classifiers on 13,000 sessions, he achieved evasion rates of 99.8% or higher. He formalized this as a non-identifiability result: when observation is limited to motor timing distributions, mutual information with content provenance is zero. His proposed solution, "content-process binding," requires architectures that couple the semantic trajectory of a text to the behavioral trace of its production. His follow-up papers proposed cryptographic verification mechanisms (Condrey 2026b, 2026c) but did not address the measurement question: what features must an instrument capture to achieve content-process binding?
 
-Condrey formalized this as a non-identifiability result: when the observation channel is limited to motor timing features, the mutual information between those features and content provenance is zero. Timing features are sufficient to confirm that a human operated the keyboard. They are not sufficient to confirm that the human originated the text.
-
-### 5.2 Content-Process Binding
-
-Condrey identified three architectural approaches that could, in principle, break the non-identifiability:
-
-1. **Revision-history coherence.** Genuine composition produces non-monotonic text evolution: writing, deleting, rephrasing, inserting earlier, resuming. Transcription is predominantly linear and forward-flowing.
-2. **Semantic coherence monitoring.** The semantic trajectory of composed text reflects an unfolding argument or narrative. Transcription reflects the structure of the source text, which may not match the person's typical ideation patterns.
-3. **Content-process binding.** The general requirement: the semantic trajectory of the emerging text must be coupled to the behavioral trace of its production in a way that timing-only observation cannot forge.
-
-Condrey's constructive follow-up papers proposed cryptographic solutions: zero-knowledge process attestation (Condrey 2026b) and trusted execution environment architectures (Condrey 2026c). These address the verification problem (how to prove that content-process binding exists in a session without revealing the underlying data). They do not address the measurement problem: what features must an instrument capture to achieve content-process binding in the first place?
-
-### 5.3 Reconstruction Validity as the Measurement-Side Answer
-
-Reconstruction validity provides the measurement-side complement to Condrey's cryptographic proposals.
-
-The reconstruction pipeline generates text from the person's vocabulary and transitions (via Markov chain) and timing from the person's motor profile. The text has correct surface statistics but no genuine semantic structure. The timing has correct distributional properties but no genuine coupling to ideation. If the instrument's full feature set (including process signals: text reconstruction, revision coherence, burst content analysis) can distinguish its own reconstruction from real sessions, the instrument captures something beyond timing: it captures the relationship between content evolution and behavioral trace.
-
-This is a direct empirical test of content-process binding. The reconstruction is the strongest possible adversary that operates within the instrument's own measurement space. It has the person's vocabulary, their transition probabilities, their motor fingerprint, their pause architecture. What it lacks is the cognitive engagement that couples meaning to process. If the signal pipeline detects the absence, content-process binding is in the measurements.
-
-The test is also a calibration tool. The specific dimensions on which the pipeline distinguishes real from reconstructed sessions identify which features carry the content-process binding information. This is more informative than a binary "binding present/absent" verdict: it tells you where in the measurement space the binding lives.
+Reconstruction validity provides a direct empirical test. The reconstruction pipeline has the person's vocabulary, transition probabilities, motor fingerprint, and pause architecture. What it lacks is the cognitive engagement that couples meaning to process. If the signal pipeline distinguishes its own reconstruction from real sessions, the instrument captures something beyond timing distributions: it captures the relationship between content evolution and behavioral trace. The specific dimensions on which the pipeline detects the difference identify where in the measurement space the binding lives. The five-variant adversary system (Section 6.4) shows that motor is where it lives, and no statistical improvement closes the gap.
 
 ---
 
@@ -327,9 +307,7 @@ Each modality has its own synthesis challenges and fidelity metrics. But the val
 
 **Self-referential validation.** Reconstruction validity evaluates the instrument in its own feature space. The instrument cannot validate features it does not compute. If the behavioral stream contains information that the instrument's pipeline does not extract, reconstruction validity will not detect the omission. It is a test of sufficiency within the instrument's measurement space, not a test of completeness. External-criterion validity remains necessary for claims about what the measurements mean.
 
-**No-LLM constraint.** The methodological decision to bound reconstruction by the instrument's measurements (Markov, PPM, but not neural models) preserves the interpretability of the residual. If an LLM were used for text generation, the reconstruction gap would shrink on semantic dimensions, but the residual would no longer cleanly characterize the instrument's limitations. The PPM variant (v4) demonstrates that better text generation within the measurement-bounded constraint closes the semantic gap (L2 = 0.131 vs 0.159) without affecting motor. This confirms the independence of the text and timing axes and shows that the no-LLM constraint is not hiding a semantic limitation.
-
-**Single participant.** The implementation is a single-subject longitudinal study. Generalizability to other individuals requires replication. However, the framework itself does not depend on population-level statistics and is designed for n=1 evaluation.
+**No-LLM constraint.** Bounding reconstruction by the instrument's measurements (Section 4.2) preserves the interpretability of the residual. The PPM variant confirms that better text generation within this constraint closes the semantic gap without affecting motor, showing the constraint is not hiding a semantic limitation.
 
 **Revision synthesis is statistical, not cognitive.** The reconstruction now includes revision episodes (R-bursts and I-bursts) parameterized from the personal revision profile. However, the placement and content of revisions are stochastic: the reconstruction deletes at profile-matching rates and retypes Markov-generated variant text. Real revision reflects cognitive deliberation about meaning. The gap between stochastic and genuine revision is itself a component of the cognitive residual, but this limitation means the revision channel's contribution to reconstruction validity is bounded by the expressiveness of the statistical revision model.
 
@@ -337,49 +315,33 @@ Each modality has its own synthesis challenges and fidelity metrics. But the val
 
 ## 10. A Research Program
 
-### 10.1 Close the Adversarial Validation Loop (Completed)
+The reconstruction validity framework suggests three lines of future work, ordered by their contribution to establishing the paradigm.
 
-The adversarial validation loop is operational. Reconstruction residuals have been computed for 20 sessions. Per-dimension L2 norms, per-signal residuals, perplexity comparison, and PE spectrum residuals are tracked per session. Results are reported in Section 6.
+### 10.1 Cross-Modality Demonstrations
 
-### 10.2 Track Convergence (Completed)
+Apply the reconstruction validity framework to instruments in other modalities: speech, gait, handwriting, eye tracking. Each application tests whether the framework generalizes beyond keystroke dynamics and provides validity evidence for the target instrument. Cross-modality demonstrations would establish reconstruction validity as a general measurement methodology rather than a domain-specific technique. The formal parallels in Section 3 suggest feasibility; empirical demonstrations are needed.
 
-Per-session perplexity is tracked using Absolute Discounting (Chen and Goodman 1999) at both word level (Markov model, reconstruction quality) and character level (trigram model, cross-session self-consistency). Two-scale divergence between these measures provides an additional convergence metric. The order-2 transition occurred at session 10.
+### 10.2 Formalize the Metric
 
-### 10.2a Adaptive Difficulty Protocol (In Progress)
+Define reconstruction validity in terms of the observability Gramian or information-theoretic mutual information between the feature set and the behavioral stream. Derive theoretical bounds on reconstruction fidelity given the instrument's feature dimensionality. This connects the empirical framework to the control-theory literature and provides a foundation for comparing reconstruction validity across instruments and modalities.
 
-The question generation pipeline now logs the difficulty classification (high, moderate, low) and raw signal inputs (MATTR, cognitive density) alongside each generated question. This enables direct correlation between question difficulty and reconstruction residual magnitude. If harder questions produce larger motor residuals, the residual is confirmed as cognitive rather than biomechanical. Difficulty classification began at session 54; correlation data is accumulating.
+### 10.3 Direct Composition-Transcription Test
 
-### 10.2b Profile-Based Mediation Detection (Completed)
+Design a transcription protocol: the same user transcribes LLM-generated text under the same journaling interface. Run both authentic composition sessions and transcription sessions through the full signal pipeline. Measure whether process-level features (not just timing features) distinguish composition from transcription. This is a direct empirical test of whether the instrument achieves the content-process binding Condrey's result requires (Section 5), and it complements the adversarial reconstruction approach with a ground-truth behavioral comparison.
 
-A session integrity system computes the profile distance of each session's motor and process signals against the participant's established behavioral profile: z-scores across 12 dimensions (IKI, hold time, flight time, ex-Gaussian parameters, burst metrics, session duration, word count, first keystroke latency, MATTR), aggregated as the L2 norm of the z-score vector. Sessions exceeding the dynamic threshold (mean + 2 standard deviations of historical distances, with a floor at the chi-squared heuristic for the dimensionality) are flagged. This provides real-time detection of sessions where the motor/process profile does not match the person's established range, addressing the construct replacement concern (Guzzardo 2026b) at the measurement level. Of 54 sessions scored retrospectively, 10 were flagged. The z-score vector (raw per-dimension scores) is persisted alongside the flag, so the threshold can be recalibrated without re-running the computation.
+### 10.4 Adaptive Difficulty Correlation
 
-### 10.3 Run the Condrey Attack
-
-Design a transcription protocol: the same user transcribes LLM-generated text under the same journaling interface. Run both authentic composition sessions and transcription sessions through the full signal pipeline. Measure whether process-level features (not just timing features) distinguish composition from transcription. This is a direct empirical test of whether the instrument achieves the content-process binding Condrey's result requires.
-
-### 10.4 Formalize the Metric
-
-Define reconstruction validity in terms of the observability Gramian or information-theoretic mutual information between the feature set and the behavioral stream. Derive theoretical bounds on reconstruction fidelity given the instrument's feature dimensionality. This connects the empirical framework to the control-theory literature and provides a foundation for comparing reconstruction validity across instruments.
-
-### 10.5 Cross-Modality Demonstrations
-
-Apply the reconstruction validity framework to instruments in other modalities: speech, gait, handwriting. Each application tests whether the framework generalizes beyond keystroke dynamics and provides validity evidence for the target instrument. Cross-modality demonstrations would establish reconstruction validity as a general measurement methodology rather than a domain-specific technique.
-
-### 10.6 Reconstruction Model Progression (Completed)
-
-Version 4 implements a five-variant adversary system that systematically increases reconstruction sophistication along two independent axes: text generation (order-2 Markov to variable-order PPM) and timing synthesis (independent ex-Gaussian to AR(1) + Gaussian copula). The results (Section 6.4) show that: (1) better text closes semantic gaps without affecting motor; (2) better timing creates dynamical artifacts without closing motor; (3) the full combination does not collapse the motor floor. This traces the boundary between what statistical models can reconstruct and what requires the mind to produce, quantifying the cognitive residual across five levels of model complexity.
+The question generation pipeline now logs difficulty classification alongside each generated question. Direct correlation between question difficulty and reconstruction residual magnitude would confirm that the motor residual is cognitive rather than biomechanical: if harder questions produce larger motor residuals, the residual tracks cognitive engagement. Data collection is underway.
 
 ---
 
 ## 11. Conclusion
 
-Reconstruction validity asks a question that the existing validity framework does not: are the measurements informationally sufficient? The answer is a dimensional map showing where the instrument captures enough to reconstruct and where it does not. The reconstruction residual characterizes the instrument's boundary more precisely than any external correlation.
+Reconstruction validity asks a question that the existing validity framework does not: are the measurements informationally sufficient? The answer is not a single coefficient but a dimensional map showing where the instrument captures enough to reconstruct and where it does not. The reconstruction residual characterizes the instrument's boundary more precisely than any external correlation.
 
-The empirical results demonstrate the framework's value at two levels of rigor. The single-ghost baseline (v3) falsified the motor convergence prediction: the synthesis uses the same distributions the instrument fits, yet motor execution is the largest residual by two orders of magnitude. The five-variant adversary system (v4) closes the methodological objection that the baseline might simply be too crude. AR(1) conditioned timing, Gaussian copula hold-flight coupling, variable-order PPM text generation, and all three combined: the motor floor holds at L2 = 86-102 across every variant. Distributional equivalence is not behavioral equivalence, and no statistical improvement within the instrument's measurement space changes that. The sequence matters, and the sequence is where the mind shows.
+The framework is general. Any instrument that extracts features from temporal behavioral streams can construct a synthesis pipeline and evaluate reconstruction fidelity. The concept requires no external criterion, no population sample, and no clinical adjudication. It is computable from n=1, applicable across modalities, and the results improve with every session the instrument captures.
 
-For process-level behavioral instruments, the framework also addresses the content-process binding problem identified by Condrey (2026a). Condrey showed that timing *distributions* cannot distinguish composition from transcription. Five adversary variants, each preserving different distributional properties with increasing sophistication, all fail to reproduce what the instrument detects in real writing. Content-process binding is present in the measurements, and the motor channel is where it lives. The multi-adversary system turns that from a single data point into a surface whose shape maps the boundary between statistics and cognition.
-
-The framework is general. Any instrument that extracts features from temporal behavioral streams can construct a synthesis pipeline and evaluate reconstruction fidelity. The concept requires no external criterion, no population sample, and no clinical adjudication. It is computable from n=1. The results improve with every session the instrument captures.
+The empirical demonstration shows the framework's diagnostic power. Five adversary variants, each adding a specific statistical improvement, all fail to reproduce what the instrument detects in real writing. The motor floor holds at L2 = 86-102 across every variant. Distributional equivalence is not behavioral equivalence. AR(1) conditioned timing, Gaussian copula coupling, variable-order PPM text generation, and all three combined: the sequence matters, and the sequence is where the mind shows.
 
 The method, the metric, and the multi-adversary evidence are the contribution. The convergence curve continues.
 
@@ -391,11 +353,7 @@ AERA, APA, & NCME. (2014). *Standards for Educational and Psychological Testing*
 
 Bandt, C., & Pompe, B. (2002). Permutation entropy: A natural complexity measure for time series. *Physical Review Letters*, 88(17), 174102.
 
-Blackman, D., & Vigna, S. (2018). Scrambled linear pseudorandom number generators. arXiv:1805.01407.
-
 Box, G. E. P., Jenkins, G. M., & Reinsel, G. C. (2008). *Time Series Analysis: Forecasting and Control* (4th ed.). Wiley.
-
-Box, G. E. P., & Muller, M. E. (1958). A note on the generation of random normal deviates. *Annals of Mathematical Statistics*, 29(2), 610-611.
 
 Chen, S. F., & Goodman, J. (1999). An empirical study of smoothing techniques for language modeling. *Computer Speech and Language*, 13(4), 359-394.
 
@@ -454,8 +412,6 @@ Messick, S. (1995). Validity of psychological assessment: Validation of inferenc
 Nelsen, R. B. (2006). *An Introduction to Copulas* (2nd ed.). Springer.
 
 Peng, C.-K., Buldyrev, S. V., Havlin, S., Simons, M., Stanley, H. E., & Goldberger, A. L. (1994). Mosaic organization of DNA nucleotides. *Physical Review E*, 49(2), 1685-1689.
-
-Steele, G., Lea, D., & Flood, C. H. (2014). Fast splittable pseudorandom number generators. *ACM SIGPLAN Notices*, 49(10), 453-472.
 
 Stern, Y., et al. (2023). A framework for concepts of reserve and resilience in aging. *Neurobiology of Aging*, 124, 100-103.
 
