@@ -1,0 +1,56 @@
+name: Signal Engine Reproducibility
+
+on:
+  pull_request:
+    paths:
+      - 'src-rs/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/signal-reproducibility.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src-rs/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: macos-14
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: src-rs
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache Rust toolchain
+        uses: actions/cache@v4
+        with:
+          path: ~/.rustup/toolchains
+          key: rustup-${{ hashFiles('src-rs/rust-toolchain.toml') }}
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-registry-${{ hashFiles('src-rs/Cargo.lock') }}
+          restore-keys: cargo-registry-
+
+      - name: Install Rust toolchain
+        run: rustup show
+
+      - name: Clippy
+        run: cargo clippy -- -D warnings
+
+      - name: Unit tests
+        run: cargo test --lib
+
+      - name: Reproducibility check
+        run: ./reproducibility-check.sh
