@@ -23,19 +23,19 @@ trap 'rm -rf "$SNAP_A" "$SNAP_B"' EXIT
 echo "=== Build A ==="
 cargo clean 2>/dev/null || true
 cargo build --release 2>&1 | tail -1
-REPRO_SNAPSHOT_DIR="$SNAP_A" cargo test --release --test reproducibility 2>&1 | grep -E "^test|Snapshot"
+REPRO_SNAPSHOT_DIR="$SNAP_A" cargo test --release --test reproducibility --test avatar_reproducibility 2>&1 | grep -E "^test|Snapshot"
 
 echo ""
 echo "=== Build B (clean rebuild) ==="
 cargo clean
 cargo build --release 2>&1 | tail -1
-REPRO_SNAPSHOT_DIR="$SNAP_B" cargo test --release --test reproducibility 2>&1 | grep -E "^test|Snapshot"
+REPRO_SNAPSHOT_DIR="$SNAP_B" cargo test --release --test reproducibility --test avatar_reproducibility 2>&1 | grep -E "^test|Snapshot"
 
 echo ""
 echo "=== Comparing snapshots ==="
 
 PASS=true
-for f in dynamical.json motor.json; do
+for f in dynamical.json motor.json avatar_v1.json avatar_v2.json avatar_v3.json avatar_v4.json avatar_v5.json; do
     if [ -f "$SNAP_A/$f" ] && [ -f "$SNAP_B/$f" ]; then
         if diff -q "$SNAP_A/$f" "$SNAP_B/$f" > /dev/null 2>&1; then
             echo "  $f: IDENTICAL"
