@@ -49,8 +49,20 @@ or directly:
 ./src-rs/reproducibility-check.sh
 ```
 
-This should be run:
-- Before merging any PR that touches `src-rs/`
+### CI enforcement (`.github/workflows/signal-reproducibility.yml`)
+
+Bit-identity is enforced automatically on every PR that touches `src-rs/**`, `package.json`, `package-lock.json`, or the workflow file itself, and on pushes to `main` touching `src-rs/**`. The workflow runs on `macos-14` (Apple M1, ARM64) matching the pinned toolchain target. Steps: clippy with warnings-as-errors, unit tests, then the full two-clean-build reproducibility check.
+
+### Local use
+
+Running the check locally is recommended for fast feedback during development but is not the enforcement mechanism. Run it with:
+
+```
+npm run reproducibility-check
+```
+
+Useful when:
+- Iterating on signal computation logic (faster than waiting for CI)
 - After upgrading the Rust toolchain version
 - After changing `Cargo.toml` dependencies or `[profile.release]` settings
 

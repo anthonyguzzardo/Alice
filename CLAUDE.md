@@ -259,7 +259,7 @@ The Rust crate must be written to Rust's standards, not JavaScript's.
 - **Error variant tests**: `assert!(matches!(result, Err(SignalError::InsufficientData { .. })))`.
 - **UTF-8 safety tests**: any text reconstruction code must have a test with emoji and multibyte characters that proves it doesn't panic.
 - Run `cargo test` before committing.
-- **Reproducibility check**: after any change to signal computation logic, summation patterns, or Cargo.toml dependencies, run `npm run reproducibility-check`. This builds twice from clean state and diffs signal output byte-for-byte. If it fails, the change introduced floating-point nondeterminism. See `src-rs/REPRODUCIBILITY.md` for the full guarantee and failure protocol.
+- **Reproducibility check**: CI enforces bit-identity on every PR touching `src-rs/**` via `.github/workflows/signal-reproducibility.yml` (clippy, unit tests, two-clean-build snapshot diff). Running `npm run reproducibility-check` locally is recommended for fast iteration but is not the enforcement mechanism. See `src-rs/REPRODUCIBILITY.md` for the full guarantee and failure protocol.
 
 ### Module Structure
 
