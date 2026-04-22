@@ -6,7 +6,7 @@ date: 2026-04-21
 status: published
 version: 5
 target_venue: Behavior Research Methods
-abstract: "Every behavioral measurement instrument implicitly claims that its extracted features preserve meaningful information about the person who produced the behavior. The standard test of this claim is external-criterion validity: do the features predict outcomes? This paper introduces reconstruction validity, a complementary form of validity evidence that asks a different question: are the features sufficient? Reconstruction validity operationalizes sufficiency by using the instrument's own measurements to regenerate the behavior they were extracted from. The fidelity of the reconstruction is the validity metric. The structured gap between reconstruction and reality, the reconstruction residual, is a dimensional map of what the instrument captures and what it does not. The framework requires no external criterion, no population sample, and no clinical gold standard. It is computable from a single participant's data and applicable to any instrument that extracts features from temporal behavioral streams, including keystroke dynamics, speech, gait, handwriting, and eye tracking. An empirical demonstration using a writing-process instrument and a five-variant adversarial reconstruction system shows that the motor residual, the gap between statistically faithful reconstruction and real writing, holds at L2 = 86-102 across all five strategies. The reconstruction's failure, replicated across five independent approaches, is the validity evidence: the instrument detects structure in real behavior that its own measurements cannot reproduce through statistical synthesis."
+abstract: "Every behavioral measurement instrument implicitly claims that its extracted features preserve meaningful information about the person who produced the behavior. The standard test of this claim is external-criterion validity: do the features predict outcomes? This paper introduces reconstruction validity, a complementary form of validity evidence that asks a different question: are the features sufficient? Reconstruction validity operationalizes sufficiency by using the instrument's own measurements to regenerate the behavior they were extracted from. The fidelity of the reconstruction is the validity metric. The structured gap between reconstruction and reality, the reconstruction residual, is a dimensional map of what the instrument captures and what it does not. The framework requires no external criterion, no population sample, and no clinical gold standard. It is computable from a single participant's data and applicable to any instrument that extracts features from temporal behavioral streams, including keystroke dynamics, speech, gait, handwriting, and eye tracking. An empirical demonstration using a writing-process instrument and a five-variant adversarial reconstruction system shows that the motor residual, the gap between statistically faithful reconstruction and real writing, holds at L2 = 89-100 across all five strategies. The reconstruction's failure, replicated across five independent approaches, is the validity evidence: the instrument detects structure in real behavior that its own measurements cannot reproduce through statistical synthesis."
 ---
 
 # Reconstruction Validity: Self-Validation of Process-Level Behavioral Instruments via Adversarial Synthesis
@@ -194,11 +194,11 @@ Reconstruction validity provides a direct empirical test. The reconstruction pip
 
 ## 6. Predictions and Results
 
-The instrument has been in daily use by a single participant. The reconstruction pipeline has been run on 23 sessions with complete signal data across all five adversary variants (115 total residual computations). This section presents the predictions registered in version 2 alongside the empirical results. The predictions were written at 8 sessions. The single-ghost results (v3) are from 54 sessions. The multi-adversary results (v4) are from 23 sessions with 57 corpus entries.
+The instrument has been in daily use by a single participant. The reconstruction pipeline has been run on 26 sessions with complete signal data across all five adversary variants (130 total residual computations). This section presents the predictions registered in version 2 alongside the empirical results. The predictions were written at 8 sessions. The single-ghost results (v3) are from 54 sessions. The multi-adversary results (v5) are from 26 sessions with 63 corpus entries.
 
 ### 6.1 Corpus State
 
-Fifty-seven journal and calibration entries. The Markov chain operates at order 2 (bigram context, transitioned from order 1 at session 10). The personal behavioral profile is computed from all sessions, updated after each: ex-Gaussian parameters, aggregate digraph latency map across all observed bigrams, pause architecture percentages, burst statistics, R-burst consolidation and duration, IKI autocorrelation, hold-flight rank correlation, cumulative vocabulary, and MATTR baseline. Five signal families are active: dynamical, motor, semantic, process, and cross-session. Five adversary variants run on every session (Section 4.2a).
+Sixty-three journal and calibration entries across 26 sessions with full signal data. The Markov chain operates at order 2 (bigram context, transitioned from order 1 at session 10). The personal behavioral profile is computed from all sessions, updated after each: ex-Gaussian parameters, aggregate digraph latency map across all observed bigrams, pause architecture percentages, burst statistics, R-burst consolidation and duration, IKI autocorrelation, hold-flight rank correlation, cumulative vocabulary, and MATTR baseline. Five signal families are active: dynamical, motor, semantic, process, and cross-session. Five adversary variants run on every session (Section 4.2a). All transfer entropy and hold-flight correlation values were recomputed after a vector alignment fix (see Limitations).
 
 ### 6.2 Predictions (Registered in v2) and Results
 
@@ -220,33 +220,33 @@ This falsification is the most important empirical result of the reconstruction 
 
 ### 6.4 Multi-Adversary Results (v4)
 
-The five-variant system tests whether the motor residual is an artifact of weak synthesis. Each variant adds one statistical improvement. The results below are averaged across 23 sessions with 57 corpus entries.
+The five-variant system tests whether the motor residual is an artifact of weak synthesis. Each variant adds one statistical improvement. The results below are averaged across 26 sessions with 63 corpus entries. (Note: all values recomputed after the HoldFlight vector alignment fix documented in METHODS_PROVENANCE.md INC-001. The copula parameter `hold_flight_rank_correlation` and all transfer entropy values were recalculated from corrected hold-flight pairs.)
 
 | Variant | Avg Total L2 | Avg Motor L2 | Avg Dynamical L2 | Avg Semantic L2 |
 |---------|-------------|-------------|-----------------|----------------|
-| 1. Baseline | 52.5 | 90.7 | 1.51 | 0.159 |
-| 2. Conditional Timing | 95.9 | 86.2 | 83.4 | 0.161 |
-| 3. Copula Motor | 58.5 | 102.4 | 0.73 | 0.170 |
-| 4. PPM Text | 56.0 | 99.7 | 0.26 | 0.131 |
-| 5. Full Adversary | 59.2 | 89.3 | 0.37 | 0.170 |
+| 1. Baseline | 52.3 | 90.8 | 1.35 | 0.159 |
+| 2. Conditional Timing | 92.1 | 88.8 | 73.75 | 0.158 |
+| 3. Copula Motor | 57.7 | 99.9 | 0.67 | 0.169 |
+| 4. PPM Text | 55.0 | 98.0 | 0.31 | 0.134 |
+| 5. Full Adversary | 59.1 | 91.1 | 0.33 | 0.169 |
 
-**Conditional Timing (variant 2) has the lowest motor L2 (86.2) but the highest total L2 (95.9).** The AR(1) process preserves keystroke rhythm and modestly closes the motor gap. But it creates artificial complexity patterns that the dynamical signals detect as anomalous, increasing dynamical L2 from 1.51 to 83.4. The AR(1) process is too regular; real cognitive events produce temporal complexity that a simple autoregressive model cannot replicate.
+**Conditional Timing (variant 2) has the lowest motor L2 (88.8) but the highest total L2 (92.1).** The AR(1) process preserves keystroke rhythm and modestly closes the motor gap. But it creates artificial complexity patterns that the dynamical signals detect as anomalous, increasing dynamical L2 from 1.35 to 73.75. The AR(1) process is too regular; real cognitive events produce temporal complexity that a simple autoregressive model cannot replicate.
 
-**Copula Motor (variant 3) makes motor worse (102.4 vs 90.7).** Coupling hold and flight times jointly introduces motor patterns that diverge further from real execution. The empirical rank correlation (rho = -0.203) is mild, and imposing it on the synthesis creates a coupling artifact the motor signals detect.
+**Copula Motor (variant 3) makes motor worse (99.9 vs 90.8).** Coupling hold and flight times jointly introduces motor patterns that diverge further from real execution. The empirical rank correlation (rho = -0.189) is mild, and imposing it on the synthesis creates a coupling artifact the motor signals detect.
 
-**PPM Text (variant 4) wins on semantics (0.131 vs 0.159) and dynamical (0.26 vs 1.51).** Better text generation closes the gaps that better text should close, without affecting motor. The text generation and timing synthesis axes are independent in the measurement.
+**PPM Text (variant 4) wins on semantics (0.134 vs 0.159) and dynamical (0.31 vs 1.35).** Better text generation closes the gaps that better text should close, without affecting motor. The text generation and timing synthesis axes are independent in the measurement.
 
-**Full Adversary (variant 5) lands at motor 89.3.** The combination of all improvements produces a modest motor improvement over baseline (89.3 vs 90.7) but not a collapse. The motor floor remains in the 86-102 range across all five variants.
+**Full Adversary (variant 5) lands at motor 91.1.** The combination of all improvements produces a negligible motor change over baseline (91.1 vs 90.8). The motor floor remains in the 89-100 range across all five variants.
 
 **The motor residual is not an artifact of weak synthesis.** Five different statistical strategies, three specifically targeting motor execution, and the floor has not meaningfully moved. The objection that the baseline generator might be too crude is empirically addressed.
 
 ### 6.5 What the Results Establish
 
-The reconstruction validity framework produces a dimensional validity profile. Across five adversary variants and 23 sessions, the profile is:
+The reconstruction validity framework produces a dimensional validity profile. Across five adversary variants and 26 sessions, the profile is:
 
-- **Motor signals:** High residual (L2 = 86-102 across all variants). The floor holds under AR(1), copula, PPM, and all three combined. The instrument detects motor structure that no statistical reconstruction within its measurement space can reproduce.
-- **Dynamical signals:** Low residual for text-matched variants (L2 = 0.26 for PPM), but blown up by AR(1) timing (L2 = 83.4). Temporal complexity is captured by the statistical profile when timing is independent, but autoregressive timing creates detectable artifacts.
-- **Semantic signals:** Low and closing (L2 = 0.131 for PPM vs 0.159 for Markov). Better text generation closes the semantic gap. Content structure is statistically compressible.
+- **Motor signals:** High residual (L2 = 89-100 across all variants). The floor holds under AR(1), copula, PPM, and all three combined. The instrument detects motor structure that no statistical reconstruction within its measurement space can reproduce.
+- **Dynamical signals:** Low residual for text-matched variants (L2 = 0.31 for PPM), but blown up by AR(1) timing (L2 = 73.75). Temporal complexity is captured by the statistical profile when timing is independent, but autoregressive timing creates detectable artifacts.
+- **Semantic signals:** Low and closing (L2 = 0.134 for PPM vs 0.159 for Markov). Better text generation closes the semantic gap. Content structure is statistically compressible.
 - **Perplexity:** Real always lower than ghost. The person is more coherent than their statistical profile predicts.
 
 The multi-adversary system transforms the motor residual from a single falsification into a surface. The surface's shape maps the boundary between statistics and cognition at higher resolution than any single ghost can. The motor floor is not an artifact of a weak generator. It is the measurement.
@@ -259,9 +259,9 @@ The reconstruction residual, the structured gap between synthetic and real sessi
 
 ### 7.1 Motor Residual (Predicted: Small. Measured: Largest. Replicated Across Five Strategies.)
 
-The timing synthesis draws from the same distributions the instrument fits to real data. The prediction was that the motor residual would be small and decrease with corpus size. The measured motor L2 norm is 86-102 across five adversary variants, the largest residual family by two orders of magnitude regardless of the statistical strategy.
+The timing synthesis draws from the same distributions the instrument fits to real data. The prediction was that the motor residual would be small and decrease with corpus size. The measured motor L2 norm is 89-100 across five adversary variants, the largest residual family by two orders of magnitude regardless of the statistical strategy.
 
-The single-ghost falsification (v3) revealed that distributional equivalence is not behavioral equivalence. The multi-adversary system (v4) tests whether the gap closes when specific distributional limitations are addressed. It does not. Preserving IKI serial dependence via AR(1) modestly reduces the motor gap (86.2 vs 90.7) but creates dynamical artifacts (L2 = 83.4). Coupling hold and flight times via Gaussian copula makes motor worse (102.4). Combining all improvements (Full Adversary) lands at 89.3. The motor floor is not an artifact of independent sampling, missing correlations, or weak text generation. It persists under every statistical improvement the instrument's own measurements can supply.
+The single-ghost falsification (v3) revealed that distributional equivalence is not behavioral equivalence. The multi-adversary system (v4) tests whether the gap closes when specific distributional limitations are addressed. It does not. Preserving IKI serial dependence via AR(1) modestly reduces the motor gap (88.8 vs 90.8) but creates dynamical artifacts (L2 = 73.75). Coupling hold and flight times via Gaussian copula makes motor worse (99.9). Combining all improvements (Full Adversary) lands at 91.1. The motor floor is not an artifact of independent sampling, missing correlations, or weak text generation. It persists under every statistical improvement the instrument's own measurements can supply.
 
 The motor signals the instrument extracts (sample entropy, motor jerk, tempo drift, IKI autocorrelation) are sensitive to the *sequence* of intervals, not just their distribution. Genuine composition produces motor sequences structured by cognitive events. Statistical sampling, even with preserved serial dependence and coupling, produces motor sequences that the instrument reliably distinguishes from real ones. The motor channel detects the mind. Five independent strategies have now failed to close that gap.
 
@@ -301,7 +301,9 @@ Each modality has its own synthesis challenges and fidelity metrics. But the val
 
 ## 9. Limitations
 
-**Still a single participant.** The implementation has 57 entries and 23 sessions with full five-variant residuals (115 total computations). The predictions from version 2 (registered at 8 sessions) have been tested, with one falsified. The convergence trajectory is stabilizing but not yet asymptotic. Motor residual variance across sessions remains substantial. The contribution remains the framework; the empirical results are early evidence, not definitive validation.
+**Still a single participant.** The implementation has 63 entries and 26 sessions with full five-variant residuals (130 total computations). The predictions from version 2 (registered at 8 sessions) have been tested, with one falsified. The convergence trajectory is stabilizing but not yet asymptotic. Motor residual variance across sessions remains substantial. The contribution remains the framework; the empirical results are early evidence, not definitive validation.
+
+**Data reprocessing disclosure.** A vector alignment bug in the hold-flight pair extraction was discovered during an adversarial audit of the signal engine (documented in METHODS_PROVENANCE.md, INC-001). The bug caused hold times and flight times to refer to different keystroke events when rollover typing produced negative flight times, affecting 100% of sessions and contaminating all transfer entropy values (130% mean shift). All dynamical signals and reconstruction residuals reported in this paper were recomputed from raw keystroke streams after the fix. Pre-fix values are preserved in snapshot tables for independent verification.
 
 **Generative model ceiling partially tested.** Version 3 used a single order-2 Markov chain. Version 4 introduces PPM text generation (adaptive context up to depth 5), AR(1) conditioned timing, and Gaussian copula hold-flight coupling. These represent the strongest reconstruction possible within the constraint that synthesis must be bounded by the instrument's measurements. The motor floor holds across all five strategies. More sophisticated models (neural language models, RNNs) would violate the measurement-bounded constraint by introducing coherence from the model's own capabilities. The current five-variant system maps the boundary of what statistical reconstruction can achieve within the instrument's measurement space. Neural models remain relevant for the separate question of how much of the residual is truly irreducible versus model-limited, but that question lies outside the reconstruction validity framework.
 
@@ -341,7 +343,7 @@ Reconstruction validity asks a question that the existing validity framework doe
 
 The framework is general. Any instrument that extracts features from temporal behavioral streams can construct a synthesis pipeline and evaluate reconstruction fidelity. The concept requires no external criterion, no population sample, and no clinical adjudication. It is computable from n=1, applicable across modalities, and the results improve with every session the instrument captures.
 
-The empirical demonstration shows the framework's diagnostic power. Five adversary variants, each adding a specific statistical improvement, all fail to reproduce what the instrument detects in real writing. The motor floor holds at L2 = 86-102 across every variant. Distributional equivalence is not behavioral equivalence. AR(1) conditioned timing, Gaussian copula coupling, variable-order PPM text generation, and all three combined: the sequence matters, and the sequence is where the mind shows.
+The empirical demonstration shows the framework's diagnostic power. Five adversary variants, each adding a specific statistical improvement, all fail to reproduce what the instrument detects in real writing. The motor floor holds at L2 = 89-100 across every variant. Distributional equivalence is not behavioral equivalence. AR(1) conditioned timing, Gaussian copula coupling, variable-order PPM text generation, and all three combined: the sequence matters, and the sequence is where the mind shows.
 
 The method, the metric, and the multi-adversary evidence are the contribution. The convergence curve continues.
 

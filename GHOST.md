@@ -210,25 +210,25 @@ One new field in `tb_motor_signals`:
 |-------|------------|---------|
 | `hold_flight_rank_corr` | Spearman rank correlation between paired hold and flight times per session. Fractional ranks with tie handling. Minimum 30 pairs. | Spearman (1904) |
 
-## Early empirical results (23 sessions, 57 corpus entries)
+## Empirical results (26 sessions, 63 corpus entries, post-INC-001 recomputation)
 
 | Variant | Avg Total L2 | Avg Motor L2 | Avg Dynamical L2 | Avg Semantic L2 |
 |---------|-------------|-------------|-----------------|----------------|
-| 1. Baseline | 52.5 | 90.7 | 1.51 | 0.159 |
-| 2. Conditional Timing | 95.9 | **86.2** | 83.4 | 0.161 |
-| 3. Copula Motor | 58.5 | 102.4 | 0.73 | 0.170 |
-| 4. PPM Text | 56.0 | 99.7 | **0.26** | **0.131** |
-| 5. Full Adversary | 59.2 | 89.3 | 0.37 | 0.170 |
+| 1. Baseline | 52.3 | 90.8 | 1.35 | 0.159 |
+| 2. Conditional Timing | 92.1 | **88.8** | 73.75 | 0.158 |
+| 3. Copula Motor | 57.7 | 99.9 | 0.67 | 0.169 |
+| 4. PPM Text | 55.0 | 98.0 | **0.31** | **0.134** |
+| 5. Full Adversary | 59.1 | 91.1 | 0.33 | 0.169 |
 
 ### What the numbers say
 
-**Conditional Timing (variant 2) has the lowest motor L2 (86.2) but the highest total L2 (95.9).** The AR(1) process preserves keystroke rhythm and modestly closes the motor gap. But it creates artificial complexity patterns that the dynamical signals detect as anomalous, blowing up dynamical L2 from 1.5 to 83.4. The AR(1) process is too regular; real cognitive events produce temporal complexity that a simple autoregressive model cannot replicate. This is informative: the motor residual is not just about serial dependence.
+**Conditional Timing (variant 2) has the lowest motor L2 (88.8) but the highest total L2 (92.1).** The AR(1) process preserves keystroke rhythm and modestly closes the motor gap. But it creates artificial complexity patterns that the dynamical signals detect as anomalous, blowing up dynamical L2 from 1.35 to 73.75. The AR(1) process is too regular; real cognitive events produce temporal complexity that a simple autoregressive model cannot replicate. This is informative: the motor residual is not just about serial dependence.
 
-**Copula Motor (variant 3) makes motor worse (102.4 vs 90.7).** Coupling hold and flight times jointly introduces motor patterns that diverge further from real execution. The empirical rank correlation (rho = -0.203) is mild, and imposing it on the synthesis creates a coupling artifact the motor signals detect. The hold-flight relationship in real typing is more complex than a single correlation coefficient.
+**Copula Motor (variant 3) makes motor worse (99.9 vs 90.8).** Coupling hold and flight times jointly introduces motor patterns that diverge further from real execution. The empirical rank correlation (rho = -0.189) is mild, and imposing it on the synthesis creates a coupling artifact the motor signals detect. The hold-flight relationship in real typing is more complex than a single correlation coefficient.
 
-**PPM Text (variant 4) wins on semantics (0.131 vs 0.159) and dynamical (0.26 vs 1.51).** Better text generation closes the gaps that better text should close, without affecting motor. This is the expected result and a sanity check: the text generation and timing synthesis axes are independent in the measurement.
+**PPM Text (variant 4) wins on semantics (0.134 vs 0.159) and dynamical (0.31 vs 1.35).** Better text generation closes the gaps that better text should close, without affecting motor. This is the expected result and a sanity check: the text generation and timing synthesis axes are independent in the measurement.
 
-**Full Adversary (variant 5) lands at motor 89.3.** The combination of all improvements produces a modest motor improvement over baseline (89.3 vs 90.7) but not a collapse. The motor floor remains firmly in the 86-102 range across all variants.
+**Full Adversary (variant 5) lands at motor 91.1.** The combination of all improvements produces a negligible motor change over baseline (91.1 vs 90.8). The motor floor remains firmly in the 89-100 range across all variants.
 
 **The motor residual is real.** Five different statistical strategies, three of them specifically targeting motor execution, and the floor has not meaningfully moved. The cognitive signal lives in motor timing sequences, not in the distributions or correlations the variants can replicate.
 
@@ -257,7 +257,7 @@ The ghost exists to prove a negative.
 
 Your whole paper rests on a claim that is easy to assert and hard to prove: *the signals Alice measures capture something about cognition, not just typing habits.* Every skeptic reading that paper is going to ask the same question: "how do you know you are not just measuring how fast this guy's fingers move?" You need an answer that is not hand-waving.
 
-The ghost is the answer. One ghost was suggestive. Five ghosts, each one closing a different statistical gap, and the motor floor still standing at 86-102? That is evidence. The strongest possible statistical imitation you can build from the instrument's own measurements cannot reproduce what the instrument detects in real writing.
+The ghost is the answer. One ghost was suggestive. Five ghosts, each one closing a different statistical gap, and the motor floor still standing at 89-100? That is evidence. The strongest possible statistical imitation you can build from the instrument's own measurements cannot reproduce what the instrument detects in real writing.
 
 Without the ghost, you are asserting the signals are cognitive. With one ghost, you are showing one subtraction. With five ghosts, you are showing that the subtraction holds no matter how you improve the statistics. The residual is not an artifact of a weak generator. It is the measurement.
 

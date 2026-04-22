@@ -272,11 +272,11 @@ The instrument validates its own measurements through adversarial synthesis. The
 
 The ghost session is fed through the same signal pipeline as real sessions. Extracted signals are compared dimension by dimension. The L2 norm of the per-family residual vector quantifies what the instrument captures.
 
-**Empirical results (n=22 reconstructions over 56 sessions):**
-- Motor L2 = 89.3 (mean). Largest residual by two orders of magnitude. Distributional equivalence is not behavioral equivalence. The ghost types from the right distributions but not in the right sequences.
-- Dynamical L2 < 1.3. Ghost matches PE, DFA, RQA closely. Expected: timing statistics converge.
-- Semantic L2 < 0.35. Markov text is statistically plausible but meaningless. Content structure is compressible.
-- Perplexity: real 21.3 vs ghost 78.5 (mean). The person is more internally consistent than the Markov model predicts.
+**Empirical results (26 sessions, 63 corpus entries, 5 adversary variants, post-INC-001 recomputation):**
+- Motor L2 = 89-100 across all five variants. Largest residual by two orders of magnitude. Distributional equivalence is not behavioral equivalence. The ghost types from the right distributions but not in the right sequences.
+- Dynamical L2 < 1.35 (baseline). Ghost matches PE, DFA, RQA closely. Expected: timing statistics converge.
+- Semantic L2 < 0.17. Markov text is statistically plausible but meaningless. Content structure is compressible.
+- PPM closes semantic gap (0.134 vs 0.159) without affecting motor. Text and timing axes are independent.
 - Journal L2 = 59.6, calibration L2 = 50.7. Harder questions widen the residual. A biomechanical residual would not vary with question type.
 
 The motor residual was predicted small. It is the largest finding. The prediction was falsified, and the falsification is the strongest evidence: motor execution in genuine composition is coupled to cognitive state. Full analysis in [Guzzardo 2026c, "Reconstruction Validity"](papers/option_f_draft.md).
@@ -449,7 +449,7 @@ Four papers published at `/papers`, versioned and open to comment:
 
 1. **A Closing Window** (v2) -- The demographic confound in keystroke-based cognitive biomarkers. The population currently studied for neurodegeneration via keystroke dynamics largely lacks the typing automaticity required for timing to reflect cognition rather than motor search.
 2. **Construct Replacement** (v2) -- AI-mediated input doesn't add noise to behavioral measurement; it replaces the cognitive construct the measurement indexes. A word accepted from a suggestion is a clean measurement of suggestion evaluation, not a noisy measurement of lexical retrieval.
-3. **Reconstruction Validity** (v3) -- Self-validation of process-level behavioral instruments via adversarial synthesis. The instrument's measurements are used to reconstruct the behavior they were extracted from. The reconstruction residual is the validity metric. Includes empirical results: motor L2 = 89.3 (predicted small, measured largest), the falsified prediction is the strongest finding.
+3. **Reconstruction Validity** (v5) -- Self-validation of process-level behavioral instruments via adversarial synthesis. The instrument's measurements are used to reconstruct the behavior they were extracted from. The reconstruction residual is the validity metric. Five adversary variants show the motor floor holds at L2 = 89-100 regardless of statistical strategy. The falsified motor convergence prediction is the strongest finding.
 4. **Irreversible Loss** (v1) -- An information-theoretic argument that process-level cognitive data loss is mathematically irreversible. The artifact is a lossy compression of the process. No future technology can recover what was discarded.
 
 ## Philosophy
