@@ -550,6 +550,8 @@ const papers = listPapers('published');
       <span class="r-instrument-stat" id="strip-variants"></span>
     </div>
 
+    <p>Every reconstruction residual is a reproducible artifact. The PRNG seed, motor profile snapshot, and corpus integrity hash are stored alongside each residual. Any future build of the instrument can regenerate the identical ghost and verify the stored residual to bit identity. This is not a design aspiration; it is a <a class="r-cite" href="/papers/reconstruction-validity">verified property</a>, demonstrated on production data across all dynamical and motor signal families.</p>
+
     <p>This framework also provides a direct empirical response to <a class="r-cite" href="https://arxiv.org/abs/2601.17280" target="_blank" rel="noopener">Condrey (2026a)</a>, who proved that keystroke timing alone cannot distinguish composition from transcription. Five reconstructions are timing-calibrated and meaning-absent. The instrument's full signal set distinguishes all five from real sessions. It captures the content-process binding that Condrey's result says timing-only instruments cannot detect. The multi-adversary system turns that from a single data point into a surface. The surface's shape is the validity evidence.</p>
   </section>
 

@@ -180,6 +180,52 @@ Dimensions where the distance is small (the reconstruction matches reality) are 
 
 The per-dimension distance profile is the reconstruction validity report. It replaces the binary question "does the instrument work?" with a dimensional map: "the instrument captures motor fingerprint with fidelity X, pause architecture with fidelity Y, temporal complexity with fidelity Z, and does not capture semantic coherence at all."
 
+### 4.4 Reproducibility of Reconstruction Residuals
+
+A reconstruction residual is a scientific measurement. If it cannot be independently reproduced from its inputs, it is an assertion, not a measurement.
+
+To validate reproducibility of reconstruction residuals as scientific artifacts, we independently regenerated ghosts for two randomly selected sessions (Q85, 566 keystrokes; Q86, 312 keystrokes) using only the stored PRNG seed and profile snapshot. All 10 dynamical and motor signals matched the originally-stored values to bit identity across both sessions. The integration test script used to produce this verification is committed to the repository and runs on demand for any residual with reproducibility metadata. Semantic signals were excluded from bit-identity verification per the external-API dependence caveat documented in REPRODUCIBILITY.md.
+
+**Q86** (seed 1776843941639, 312 keystrokes, 40 words):
+
+| Signal | Family | Stored | Recomputed | Match |
+|--------|--------|--------|------------|-------|
+| permutation_entropy | dynamical | 0.9966825625 | 0.9966825625 | EXACT |
+| dfa_alpha | dynamical | 0.7261043441 | 0.7261043441 | EXACT |
+| rqa_determinism | dynamical | 0.6937524329 | 0.6937524329 | EXACT |
+| rqa_laminarity | dynamical | 0.8164168937 | 0.8164168937 | EXACT |
+| te_dominance | dynamical | 0.0000000000 | 0.0000000000 | EXACT |
+| sample_entropy | motor | 0.6523756287 | 0.6523756287 | EXACT |
+| motor_jerk | motor | 439.0112425783 | 439.0112425783 | EXACT |
+| lapse_rate | motor | 3.8544461387 | 3.8544461387 | EXACT |
+| tempo_drift | motor | 4.2073461319 | 4.2073461319 | EXACT |
+| perplexity | perplexity | 67.3776199753 | 67.3776199753 | EXACT |
+
+**Q85** (seed 1776844011412, 566 keystrokes, 77 words):
+
+| Signal | Family | Stored | Recomputed | Match |
+|--------|--------|--------|------------|-------|
+| permutation_entropy | dynamical | 0.9932871508 | 0.9932871508 | EXACT |
+| dfa_alpha | dynamical | 0.7434630019 | 0.7434630019 | EXACT |
+| rqa_determinism | dynamical | 0.6764910266 | 0.6764910266 | EXACT |
+| rqa_laminarity | dynamical | 0.7843978488 | 0.7843978488 | EXACT |
+| te_dominance | dynamical | 5.7556321802 | 5.7556321802 | EXACT |
+| sample_entropy | motor | 0.7015220898 | 0.7015220898 | EXACT |
+| motor_jerk | motor | 496.6321126694 | 496.6321126694 | EXACT |
+| lapse_rate | motor | 4.3036414353 | 4.3036414353 | EXACT |
+| tempo_drift | motor | -9.7296811544 | -9.7296811544 | EXACT |
+| perplexity | perplexity | 83.2449181719 | 83.2449181719 | EXACT |
+
+This guarantee rests on three independently verified properties, each enforced by CI:
+
+1. **Signal computation is build-stable.** Neumaier compensated summation, deterministic iteration (BTreeMap for entropy computation, sorted vecs for Markov chain sampling), and toolchain pinning (Rust 1.95.0, LLVM 22.1.2, aarch64-apple-darwin) eliminate floating-point nondeterminism. Two-clean-build snapshot diffing verifies bit-identity on every commit touching the signal engine.
+
+2. **Ghost generation is seed-deterministic and build-stable.** All randomness flows from a single u64 PRNG seed via SplitMix64 (Steele, Lea, and Flood 2014). Markov chain and PPM trie data structures use sorted vecs (constructed from HashMaps, then frozen and sorted by key) to ensure deterministic sampling order. Cross-build snapshot tests verify bit-identical ghost output for all five adversary variants.
+
+3. **Residual inputs are persisted.** Every residual computed after the reproducibility migration stores the exact PRNG seed, profile snapshot (the JSON passed to the ghost engine), corpus integrity hash (SHA-256), and topic string. Given these stored inputs, any build of the instrument on the pinned toolchain can regenerate the identical ghost and verify the residual.
+
+Pre-reproducibility-era residuals (computed before seed and profile persistence) are frozen artifacts whose stored values are the permanent record. They cannot be independently regenerated.
+
 ---
 
 ## 5. Application: The Authorship Verification Problem
