@@ -8,6 +8,39 @@ Newest first.
 
 ---
 
+## DEFERRED: Residual reanalysis capability
+
+**Date noted:** 2026-04-22
+**Type:** Architectural decision (deferred)
+**Status:** Current architecture is frozen-residual. No action needed before Stage 2.
+
+### Current state
+
+Ghost output is ephemeral. The production path (`avatar::compute`) uses a time-based seed, generates the ghost once at submission time, computes residuals against real signals, and persists the residuals as numbers in `tb_reconstruction_residuals`. The seed is never stored. The idempotency gate (`getReconstructionResidual`) ensures the ghost is never regenerated for the same session+variant.
+
+This means residuals are frozen artifacts. There is no path to regenerate the ghost that produced a given residual, and no way to verify a stored residual against a fresh computation.
+
+### What reanalysis would require
+
+If Alice should support regenerating ghosts on demand (e.g., to verify stored residuals, recompute after profile model improvements, or audit historical data):
+
+1. **Seed column** on `tb_reconstruction_residuals` (backfill historical rows as `NULL`)
+2. **Profile snapshot** at generation time (profiles update as new sessions arrive; reconstructing a January ghost in June requires the January profile state)
+3. **Regeneration API** that takes `(session_id, variant_id, stored_seed, stored_profile)` and produces an identical ghost
+4. **Cross-build ghost determinism in CI** so regeneration is trustworthy across recompilations (PRNG + sorted-vec sampling producing identical sequences for a given seed)
+
+### Why this is deferred
+
+Cross-build ghost reproducibility has no current consumer. The ghost is stochastic by design (time-seeded), residuals are computed once and frozen, and the idempotency gate prevents recomputation. Adding cross-build ghost determinism to CI without the seed storage and profile snapshotting infrastructure would be defensive programming with nothing to defend.
+
+The frozen-residual design is defensible: the residual is the scientific artifact, not the ghost. But it forecloses retrospective reanalysis, which may matter as the profile model evolves.
+
+### Decision point
+
+Revisit before Stage 2, when the reconstruction residual paradigm is mature enough to know whether reanalysis is a real scientific need or a theoretical nicety.
+
+---
+
 ## INC-005: Reproducibility check wired into CI
 
 **Date:** 2026-04-22
