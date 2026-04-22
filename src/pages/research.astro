@@ -11,6 +11,9 @@
  * All numbers are real. All citations are traceable.
  */
 import PublicLayout from '../layouts/layPublic.astro';
+import { listPapers } from '../lib/libPapers.ts';
+
+const papers = listPapers('published');
 ---
 
 <PublicLayout title="Alice -- Research" active="research" description="The scientific case for a cognitive instrument built on unmediated writing.">
@@ -56,6 +59,10 @@ import PublicLayout from '../layouts/layPublic.astro';
       <a href="#reconstruction" class="r-nav-link" data-section="reconstruction">Reconstruction validity</a>
       <a href="#extensions" class="r-nav-link" data-section="extensions">Theoretical extensions</a>
       <a href="#open" class="r-nav-link" data-section="open">Open questions</a>
+    </div>
+    <div class="r-nav-group">
+      <span class="r-nav-group-label">Output</span>
+      <a href="#publications" class="r-nav-link" data-section="publications">Papers & tools</a>
     </div>
   </nav>
 
@@ -558,6 +565,30 @@ import PublicLayout from '../layouts/layPublic.astro';
 
 
   <!-- ===== SECTION 13: OPEN QUESTIONS ===== -->
+  <!-- ===== PUBLICATIONS & TOOLS ===== -->
+  <section class="r-section" id="publications">
+    <h2>Papers and tools</h2>
+
+    <p>The research program behind Alice produces versioned papers, open-source tools, and empirical results. Each paper addresses a different facet of the same problem. The tool makes the methodology available to other instruments.</p>
+
+    <div class="r-pub-list">
+      {papers.map(paper => (
+        <a href={`/papers/${paper.slug}`} class="r-pub-card">
+          <div class="r-pub-meta">{paper.date} &middot; v{paper.version}</div>
+          <div class="r-pub-title">{paper.title}</div>
+          <div class="r-pub-abstract">{paper.abstract.length > 200 ? paper.abstract.slice(0, 200).replace(/\s+\S*$/, '') + '...' : paper.abstract}</div>
+        </a>
+      ))}
+
+      <a href="https://github.com/anthonyguzzardo/reconstruction-validity" target="_blank" rel="noopener" class="r-pub-card r-pub-tool">
+        <div class="r-pub-meta">Rust crate &middot; MIT license</div>
+        <div class="r-pub-title">reconstruction-validity</div>
+        <div class="r-pub-abstract">A framework for validating behavioral measurement instruments via adversarial reconstruction. Implements the five-variant adversary system from the reconstruction validity paper. Any instrument that extracts features from temporal behavioral streams can use it.</div>
+      </a>
+    </div>
+  </section>
+
+
   <section class="r-section" id="open">
     <h2>Open questions and limitations</h2>
 
@@ -591,7 +622,7 @@ import PublicLayout from '../layouts/layPublic.astro';
     <p class="r-muted">Epistemic status: This page presents a working thesis drawn from published literature and two preprints by the author. The cited empirical findings are real. The synthesis and instrument design are proposed, not validated.</p>
 
     <div class="r-close-links">
-      <a href="/papers">Read the papers</a>
+      <a href="#publications">Papers and tools</a>
       <a href="/instrument">See the architecture</a>
       <a href="/vision">The broader vision</a>
     </div>
@@ -605,7 +636,7 @@ import PublicLayout from '../layouts/layPublic.astro';
     <ul>
       <li>Guzzardo, A. (2026a). <a href="/papers/closing-window">"A Closing Window: The Demographic Confound in Keystroke-Based Cognitive Biomarkers and the AI-Mediation Threat to the Paradigm That Would Replace It."</a> Preprint, v2.</li>
       <li>Guzzardo, A. (2026b). <a href="/papers/construct-replacement">"Construct Replacement: When AI-Mediated Input Invalidates Behavioral Measurement."</a> Preprint, v2.</li>
-      <li>Guzzardo, A. (2026c). <a href="/papers/reconstruction-validity">"Reconstruction Validity: Self-Validation of Process-Level Behavioral Instruments via Adversarial Synthesis."</a> Preprint, v4.</li>
+      <li>Guzzardo, A. (2026c). <a href="/papers/reconstruction-validity">"Reconstruction Validity: Self-Validation of Process-Level Behavioral Instruments via Adversarial Synthesis."</a> Preprint, v5.</li>
       <li>Guzzardo, A. (2026d). <a href="/papers/irreversible-loss">"Irreversible Loss: An Information-Theoretic Argument for Process-Level Cognitive Preservation."</a> Preprint, v1.</li>
     </ul>
     <p class="r-sources-note">Key citations: Adair 1984; Arnold et al. 2020; Banovic et al. 2019; Buchman &amp; Bennett 2011; Buschek et al. 2021; Chen &amp; Goodman 1999; Covington &amp; McFall 2010; Csikszentmihalyi &amp; Larson 1987; Dhakal et al. 2018; Doshi &amp; Hauser 2024; Etkin 2016; Hayes &amp; Flower 1980; Inhoff &amp; Rayner 1986; Jelinek &amp; Mercer 1980; Kellogg 1996; Kim et al. 2024; Li et al. 2025; McCambridge, Witton &amp; Elbourne 2014; Meulemans et al. 2022; Molenaar 2004; Pennebaker 1997; Pinet et al. 2022; Rosman et al. 2021; Shiffman, Stone &amp; Hufford 2008; Vishnevsky et al. 2024; Yamaguchi &amp; Logan 2014; Zhou &amp; Liu 2025.</p>
@@ -1923,5 +1954,68 @@ import PublicLayout from '../layouts/layPublic.astro';
       grid-template-columns: 80px 100px 1fr;
       gap: 0.5rem;
     }
+
+    .r-pub-list {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* ── Publications & Tools ── */
+
+  .r-pub-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin: 2rem 0;
+  }
+
+  .r-pub-card {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .r-pub-card:hover {
+    border-color: var(--text-muted);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  }
+
+  .r-pub-meta {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-faint);
+  }
+
+  .r-pub-title {
+    font-family: var(--serif-display);
+    font-size: 1.1rem;
+    font-style: italic;
+    line-height: 1.35;
+    color: var(--text);
+  }
+
+  .r-pub-abstract {
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: var(--text-muted);
+  }
+
+  .r-pub-tool {
+    border-style: dashed;
+  }
+
+  .r-pub-tool .r-pub-title {
+    font-family: var(--mono);
+    font-style: normal;
+    font-size: 0.95rem;
+    letter-spacing: 0.02em;
   }
 </style>

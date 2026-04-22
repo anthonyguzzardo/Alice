@@ -127,20 +127,27 @@ impl HoldFlight {
         &self.flights
     }
 
+    /// Extract paired hold and flight times from a keystroke stream.
+    ///
+    /// Hold and flight are filtered *together* for each event: both must be
+    /// valid for the pair to be included. This guarantees `holds[k]` and
+    /// `flights[k]` always refer to the same keystroke event, which is
+    /// required for transfer entropy and RQA on hold-flight pairs.
+    ///
+    /// Prior to 2026-04-21, holds and flights were filtered independently,
+    /// causing misalignment when a keystroke had a valid hold but invalid
+    /// flight (e.g., rollover typing where key_down[i] < key_up[i-1]).
+    /// This affected 100% of sessions. See GOTCHAS.md.
     pub(crate) fn from_stream(stream: &[KeystrokeEvent]) -> Self {
         let mut holds = Vec::with_capacity(stream.len());
         let mut flights = Vec::with_capacity(stream.len());
 
-        for (i, evt) in stream.iter().enumerate() {
-            let ht = evt.key_up_ms - evt.key_down_ms;
-            if ht > 0.0 && ht < 2000.0 {
+        for i in 1..stream.len() {
+            let ht = stream[i].key_up_ms - stream[i].key_down_ms;
+            let ft = stream[i].key_down_ms - stream[i - 1].key_up_ms;
+            if ht > 0.0 && ht < 2000.0 && ft > 0.0 && ft < 5000.0 {
                 holds.push(ht);
-            }
-            if i > 0 {
-                let ft = evt.key_down_ms - stream[i - 1].key_up_ms;
-                if ft > 0.0 && ft < 5000.0 {
-                    flights.push(ft);
-                }
+                flights.push(ft);
             }
         }
 
@@ -150,9 +157,15 @@ impl HoldFlight {
         }
     }
 
-    /// Length of the shorter series (for aligned operations like transfer entropy).
+    /// Length of the paired series. Holds and flights are always the same
+    /// length because `from_stream` filters them together.
     pub(crate) fn aligned_len(&self) -> usize {
-        self.holds.len().min(self.flights.len())
+        debug_assert_eq!(
+            self.holds.len(),
+            self.flights.len(),
+            "HoldFlight invariant violated: holds and flights must be same length"
+        );
+        self.holds.len()
     }
 }
 
@@ -211,5 +224,91 @@ mod tests {
     fn utf16_empty() {
         assert_eq!(utf16_to_byte_offset("", 0), 0);
         assert_eq!(utf16_to_byte_offset("", 5), 0);
+    }
+
+    // ── HoldFlight alignment tests ──
+
+    fn make_event(c: &str, d: f64, u: f64) -> KeystrokeEvent {
+        KeystrokeEvent {
+            character: c.to_string(),
+            key_down_ms: d,
+            key_up_ms: u,
+        }
+    }
+
+    #[test]
+    fn holdflight_vectors_always_same_length() {
+        // Rollover typing: key_down[i] < key_up[i-1] produces negative flight.
+        // Old code pushed hold but dropped flight, causing misalignment.
+        // New code must always produce equal-length vectors.
+        let stream = vec![
+            make_event("a", 0.0, 80.0),
+            make_event("b", 50.0, 130.0),   // overlap: flight = 50 - 80 = -30 (invalid)
+            make_event("c", 200.0, 280.0),   // normal: flight = 200 - 130 = 70 (valid)
+            make_event("d", 250.0, 330.0),   // overlap: flight = 250 - 280 = -30 (invalid)
+            make_event("e", 400.0, 480.0),   // normal: flight = 400 - 330 = 70 (valid)
+        ];
+        let hf = HoldFlight::from_stream(&stream);
+        assert_eq!(
+            hf.holds().len(),
+            hf.flights().len(),
+            "holds and flights must be same length; got holds={}, flights={}",
+            hf.holds().len(),
+            hf.flights().len()
+        );
+    }
+
+    #[test]
+    fn holdflight_pairs_refer_to_same_event() {
+        // Construct stream where we can verify pairing by value.
+        // Event 1: hold=80, flight=-30 (invalid) -> excluded
+        // Event 2: hold=80, flight=70 -> included as pair (80, 70)
+        // Event 3: hold=80, flight=-30 (invalid) -> excluded
+        // Event 4: hold=80, flight=70 -> included as pair (80, 70)
+        let stream = vec![
+            make_event("a", 0.0, 80.0),
+            make_event("b", 50.0, 130.0),
+            make_event("c", 200.0, 280.0),
+            make_event("d", 250.0, 330.0),
+            make_event("e", 400.0, 480.0),
+        ];
+        let hf = HoldFlight::from_stream(&stream);
+        assert_eq!(hf.holds().len(), 2, "only 2 events have both valid hold and flight");
+        assert_eq!(hf.flights().len(), 2);
+        // Event 2 (c): hold = 280 - 200 = 80, flight = 200 - 130 = 70
+        assert!((hf.holds()[0] - 80.0).abs() < 1e-10);
+        assert!((hf.flights()[0] - 70.0).abs() < 1e-10);
+        // Event 4 (e): hold = 480 - 400 = 80, flight = 400 - 330 = 70
+        assert!((hf.holds()[1] - 80.0).abs() < 1e-10);
+        assert!((hf.flights()[1] - 70.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn holdflight_excludes_invalid_hold_with_valid_flight() {
+        // Event where hold is invalid (>2000ms) but flight is valid.
+        // Must NOT be included (old code would push flight but drop hold).
+        let stream = vec![
+            make_event("a", 0.0, 80.0),
+            make_event("b", 200.0, 2500.0), // hold = 2300 (invalid), flight = 120 (valid)
+            make_event("c", 2600.0, 2680.0), // hold = 80 (valid), flight = 100 (valid)
+        ];
+        let hf = HoldFlight::from_stream(&stream);
+        assert_eq!(hf.holds().len(), 1, "event with invalid hold must be excluded");
+        assert_eq!(hf.flights().len(), 1);
+        // Only event 2 (c) should be present
+        assert!((hf.holds()[0] - 80.0).abs() < 1e-10);
+        assert!((hf.flights()[0] - 100.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn holdflight_aligned_len_equals_vector_length() {
+        let stream = vec![
+            make_event("a", 0.0, 80.0),
+            make_event("b", 150.0, 230.0),
+            make_event("c", 300.0, 380.0),
+        ];
+        let hf = HoldFlight::from_stream(&stream);
+        assert_eq!(hf.aligned_len(), hf.holds().len());
+        assert_eq!(hf.aligned_len(), hf.flights().len());
     }
 }

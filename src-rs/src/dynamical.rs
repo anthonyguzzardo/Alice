@@ -8,9 +8,9 @@
 //! - RQA: determinism, laminarity, trapping time, recurrence rate (Webber & Zbilut 2005)
 //! - Transfer entropy (Schreiber 2000)
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
-use crate::stats::{digamma, linreg_slope, mean, normalize, std_dev};
+use crate::stats::{digamma, linreg_slope, mean, normalize, std_dev, NeumaierAccumulator};
 use crate::types::{HoldFlight, IkiSeries, KeystrokeEvent, SignalError, SignalResult};
 
 // ─── Result types ─────────────────────────────────────────────────
@@ -48,7 +48,11 @@ fn permutation_entropy(series: &[f64], order: usize) -> SignalResult<(f64, f64)>
         });
     }
 
-    let mut pattern_counts: HashMap<Vec<usize>, u64> = HashMap::new();
+    // BTreeMap for deterministic iteration order. The entropy sum depends on
+    // which p*log2(p) terms are added first; HashMap would make this
+    // nondeterministic across runs (even with Neumaier compensation, the
+    // iteration order must be fixed for bit-identical output).
+    let mut pattern_counts: BTreeMap<Vec<usize>, u64> = BTreeMap::new();
     let window_count = n - order + 1;
 
     for i in 0..window_count {
@@ -63,13 +67,14 @@ fn permutation_entropy(series: &[f64], order: usize) -> SignalResult<(f64, f64)>
     }
 
     let total = window_count as f64;
-    let mut entropy = 0.0;
+    let mut entropy = NeumaierAccumulator::new();
     for &count in pattern_counts.values() {
         let p = count as f64 / total;
         if p > 0.0 {
-            entropy -= p * p.log2();
+            entropy.add(p * p.log2());
         }
     }
+    let entropy = -entropy.total();
 
     // Maximum entropy: log2(order!)
     let mut factorial: u64 = 1;
@@ -96,11 +101,16 @@ fn dfa_alpha(series: &[f64]) -> SignalResult<f64> {
 
     let mu = mean(series);
 
-    // Cumulative sum (integration)
+    // Cumulative sum (integration) with Neumaier compensation.
+    // The cumulative sum is a running accumulator over potentially thousands
+    // of values; without compensation, precision loss accumulates linearly.
     let mut y = vec![0.0; n];
-    y[0] = series[0] - mu;
+    let mut cum = NeumaierAccumulator::new();
+    cum.add(series[0] - mu);
+    y[0] = cum.total();
     for i in 1..n {
-        y[i] = y[i - 1] + (series[i] - mu);
+        cum.add(series[i] - mu);
+        y[i] = cum.total();
     }
 
     let min_box = 4usize;
@@ -128,22 +138,23 @@ fn dfa_alpha(series: &[f64]) -> SignalResult<f64> {
             continue;
         }
 
-        let mut sum_fluctuation = 0.0;
+        let mut sum_fluctuation = NeumaierAccumulator::new();
         for b in 0..num_boxes {
             let start = b * box_size;
-            let mut sx = 0.0f64;
-            let mut sy = 0.0f64;
-            let mut sxx = 0.0f64;
-            let mut sxy = 0.0f64;
+            let mut sx = NeumaierAccumulator::new();
+            let mut sy = NeumaierAccumulator::new();
+            let mut sxx = NeumaierAccumulator::new();
+            let mut sxy = NeumaierAccumulator::new();
 
             for j in 0..box_size {
                 let jf = j as f64;
-                sx += jf;
-                sy += y[start + j];
-                sxx += jf * jf;
-                sxy += jf * y[start + j];
+                sx.add(jf);
+                sy.add(y[start + j]);
+                sxx.add(jf * jf);
+                sxy.add(jf * y[start + j]);
             }
 
+            let (sx, sy, sxx, sxy) = (sx.total(), sy.total(), sxx.total(), sxy.total());
             let bsf = box_size as f64;
             // OLS denominator: n*Sxx - (Sx)^2
             #[allow(clippy::suspicious_operation_groupings)]
@@ -156,15 +167,15 @@ fn dfa_alpha(series: &[f64]) -> SignalResult<f64> {
             };
             let intercept = (sy - slope * sx) / bsf;
 
-            let mut sum_sq = 0.0;
+            let mut sum_sq = NeumaierAccumulator::new();
             for j in 0..box_size {
                 let trend = slope.mul_add(j as f64, intercept);
-                sum_sq += (y[start + j] - trend).powi(2);
+                sum_sq.add((y[start + j] - trend).powi(2));
             }
-            sum_fluctuation += (sum_sq / bsf).sqrt();
+            sum_fluctuation.add((sum_sq.total() / bsf).sqrt());
         }
 
-        let f = sum_fluctuation / num_boxes as f64;
+        let f = sum_fluctuation.total() / num_boxes as f64;
         if f > 0.0 {
             log_sizes.push(box_size);
             log_fluctuations.push(f.ln());
@@ -356,9 +367,9 @@ fn transfer_entropy(source: &[f64], target: &[f64], lag: usize) -> SignalResult<
         z_vec.push(t_norm[i]); // target current (conditioning)
     }
 
-    let mut sum_psi_nxz = 0.0;
-    let mut sum_psi_nyz = 0.0;
-    let mut sum_psi_nz = 0.0;
+    let mut sum_psi_nxz = NeumaierAccumulator::new();
+    let mut sum_psi_nyz = NeumaierAccumulator::new();
+    let mut sum_psi_nz = NeumaierAccumulator::new();
 
     // Reusable buffer for joint distances
     let mut joint_dists: Vec<f64> = Vec::with_capacity(m);
@@ -406,13 +417,13 @@ fn transfer_entropy(source: &[f64], target: &[f64], lag: usize) -> SignalResult<
             }
         }
 
-        sum_psi_nxz += digamma(f64::from(n_xz) + 1.0);
-        sum_psi_nyz += digamma(f64::from(n_yz) + 1.0);
-        sum_psi_nz += digamma(f64::from(n_z) + 1.0);
+        sum_psi_nxz.add(digamma(f64::from(n_xz) + 1.0));
+        sum_psi_nyz.add(digamma(f64::from(n_yz) + 1.0));
+        sum_psi_nz.add(digamma(f64::from(n_z) + 1.0));
     }
 
     let mf = m as f64;
-    let te = digamma(KSG_K as f64) - sum_psi_nxz / mf - sum_psi_nyz / mf + sum_psi_nz / mf;
+    let te = digamma(KSG_K as f64) - sum_psi_nxz.total() / mf - sum_psi_nyz.total() / mf + sum_psi_nz.total() / mf;
 
     Ok(te.max(0.0))
 }
@@ -454,16 +465,11 @@ pub(crate) fn compute(stream: &[KeystrokeEvent]) -> DynamicalResult {
     let te_hf = transfer_entropy(holds, flights, 1).ok();
     let te_fh = transfer_entropy(flights, holds, 1).ok();
 
+    // Dominance = TE(H->F) / TE(F->H). When the denominator is zero,
+    // the ratio is undefined, not infinite. Return None so the caller
+    // (and the database) don't get a non-finite float.
     let te_dominance = match (te_hf, te_fh) {
-        (Some(hf_val), Some(fh_val)) if (hf_val + fh_val) > 0.0 => {
-            if fh_val > 0.0 {
-                Some(hf_val / fh_val)
-            } else if hf_val > 0.0 {
-                Some(f64::INFINITY)
-            } else {
-                Some(1.0)
-            }
-        }
+        (Some(hf_val), Some(fh_val)) if fh_val > 0.0 => Some(hf_val / fh_val),
         _ => None,
     };
 

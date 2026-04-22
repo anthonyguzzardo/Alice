@@ -4,14 +4,13 @@
 //! Sample entropy, autocorrelation, jerk, lapse rate, tempo drift,
 //! IKI compression, digraph latency, ex-Gaussian fit, adjacent hold-time covariance.
 
-use std::cmp::Reverse;
 use std::collections::HashMap;
 use std::io::Write;
 
 use flate2::write::GzEncoder;
 use flate2::Compression;
 
-use crate::stats::{erfc, mean, std_dev};
+use crate::stats::{erfc, mean, neumaier_sum_map, std_dev, NeumaierAccumulator};
 use crate::types::{FlightTimes, IkiSeries, KeystrokeEvent, SignalError, SignalResult};
 
 // ─── Result types ─────────────────────────────────────────────────
@@ -102,18 +101,18 @@ fn iki_autocorrelation(ikis: &[f64], max_lag: usize) -> SignalResult<Vec<f64>> {
     }
 
     let mu = mean(ikis);
-    let variance = ikis.iter().map(|v| (v - mu).powi(2)).sum::<f64>() / n as f64;
-    if variance == 0.0 {
+    let variance = neumaier_sum_map(ikis, |v| (v - mu).powi(2)) / n as f64;
+    if variance < 1e-20 {
         return Err(SignalError::ZeroVariance { len: n });
     }
 
     let mut result = Vec::with_capacity(max_lag);
     for lag in 1..=max_lag {
-        let mut sum = 0.0;
+        let mut sum = NeumaierAccumulator::new();
         for i in 0..(n - lag) {
-            sum += (ikis[i] - mu) * (ikis[i + lag] - mu);
+            sum.add((ikis[i] - mu) * (ikis[i + lag] - mu));
         }
-        result.push(sum / ((n - lag) as f64 * variance));
+        result.push(sum.total() / ((n - lag) as f64 * variance));
     }
     Ok(result)
 }
@@ -154,7 +153,7 @@ fn lapse_rate(ikis: &[f64], total_duration_ms: f64) -> SignalResult<f64> {
     // Lapse rate is an estimator (Haag et al. 2020): a zero-variance series has no
     // temporal variability to distinguish lapses from baseline. Report as ZeroVariance
     // for consistency with sample_entropy, autocorrelation, adjacent_hold_time_cov.
-    if s == 0.0 {
+    if s < 1e-20 {
         return Err(SignalError::ZeroVariance { len: ikis.len() });
     }
     let threshold = 3.0f64.mul_add(s, mu);
@@ -189,16 +188,16 @@ fn tempo_drift(ikis: &[f64]) -> SignalResult<f64> {
 
     let x_mean = 1.5;
     let y_mean = mean(&quartile_means);
-    let mut num = 0.0;
-    let mut den = 0.0;
+    let mut num = NeumaierAccumulator::new();
+    let mut den = NeumaierAccumulator::new();
     for (i, &qm) in quartile_means.iter().enumerate() {
         let xi = i as f64;
-        num += (xi - x_mean) * (qm - y_mean);
-        den += (xi - x_mean).powi(2);
+        num.add((xi - x_mean) * (qm - y_mean));
+        den.add((xi - x_mean).powi(2));
     }
 
-    if den > 0.0 {
-        Ok(num / den)
+    if den.total() > 0.0 {
+        Ok(num.total() / den.total())
     } else {
         Err(SignalError::DegenerateValue(
             "zero denominator in tempo regression",
@@ -255,14 +254,20 @@ fn digraph_latency_profile(stream: &[KeystrokeEvent]) -> Option<String> {
         .into_iter()
         .filter(|(_, v)| v.len() >= 2)
         .collect();
-    sorted.sort_by_key(|item| Reverse(item.1.len()));
+    // Sort by count descending, then by key ascending for deterministic tie-breaking.
+    // Without the secondary sort, HashMap iteration order determines which digraphs
+    // make the top-10 cut when counts are tied.
+    sorted.sort_by(|a, b| b.1.len().cmp(&a.1.len()).then_with(|| a.0.cmp(&b.0)));
     sorted.truncate(10);
 
     if sorted.is_empty() {
         return None;
     }
 
-    let profile: HashMap<String, f64> = sorted
+    // BTreeMap for deterministic JSON serialization order.
+    // HashMap iteration order is nondeterministic; serde_json serializes
+    // in iteration order, so the JSON output would differ across runs.
+    let profile: std::collections::BTreeMap<String, f64> = sorted
         .iter()
         .map(|(key, values)| (key.clone(), mean(values)))
         .collect();
@@ -283,15 +288,22 @@ fn digraph_latency_profile(stream: &[KeystrokeEvent]) -> Option<String> {
 // Falls back to method of moments if EM fails to converge.
 
 /// Log-PDF of the ex-Gaussian distribution.
-/// ln f(x | mu, sigma, tau) = -ln(tau) + (mu - x)/tau + sigma²/(2*tau²) + ln erfc(z/√2)
-/// where z = (mu + sigma²/tau - x) / sigma
+/// ln f(x | mu, sigma, tau) = -ln(tau) + (mu - x)/tau + sigma^2/(2*tau^2) + ln erfc(z/sqrt(2))
+/// where z = (mu + sigma^2/tau - x) / sigma
+///
+/// The exponential term (mu - x)/tau can overflow to -inf for extreme x values
+/// (e.g., a 4999ms IKI with mu=80). Clamp to -700 to prevent a single outlier
+/// from poisoning the entire log-likelihood sum and forcing MoM fallback.
 fn exgauss_log_pdf(x: f64, mu: f64, sigma: f64, tau: f64) -> f64 {
     let z = (mu + sigma * sigma / tau - x) / sigma;
     let erfc_val = erfc(z / std::f64::consts::SQRT_2);
     if erfc_val <= 0.0 {
         return f64::NEG_INFINITY;
     }
-    -(tau.ln()) + (mu - x) / tau + (sigma * sigma) / (2.0 * tau * tau) + erfc_val.ln()
+    // Clamp the exponential term: exp(-700) is effectively zero but finite,
+    // preventing -inf from propagating through the log-likelihood sum.
+    let exp_term = ((mu - x) / tau + (sigma * sigma) / (2.0 * tau * tau)).max(-700.0);
+    -(tau.ln()) + exp_term + erfc_val.ln()
 }
 
 /// Method of moments initial estimates (used as EM seed and fallback).
@@ -303,7 +315,7 @@ fn mom_estimates(data: &[f64]) -> SignalResult<(f64, f64, f64)> {
     }
 
     let n = data.len() as f64;
-    let m3: f64 = data.iter().map(|v| ((v - m) / s).powi(3)).sum::<f64>() / n;
+    let m3: f64 = neumaier_sum_map(data, |v| ((v - m) / s).powi(3)) / n;
 
     // If skewness is non-positive, can't decompose into Gaussian + exponential
     if m3 <= 0.0 {
@@ -392,7 +404,7 @@ fn ex_gaussian_fit(flight_times: &[f64]) -> SignalResult<ExGaussianValues> {
         }
 
         // M-step: update tau from mean of exponential components
-        let w_sum: f64 = weights.iter().sum();
+        let w_sum: f64 = neumaier_sum_map(&weights, |w| *w);
         let n = filtered.len() as f64;
         if w_sum <= 0.0 {
             break; // Degenerate, keep previous estimates
@@ -407,7 +419,7 @@ fn ex_gaussian_fit(flight_times: &[f64]) -> SignalResult<ExGaussianValues> {
             .map(|(&x, &w)| x - w)
             .collect();
         mu = mean(&gauss_parts);
-        let var: f64 = gauss_parts.iter().map(|&g| (g - mu).powi(2)).sum::<f64>() / n;
+        let var: f64 = neumaier_sum_map(&gauss_parts, |g| (g - mu).powi(2)) / n;
         sigma = var.sqrt();
 
         // Guard against degenerate parameters
@@ -429,14 +441,8 @@ fn ex_gaussian_fit(flight_times: &[f64]) -> SignalResult<ExGaussianValues> {
     }
 
     // Validate final log-likelihood is better than MoM
-    let mle_ll: f64 = filtered
-        .iter()
-        .map(|&x| exgauss_log_pdf(x, mu, sigma, tau))
-        .sum();
-    let mom_ll: f64 = filtered
-        .iter()
-        .map(|&x| exgauss_log_pdf(x, mom_mu, mom_sigma, mom_tau))
-        .sum();
+    let mle_ll: f64 = neumaier_sum_map(&filtered, |&x| exgauss_log_pdf(x, mu, sigma, tau));
+    let mom_ll: f64 = neumaier_sum_map(&filtered, |&x| exgauss_log_pdf(x, mom_mu, mom_sigma, mom_tau));
 
     if !mle_ll.is_finite() || mle_ll < mom_ll {
         // MLE didn't improve; use MoM
@@ -481,17 +487,16 @@ fn adjacent_hold_time_cov(stream: &[KeystrokeEvent]) -> SignalResult<f64> {
     let sx = std_dev(x, Some(mx));
     let sy = std_dev(y, Some(my));
 
-    if sx == 0.0 || sy == 0.0 {
+    if sx < 1e-20 || sy < 1e-20 {
         return Err(SignalError::ZeroVariance { len: n });
     }
 
-    let cov: f64 = x
-        .iter()
-        .zip(y.iter())
-        .map(|(xi, yi)| (xi - mx) * (yi - my))
-        .sum();
+    let mut cov = NeumaierAccumulator::new();
+    for (xi, yi) in x.iter().zip(y.iter()) {
+        cov.add((xi - mx) * (yi - my));
+    }
 
-    Ok(cov / (n as f64 * sx * sy))
+    Ok(cov.total() / (n as f64 * sx * sy))
 }
 
 // ─── Hold-Flight Rank Correlation (Spearman) ─────────────────────
@@ -562,17 +567,16 @@ fn hold_flight_rank_correlation(stream: &[KeystrokeEvent]) -> SignalResult<f64> 
     let sh = std_dev(&hold_ranks, Some(mh));
     let sf = std_dev(&flight_ranks, Some(mf));
 
-    if sh == 0.0 || sf == 0.0 {
+    if sh < 1e-20 || sf < 1e-20 {
         return Err(SignalError::ZeroVariance { len: n });
     }
 
-    let cov: f64 = hold_ranks
-        .iter()
-        .zip(flight_ranks.iter())
-        .map(|(h, f)| (h - mh) * (f - mf))
-        .sum();
+    let mut cov = NeumaierAccumulator::new();
+    for (h, f) in hold_ranks.iter().zip(flight_ranks.iter()) {
+        cov.add((h - mh) * (f - mf));
+    }
 
-    Ok(cov / (n as f64 * sh * sf))
+    Ok(cov.total() / (n as f64 * sh * sf))
 }
 
 // ─── Public API ───────────────────────────────────────────────────

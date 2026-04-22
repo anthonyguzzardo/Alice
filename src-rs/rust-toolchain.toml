@@ -1,0 +1,22 @@
+# Pinned Rust toolchain for bit-reproducible signal computation.
+#
+# This crate is a measurement instrument. Floating-point results must be
+# identical across clean rebuilds on the same platform. Pinning the exact
+# Rust version + LLVM version + target triple ensures the same codegen
+# decisions (instruction selection, vectorization, register allocation)
+# every time.
+#
+# FMA determinism: mul_add() calls are intentional and produce more stable
+# results than separate multiply+add. FMA availability is guaranteed by
+# the pinned target (aarch64-apple-darwin always has NEON FMA). Determinism
+# is guaranteed by the pinned toolchain producing identical code, not by
+# avoiding FMA.
+#
+# If you upgrade the Rust version, rerun `make reproducibility-check` and
+# expect signal values to shift at the ULP level. This is acceptable but
+# must be documented in the commit message.
+
+[toolchain]
+channel = "1.95.0"
+targets = ["aarch64-apple-darwin"]
+profile = "default"

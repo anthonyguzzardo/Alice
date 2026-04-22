@@ -1,4 +1,102 @@
 //! Shared statistical helpers.
+//!
+//! All multi-element floating-point sums use Neumaier compensated summation
+//! (an improved Kahan algorithm) to guarantee results are independent of
+//! summation order and resistant to catastrophic cancellation. This makes
+//! signal values bit-reproducible across compiler optimization changes.
+//!
+//! Citation: Neumaier, A. (1974). "Rundungsfehleranalyse einiger Verfahren
+//! zur Summation endlicher Summen." Zeitschrift fur Angewandte Mathematik
+//! und Mechanik, 54(1), 39-51.
+
+// ─── Compensated summation ──────────────────────────────────────────
+
+/// Neumaier compensated sum of a slice.
+///
+/// Improved Kahan summation that handles the case where the running sum
+/// is smaller than the next addend (which basic Kahan gets wrong). Error
+/// bound: O(eps) independent of n, vs O(n * eps) for naive summation.
+#[inline]
+pub(crate) fn neumaier_sum(values: &[f64]) -> f64 {
+    if values.is_empty() {
+        return 0.0;
+    }
+    let mut sum = values[0];
+    let mut compensation = 0.0;
+    for &v in &values[1..] {
+        let t = sum + v;
+        if sum.abs() >= v.abs() {
+            compensation += (sum - t) + v;
+        } else {
+            compensation += (v - t) + sum;
+        }
+        sum = t;
+    }
+    sum + compensation
+}
+
+/// Neumaier compensated sum with a mapping function applied to each element.
+///
+/// Equivalent to `values.iter().map(f).collect::<Vec<_>>()` followed by
+/// `neumaier_sum`, but avoids the intermediate allocation.
+#[inline]
+pub(crate) fn neumaier_sum_map<T, F>(values: &[T], f: F) -> f64
+where
+    F: Fn(&T) -> f64,
+{
+    if values.is_empty() {
+        return 0.0;
+    }
+    let mut sum = f(&values[0]);
+    let mut compensation = 0.0;
+    for v in &values[1..] {
+        let mapped = f(v);
+        let t = sum + mapped;
+        if sum.abs() >= mapped.abs() {
+            compensation += (sum - t) + mapped;
+        } else {
+            compensation += (mapped - t) + sum;
+        }
+        sum = t;
+    }
+    sum + compensation
+}
+
+/// Neumaier compensated accumulator for use in loops where values
+/// arrive one at a time (can't use slice-based functions).
+#[derive(Clone)]
+pub(crate) struct NeumaierAccumulator {
+    sum: f64,
+    compensation: f64,
+}
+
+impl NeumaierAccumulator {
+    #[inline]
+    pub(crate) fn new() -> Self {
+        Self {
+            sum: 0.0,
+            compensation: 0.0,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn add(&mut self, v: f64) {
+        let t = self.sum + v;
+        if self.sum.abs() >= v.abs() {
+            self.compensation += (self.sum - t) + v;
+        } else {
+            self.compensation += (v - t) + self.sum;
+        }
+        self.sum = t;
+    }
+
+    #[inline]
+    pub(crate) fn total(&self) -> f64 {
+        self.sum + self.compensation
+    }
+}
+
+// ─── Statistical functions ──────────────────────────────────────────
 
 /// Arithmetic mean. Returns 0.0 for empty slices.
 #[inline]
@@ -6,7 +104,7 @@ pub(crate) fn mean(arr: &[f64]) -> f64 {
     if arr.is_empty() {
         return 0.0;
     }
-    arr.iter().sum::<f64>() / arr.len() as f64
+    neumaier_sum(arr) / arr.len() as f64
 }
 
 /// Population standard deviation. Returns 0.0 for empty slices.
@@ -16,7 +114,7 @@ pub(crate) fn std_dev(arr: &[f64], mu: Option<f64>) -> f64 {
         return 0.0;
     }
     let m = mu.unwrap_or_else(|| mean(arr));
-    let variance = arr.iter().map(|v| (v - m).powi(2)).sum::<f64>() / arr.len() as f64;
+    let variance = neumaier_sum_map(arr, |v| (v - m).powi(2)) / arr.len() as f64;
     variance.sqrt()
 }
 
@@ -42,18 +140,19 @@ pub(crate) fn linreg_slope(x: &[f64], y: &[f64]) -> Option<f64> {
         return None;
     }
 
-    let mut sx = 0.0;
-    let mut sy = 0.0;
-    let mut sxx = 0.0;
-    let mut sxy = 0.0;
+    let mut sx = NeumaierAccumulator::new();
+    let mut sy = NeumaierAccumulator::new();
+    let mut sxx = NeumaierAccumulator::new();
+    let mut sxy = NeumaierAccumulator::new();
 
     for i in 0..n {
-        sx += x[i];
-        sy += y[i];
-        sxx += x[i] * x[i];
-        sxy += x[i] * y[i];
+        sx.add(x[i]);
+        sy.add(y[i]);
+        sxx.add(x[i] * x[i]);
+        sxy.add(x[i] * y[i]);
     }
 
+    let (sx, sy, sxx, sxy) = (sx.total(), sy.total(), sxx.total(), sxy.total());
     let nf = n as f64;
     // Denominator of OLS slope: n*Sxx - (Sx)^2
     #[allow(clippy::suspicious_operation_groupings)]
@@ -68,8 +167,12 @@ pub(crate) fn linreg_slope(x: &[f64], y: &[f64]) -> Option<f64> {
 
 /// Digamma (psi) function. Used by KSG transfer entropy estimator.
 /// Asymptotic expansion with recurrence for small arguments.
+/// Returns NaN for x <= 0 (psi is undefined at non-positive integers).
 #[inline]
 pub(crate) fn digamma(mut x: f64) -> f64 {
+    if x <= 0.0 {
+        return f64::NAN;
+    }
     let mut result = 0.0;
     // Shift x up to >= 6 for accurate asymptotic expansion
     while x < 6.0 {
@@ -111,6 +214,9 @@ pub(crate) fn normalize(arr: &[f64]) -> Vec<f64> {
     arr.iter().map(|&v| (v - mu) / sd).collect()
 }
 
+// Note: normalize() does element-wise division, not summation.
+// No Neumaier needed here; mean() and std_dev() already use it.
+
 /// Signed Pearson correlation coefficient.
 /// Returns 0.0 for series shorter than 3 or with zero variance.
 #[inline]
@@ -121,21 +227,21 @@ pub(crate) fn pearson(a: &[f64], b: &[f64]) -> f64 {
     }
     let ma = mean(&a[..n]);
     let mb = mean(&b[..n]);
-    let mut num = 0.0;
-    let mut da = 0.0;
-    let mut db = 0.0;
+    let mut num = NeumaierAccumulator::new();
+    let mut da = NeumaierAccumulator::new();
+    let mut db = NeumaierAccumulator::new();
     for i in 0..n {
         let ai = a[i] - ma;
         let bi = b[i] - mb;
-        num = ai.mul_add(bi, num);
-        da = ai.mul_add(ai, da);
-        db = bi.mul_add(bi, db);
+        num.add(ai * bi);
+        da.add(ai * ai);
+        db.add(bi * bi);
     }
-    let denom = (da * db).sqrt();
+    let denom = (da.total() * db.total()).sqrt();
     if denom < 1e-10 {
         0.0
     } else {
-        num / denom
+        num.total() / denom
     }
 }
 
@@ -148,15 +254,15 @@ pub(crate) fn z_scores_and_distance(
 ) -> (Vec<f64>, f64) {
     let n = values.len().min(means.len()).min(stds.len());
     let mut z_scores = Vec::with_capacity(n);
-    let mut sum_sq = 0.0;
+    let mut sum_sq = NeumaierAccumulator::new();
     for i in 0..n {
         if stds[i] > 0.0 {
             let z = (values[i] - means[i]) / stds[i];
             z_scores.push(z);
-            sum_sq = z.mul_add(z, sum_sq);
+            sum_sq.add(z * z);
         }
     }
-    let distance = sum_sq.sqrt();
+    let distance = sum_sq.total().sqrt();
     (z_scores, distance)
 }
 
@@ -221,6 +327,62 @@ pub(crate) fn batch_lagged_correlations(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── Neumaier summation tests ──
+
+    #[test]
+    fn neumaier_exact_for_simple() {
+        assert!((neumaier_sum(&[1.0, 2.0, 3.0]) - 6.0).abs() < 1e-15);
+    }
+
+    #[test]
+    fn neumaier_empty() {
+        assert_eq!(neumaier_sum(&[]), 0.0);
+    }
+
+    #[test]
+    fn neumaier_compensates_cancellation() {
+        // Classic test: 1.0 + 1e100 + 1.0 + -1e100 should be 2.0.
+        // Naive sum gives 0.0 because 1.0 + 1e100 == 1e100 (precision loss).
+        let vals = [1.0, 1e100, 1.0, -1e100];
+        let result = neumaier_sum(&vals);
+        assert!(
+            (result - 2.0).abs() < 1e-10,
+            "Neumaier should compensate cancellation, got {result}"
+        );
+    }
+
+    #[test]
+    fn neumaier_order_independent() {
+        // Same values in different order should produce identical results.
+        let a = [1.0, 1e-16, 1e-16, 1e-16, 1e-16, 1e-16];
+        let b = [1e-16, 1e-16, 1e-16, 1e-16, 1e-16, 1.0];
+        assert_eq!(
+            neumaier_sum(&a),
+            neumaier_sum(&b),
+            "Neumaier sum should be order-independent"
+        );
+    }
+
+    #[test]
+    fn neumaier_accumulator_matches_slice() {
+        let vals = [3.14, 2.71, 1.41, 1.73, 0.58];
+        let slice_sum = neumaier_sum(&vals);
+        let mut acc = NeumaierAccumulator::new();
+        for &v in &vals {
+            acc.add(v);
+        }
+        assert_eq!(acc.total(), slice_sum);
+    }
+
+    #[test]
+    fn neumaier_sum_map_matches() {
+        let vals = [1.0, 2.0, 3.0, 4.0];
+        let result = neumaier_sum_map(&vals, |v| v * v);
+        assert!((result - 30.0).abs() < 1e-15);
+    }
+
+    // ── Original tests ──
 
     #[test]
     fn mean_empty() {
@@ -317,6 +479,17 @@ mod tests {
             "ψ(100) should be ~4.6002, got {}",
             digamma(100.0)
         );
+    }
+
+    #[test]
+    fn digamma_zero_returns_nan() {
+        assert!(digamma(0.0).is_nan());
+    }
+
+    #[test]
+    fn digamma_negative_returns_nan() {
+        assert!(digamma(-1.0).is_nan());
+        assert!(digamma(-0.5).is_nan());
     }
 
     #[test]

@@ -28,6 +28,9 @@ use types::KeystrokeEvent;
 #[napi(object)]
 #[derive(Serialize, Default)]
 pub struct DynamicalSignals {
+    /// Non-empty if the input JSON failed to parse. Caller should log this
+    /// rather than treating the all-None result as "insufficient data."
+    pub parse_error: Option<String>,
     pub iki_count: i32,
     pub hold_flight_count: i32,
     pub permutation_entropy: Option<f64>,
@@ -48,12 +51,16 @@ pub struct DynamicalSignals {
 pub fn compute_dynamical_signals(stream_json: String) -> DynamicalSignals {
     let stream: Vec<KeystrokeEvent> = match serde_json::from_str(&stream_json) {
         Ok(s) => s,
-        Err(_) => return DynamicalSignals::default(),
+        Err(e) => return DynamicalSignals {
+            parse_error: Some(format!("keystroke JSON: {e}")),
+            ..DynamicalSignals::default()
+        },
     };
 
     let r = dynamical::compute(&stream);
 
     DynamicalSignals {
+        parse_error: None,
         iki_count: i32::try_from(r.iki_count).unwrap_or(i32::MAX),
         hold_flight_count: i32::try_from(r.hold_flight_count).unwrap_or(i32::MAX),
         permutation_entropy: r.permutation_entropy,
@@ -75,6 +82,8 @@ pub fn compute_dynamical_signals(stream_json: String) -> DynamicalSignals {
 #[napi(object)]
 #[derive(Serialize, Default)]
 pub struct MotorSignals {
+    /// Non-empty if the input JSON failed to parse.
+    pub parse_error: Option<String>,
     pub sample_entropy: Option<f64>,
     pub iki_autocorrelation: Option<Vec<f64>>,
     pub motor_jerk: Option<f64>,
@@ -95,12 +104,16 @@ pub struct MotorSignals {
 pub fn compute_motor_signals(stream_json: String, total_duration_ms: f64) -> MotorSignals {
     let stream: Vec<KeystrokeEvent> = match serde_json::from_str(&stream_json) {
         Ok(s) => s,
-        Err(_) => return MotorSignals::default(),
+        Err(e) => return MotorSignals {
+            parse_error: Some(format!("keystroke JSON: {e}")),
+            ..MotorSignals::default()
+        },
     };
 
     let r = motor::compute(&stream, total_duration_ms);
 
     MotorSignals {
+        parse_error: None,
         sample_entropy: r.sample_entropy,
         iki_autocorrelation: r.iki_autocorrelation,
         motor_jerk: r.motor_jerk,
