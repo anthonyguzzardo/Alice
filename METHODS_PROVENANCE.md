@@ -8,6 +8,30 @@ Newest first.
 
 ---
 
+## INC-005: Reproducibility check wired into CI
+
+**Date:** 2026-04-22
+**Type:** Methods event (not an incident)
+**Commit:** 54e84a1 (merge), e43fadb (documentation)
+
+### What changed
+
+The two-clean-build reproducibility check (`reproducibility-check.sh`) is now enforced automatically by GitHub Actions on every PR touching `src-rs/**`, `package.json`, `package-lock.json`, or the workflow file itself. Workflow: `.github/workflows/signal-reproducibility.yml`. Runner: `macos-14` (Apple M1, ARM64), matching the pinned `aarch64-apple-darwin` toolchain.
+
+CI step order: clippy with warnings-as-errors, unit tests (`cargo test --lib`), then the full reproducibility check (two clean release builds, byte-for-byte snapshot diff). Caches Rust toolchain and cargo registry; never caches `target/` (clean builds are the point).
+
+### Why this is a methods event
+
+INC-002 established the bit-identity guarantee and built the verification infrastructure. INC-004 closed numerical edge cases. But enforcement was a paragraph in CLAUDE.md telling agents to run the check before committing. That is a soft guarantee. It depends on discipline, not mechanism.
+
+CI makes the guarantee structural. A PR that breaks bit-identity cannot merge. The enforcement authority is the workflow, not agent memory.
+
+### Verification
+
+First CI run on PR #1: all steps passed in 1m54s. Clippy zero warnings, unit tests passed, reproducibility check PASS (bit-identical snapshots across clean rebuilds on `macos-14`).
+
+---
+
 ## INC-004: Numerical edge case closure (batch)
 
 **Date:** 2026-04-21/22
