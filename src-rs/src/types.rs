@@ -25,6 +25,8 @@ pub(crate) enum SignalError {
     ZeroVariance { len: usize },
     /// A computed threshold, denominator, or intermediate value is degenerate.
     DegenerateValue(&'static str),
+    /// Input JSON failed to parse at the napi boundary.
+    ParseError(String),
 }
 
 impl std::fmt::Display for SignalError {
@@ -38,6 +40,9 @@ impl std::fmt::Display for SignalError {
             }
             Self::DegenerateValue(ctx) => {
                 write!(f, "degenerate value in {ctx}")
+            }
+            Self::ParseError(detail) => {
+                write!(f, "parse error: {detail}")
             }
         }
     }

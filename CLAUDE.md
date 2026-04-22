@@ -217,7 +217,8 @@ The Rust crate must be written to Rust's standards, not JavaScript's.
 - **Newtypes for domain separation**: `IkiSeries` and `FlightTimes` are distinct types via newtype wrappers with `Deref<Target=[f64]>`. Never pass raw `&[f64]` where a typed series is expected. If you add a new series kind, wrap it. **Newtypes earn their keep by flowing**: a newtype is justified when it is constructed in one place, used in another, and the wrapper prevents a specific category of mistake at the use site. A newtype constructed and consumed in the same struct with no independent constructor is ceremony -- either give it a `from_*` constructor or inline the field.
 - **Newtypes enforce invariants through private inner fields.** `IkiSeries` and `FlightTimes` wrap private `Vec<f64>` fields with controlled constructors (`from_stream`) that apply the relevant filtering. An unfiltered series cannot be constructed outside `types.rs` in non-test code. `HoldFlight` encapsulates its `holds` field the same way, accessed via `.holds() -> &[f64]`. When adding a new series type, follow this pattern -- a tuple struct with a `pub` inner field is a newtype in name only.
 - **Internal items are `pub(crate)`, not `pub`.** The crate is a `cdylib` with no Rust consumers -- everything below the napi boundary is crate-internal by design. `pub(crate)` declares that intent. `pub` is reserved for items that cross the FFI boundary (the `#[napi]` entry functions and `#[napi(object)]` structs in `lib.rs`).
-- **`SignalError` enum over `Option`**: Internal signal functions return `SignalResult<T>`. The error variant (`InsufficientData`, `ZeroVariance`, `DegenerateValue`) preserves *why* a computation failed. Convert to `Option` with `.ok()` only at the napi boundary in `lib.rs`.
+- **`SignalError` enum over `Option`**: Internal signal functions return `SignalResult<T>`. The error variants (`InsufficientData`, `ZeroVariance`, `DegenerateValue`, `ParseError`) preserve *why* a computation failed. `ParseError` is for JSON deserialization failures at module boundaries. Convert to `Option` with `.ok()` only at the napi boundary in `lib.rs`. Never silently default on bad input with `unwrap_or_default()` -- propagate the error.
+- **`#[derive(Debug)]` on all `pub(crate)` types.** Every struct and enum in the crate should derive `Debug` so error messages (especially `assert!` failures in tests) produce useful output. This is standard practice for library types.
 - **Structs get methods**: If a struct has a derived property (e.g. `HoldFlight::aligned_len()`), put it on the struct. Don't compute it inline at the call site.
 - **`KeystrokeEvent` uses `#[serde(rename)]`**: Wire format is `{c, d, u}`. Rust-side fields are `character`, `key_down_ms`, `key_up_ms`. Always use the readable names in Rust code.
 
@@ -226,6 +227,14 @@ The Rust crate must be written to Rust's standards, not JavaScript's.
 - **JavaScript cursor positions are UTF-16 code units. Rust strings are UTF-8.** Any code that receives a cursor position or delete count from JS MUST convert through `types::utf16_to_byte_offset()` before indexing into a Rust string. Indexing raw bytes at a UTF-16 offset will panic on any non-ASCII character (curly quotes, accented letters, emoji).
 - **Count comparisons are also unit-typed.** When comparing a Rust-side character or byte count against a JS-sourced count (like `deletedCount`), convert both sides to the same unit -- typically UTF-16 code units via `.chars().map(|c| c.len_utf16()).sum::<usize>()`. Byte length (`.len()`) and character count (`.chars().count()`) are both wrong when the other side of the comparison is UTF-16.
 - **Never use `text.as_bytes()[pos]` with JS-sourced positions.** Use `text[..byte_offset].chars().next_back()` for character inspection.
+
+### Deterministic Iteration
+
+- **Never iterate a `HashMap` on a path that feeds into sampling or output.** `HashMap` iteration order is nondeterministic across runs in Rust (randomized hash seeds). If a seeded PRNG samples from a `HashMap`-ordered distribution, the same seed produces different results across runs. This is a correctness bug for any reproducibility claim.
+- **The pattern: build with `HashMap`, freeze into sorted `Vec`.** Use `HashMap` as a mutable builder during construction, then `.into_iter().collect()` into a `Vec<(K, V)>` and `.sort_by()` on the key. All subsequent reads go through the sorted vec. See `MarkovChain` and `PpmTrie` in `avatar.rs` for the canonical implementation.
+- **Use `sorted_vec_get()` for O(log n) lookup** into frozen sorted vecs. Binary search on the key, returns `Option<&V>`.
+- **When to use `BTreeMap` instead**: if the data structure needs insertion after construction (e.g. online learning without a rebuild step), `BTreeMap` provides deterministic iteration without a freeze step. For build-once-sample-many workloads, sorted vecs are preferred for cache locality.
+- **Determinism tests**: any module that generates output from a seeded PRNG must have a test that calls the function twice with the same seed and asserts identical output. See `avatar::tests::determinism_*` for examples.
 
 ### napi Boundary (`lib.rs`)
 
@@ -260,10 +269,21 @@ src-rs/src/
 ├── stats.rs        # mean, std_dev, erfc, digamma, extract_iki, linreg_slope (#[inline])
 ├── dynamical.rs    # PE (single + multi-scale spectrum), DFA, RQA, KSG transfer entropy
 ├── motor.rs        # sample entropy, autocorrelation, ex-Gaussian (MLE/EM), compression
-└── process.rs      # text reconstruction, pause/burst analysis
+├── process.rs      # text reconstruction, pause/burst analysis
+└── avatar.rs       # ghost engine: Markov/PPM text generation, timing synthesis, adversary variants
 ```
 
 Each compute module defines its own result struct (e.g. `DynamicalResult`, `MotorResult`). `lib.rs` maps these to the flat napi output structs.
+
+### Avatar Engine (`avatar.rs`)
+
+The avatar (ghost) is a reconstruction adversary: it generates synthetic keystroke streams from a person's statistical profile. Five adversary variants isolate which dimension of behavior carries the most signal by adding one modeling improvement at a time (text prediction via Markov/PPM, IKI correlation via AR(1), hold/flight coupling via Gaussian copula). Comparing reconstruction residuals across variants reveals what a profile can reproduce vs. what requires the actual person.
+
+**Key patterns:**
+- **Sampler factories over boolean flags.** Timing synthesis takes `IkiSampler` and `HoldSampler` closures constructed per-variant, rather than boolean flags controlling behavior inside the function. This keeps the generation skeleton free of variant-specific logic.
+- **Build-once-sample-many.** `MarkovChain` and `PpmTrie` are built from `HashMap`s then frozen into sorted vecs. See **Deterministic Iteration** above.
+- **String cloning is intentional.** The corpus vocabulary is ~2-5K words. Interning or arena allocation would add complexity for zero measurable benefit at this scale. This is documented on the `MarkovChain` struct.
+- **`compute_seeded()` for testability.** The public `compute()` uses a time-based seed. Tests call `compute_seeded()` with a fixed seed to verify determinism.
 
 ### Single Source of Truth
 

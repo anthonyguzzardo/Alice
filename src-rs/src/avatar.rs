@@ -16,9 +16,21 @@ use crate::types::{SignalError, SignalResult};
 
 // ─── Adversary Variants ─────────────────────────────────────────
 //
-// Each variant uses a different combination of text generation and
-// timing synthesis strategies to test which statistical improvement
-// closes the most reconstruction residual.
+// The avatar is a reconstruction adversary: it generates synthetic
+// keystroke streams from a person's statistical profile to test
+// what a profile alone can reproduce vs. what requires the actual
+// person. Each variant adds one modeling improvement to isolate
+// which statistical dimension carries the most signal:
+//
+// 1. Baseline:           Markov text + independent IKI + fixed hold
+// 2. ConditionalTiming:  Markov text + AR(1) correlated IKI + fixed hold
+// 3. CopulaMotor:        Markov text + independent IKI + copula hold/flight
+// 4. PpmText:            PPM text + independent IKI + fixed hold
+// 5. FullAdversary:      PPM text + AR(1) IKI + copula hold/flight
+//
+// Comparing residuals across variants reveals which dimension of
+// behavior (text prediction, IKI correlation, hold/flight coupling)
+// is most irreducible from the profile alone.
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum AdversaryVariant {
@@ -60,7 +72,7 @@ impl AdversaryVariant {
 
 // ─── Types ──────────────────────────────────────────────────────
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub(crate) struct TimingProfile {
     /// Mean digraph latency per bigram (character pair)
     pub(crate) digraph: Option<HashMap<String, f64>>,
@@ -121,6 +133,7 @@ pub(crate) struct TimingProfile {
     pub(crate) flight_time_std: Option<f64>,
 }
 
+#[derive(Debug)]
 pub(crate) struct AvatarResult {
     /// Generated text
     pub(crate) text: String,
@@ -143,6 +156,7 @@ pub(crate) struct AvatarResult {
     pub(crate) variant: u8,
 }
 
+#[derive(Debug)]
 pub(crate) struct SyntheticKeystroke {
     pub(crate) character: char,
     pub(crate) key_down_ms: f64,
@@ -150,6 +164,7 @@ pub(crate) struct SyntheticKeystroke {
 }
 
 /// Result of computing perplexity of a text against the Markov model.
+#[derive(Debug)]
 pub(crate) struct PerplexityResult {
     /// Per-word log2 perplexity (lower = model predicts the text better)
     pub(crate) perplexity: f64,
@@ -230,26 +245,64 @@ impl Rng {
 }
 
 // ─── Markov chain ───────────────────────────────────────────────
+//
+// All internal collections use sorted vecs, not HashMaps, for
+// deterministic iteration order. This is a build-once-sample-many
+// data structure: the corpus is processed once into frozen probability
+// tables, then sampled hundreds of times during generation. Sorted
+// vecs give cache-friendly contiguous memory on the sampling hot path
+// and deterministic output for a given PRNG seed.
+//
+// BTreeMap would also provide deterministic iteration and is the
+// simpler default. Use BTreeMap instead if the data structure ever
+// needs to support insertion after construction (e.g. online learning
+// from new journal entries without rebuilding the full chain).
 
+/// Word-level Markov chain built from a personal writing corpus.
+///
+/// Strings are cloned into owned `String`s rather than interned or
+/// arena-allocated. This is intentional: a personal journal corpus has
+/// ~2-5K unique words. The entire chain fits in a few hundred KB.
+/// Interning would add complexity (lifetime management or global state)
+/// for zero measurable benefit at this vocabulary scale.
 #[allow(dead_code)] // total_starters available for diagnostics but not currently read
 struct MarkovChain {
-    /// state -> [(next_word, count)]
-    transitions: HashMap<String, Vec<(String, u32)>>,
-    /// sentence starters with counts
+    /// state -> [(next_word, count)], sorted by key for deterministic lookup
+    transitions: Vec<(String, Vec<(String, u32)>)>,
+    /// sentence starters with counts, sorted by key
     starters: Vec<(String, u32)>,
     total_starters: u32,
     order: usize,
-    /// Order-1 chain for backoff when order-2 hits a dead end
-    backoff: Option<HashMap<String, Vec<(String, u32)>>>,
+    /// Order-1 chain for backoff when order-2 hits a dead end, sorted by key.
+    #[allow(clippy::type_complexity)] // Flat sorted vecs are intentional; a wrapper type adds indirection for no benefit
+    backoff: Option<Vec<(String, Vec<(String, u32)>)>>,
     /// Total word count across all training texts (for perplexity vocab size)
     vocab_size: usize,
     /// Absolute discounting parameter d = n1 / (n1 + 2*n2).
     /// Chen & Goodman (1999): optimal single-discount estimator.
     discount: f64,
-    /// Unigram probability distribution for backoff: word -> P(word).
-    unigram_probs: HashMap<String, f64>,
+    /// Unigram probability distribution for backoff: word -> P(word), sorted by key.
+    unigram_probs: Vec<(String, f64)>,
 }
 
+/// Binary search for a key in a sorted `Vec<(String, V)>`.
+///
+/// All sampling collections in the avatar engine are built as `HashMap` then
+/// frozen into sorted vecs for deterministic iteration. This function provides
+/// O(log n) lookup into those frozen collections. See the module-level comment
+/// on `MarkovChain` for why sorted vecs over `BTreeMap`.
+fn sorted_vec_get<'a, V>(sorted: &'a [(String, V)], key: &str) -> Option<&'a V> {
+    sorted
+        .binary_search_by_key(&key, |(k, _)| k.as_str())
+        .ok()
+        .map(|i| &sorted[i].1)
+}
+
+/// Split text into word tokens and punctuation tokens.
+///
+/// Punctuation (`.!?,;:`) becomes its own token. Whitespace is a separator
+/// (not a token). Contractions (`don't`) are preserved as single tokens
+/// because the apostrophe is not in the split set.
 fn tokenize(text: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     let mut current = String::new();
@@ -274,6 +327,14 @@ fn tokenize(text: &str) -> Vec<String> {
     tokens
 }
 
+/// Build a word-level Markov chain from a personal writing corpus.
+///
+/// Constructs order-N transitions (specified by `order`) plus a mandatory
+/// order-1 backoff chain. Computes Absolute Discounting (Chen & Goodman 1999)
+/// and unigram probabilities for smoothed generation and perplexity scoring.
+///
+/// All internal `HashMap`s are frozen into sorted vecs at the end so that
+/// iteration order is deterministic for a given PRNG seed.
 fn build_chain(texts: &[String], order: usize) -> MarkovChain {
     let mut transitions: HashMap<String, HashMap<String, u32>> = HashMap::new();
     let mut starters: HashMap<String, u32> = HashMap::new();
@@ -358,27 +419,39 @@ fn build_chain(texts: &[String], order: usize) -> MarkovChain {
         }
     }
     let unigram_total_f = unigram_total.max(1) as f64;
-    let unigram_probs: HashMap<String, f64> = unigram_counts
+    let mut unigram_probs: Vec<(String, f64)> = unigram_counts
         .into_iter()
         .map(|(k, v)| (k, v as f64 / unigram_total_f))
         .collect();
+    unigram_probs.sort_by(|(a, _), (b, _)| a.cmp(b));
 
-    // Flatten to vecs for weighted sampling
-    let transitions = transitions
+    // Flatten to sorted vecs for deterministic weighted sampling.
+    // HashMap is used as a builder; sorted vecs are the frozen form.
+    let mut transitions: Vec<(String, Vec<(String, u32)>)> = transitions
         .into_iter()
-        .map(|(k, v)| (k, v.into_iter().collect::<Vec<_>>()))
+        .map(|(k, v)| {
+            let mut dist: Vec<(String, u32)> = v.into_iter().collect();
+            dist.sort_by(|(a, _), (b, _)| a.cmp(b));
+            (k, dist)
+        })
         .collect();
+    transitions.sort_by(|(a, _), (b, _)| a.cmp(b));
 
-    let starters = starters.into_iter().collect::<Vec<_>>();
+    let mut starters: Vec<(String, u32)> = starters.into_iter().collect();
+    starters.sort_by(|(a, _), (b, _)| a.cmp(b));
 
     // Build backoff chain if order > 1
     let backoff = if order > 1 {
-        Some(
-            order1_transitions
-                .into_iter()
-                .map(|(k, v)| (k, v.into_iter().collect::<Vec<_>>()))
-                .collect(),
-        )
+        let mut bo: Vec<(String, Vec<(String, u32)>)> = order1_transitions
+            .into_iter()
+            .map(|(k, v)| {
+                let mut dist: Vec<(String, u32)> = v.into_iter().collect();
+                dist.sort_by(|(a, _), (b, _)| a.cmp(b));
+                (k, dist)
+            })
+            .collect();
+        bo.sort_by(|(a, _), (b, _)| a.cmp(b));
+        Some(bo)
     } else {
         None
     };
@@ -397,6 +470,10 @@ fn build_chain(texts: &[String], order: usize) -> MarkovChain {
     }
 }
 
+/// Sample a word from a weighted distribution using cumulative probability.
+///
+/// Returns `None` if the distribution is empty or has zero total weight.
+/// Because the distribution is a sorted vec, iteration order is deterministic.
 fn weighted_pick(dist: &[(String, u32)], rng: &mut Rng) -> Option<String> {
     let total: u32 = dist.iter().map(|(_, c)| c).sum();
     if total == 0 {
@@ -441,6 +518,15 @@ fn interpolated_pick(
     }
 }
 
+/// Generate text by walking the Markov chain starting from a topic seed.
+///
+/// Tries to find a starting state containing a seed word, falling back to
+/// transition keys, then to a random starter. Uses Witten-Bell interpolated
+/// backoff (Jelinek & Mercer 1980) to blend order-N and order-1 distributions
+/// at each step. Dead ends trigger a sentence break and random restart.
+///
+/// `max_words` is approximate: the output may be slightly longer due to
+/// starter tokens and sentence restarts.
 fn generate_text(chain: &MarkovChain, seed: &str, max_words: usize, rng: &mut Rng) -> String {
     let seed_tokens: Vec<String> = seed
         .to_lowercase()
@@ -459,7 +545,7 @@ fn generate_text(chain: &MarkovChain, seed: &str, max_words: usize, rng: &mut Rn
     }
     // Also search transition keys
     if state.is_none() {
-        for key in chain.transitions.keys() {
+        for (key, _) in &chain.transitions {
             let key_lower = key.to_lowercase();
             if seed_tokens.iter().any(|sw| key_lower.contains(sw.as_str())) {
                 state = Some(key.clone());
@@ -484,8 +570,8 @@ fn generate_text(chain: &MarkovChain, seed: &str, max_words: usize, rng: &mut Rn
         let last_token = &tokens[tokens.len() - 1];
 
         // Interpolated backoff: blend order-N and order-1 distributions
-        let primary = chain.transitions.get(&key);
-        let lower = chain.backoff.as_ref().and_then(|b| b.get(last_token.as_str()));
+        let primary = sorted_vec_get(&chain.transitions, &key);
+        let lower = chain.backoff.as_ref().and_then(|b| sorted_vec_get(b, last_token.as_str()));
 
         if let Some(next) = interpolated_pick(primary, lower, rng) {
             tokens.push(next);
@@ -576,6 +662,7 @@ fn word_difficulty_multiplier(word: &str, freq_map: &HashMap<String, f64>, rng: 
 
 // ─── Timing synthesis ───────────────────────────────────────────
 
+#[derive(Debug)]
 struct TimingOutput {
     delays: Vec<f64>,
     keystrokes: Vec<SyntheticKeystroke>,
@@ -587,10 +674,22 @@ struct TimingOutput {
 /// - Evaluation pauses (periodic read-back pauses at structural boundaries)
 /// - I-burst insertion (navigate back and insert text mid-stream)
 /// - All prior features (P-bursts, digraph timing, pause architecture)
+///
+/// The `iki_sampler` closure controls how base IKI delays are generated.
+/// For independent timing (Baseline, PpmText), it samples from ex-Gaussian(mu, sigma, tau).
+/// For conditioned timing (ConditionalTiming, FullAdversary), it uses an AR(1) process
+/// calibrated from the profile's lag-1 autocorrelation.
+///
+/// The `hold_sampler` closure controls hold/flight time generation.
+/// For baseline variants, it samples from a fixed Gaussian.
+/// For copula variants (CopulaMotor, FullAdversary), it uses a bivariate
+/// Gaussian copula preserving the measured hold-flight rank correlation.
 fn synthesize_timing(
     text: &str,
     profile: &TimingProfile,
     word_freq: &HashMap<String, f64>,
+    iki_sampler: &mut IkiSampler,
+    hold_sampler: &mut HoldSampler,
     rng: &mut Rng,
 ) -> TimingOutput {
     let chars: Vec<char> = text.chars().collect();
@@ -599,14 +698,9 @@ fn synthesize_timing(
     let mut keystrokes = Vec::with_capacity(total_chars + total_chars / 10);
 
     let base_mu = profile.mu.unwrap_or(120.0);
-    let sigma = profile.sigma.unwrap_or(40.0);
-    let tau = profile.tau.unwrap_or(80.0);
     let burst_length = profile.burst_length.unwrap_or(150.0) as usize;
     let pause_sent_pct = profile.pause_sent_pct.unwrap_or(0.07);
     let pause_between_pct = profile.pause_between_pct.unwrap_or(0.69);
-
-    let hold_mu = 95.0;
-    let hold_sigma = 20.0;
 
     let mut chars_since_burst: usize = 0;
     let mut clock: f64 = 0.0;
@@ -628,7 +722,6 @@ fn synthesize_timing(
     };
 
     // ── Content-process coupling: track current word for difficulty ──
-    // Build word boundaries from text
     let words: Vec<(usize, usize, String)> = extract_word_spans(text);
     let mut word_idx = 0;
 
@@ -640,7 +733,7 @@ fn synthesize_timing(
     let fk = profile.first_keystroke.unwrap_or(3000.0);
     let first_delay = fk * (0.7 + rng.f64() * 0.6);
     clock += first_delay;
-    let hold = rng.gaussian(hold_mu, hold_sigma).clamp(40.0, 200.0);
+    let (hold, _) = hold_sampler(rng);
     delays.push(first_delay);
     keystrokes.push(SyntheticKeystroke {
         character: chars[0],
@@ -671,7 +764,6 @@ fn synthesize_timing(
             // Evaluation pause: periodically insert a longer read-back pause
             if bursts_since_eval >= eval_interval {
                 bursts_since_eval = 0;
-                // Evaluation pause: 4-8 seconds (reading back what was written)
                 delay = 4000.0 + rng.f64() * 4000.0;
             } else {
                 delay = 2000.0 + rng.f64() * 2000.0;
@@ -682,12 +774,11 @@ fn synthesize_timing(
             if rng.f64() < pause_sent_pct.min(1.0) * 3.5 {
                 delay = 800.0 + rng.f64() * 2200.0;
             } else {
-                delay = rng.ex_gaussian(mu, sigma, tau);
+                delay = iki_sampler(mu, rng);
             }
         }
         // Word boundary pause: content-process coupling applies here
         else if prev == ' ' {
-            // Check difficulty of the upcoming word
             let difficulty = if word_idx < words.len() {
                 word_difficulty_multiplier(&words[word_idx].2, word_freq, rng)
             } else {
@@ -695,10 +786,9 @@ fn synthesize_timing(
             };
 
             if rng.f64() < (pause_between_pct * 0.12 * difficulty).min(0.25) {
-                // Longer pause for rare words, shorter for common
                 delay = (300.0 + rng.f64() * 900.0) * difficulty.min(2.0);
             } else {
-                delay = rng.ex_gaussian(mu, sigma, tau);
+                delay = iki_sampler(mu, rng);
             }
         }
         // Digraph-specific timing
@@ -708,15 +798,20 @@ fn synthesize_timing(
         }) {
             delay = (latency + (rng.f64() - 0.5) * 40.0).max(30.0);
         }
-        // Fallback: ex-Gaussian sample with tempo drift
+        // Fallback: base IKI sample with tempo drift
         else {
-            delay = rng.ex_gaussian(mu, sigma, tau);
+            delay = iki_sampler(mu, rng);
         }
 
-        clock += delay;
-        let hold = rng.gaussian(hold_mu, hold_sigma).clamp(40.0, 200.0);
+        let (hold, flight_factor) = hold_sampler(rng);
+        let adjusted_delay = if flight_factor > 0.0 && (flight_factor - 1.0).abs() > 1e-6 {
+            (delay * flight_factor).max(30.0)
+        } else {
+            delay
+        };
 
-        delays.push(delay);
+        clock += adjusted_delay;
+        delays.push(adjusted_delay);
         keystrokes.push(SyntheticKeystroke {
             character: curr,
             key_down_ms: clock,
@@ -1162,191 +1257,75 @@ fn pick_revision_position(total: usize, midpoint: usize, bias: f64, rng: &mut Rn
     }
 }
 
-// ─── Conditional Timing: AR(1) IKI Process ──────────────────────
-//
-// Instead of sampling each IKI independently from ex-Gaussian(mu, sigma, tau),
-// generate a correlated sequence via an AR(1) process calibrated from the
-// profile's measured lag-1 autocorrelation.
-//
-// AR(1): IKI[t] = mu + phi * (IKI[t-1] - mu) + epsilon
-// where phi = iki_autocorrelation_lag1, epsilon ~ ex-Gaussian(0, sigma_adj, tau)
-// sigma_adj = sigma * sqrt(1 - phi^2) preserves marginal variance.
-//
-// Citation: Box, Jenkins & Reinsel (2008). Time Series Analysis.
+/// IKI sampler: given current tempo-adjusted mu and an RNG, returns a delay in ms.
+type IkiSampler = dyn FnMut(f64, &mut Rng) -> f64;
 
-/// AR(1) conditioned timing synthesis. Same pause/burst/digraph/tempo-drift
-/// logic as baseline, but base IKI sampling uses AR(1) instead of independent
-/// ex-Gaussian. Falls back to baseline if phi is None.
-fn synthesize_timing_conditional(
-    text: &str,
-    profile: &TimingProfile,
-    word_freq: &HashMap<String, f64>,
-    use_copula: bool,
-    rng: &mut Rng,
-) -> TimingOutput {
-    let chars: Vec<char> = text.chars().collect();
-    let total_chars = chars.len();
-    let mut delays = Vec::with_capacity(total_chars + total_chars / 10);
-    let mut keystrokes = Vec::with_capacity(total_chars + total_chars / 10);
+/// Hold sampler: given an RNG, returns (hold_ms, flight_factor).
+/// flight_factor is 1.0 when no copula modulation is applied.
+type HoldSampler = dyn FnMut(&mut Rng) -> (f64, f64);
 
-    let base_mu = profile.mu.unwrap_or(120.0);
-    let sigma = profile.sigma.unwrap_or(40.0);
-    let tau = profile.tau.unwrap_or(80.0);
-    let burst_length = profile.burst_length.unwrap_or(150.0) as usize;
-    let pause_sent_pct = profile.pause_sent_pct.unwrap_or(0.07);
-    let pause_between_pct = profile.pause_between_pct.unwrap_or(0.69);
+// ─── IKI Sampler Factories ──────────────────────────────────────
+//
+// Each adversary variant combines one IKI sampler with one hold sampler.
+// The factories below construct the closures that `synthesize_timing`
+// uses, keeping the generation skeleton free of variant-specific logic.
 
-    // AR(1) coefficient from profile
-    let phi = profile.iki_autocorrelation_lag1.unwrap_or(0.0).clamp(-0.99, 0.99);
-    // Adjusted sigma to preserve marginal variance under AR(1)
+/// Build an independent ex-Gaussian IKI sampler (Baseline, PpmText).
+fn make_independent_iki(sigma: f64, tau: f64) -> impl FnMut(f64, &mut Rng) -> f64 {
+    move |mu: f64, rng: &mut Rng| rng.ex_gaussian(mu, sigma, tau)
+}
+
+/// Build an AR(1) conditioned IKI sampler (ConditionalTiming, FullAdversary).
+///
+/// AR(1): IKI[t] = mu + phi * (IKI[t-1] - mu) + epsilon
+/// where phi = iki_autocorrelation_lag1, epsilon ~ ex-Gaussian(0, sigma_adj, tau).
+/// sigma_adj = sigma * sqrt(1 - phi^2) preserves marginal variance.
+///
+/// Citation: Box, Jenkins & Reinsel (2008). Time Series Analysis.
+fn make_ar1_iki(sigma: f64, tau: f64, phi: f64, base_mu: f64) -> impl FnMut(f64, &mut Rng) -> f64 {
     let sigma_adj = sigma * (1.0 - phi * phi).max(0.01).sqrt();
-
-    // Copula parameters (used when use_copula is true)
-    let copula_rho = if use_copula {
-        profile.hold_flight_rank_correlation.unwrap_or(0.0)
-    } else {
-        0.0
-    };
-    // Convert Spearman rho to Pearson for Gaussian copula (Kruskal 1958)
-    let copula_pearson = 2.0 * (std::f64::consts::FRAC_PI_6 * copula_rho).sin();
-    let hold_mean = profile.hold_time_mean.unwrap_or(95.0);
-    let hold_std = profile.hold_time_std.unwrap_or(20.0);
-
-    let mut chars_since_burst: usize = 0;
-    let mut clock: f64 = 0.0;
-    #[allow(unused_assignments)] // initialized before AR(1) loop reads it
-    let mut prev_iki: f64 = base_mu;
-
-    // Tempo drift closure (same as baseline)
-    let tempo_mu = |char_idx: usize| -> f64 {
-        let progress = char_idx as f64 / total_chars.max(1) as f64;
-        let drift = if progress < 0.2 {
-            1.3 - (progress / 0.2) * 0.45
-        } else if progress < 0.75 {
-            0.85
-        } else {
-            0.85 + ((progress - 0.75) / 0.25) * 0.25
-        };
-        base_mu * drift
-    };
-
-    let words = extract_word_spans(text);
-    let mut word_idx = 0;
-    let mut bursts_since_eval: usize = 0;
-    let eval_interval = 3 + (rng.f64() * 3.0) as usize;
-
-    // AR(1) IKI sampler: conditioned on previous IKI
-    let ar1_sample = |prev: f64, mu: f64, rng: &mut Rng| -> f64 {
+    let mut prev_iki = base_mu;
+    move |mu: f64, rng: &mut Rng| {
         let innovation = rng.ex_gaussian(0.0, sigma_adj, tau) - tau; // center the exponential
-        let iki = mu + phi * (prev - mu) + innovation;
-        iki.max(30.0)
-    };
+        let iki = mu + phi * (prev_iki - mu) + innovation;
+        let iki = iki.max(30.0);
+        prev_iki = iki;
+        iki
+    }
+}
 
-    // Copula hold/flight sampler
-    let sample_hold_flight = |rng: &mut Rng| -> (f64, f64) {
-        if !use_copula || copula_rho.abs() < 0.01 {
+/// Build a fixed-Gaussian hold sampler (Baseline, ConditionalTiming, PpmText).
+/// Returns (hold_ms, flight_factor=1.0) so the caller can ignore flight_factor.
+fn make_fixed_hold(hold_mean: f64, hold_std: f64) -> impl FnMut(&mut Rng) -> (f64, f64) {
+    move |rng: &mut Rng| {
+        let hold = rng.gaussian(hold_mean, hold_std).clamp(40.0, 200.0);
+        (hold, 1.0)
+    }
+}
+
+/// Build a Gaussian copula hold/flight sampler (CopulaMotor, FullAdversary).
+///
+/// Generates bivariate Gaussian samples preserving the measured Spearman
+/// rank correlation between hold and flight times. Spearman rho is converted
+/// to Pearson via Kruskal (1958): r_pearson = 2 * sin(pi/6 * r_spearman).
+fn make_copula_hold(
+    hold_mean: f64,
+    hold_std: f64,
+    spearman_rho: f64,
+) -> impl FnMut(&mut Rng) -> (f64, f64) {
+    let copula_pearson = 2.0 * (std::f64::consts::FRAC_PI_6 * spearman_rho).sin();
+    move |rng: &mut Rng| {
+        if spearman_rho.abs() < 0.01 {
             let hold = rng.gaussian(hold_mean, hold_std).clamp(40.0, 200.0);
-            return (hold, 0.0); // flight determined by delay
+            return (hold, 1.0);
         }
-        // Bivariate Gaussian with correlation copula_pearson
         let z1 = rng.gaussian(0.0, 1.0);
         let z2 = rng.gaussian(0.0, 1.0);
-        let u1 = z1;
         let u2 = copula_pearson.mul_add(z1, (1.0 - copula_pearson * copula_pearson).max(0.01).sqrt() * z2);
-        let hold = (hold_mean + hold_std * u1).clamp(40.0, 200.0);
-        // Flight modulation: scale the base delay by a factor derived from u2
-        // Positive u2 = longer flight, preserving rank correlation with hold
+        let hold = (hold_mean + hold_std * z1).clamp(40.0, 200.0);
         let flight_factor = 1.0 + 0.2 * u2; // modest modulation
         (hold, flight_factor)
-    };
-
-    // First character
-    let fk = profile.first_keystroke.unwrap_or(3000.0);
-    let first_delay = fk * (0.7 + rng.f64() * 0.6);
-    clock += first_delay;
-    let (hold, _) = sample_hold_flight(rng);
-    delays.push(first_delay);
-    keystrokes.push(SyntheticKeystroke {
-        character: chars[0],
-        key_down_ms: clock,
-        key_up_ms: clock + hold,
-    });
-    prev_iki = first_delay;
-
-    for i in 1..total_chars {
-        let prev_char = chars[i - 1];
-        let curr = chars[i];
-        chars_since_burst += 1;
-
-        while word_idx + 1 < words.len() && i >= words[word_idx + 1].0 {
-            word_idx += 1;
-        }
-
-        let mu = tempo_mu(i);
-        let delay;
-
-        // P-burst pause
-        if chars_since_burst >= burst_length && prev_char == ' ' {
-            chars_since_burst = 0;
-            bursts_since_eval += 1;
-            if bursts_since_eval >= eval_interval {
-                bursts_since_eval = 0;
-                delay = 4000.0 + rng.f64() * 4000.0;
-            } else {
-                delay = 2000.0 + rng.f64() * 2000.0;
-            }
-        }
-        // Sentence boundary
-        else if matches!(prev_char, '.' | '!' | '?') && curr == ' ' {
-            if rng.f64() < pause_sent_pct.min(1.0) * 3.5 {
-                delay = 800.0 + rng.f64() * 2200.0;
-            } else {
-                delay = ar1_sample(prev_iki, mu, rng);
-            }
-        }
-        // Word boundary with content-process coupling
-        else if prev_char == ' ' {
-            let difficulty = if word_idx < words.len() {
-                word_difficulty_multiplier(&words[word_idx].2, word_freq, rng)
-            } else {
-                1.0
-            };
-            if rng.f64() < (pause_between_pct * 0.12 * difficulty).min(0.25) {
-                delay = (300.0 + rng.f64() * 900.0) * difficulty.min(2.0);
-            } else {
-                delay = ar1_sample(prev_iki, mu, rng);
-            }
-        }
-        // Digraph-specific
-        else if let Some(latency) = profile.digraph.as_ref().and_then(|d| {
-            let bigram = format!("{}{}", prev_char, curr);
-            d.get(&bigram).copied()
-        }) {
-            delay = (latency + (rng.f64() - 0.5) * 40.0).max(30.0);
-        }
-        // Fallback: AR(1) conditioned ex-Gaussian
-        else {
-            delay = ar1_sample(prev_iki, mu, rng);
-        }
-
-        prev_iki = delay;
-        let (hold, flight_factor) = sample_hold_flight(rng);
-        let adjusted_delay = if use_copula && flight_factor > 0.0 {
-            (delay * flight_factor).max(30.0)
-        } else {
-            delay
-        };
-
-        clock += adjusted_delay;
-        delays.push(adjusted_delay);
-        keystrokes.push(SyntheticKeystroke {
-            character: curr,
-            key_down_ms: clock,
-            key_up_ms: clock + hold,
-        });
     }
-
-    TimingOutput { delays, keystrokes }
 }
 
 // ─── PPM Text Generation (Prediction by Partial Matching) ───────
@@ -1360,13 +1339,15 @@ fn synthesize_timing_conditional(
 // continuation), the model backs off to shorter contexts until order-0
 // (unigram) or uniform distribution.
 
-struct PpmNode {
-    children: HashMap<String, PpmNode>,
+/// Mutable PPM node used during trie construction. Converted to
+/// `FrozenPpmNode` after building for deterministic sampling.
+struct PpmNodeBuilder {
+    children: HashMap<String, PpmNodeBuilder>,
     counts: HashMap<String, u32>,
     total: u32,
 }
 
-impl PpmNode {
+impl PpmNodeBuilder {
     fn new() -> Self {
         Self {
             children: HashMap::new(),
@@ -1374,19 +1355,52 @@ impl PpmNode {
             total: 0,
         }
     }
+
+    /// Recursively freeze into sorted form for deterministic iteration.
+    fn freeze(self) -> FrozenPpmNode {
+        let mut children: Vec<(String, FrozenPpmNode)> = self.children
+            .into_iter()
+            .map(|(k, v)| (k, v.freeze()))
+            .collect();
+        children.sort_by(|(a, _), (b, _)| a.cmp(b));
+
+        let mut counts: Vec<(String, u32)> = self.counts.into_iter().collect();
+        counts.sort_by(|(a, _), (b, _)| a.cmp(b));
+
+        FrozenPpmNode {
+            children,
+            counts,
+            total: self.total,
+        }
+    }
+}
+
+/// Immutable PPM node with sorted children and counts for deterministic sampling.
+struct FrozenPpmNode {
+    children: Vec<(String, FrozenPpmNode)>,
+    counts: Vec<(String, u32)>,
+    total: u32,
 }
 
 struct PpmTrie {
-    root: PpmNode,
+    root: FrozenPpmNode,
     max_depth: usize,
-    unigram_probs: HashMap<String, f64>,
+    /// Sorted by key for deterministic fallback sampling.
+    unigram_probs: Vec<(String, f64)>,
     vocab_size: usize,
+    /// Sorted by key for deterministic starter selection.
     starters: Vec<(String, u32)>,
     total_starters: u32,
 }
 
+/// Build a PPM (Prediction by Partial Matching) trie from the corpus.
+///
+/// Constructs a variable-order Markov model up to `max_depth` using
+/// PPM Method C (Cleary & Witten 1984, Moffat 1990). The trie is built
+/// with mutable `PpmNodeBuilder` nodes, then frozen into sorted
+/// `FrozenPpmNode`s for deterministic sampling.
 fn build_ppm_trie(texts: &[String], max_depth: usize) -> PpmTrie {
-    let mut root = PpmNode::new();
+    let mut root = PpmNodeBuilder::new();
     let mut unigram_counts: HashMap<String, u32> = HashMap::new();
     let mut total_words: u32 = 0;
     let mut starters: HashMap<String, u32> = HashMap::new();
@@ -1418,7 +1432,7 @@ fn build_ppm_trie(texts: &[String], max_depth: usize) -> PpmTrie {
                 // Navigate to the correct node
                 let mut node = &mut root;
                 for tok in ctx_tokens {
-                    node = node.children.entry(tok.clone()).or_insert_with(PpmNode::new);
+                    node = node.children.entry(tok.clone()).or_insert_with(PpmNodeBuilder::new);
                 }
                 *node.counts.entry(next.clone()).or_default() += 1;
                 node.total += 1;
@@ -1426,20 +1440,24 @@ fn build_ppm_trie(texts: &[String], max_depth: usize) -> PpmTrie {
         }
     }
 
+    let vocab_size = unigram_counts.len();
     let total_f = total_words.max(1) as f64;
-    let unigram_probs: HashMap<String, f64> = unigram_counts
-        .iter()
-        .map(|(w, c)| (w.clone(), *c as f64 / total_f))
+    let mut unigram_probs: Vec<(String, f64)> = unigram_counts
+        .into_iter()
+        .map(|(w, c)| (w, c as f64 / total_f))
         .collect();
+    unigram_probs.sort_by(|(a, _), (b, _)| a.cmp(b));
 
-    let starter_vec: Vec<(String, u32)> = starters.into_iter().collect();
+    let mut starter_vec: Vec<(String, u32)> = starters.into_iter().collect();
+    starter_vec.sort_by(|(a, _), (b, _)| a.cmp(b));
     let total_starters: u32 = starter_vec.iter().map(|(_, c)| *c).sum();
 
+    // Freeze the mutable trie into sorted form for deterministic sampling
     PpmTrie {
-        root,
+        root: root.freeze(),
         max_depth,
         unigram_probs,
-        vocab_size: unigram_counts.len(),
+        vocab_size,
         starters: starter_vec,
         total_starters,
     }
@@ -1453,11 +1471,11 @@ fn ppm_sample(trie: &PpmTrie, context: &[String], rng: &mut Rng) -> String {
         let ctx_start = context.len().saturating_sub(depth);
         let ctx = &context[ctx_start..];
 
-        // Navigate to the node for this context
+        // Navigate to the node for this context (sorted vec binary search)
         let mut node = &trie.root;
         let mut found = true;
         for tok in ctx {
-            match node.children.get(tok) {
+            match sorted_vec_get(&node.children, tok) {
                 Some(child) => node = child,
                 None => {
                     found = false;
@@ -1489,7 +1507,7 @@ fn ppm_sample(trie: &PpmTrie, context: &[String], rng: &mut Rng) -> String {
             }
         }
         // Shouldn't reach here, but safety fallback
-        if let Some((word, _)) = node.counts.iter().next() {
+        if let Some((word, _)) = node.counts.first() {
             return word.clone();
         }
     }
@@ -1510,6 +1528,11 @@ fn ppm_sample(trie: &PpmTrie, context: &[String], rng: &mut Rng) -> String {
     String::from("the")
 }
 
+/// Generate text using the PPM trie for variable-order context matching.
+///
+/// Similar to `generate_text` but uses PPM-C escape-based backoff instead
+/// of fixed-order Markov with Witten-Bell interpolation. Produces more
+/// varied text when the corpus is large enough to support deeper contexts.
 fn generate_text_ppm(trie: &PpmTrie, seed: &str, max_words: usize, rng: &mut Rng) -> String {
     let seed_lower = seed.to_lowercase();
     let seed_tokens: Vec<String> = tokenize(&seed_lower);
@@ -1616,7 +1639,7 @@ fn compute_ppm_perplexity(trie: &PpmTrie, text: &str) -> SignalResult<Perplexity
             let mut node = &trie.root;
             let mut valid = true;
             for tok in ctx {
-                match node.children.get(tok) {
+                match sorted_vec_get(&node.children, tok) {
                     Some(child) => node = child,
                     None => {
                         valid = false;
@@ -1633,7 +1656,7 @@ fn compute_ppm_perplexity(trie: &PpmTrie, text: &str) -> SignalResult<Perplexity
             let total = node.total as f64;
             let p_escape = unique / (unique + total);
 
-            if let Some(count) = node.counts.get(next) {
+            if let Some(count) = sorted_vec_get(&node.counts, next) {
                 // Non-escape probability * word probability within context
                 let prob = (1.0 - p_escape) * (*count as f64 / total);
                 log_prob_sum += prob.max(1e-20).log2();
@@ -1646,7 +1669,7 @@ fn compute_ppm_perplexity(trie: &PpmTrie, text: &str) -> SignalResult<Perplexity
 
         if !found_context {
             // Unigram fallback
-            let prob = trie.unigram_probs.get(next).copied().unwrap_or(1.0 / vocab);
+            let prob = sorted_vec_get(&trie.unigram_probs, next).copied().unwrap_or(1.0 / vocab);
             log_prob_sum += prob.max(1e-20).log2();
             unknown += 1;
         }
@@ -1694,7 +1717,7 @@ fn compute_perplexity(chain: &MarkovChain, text: &str) -> SignalResult<Perplexit
         let key = tokens[i - chain.order..i].join(" ");
         let next = &tokens[i];
 
-        if let Some(dist) = chain.transitions.get(&key) {
+        if let Some(dist) = sorted_vec_get(&chain.transitions, &key) {
             let total: f64 = dist.iter().map(|(_, c)| *c as f64).sum();
             let count = dist
                 .iter()
@@ -1706,7 +1729,7 @@ fn compute_perplexity(chain: &MarkovChain, text: &str) -> SignalResult<Perplexit
             // Interpolation weight for backoff: lambda = d * N1+(h) / c(h)
             let lambda = (d * unique_successors) / total.max(1.0);
             // Unigram backoff probability for the next word
-            let p_backoff = chain.unigram_probs.get(next).copied().unwrap_or(1.0 / vocab);
+            let p_backoff = sorted_vec_get(&chain.unigram_probs, next).copied().unwrap_or(1.0 / vocab);
 
             if count > 0.0 {
                 // P(w|h) = max(c(h,w) - d, 0) / c(h) + lambda * P_bo(w)
@@ -1721,7 +1744,7 @@ fn compute_perplexity(chain: &MarkovChain, text: &str) -> SignalResult<Perplexit
             }
         } else {
             // Context not in chain: fall through to unigram
-            let prob = chain.unigram_probs.get(next).copied().unwrap_or(1.0 / vocab);
+            let prob = sorted_vec_get(&chain.unigram_probs, next).copied().unwrap_or(1.0 / vocab);
             log_prob_sum += prob.max(1e-20).log2();
             unknown += 1;
         }
@@ -1742,6 +1765,7 @@ fn compute_perplexity(chain: &MarkovChain, text: &str) -> SignalResult<Perplexit
 
 // ─── Public API ─────────────────────────────────────────────────
 
+#[cfg(test)]
 fn default_profile() -> TimingProfile {
     TimingProfile {
         digraph: None,
@@ -1776,21 +1800,36 @@ pub(crate) fn compute(
     max_words: usize,
     variant: AdversaryVariant,
 ) -> SignalResult<AvatarResult> {
-    // Parse inputs
-    let texts: Vec<String> = serde_json::from_str(corpus_json).unwrap_or_default();
-    let profile: TimingProfile =
-        serde_json::from_str(profile_json).unwrap_or_else(|_| default_profile());
+    // Production path: time-based seed for variety across calls.
+    let seed_val = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(42);
+    compute_seeded(corpus_json, topic, profile_json, max_words, variant, seed_val)
+}
+
+/// Core generation pipeline, separated from `compute` to allow deterministic
+/// seeding in tests. All randomness flows from the single `seed` value.
+/// Given identical inputs and seed, output must be identical across runs.
+pub(crate) fn compute_seeded(
+    corpus_json: &str,
+    topic: &str,
+    profile_json: &str,
+    max_words: usize,
+    variant: AdversaryVariant,
+    seed: u64,
+) -> SignalResult<AvatarResult> {
+    // Parse inputs -- propagate errors instead of silently defaulting.
+    let texts: Vec<String> = serde_json::from_str(corpus_json)
+        .map_err(|e| SignalError::ParseError(format!("corpus JSON: {e}")))?;
+    let profile: TimingProfile = serde_json::from_str(profile_json)
+        .map_err(|e| SignalError::ParseError(format!("profile JSON: {e}")))?;
 
     if texts.is_empty() {
         return Err(SignalError::InsufficientData { needed: 1, got: 0 });
     }
 
-    // Generate with time-based seed for variety
-    let seed_val = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(42);
-    let mut rng = Rng::from_seed(seed_val);
+    let mut rng = Rng::from_seed(seed);
 
     // Choose order based on corpus size (used for Markov variants)
     let order = if texts.len() >= 10 { 2 } else { 1 };
@@ -1814,12 +1853,31 @@ pub(crate) fn compute(
 
     let word_count = text.split_whitespace().count();
 
-    // ── Timing synthesis: baseline or conditional (with optional copula) ──
-    let timing = if variant.uses_conditional_timing() || variant.uses_copula() {
-        synthesize_timing_conditional(&text, &profile, &word_freq, variant.uses_copula(), &mut rng)
+    // ── Timing synthesis: construct IKI + hold samplers per variant ──
+    let sigma = profile.sigma.unwrap_or(40.0);
+    let tau = profile.tau.unwrap_or(80.0);
+    let base_mu = profile.mu.unwrap_or(120.0);
+    let hold_mean = profile.hold_time_mean.unwrap_or(95.0);
+    let hold_std = profile.hold_time_std.unwrap_or(20.0);
+
+    let mut iki_sampler: Box<IkiSampler> = if variant.uses_conditional_timing() {
+        let phi = profile.iki_autocorrelation_lag1.unwrap_or(0.0).clamp(-0.99, 0.99);
+        Box::new(make_ar1_iki(sigma, tau, phi, base_mu))
     } else {
-        synthesize_timing(&text, &profile, &word_freq, &mut rng)
+        Box::new(make_independent_iki(sigma, tau))
     };
+
+    let mut hold_sampler: Box<HoldSampler> = if variant.uses_copula() {
+        let rho = profile.hold_flight_rank_correlation.unwrap_or(0.0);
+        Box::new(make_copula_hold(hold_mean, hold_std, rho))
+    } else {
+        Box::new(make_fixed_hold(hold_mean, hold_std))
+    };
+
+    let timing = synthesize_timing(
+        &text, &profile, &word_freq,
+        &mut *iki_sampler, &mut *hold_sampler, &mut rng,
+    );
     let mut delays = timing.delays;
     let mut keystrokes = timing.keystrokes;
 
@@ -1853,7 +1911,8 @@ pub(crate) fn compute_text_perplexity(
     corpus_json: &str,
     text: &str,
 ) -> SignalResult<PerplexityResult> {
-    let texts: Vec<String> = serde_json::from_str(corpus_json).unwrap_or_default();
+    let texts: Vec<String> = serde_json::from_str(corpus_json)
+        .map_err(|e| SignalError::ParseError(format!("corpus JSON: {e}")))?;
     if texts.is_empty() {
         return Err(SignalError::InsufficientData { needed: 1, got: 0 });
     }
@@ -1976,7 +2035,7 @@ mod tests {
     fn build_chain_unigram_probs_sum_to_one() {
         let texts = sample_corpus();
         let chain = build_chain(&texts, 1);
-        let sum: f64 = chain.unigram_probs.values().sum();
+        let sum: f64 = chain.unigram_probs.iter().map(|(_, p)| p).sum();
         assert!(
             (sum - 1.0).abs() < 1e-6,
             "Unigram probs should sum to ~1.0, got {sum}"
@@ -2191,13 +2250,22 @@ mod tests {
 
     // ── Timing synthesis tests ──
 
+    fn test_synthesize(text: &str, profile: &TimingProfile, word_freq: &HashMap<String, f64>, rng: &mut Rng) -> TimingOutput {
+        let mut iki = make_independent_iki(
+            profile.sigma.unwrap_or(40.0),
+            profile.tau.unwrap_or(80.0),
+        );
+        let mut hold = make_fixed_hold(95.0, 20.0);
+        synthesize_timing(text, profile, word_freq, &mut iki, &mut hold, rng)
+    }
+
     #[test]
     fn timing_delays_all_positive() {
         let texts = sample_corpus();
         let word_freq = build_word_freq(&texts);
         let profile = default_profile();
         let mut rng = make_rng();
-        let result = synthesize_timing("Hello world, this is a test.", &profile, &word_freq, &mut rng);
+        let result = test_synthesize("Hello world, this is a test.", &profile, &word_freq, &mut rng);
         for (i, d) in result.delays.iter().enumerate() {
             assert!(*d > 0.0, "Delay at index {i} should be positive, got {d}");
         }
@@ -2209,7 +2277,7 @@ mod tests {
         let word_freq = build_word_freq(&texts);
         let profile = default_profile();
         let mut rng = make_rng();
-        let result = synthesize_timing("Some words to type out.", &profile, &word_freq, &mut rng);
+        let result = test_synthesize("Some words to type out.", &profile, &word_freq, &mut rng);
         for i in 1..result.keystrokes.len() {
             assert!(
                 result.keystrokes[i].key_down_ms >= result.keystrokes[i - 1].key_down_ms,
@@ -2224,7 +2292,7 @@ mod tests {
         let word_freq = build_word_freq(&texts);
         let profile = default_profile();
         let mut rng = make_rng();
-        let result = synthesize_timing("Testing hold times.", &profile, &word_freq, &mut rng);
+        let result = test_synthesize("Testing hold times.", &profile, &word_freq, &mut rng);
         for (i, k) in result.keystrokes.iter().enumerate() {
             let hold = k.key_up_ms - k.key_down_ms;
             assert!(
@@ -2401,5 +2469,80 @@ mod tests {
         let result = compute_ppm_perplexity(&trie, "I think about what matters").unwrap();
         assert!(result.perplexity > 0.0);
         assert!(result.perplexity.is_finite());
+    }
+
+    // ── Determinism tests ──
+    //
+    // Same seed + same corpus must produce identical output across runs.
+    // If HashMap iteration order leaks into sampling, these fail.
+
+    #[test]
+    fn determinism_baseline_same_seed_same_output() {
+        let corpus = serde_json::to_string(&sample_corpus()).unwrap();
+        let seed = 99999u64;
+        let a = compute_seeded(&corpus, "morning", "{}", 20, AdversaryVariant::Baseline, seed).unwrap();
+        let b = compute_seeded(&corpus, "morning", "{}", 20, AdversaryVariant::Baseline, seed).unwrap();
+        assert_eq!(a.text, b.text, "Same seed should produce identical text");
+        assert_eq!(a.delays.len(), b.delays.len(), "Same seed should produce same delay count");
+        for (i, (da, db)) in a.delays.iter().zip(b.delays.iter()).enumerate() {
+            assert!(
+                (da - db).abs() < 1e-10,
+                "Delay mismatch at index {i}: {da} vs {db}"
+            );
+        }
+    }
+
+    #[test]
+    fn determinism_ppm_same_seed_same_output() {
+        let corpus = serde_json::to_string(&sample_corpus()).unwrap();
+        let seed = 77777u64;
+        let a = compute_seeded(&corpus, "think", "{}", 20, AdversaryVariant::PpmText, seed).unwrap();
+        let b = compute_seeded(&corpus, "think", "{}", 20, AdversaryVariant::PpmText, seed).unwrap();
+        assert_eq!(a.text, b.text, "PPM: same seed should produce identical text");
+        assert_eq!(a.delays.len(), b.delays.len());
+    }
+
+    #[test]
+    fn determinism_full_adversary_same_seed_same_output() {
+        let corpus = serde_json::to_string(&sample_corpus()).unwrap();
+        let profile = r#"{"iki_autocorrelation_lag1": 0.3, "hold_flight_rank_correlation": 0.2, "hold_time_mean": 95.0, "hold_time_std": 20.0, "small_del_rate": 1.5, "large_del_rate": 0.8}"#;
+        let seed = 55555u64;
+        let a = compute_seeded(&corpus, "change", profile, 20, AdversaryVariant::FullAdversary, seed).unwrap();
+        let b = compute_seeded(&corpus, "change", profile, 20, AdversaryVariant::FullAdversary, seed).unwrap();
+        assert_eq!(a.text, b.text, "FullAdversary: same seed should produce identical text");
+        assert_eq!(a.delays.len(), b.delays.len());
+        assert_eq!(a.i_burst_count, b.i_burst_count, "I-burst count should be deterministic");
+    }
+
+    #[test]
+    fn determinism_different_seeds_differ() {
+        let corpus = serde_json::to_string(&sample_corpus()).unwrap();
+        let a = compute_seeded(&corpus, "morning", "{}", 20, AdversaryVariant::Baseline, 11111).unwrap();
+        let b = compute_seeded(&corpus, "morning", "{}", 20, AdversaryVariant::Baseline, 22222).unwrap();
+        // Different seeds should (almost certainly) produce different text
+        assert_ne!(a.text, b.text, "Different seeds should produce different text");
+    }
+
+    // ── JSON parse error tests ──
+
+    #[test]
+    fn compute_invalid_corpus_json_returns_error() {
+        let result = compute_seeded("not json", "topic", "{}", 20, AdversaryVariant::Baseline, 1);
+        assert!(
+            matches!(result, Err(SignalError::ParseError(_))),
+            "Invalid corpus JSON should return ParseError, got {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn compute_invalid_profile_json_returns_error() {
+        let corpus = serde_json::to_string(&sample_corpus()).unwrap();
+        let result = compute_seeded(&corpus, "topic", "not json", 20, AdversaryVariant::Baseline, 1);
+        assert!(
+            matches!(result, Err(SignalError::ParseError(_))),
+            "Invalid profile JSON should return ParseError, got {:?}",
+            result.err()
+        );
     }
 }

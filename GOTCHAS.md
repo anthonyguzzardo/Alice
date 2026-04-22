@@ -18,6 +18,16 @@ Things that look wrong but aren't, things that will bite you, things that are no
 
 - **`COUNT(*)` returns bigint.** postgres.js returns `COUNT(*)` as a string (PG bigint). Every count query in libDb.ts casts with `COUNT(*)::int` to get a JS number. Forget the cast and you get string comparisons.
 
+## Rust / Avatar Engine
+
+- **HashMap iteration is nondeterministic in Rust.** Rust's `HashMap` uses randomized hash seeds, so iteration order changes between runs. If you iterate a `HashMap` to build a probability distribution and then sample from it with a seeded PRNG, the same seed produces different output across runs. This was a real bug in `avatar.rs` that broke reproducibility. The fix: build with `HashMap`, freeze into a sorted `Vec<(K, V)>`, sample from the sorted vec. See `MarkovChain` and `PpmTrie` for the pattern. If you add a new data structure that feeds into sampling, never iterate a `HashMap` on the sampling path.
+
+- **`serde_json::from_str().unwrap_or_default()` silently eats parse errors.** If corpus or profile JSON is malformed, `unwrap_or_default()` returns an empty vec or default struct, and the function proceeds with garbage state. Avatar functions now use `SignalError::ParseError` to propagate parse failures. If you add a new function that deserializes JSON, use `.map_err(|e| SignalError::ParseError(...))` and `?`, never `unwrap_or_default()`.
+
+- **Avatar `compute()` uses a time-based seed. Tests use `compute_seeded()`.** The public `compute()` generates variety by seeding from `SystemTime`. Tests must call `compute_seeded()` with a fixed seed to verify determinism. If you add a new generation function with randomness, provide a seeded variant for testing.
+
+- **`default_profile()` is `#[cfg(test)]` only.** It was removed from production code when `unwrap_or_else(|_| default_profile())` was replaced with error propagation. Tests still use it. If you need a default profile in production, the caller should construct one explicitly.
+
 ## Signal Pipeline
 
 - **`return` in signal family blocks exits the entire pipeline function.** In `libSignalPipeline.ts`, the dynamical, motor, and process signal blocks each have `if (!ds) return;` / `if (!ms) return;` / `if (!ps) return;` when the Rust engine is unavailable. These `return` statements exit `computeAndPersistDerivedSignals` entirely, skipping all subsequent families. This means if dynamical signals fail, motor/semantic/process/cross-session/integrity/profile/reconstruction all get skipped. This is semi-intentional (if Rust is down, most families can't compute) but surprising if you add a new family that doesn't depend on Rust.

@@ -27,50 +27,57 @@ A four-phase plan to position reconstruction validity as a general paradigm and 
 ### Phase 3: Dataset (owner's legwork)
 The irreversible moat. A+G together prove: unmediated longitudinal behavioral data becomes impossible to replicate as AI mediation saturates. Every day of collection increases the value. Key decision still open: scale Alice to multi-user (auth, multi-tenancy, IRB) or keep Alice monastic and let the ghost framework propagate through other instruments.
 
-### Phase 4: Ghost crate extraction (PLANNED, not started)
-Standalone Rust crate `reconstruction-validity` published to crates.io. Extracts the algorithmic core from `avatar.rs` into a generic library other instruments can use. Alice keeps its avatar.rs unchanged.
+### Phase 4: Ghost crate extraction (DONE)
+Standalone Rust crate `reconstruction-validity` built at `/Users/anthonyguzzardo/Developer/Personal/GitHub/reconstruction-validity/`. Extracts the algorithmic core from `avatar.rs` into a generic library other instruments can use. Alice's avatar.rs is completely untouched.
 
-**Architecture plan:**
-- Separate repo (not a workspace in Einstein). Different audience, different release cycle.
-- Generic traits: `BehavioralProfile`, `TextModel`, `TimingModel`, `AdversaryVariant`
-- Keystroke module as feature-gated reference implementation
-- Residual computation in Rust (no TypeScript dependency)
-- Five implementation phases:
-  1. Extract pure algorithms (Markov, PPM, AR(1), copula, PRNG, stats, perplexity)
-  2. Define traits and refactor into generic interface
-  3. Keystroke reference implementation (port Alice's specific synthesis)
-  4. Publish (README, examples, docs, CI, crates.io)
-  5. Alice migration (optional, future -- swap inline algorithms for crate dependency)
+**Status:** Code complete. 50 tests, zero clippy warnings, example runs clean. Files staged in local git but not committed or pushed. Awaiting owner to create GitHub repo and publish to crates.io.
+
+**What was built (Phases 1-4 in one session):**
+1. Extracted pure algorithms from avatar.rs (Markov, PPM, AR(1), copula, PRNG, stats, perplexity, residual computation)
+2. Defined generic traits (`BehavioralProfile`, `TextModel`, `TimingModel`, `AdversaryVariant`)
+3. Built keystroke reference implementation with all 5 adversary variants + `ReconstructionEngine` orchestrator
+4. README, LICENSE (MIT), example (`keystroke_example.rs`), doc-test
 
 **Crate structure:**
 ```
 reconstruction-validity/
+  Cargo.toml            # crate metadata, keystroke feature flag
+  LICENSE               # MIT
+  README.md             # full docs, usage examples, variant table, custom modality guide
   src/
-    lib.rs              # pub API surface
+    lib.rs              # pub API surface, doc-test
     traits.rs           # BehavioralProfile, TextModel, TimingModel, AdversaryVariant
     adversary.rs        # ReconstructionEngine orchestrator
     text/
-      markov.rs         # MarkovChain (order-1/2, Witten-Bell, absolute discounting)
+      mod.rs            # shared tokenizer
+      markov.rs         # MarkovChain (order-1/2, Witten-Bell, absolute discounting, perplexity)
       ppm.rs            # PpmModel (variable-order, Method C escape)
     timing/
-      baseline.rs       # Independent ex-Gaussian
+      mod.rs            # word_difficulty_multiplier (content-process coupling)
+      baseline.rs       # Independent ex-Gaussian + tempo drift
       ar1.rs            # AR(1) conditioned timing
       copula.rs         # Gaussian copula joint sampling
     residual.rs         # Per-dimension delta, L2 norms, family aggregation
     rng.rs              # xoshiro128+, Box-Muller, ex-Gaussian sampling
-    stats.rs            # mean, std_dev, pearson, normalize
-    keystroke.rs        # Reference implementation (feature-gated)
-    revision.rs         # R-burst/I-burst injection (keystroke-specific)
+    stats.rs            # mean, std_dev, pearson, normalize, erfc, linreg
+    keystroke.rs        # KeystrokeProfile, 5 variants, all_variants(), signal extraction
   examples/
-    keystroke_example.rs
-    custom_modality.rs  # skeleton for gait/speech/etc
+    keystroke_example.rs  # end-to-end: corpus -> engine -> residual report
 ```
 
 **Key design decisions:**
-- Traits use associated types (`type Event`, `type CorpusEntry`) not generics
+- Separate repo (not in Einstein workspace). Different audience, different release cycle.
+- Traits use associated types (`type Event`) not generics
+- Keystroke module is feature-gated (`default = ["keystroke"]`)
 - Rng is deterministic and seedable (reproducibility for research)
-- No flate2/napi dependencies in core
-- Alice doesn't change until Phase 5 (optional)
+- No flate2/napi dependencies. Only serde + serde_json.
+- Alice doesn't change until optional Phase 5 (swap inline algorithms for crate dependency)
+
+**To publish:**
+1. Create GitHub repo: `gh repo create reconstruction-validity --public`
+2. Commit: `git commit -m "initial release: reconstruction validity framework"`
+3. Push: `git remote add origin <url> && git push -u origin main`
+4. Publish: `cargo publish` (requires crates.io API token)
 
 ## What was built (prior session, 2026-04-21)
 
@@ -152,8 +159,11 @@ Code comments in `avatar.rs` and `libReconstruction.ts` document this cutover.
 
 ## What's next
 
-### Ghost crate extraction (Phase 4)
-Next concrete engineering task. Start with Phase 1: extract pure algorithms into new repo.
+### Publish reconstruction-validity crate
+Owner to create GitHub repo, commit, push, and publish to crates.io. Code is complete and tested at `../reconstruction-validity/`.
+
+### Dataset strategy decision (Phase 3)
+Key fork: scale Alice to multi-user (auth, multi-tenancy, IRB) or keep monastic and let the ghost framework propagate through other instruments. The irreversible data moat argument (Papers A+G) holds either way, but the path determines what gets built next.
 
 ### Difficulty-residual correlation (data accumulating)
 Difficulty classification began at session 54. Once enough generated questions have reconstruction residuals, the correlation between difficulty and motor residual is testable.
@@ -187,6 +197,7 @@ src/pages/api/instrument-status.ts     -- per-variant convergence data for resea
 papers/option_b_compressed.md          -- Compressed Option B for Science (Phase 1, DONE)
 papers/option_f_draft.md               -- Reconstruction Validity paper (v5, Phase 2, DONE)
 GHOST.md                               -- ghost system documentation (multi-adversary, R-burst calibration)
+../reconstruction-validity/            -- standalone crate (Phase 4, DONE, awaiting publish)
 ```
 
 ## Key design decisions
@@ -202,6 +213,7 @@ GHOST.md                               -- ghost system documentation (multi-adve
 
 ## Test results
 
-- **Rust**: 136 tests pass, zero clippy warnings
-- **TypeScript**: no new type errors in changed files
-- **Pipeline**: all 5 variants producing correct residuals for new sessions
+- **Alice Rust**: 136 tests pass, zero clippy warnings
+- **Alice TypeScript**: no new type errors in changed files
+- **Alice Pipeline**: all 5 variants producing correct residuals for new sessions
+- **reconstruction-validity crate**: 50 tests pass (49 unit + 1 doc-test), zero clippy warnings, example runs clean
