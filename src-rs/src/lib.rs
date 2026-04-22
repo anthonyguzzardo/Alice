@@ -283,6 +283,67 @@ pub fn generate_avatar(
     }
 }
 
+/// Regenerate a ghost from a stored seed for reproducibility verification.
+///
+/// Identical to `generate_avatar` except the PRNG seed is provided explicitly
+/// (as a decimal string, since JS cannot represent u64 without precision loss)
+/// instead of being derived from `SystemTime`. Given the same inputs and seed,
+/// the output is bit-identical to the original generation.
+#[napi]
+#[allow(clippy::needless_pass_by_value)]
+pub fn regenerate_avatar(
+    corpus_json: String,
+    topic: String,
+    profile_json: String,
+    max_words: i32,
+    variant: i32,
+    seed: String,
+) -> AvatarOutput {
+    let seed_val: u64 = match seed.parse() {
+        Ok(v) => v,
+        Err(_) => return AvatarOutput::default(),
+    };
+
+    let av = avatar::AdversaryVariant::from_i32(variant);
+    let r = match avatar::compute_seeded(
+        &corpus_json,
+        &topic,
+        &profile_json,
+        max_words.max(10) as usize,
+        av,
+        seed_val,
+    ) {
+        Ok(r) => r,
+        Err(_) => return AvatarOutput::default(),
+    };
+
+    // Serialize keystroke events into the wire format the signal pipeline expects
+    let stream: Vec<serde_json::Value> = r
+        .keystroke_events
+        .iter()
+        .map(|k| {
+            serde_json::json!({
+                "c": k.character.to_string(),
+                "d": k.key_down_ms,
+                "u": k.key_up_ms
+            })
+        })
+        .collect();
+    let keystroke_stream_json = serde_json::to_string(&stream).unwrap_or_default();
+
+    AvatarOutput {
+        text: r.text,
+        delays: r.delays,
+        keystroke_stream_json,
+        word_count: i32::try_from(r.word_count).unwrap_or(i32::MAX),
+        order: i32::try_from(r.order).unwrap_or(0),
+        chain_size: i32::try_from(r.chain_size).unwrap_or(0),
+        i_burst_count: i32::try_from(r.i_burst_count).unwrap_or(i32::MAX),
+        variant: r.variant as i32,
+        seed,
+    }
+}
+
 // ─── Profile distance (mediation detection) ────────────────────
 
 #[napi(object)]
