@@ -244,29 +244,14 @@ const responseId = parseInt(id ?? '', 10);
           if (a < 1.1) return 'pink-brown';
           return 'brown noise';
         }
-        function peRegime(pe) {
-          if (pe == null) return '';
-          if (pe > 0.9) return 'exploratory';
-          if (pe > 0.75) return 'varied';
-          if (pe > 0.6) return 'patterned';
-          return 'formulaic';
-        }
-        function lamRegime(lam) {
-          if (lam == null) return '';
-          const pct = lam * 100;
-          if (pct < 15) return 'fluid';
-          if (pct < 35) return 'moderate';
-          if (pct < 55) return 'sticky';
-          return 'trapped';
-        }
         const dynamicalPanel = ds ? `
           <section class="panel">
             <h2>Dynamical signals · nonlinear keystroke analysis</h2>
             <div class="stat-grid">
-              <div><div class="k">permutation entropy</div><div class="v">${ds.permutationEntropy != null ? ds.permutationEntropy.toFixed(3) + ' · ' + peRegime(ds.permutationEntropy) : '—'}</div></div>
+              <div><div class="k">permutation entropy</div><div class="v">${ds.permutationEntropy != null ? ds.permutationEntropy.toFixed(3) + ' <span style="color:var(--text-faint);font-size:0.85em;">(0–1)</span>' : '—'}</div></div>
               <div><div class="k">DFA alpha</div><div class="v">${ds.dfaAlpha != null ? ds.dfaAlpha.toFixed(3) + ' · ' + dfaRegime(ds.dfaAlpha) : '—'}</div></div>
               <div><div class="k">RQA determinism</div><div class="v">${ds.rqaDeterminism != null ? (ds.rqaDeterminism * 100).toFixed(1) + '%' : '—'}</div></div>
-              <div><div class="k">RQA laminarity</div><div class="v">${ds.rqaLaminarity != null ? (ds.rqaLaminarity * 100).toFixed(1) + '% · ' + lamRegime(ds.rqaLaminarity) : '—'}</div></div>
+              <div><div class="k">RQA laminarity</div><div class="v">${ds.rqaLaminarity != null ? (ds.rqaLaminarity * 100).toFixed(1) + '%' : '—'}</div></div>
               <div><div class="k">RQA trapping time</div><div class="v">${ds.rqaTrappingTime != null ? ds.rqaTrappingTime.toFixed(1) : '—'}</div></div>
               <div><div class="k">RQA recurrence rate</div><div class="v">${ds.rqaRecurrenceRate != null ? (ds.rqaRecurrenceRate * 100).toFixed(1) + '%' : '—'}</div></div>
               <div><div class="k">TE hold→flight</div><div class="v">${ds.teHoldToFlight != null ? ds.teHoldToFlight.toFixed(4) + ' bits' : '—'}</div></div>
@@ -279,17 +264,11 @@ const responseId = parseInt(id ?? '', 10);
         ` : '';
 
         const ms = motorSignals;
-        function tauRegime(tp) {
-          if (tp == null) return '';
-          if (tp > 0.7) return 'cognitive-dominant';
-          if (tp > 0.4) return 'mixed';
-          return 'motor-dominant';
-        }
         const motorPanel = ms ? `
           <section class="panel">
             <h2>Motor signals · ex-Gaussian decomposition + motor coordination</h2>
             <div class="stat-grid">
-              <div><div class="k">ex-Gaussian tau</div><div class="v">${ms.ex_gaussian_tau != null ? ms.ex_gaussian_tau.toFixed(1) + 'ms · ' + tauRegime(ms.tau_proportion) : '—'}</div></div>
+              <div><div class="k">ex-Gaussian tau</div><div class="v">${ms.ex_gaussian_tau != null ? ms.ex_gaussian_tau.toFixed(1) + 'ms' : '—'}</div></div>
               <div><div class="k">ex-Gaussian mu</div><div class="v">${ms.ex_gaussian_mu != null ? ms.ex_gaussian_mu.toFixed(1) + 'ms' : '—'}</div></div>
               <div><div class="k">ex-Gaussian sigma</div><div class="v">${ms.ex_gaussian_sigma != null ? ms.ex_gaussian_sigma.toFixed(1) + 'ms' : '—'}</div></div>
               <div><div class="k">tau proportion</div><div class="v">${ms.tau_proportion != null ? (ms.tau_proportion * 100).toFixed(1) + '%' : '—'}</div></div>
