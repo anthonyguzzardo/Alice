@@ -86,6 +86,7 @@ export interface AvatarResult {
   chainSize: number;
   iBurstCount: number;
   variant: number;
+  seed: string;
 }
 
 // ─── Null coercion helpers ────────────────────────────────────────
@@ -348,6 +349,7 @@ export function generateAvatar(
       chainSize: result.chainSize,
       iBurstCount: result.iBurstCount,
       variant: result.variant,
+      seed: result.seed,
     };
   } catch (err) {
     logError('signalsNative.avatar', err);

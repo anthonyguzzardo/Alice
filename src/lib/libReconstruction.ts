@@ -37,6 +37,7 @@ import {
 } from './libSignalsNative.ts';
 import { computeSemanticSignals, type SemanticSignals } from './libSemanticSignals.ts';
 import { logError } from './utlErrorLog.ts';
+import { createHash } from 'node:crypto';
 
 // ─── Constants ─────────────────────────────────────────────────────
 
@@ -89,6 +90,7 @@ async function computeForVariant(
   profileJson: string,
   corpusSize: number,
   sessionCount: number,
+  corpusSha256: string,
   realDyn: Awaited<ReturnType<typeof getDynamicalSignals>>,
   realMot: Awaited<ReturnType<typeof getMotorSignals>>,
   realSem: Awaited<ReturnType<typeof getSemanticSignals>>,
@@ -172,6 +174,10 @@ async function computeForVariant(
   const row: ReconstructionResidualInput = {
     adversary_variant_id: variantId,
     question_source_id: questionSourceId,
+    avatar_seed: avatar.seed,
+    profile_snapshot_json: profileJson,
+    corpus_sha256: corpusSha256,
+    avatar_topic: questionText,
     avatar_text: avatar.text,
     avatar_word_count: avatar.wordCount,
     avatar_markov_order: avatar.markovOrder,
@@ -363,13 +369,16 @@ export async function computeReconstructionResidual(questionId: number): Promise
   const corpusSize = textRows.length;
   const sessionCount = (p.session_count as number) ?? 0;
 
+  // Compute corpus hash ONCE per session (shared across all 5 variants)
+  const corpusSha256 = createHash('sha256').update(corpusJson).digest('hex');
+
   // Run all 5 variants sequentially
   for (const variantId of ALL_VARIANTS) {
     try {
       await computeForVariant(
         questionId, variantId, corpusJson, questionText, questionSourceId,
         realWordCount, realText, profileJson, corpusSize, sessionCount,
-        realDyn, realMot, realSem,
+        corpusSha256, realDyn, realMot, realSem,
       );
     } catch (err) {
       logError('reconstruction.variant', err, { questionId, variantId });
