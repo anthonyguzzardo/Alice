@@ -8,6 +8,68 @@ Newest first.
 
 ---
 
+## INC-008: Observatory discovery badges -- statistical rigor pass
+
+**Date:** 2026-04-22
+**Type:** Methods correction (presentation layer was making unsupported statistical claims)
+
+### What was wrong
+
+The observatory discoveries section displayed coupling correlations with "strong" and "moderate" badges based on hardcoded thresholds: |r| >= 0.5 was "strong," |r| >= 0.3 was "moderate." These labels implied statistical confidence but had no significance testing behind them.
+
+Specific problems:
+
+1. **No sample-size gate on badge strength.** A correlation of r=0.55 from n=10 entries displayed as "strong" despite having p > 0.05 (critical r at n=10 is ~0.63). The badge claimed strength that the data could not support.
+
+2. **No multiple-comparisons awareness.** The system tests 784 raw correlation pairs (147 behavioral + 385 semantic + 252 emotion-behavior, each across multiple lag values), reduced to 139 stored pairs via best-lag selection. Displaying the top results without any correction inflates the false-positive rate. (FDR correction is deferred to a future pass; this change addresses the sample-size gate only.)
+
+3. **Stability analysis disconnected from badges.** `libCouplingStability.ts` computed rolling-window CV for emotion-behavior couplings but fed a separate page (`/observatory/coupling`). The discoveries page ignored stability entirely. A coupling could be flagged as unstable (CV >= 0.5) by the stability system and still display as "strong" in discoveries.
+
+### Resolution
+
+**Dynamic critical-r gate.** Replaced the hardcoded |r| >= 0.3 floor with `max(criticalR(n), 0.3)`, where `criticalR(n)` computes the two-tailed Pearson r significance threshold at alpha=0.05 using a Cornish-Fisher approximation of the t-distribution quantile (Abramowitz & Stegun 26.7.5, < 0.5% error for df >= 3). Correlations below this threshold are not displayed. The 0.3 floor preserves a practical relevance gate (~9% shared variance) at large n where weak correlations become technically significant.
+
+Verified against published t-table values:
+
+| n | criticalR(n) | max(rCrit, 0.3) |
+|---|---|---|
+| 10 | 0.6236 | 0.6236 |
+| 15 | 0.5108 | 0.5108 |
+| 20 | 0.4422 | 0.4422 |
+| 25 | 0.3952 | 0.3952 |
+| 30 | 0.3604 | 0.3604 |
+| 50 | 0.2786 | 0.3000 |
+
+**Two-state badge system.** Replaced "strong"/"moderate" with "established"/"provisional":
+- **Established:** passes critical-r gate AND the emotion-behavior coupling is stable (CV < 0.5 from `libCouplingStability.ts`).
+- **Provisional:** passes critical-r gate but either fails stability, stability data is unavailable, or the coupling is same-domain (behavioral-only or semantic-only).
+- Below critical-r: not displayed.
+
+**Stability wiring.** `synthesis.ts` now calls `computeCouplingStability()` and builds a lookup set of stable emotion-behavior pair keys. If the stability computation fails or returns empty (e.g., insufficient data for rolling windows), all badges default to "provisional."
+
+### Known limitation
+
+`libCouplingStability.ts` only analyzes emotion-behavior cross-domain pairs. Same-domain couplings (behavioral-only, semantic-only) can never reach "established" under this design. This is a structural asymmetry, not a bug. Extending the stability system to same-domain pairs is a phase-two follow-up.
+
+### Files changed
+
+| File | Change |
+|---|---|
+| `src/lib/utlCriticalR.ts` | New. Exports `criticalR(n)`. |
+| `src/pages/api/observatory/synthesis.ts` | Dynamic r gate, stability wiring, two-state badges. |
+| `src/pages/observatory/index.astro` | Badge CSS class mapping updated. |
+| `GOTCHAS.md` | Two new entries documenting the badge asymmetry and the critical-r gate behavior. |
+
+Zero schema changes. All coupling tables (`tb_coupling_matrix`, `tb_semantic_coupling`, `tb_emotion_behavior_coupling`) are read-only from this change.
+
+### What this does NOT fix
+
+- **FDR correction:** The 784-test multiple-comparisons surface is not corrected. The critical-r gate addresses single-test significance only. FDR is explicitly deferred.
+- **Same-domain stability analysis:** Behavioral and semantic couplings have no convergence data.
+- **Lag-selection inflation:** Best-lag selection (picking max |r| across 4-7 lags per pair) inflates the effective false-positive rate. The critical-r threshold does not account for this.
+
+---
+
 ## INC-007: Daily delta timing fix and dead code removal
 
 **Date:** 2026-04-22
