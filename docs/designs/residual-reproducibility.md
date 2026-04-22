@@ -358,9 +358,11 @@ If a future profile model improvement warrants reanalysis, the correct approach 
 
 ### Scientific claim (draft for REPRODUCIBILITY.md)
 
-> **Reconstruction residual reproducibility.** Every reconstruction residual computed after [migration date] is a reproducible artifact. The PRNG seed and exact profile snapshot used to generate the ghost are stored alongside the residual. Given these inputs and the response corpus (recoverable from `tb_responses`), any build of Alice on the pinned toolchain can regenerate the identical ghost and verify the residual.
+> **Reconstruction residual reproducibility.** Every reconstruction residual computed after [migration date] stores the PRNG seed, exact profile snapshot, corpus hash, and topic used to generate the ghost. Given these stored inputs and the response corpus (recoverable from `tb_responses`, verified by SHA-256), any build of Alice on the pinned toolchain can regenerate the identical ghost and verify the residual.
 >
-> This guarantee composes with signal reproducibility (INC-002/INC-005): the signal computation applied to both the real keystroke stream and the ghost's synthetic stream is bit-identical across clean rebuilds. The ghost generation itself is seed-deterministic and build-stable (verified by CI). The full chain from stored inputs to stored residual is reproducible end to end.
+> **Scope of the guarantee.** Dynamical and motor residuals are bit-reproducible end to end. The ghost generation (seed-deterministic, build-stable) and the signal computation (Neumaier summation, deterministic iteration, pinned toolchain) are both verified by CI across clean rebuilds. The full chain from stored inputs to stored dynamical/motor residual values is reproducible.
+>
+> Semantic residuals (idea density, lexical sophistication, epistemic stance, integrative complexity, deep cohesion, text compression ratio) depend on external NLP APIs (Claude, Voyage) whose behavior can change independently of Alice's code. Semantic residuals are stored and verifiable against regenerated ghost text, but are not covered by the bit-reproducibility guarantee. They are classified as externally-dependent.
 >
 > Residuals computed before [migration date] are historical artifacts. They carry `NULL` seed and profile snapshot columns. Their stored values are the permanent record; they cannot be independently regenerated.
 
@@ -368,7 +370,7 @@ If a future profile model improvement warrants reanalysis, the correct approach 
 
 > Reconstruction residuals are computed by generating a synthetic keystroke stream (ghost) from the participant's statistical writing profile and comparing the signals of the ghost against the signals of the real session. Five adversary variants isolate which behavioral dimensions carry signal. The residual -- what the ghost cannot reproduce -- is the cognitive signature.
 >
-> Each residual is a reproducible artifact. The PRNG seed and profile state used for generation are persisted alongside the result. Independent verification is possible by regenerating the ghost from stored inputs and recomputing signals. Cross-build determinism of both the ghost engine and the signal pipeline is enforced by CI on every code change.
+> Each residual is a verifiable artifact. The PRNG seed, profile state, corpus hash, and topic used for generation are persisted alongside the result. Independent verification is possible by regenerating the ghost from stored inputs and recomputing signals. Cross-build determinism of both the ghost engine and the signal pipeline is enforced by CI on every code change. Dynamical and motor residuals are bit-reproducible end to end; semantic residuals are reproducible to the extent that external NLP APIs are stable.
 
 ---
 
@@ -390,6 +392,8 @@ Commit order for clean review:
 4. **Schema migration.** Add `avatar_seed`, `profile_snapshot_json`, `corpus_sha256`, and `avatar_topic` columns to `tb_reconstruction_residuals`. Update `dbAlice_Tables.sql` to include the new columns in the CREATE TABLE definition.
 
 5. **TypeScript: persist seed, profile snapshot, corpus hash, and topic.** `libReconstruction.ts` captures seed from generation result, profile JSON from the already-constructed object, SHA-256 of corpus JSON, and the topic string. `saveReconstructionResidual` writes all new columns.
+
+   **Implementation note:** Compute `corpus_sha256` once per session in `computeReconstructionResidual()` (the outer function), not once per variant in `computeForVariant()`. The corpus is shared across all five variants. Hashing five times is wasteful and introduces a failure mode where a race condition or mutation between variant calls could produce different hashes for the same corpus. Hash once, pass to each `computeForVariant()` call.
 
 6. **TypeScript: `regenerateAvatar` + `verifyResidual` + integration test.** New functions in `libSignalsNative.ts` and `libReconstruction.ts`. Integration test script (`src/scripts/verify-residual-integration.ts`) exercises the full chain on a real stored residual. Not wired to any API route; available for scripts, manual verification, and future automated sweeps.
 
@@ -491,3 +495,5 @@ This caveat does not weaken the reproducibility claim for the signal engine (Rus
 2. **Topic as input:** Stored as `avatar_topic TEXT`. Currently equals question text (passed directly, no derivation function). Closes the door on future topic derivation drift.
 
 3. **`max_words` source:** Already stored as `real_word_count` on the residual row. No additional persistence needed. Derived from `tb_session_summaries.word_count`, which is immutable per session.
+
+4. **Semantic signals and external API dependence.** Semantic signal computation (idea density, lexical sophistication, epistemic stance, integrative complexity, deep cohesion) depends on external APIs (Claude, Voyage) that can change behavior independently of Alice's code. Model updates, prompt caching behavior, and embedding space revisions are outside Alice's control. For Stage 1, semantic residuals are classified as **externally-dependent** and excluded from the strong reproducibility guarantee. **Dynamical and motor residuals are bit-reproducible end-to-end. Semantic residuals are not.** Future work may address semantic reproducibility via API response snapshotting (storing the raw API output alongside the computed signal); not in scope here.
