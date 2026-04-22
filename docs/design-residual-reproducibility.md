@@ -99,7 +99,7 @@ ALTER TABLE tb_reconstruction_residuals
 - The profile JSON is already constructed in `libReconstruction.ts` (lines 329-356). Just persist what's already in memory.
 
 **Cons:**
-- Redundancy. Five variants per session, each storing the same profile blob. The profile JSON is ~2-4KB. That's 10-20KB per session, ~7MB/year at daily journaling. Not a storage concern.
+- Redundancy. Five variants per session, each storing the same profile blob. **Measured:** the profile JSON as constructed by `libReconstruction.ts` (the curated object with field renaming, not the full database row) is **3,134 bytes** for a real profile. The full database row is 31KB, but that includes `trigram_model_json` (26.8KB) and `digraph_aggregate_json` (2.3KB raw), neither of which are passed in full. The curated object is what matters. That's ~15KB per session across five variants, ~5.5MB/year at daily journaling. Not a storage concern.
 - Schema coupling. If the profile JSON shape changes (new fields), old snapshots have the old shape. This is actually a feature, not a bug: the snapshot records what was used, not what's current.
 
 ### Option B: Versioned profile table
@@ -135,7 +135,7 @@ The deciding factor: the profile snapshot that matters is not the database row. 
 
 Option B stores a normalized approximation of the input, then requires a mapping layer to reconstruct the actual input. That mapping layer is itself a source of irreproducibility if it changes.
 
-The redundancy cost (same JSON across five variant rows) is ~15KB/session. At daily journaling, that's ~5.5MB/year. Irrelevant.
+The redundancy cost (same 3.1KB JSON across five variant rows) is ~15KB/session. At daily journaling, that's ~5.5MB/year. Irrelevant.
 
 ---
 
@@ -150,9 +150,33 @@ The corpus is reproducible from the database without snapshotting, as long as:
 
 All three hold in Alice's current design (single user, no edit capability, logical-FK-aware deletion). The corpus does not need to be stored inline.
 
-However, the `corpus_size` column already exists on `tb_reconstruction_residuals`. This serves as a checksum: if regeneration produces a different corpus size than stored, the response history has changed and the regeneration is not valid against the original.
+**Integrity check: SHA-256 hash.** The existing `corpus_size` column is a coarse check (response count). It would not detect a future "edit response" feature or a text corruption. Store a SHA-256 hash of the serialized `corpusJson` string as a new column. At verification time, reconstruct the corpus from `tb_responses`, hash it, and compare. If the hash doesn't match, the corpus has changed and regeneration is not valid against the original.
 
-**No schema change needed.** Document the corpus reproducibility assumption and the `corpus_size` integrity check.
+```sql
+ALTER TABLE tb_reconstruction_residuals
+  ADD COLUMN corpus_sha256 TEXT;
+
+COMMENT ON COLUMN tb_reconstruction_residuals.corpus_sha256 IS
+  'SHA-256 hex digest of the corpusJson string passed to generateAvatar(). NULL for pre-reproducibility-era rows.';
+```
+
+Computation: `crypto.createHash('sha256').update(corpusJson).digest('hex')` in `libReconstruction.ts`. One hash per session (shared across all five variants; same corpus for each).
+
+## Component 3a: Topic Persistence
+
+The ghost receives `topic` as a seed word for Markov text generation. Currently this is the raw question text, passed directly from `tb_questions.text` through `libReconstruction.ts` (line 100) to `generateAvatar()`. There is no intermediate `topic_from_question()` function today, but if one were introduced later, it would become an implicit source of regeneration drift.
+
+Store the resolved topic string alongside the residual:
+
+```sql
+ALTER TABLE tb_reconstruction_residuals
+  ADD COLUMN avatar_topic TEXT;
+
+COMMENT ON COLUMN tb_reconstruction_residuals.avatar_topic IS
+  'Topic string passed to generateAvatar(). Currently equals question text. NULL for pre-reproducibility-era rows.';
+```
+
+Cost: a few hundred bytes per row. Closes the door on topic derivation drift permanently. At regeneration time, use the stored topic, not a re-derivation from question text.
 
 ---
 
@@ -290,13 +314,21 @@ Single migration file: `db/sql/migrations/NNN_residual_reproducibility.sql`
 
 ALTER TABLE tb_reconstruction_residuals
   ADD COLUMN avatar_seed TEXT,
-  ADD COLUMN profile_snapshot_json JSONB;
+  ADD COLUMN profile_snapshot_json JSONB,
+  ADD COLUMN corpus_sha256 TEXT,
+  ADD COLUMN avatar_topic TEXT;
 
 COMMENT ON COLUMN tb_reconstruction_residuals.avatar_seed IS
   'PRNG seed (u64 decimal string) used to generate the ghost. NULL for pre-reproducibility-era rows.';
 
 COMMENT ON COLUMN tb_reconstruction_residuals.profile_snapshot_json IS
   'Exact profile JSON passed to generateAvatar() at computation time. NULL for pre-reproducibility-era rows.';
+
+COMMENT ON COLUMN tb_reconstruction_residuals.corpus_sha256 IS
+  'SHA-256 hex digest of the corpusJson string passed to generateAvatar(). NULL for pre-reproducibility-era rows.';
+
+COMMENT ON COLUMN tb_reconstruction_residuals.avatar_topic IS
+  'Topic string passed to generateAvatar(). Currently equals question text. NULL for pre-reproducibility-era rows.';
 ```
 
 ### Historical residuals
@@ -344,6 +376,11 @@ If a future profile model improvement warrants reanalysis, the correct approach 
 Commit order for clean review:
 
 1. **Rust: expose seed from `compute()`.** New `SeededAvatarResult` struct, `AvatarOutput` gains `seed: String` field. No behavior change; existing callers receive the seed and can ignore it.
+
+   **Caller audit (verified 2026-04-22):**
+   - `avatar::compute()` is called by exactly one site: `lib.rs:241` (`generate_avatar` napi entry point). Update in this commit.
+   - `avatar::compute_seeded()` is called by: `avatar::compute()` (line 1808), plus 8 test call sites in `avatar.rs` (lines 2483-2541). Tests call `compute_seeded` directly and are unaffected by the `compute()` return type change.
+   - No other Rust-internal callers. No examples directory. Clean upgrade path.
 
 2. **Rust: add `regenerate_avatar` napi entry point.** Takes explicit seed string. Calls `compute_seeded()`. Tests.
 
