@@ -1793,19 +1793,28 @@ fn default_profile() -> TimingProfile {
     }
 }
 
+/// Result of `compute()`: the avatar output plus the PRNG seed used.
+/// The seed is needed for reproducibility -- store it to regenerate the same ghost.
+#[derive(Debug)]
+pub(crate) struct SeededAvatarResult {
+    pub(crate) result: AvatarResult,
+    pub(crate) seed: u64,
+}
+
 pub(crate) fn compute(
     corpus_json: &str,
     topic: &str,
     profile_json: &str,
     max_words: usize,
     variant: AdversaryVariant,
-) -> SignalResult<AvatarResult> {
+) -> SignalResult<SeededAvatarResult> {
     // Production path: time-based seed for variety across calls.
     let seed_val = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(42);
-    compute_seeded(corpus_json, topic, profile_json, max_words, variant, seed_val)
+    let result = compute_seeded(corpus_json, topic, profile_json, max_words, variant, seed_val)?;
+    Ok(SeededAvatarResult { result, seed: seed_val })
 }
 
 /// Core generation pipeline, separated from `compute` to allow deterministic
@@ -2308,7 +2317,9 @@ mod tests {
     fn compute_produces_output() {
         let corpus = serde_json::to_string(&sample_corpus()).unwrap();
         let profile = "{}";
-        let result = compute(&corpus, "morning", profile, 20, AdversaryVariant::Baseline).unwrap();
+        let seeded = compute(&corpus, "morning", profile, 20, AdversaryVariant::Baseline).unwrap();
+        assert!(!seeded.seed.to_string().is_empty(), "Should have a seed");
+        let result = seeded.result;
         assert!(!result.text.is_empty(), "Should produce text");
         assert!(!result.delays.is_empty(), "Should produce delays");
         assert!(!result.keystroke_events.is_empty(), "Should produce keystroke events");
@@ -2327,7 +2338,7 @@ mod tests {
     fn compute_with_revision_profile() {
         let corpus = serde_json::to_string(&sample_corpus()).unwrap();
         let profile = r#"{"small_del_rate": 2.0, "large_del_rate": 1.0, "revision_timing_bias": 0.6}"#;
-        let result = compute(&corpus, "think", profile, 30, AdversaryVariant::Baseline).unwrap();
+        let result = compute(&corpus, "think", profile, 30, AdversaryVariant::Baseline).unwrap().result;
         // With revisions, keystrokes should include backspace characters
         let has_backspace = result.keystroke_events.iter().any(|k| k.character == '\u{0008}');
         assert!(has_backspace, "Revision profile should inject backspace events");
@@ -2336,7 +2347,7 @@ mod tests {
     #[test]
     fn compute_keystroke_stream_has_wire_format() {
         let corpus = serde_json::to_string(&sample_corpus()).unwrap();
-        let result = compute(&corpus, "time", "{}", 10, AdversaryVariant::Baseline).unwrap();
+        let result = compute(&corpus, "time", "{}", 10, AdversaryVariant::Baseline).unwrap().result;
         // Every keystroke event should have valid character, key_down, key_up
         for (i, k) in result.keystroke_events.iter().enumerate() {
             assert!(
@@ -2398,7 +2409,7 @@ mod tests {
     fn compute_conditional_timing_produces_output() {
         let corpus = serde_json::to_string(&sample_corpus()).unwrap();
         let profile = r#"{"iki_autocorrelation_lag1": 0.4}"#;
-        let result = compute(&corpus, "morning", profile, 20, AdversaryVariant::ConditionalTiming).unwrap();
+        let result = compute(&corpus, "morning", profile, 20, AdversaryVariant::ConditionalTiming).unwrap().result;
         assert!(!result.text.is_empty());
         assert_eq!(result.variant, 2);
     }
@@ -2407,7 +2418,7 @@ mod tests {
     fn compute_copula_motor_produces_output() {
         let corpus = serde_json::to_string(&sample_corpus()).unwrap();
         let profile = r#"{"hold_flight_rank_correlation": 0.3, "hold_time_mean": 90.0, "hold_time_std": 18.0}"#;
-        let result = compute(&corpus, "morning", profile, 20, AdversaryVariant::CopulaMotor).unwrap();
+        let result = compute(&corpus, "morning", profile, 20, AdversaryVariant::CopulaMotor).unwrap().result;
         assert!(!result.text.is_empty());
         assert_eq!(result.variant, 3);
     }
@@ -2415,7 +2426,7 @@ mod tests {
     #[test]
     fn compute_ppm_text_produces_output() {
         let corpus = serde_json::to_string(&sample_corpus()).unwrap();
-        let result = compute(&corpus, "morning", "{}", 20, AdversaryVariant::PpmText).unwrap();
+        let result = compute(&corpus, "morning", "{}", 20, AdversaryVariant::PpmText).unwrap().result;
         assert!(!result.text.is_empty());
         assert_eq!(result.variant, 4);
     }
@@ -2424,7 +2435,7 @@ mod tests {
     fn compute_full_adversary_produces_output() {
         let corpus = serde_json::to_string(&sample_corpus()).unwrap();
         let profile = r#"{"iki_autocorrelation_lag1": 0.3, "hold_flight_rank_correlation": 0.2, "hold_time_mean": 95.0, "hold_time_std": 20.0}"#;
-        let result = compute(&corpus, "morning", profile, 20, AdversaryVariant::FullAdversary).unwrap();
+        let result = compute(&corpus, "morning", profile, 20, AdversaryVariant::FullAdversary).unwrap().result;
         assert!(!result.text.is_empty());
         assert_eq!(result.variant, 5);
     }
@@ -2440,7 +2451,7 @@ mod tests {
             AdversaryVariant::PpmText,
             AdversaryVariant::FullAdversary,
         ] {
-            let result = compute(&corpus, "morning", profile, 15, v).unwrap();
+            let result = compute(&corpus, "morning", profile, 15, v).unwrap().result;
             for (i, k) in result.keystroke_events.iter().enumerate() {
                 assert!(
                     k.key_up_ms >= k.key_down_ms,

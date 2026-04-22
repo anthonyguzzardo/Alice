@@ -209,6 +209,10 @@ pub struct AvatarOutput {
     pub i_burst_count: i32,
     /// Which adversary variant produced this result (1-5).
     pub variant: i32,
+    /// PRNG seed used for this generation (u64 as decimal string).
+    /// Store this to reproduce the exact same ghost via `regenerate_avatar`.
+    /// Serialized as a string because JS Number loses precision above 2^53.
+    pub seed: String,
 }
 
 #[napi(object)]
@@ -238,16 +242,19 @@ pub fn generate_avatar(
     variant: i32,
 ) -> AvatarOutput {
     let av = avatar::AdversaryVariant::from_i32(variant);
-    let r = match avatar::compute(
+    let seeded = match avatar::compute(
         &corpus_json,
         &topic,
         &profile_json,
         max_words.max(10) as usize,
         av,
     ) {
-        Ok(r) => r,
+        Ok(s) => s,
         Err(_) => return AvatarOutput::default(),
     };
+
+    let seed_str = seeded.seed.to_string();
+    let r = seeded.result;
 
     // Serialize keystroke events into the wire format the signal pipeline expects
     let stream: Vec<serde_json::Value> = r
@@ -272,6 +279,7 @@ pub fn generate_avatar(
         chain_size: i32::try_from(r.chain_size).unwrap_or(0),
         i_burst_count: i32::try_from(r.i_burst_count).unwrap_or(i32::MAX),
         variant: r.variant as i32,
+        seed: seed_str,
     }
 }
 
