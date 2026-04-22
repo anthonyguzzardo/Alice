@@ -8,36 +8,85 @@ Newest first.
 
 ---
 
-## DEFERRED: Residual reanalysis capability
+## INC-006: Reconstruction residual reproducibility
 
-**Date noted:** 2026-04-22
-**Type:** Architectural decision (deferred -> **approved for implementation**)
-**Status:** Design approved. Full design doc: `docs/design-residual-reproducibility.md`. Implementation pending.
+**Date:** 2026-04-22
+**Type:** Methods event (architectural upgrade, not an incident)
+**Design doc:** `docs/designs/residual-reproducibility.md`
+**Commits:** `9d193ea` through `a4ea6b5` (7 commits)
 
-### Current state
+### What changed
 
-Ghost output is ephemeral. The production path (`avatar::compute`) uses a time-based seed, generates the ghost once at submission time, computes residuals against real signals, and persists the residuals as numbers in `tb_reconstruction_residuals`. The seed is never stored. The idempotency gate (`getReconstructionResidual`) ensures the ghost is never regenerated for the same session+variant.
+Reconstruction residuals are now reproducible scientific artifacts. Every residual computed after 2026-04-22 stores the exact inputs needed to regenerate the ghost that produced it:
 
-This means residuals are frozen artifacts. There is no path to regenerate the ghost that produced a given residual, and no way to verify a stored residual against a fresh computation.
+- **PRNG seed** (`avatar_seed TEXT`): the u64 seed used by the ghost engine, serialized as a decimal string (JS cannot represent u64 without precision loss).
+- **Profile snapshot** (`profile_snapshot_json JSONB`): the exact JSON passed to `generateAvatar()` at computation time (3.1KB measured, the curated object with field renaming, not the full 31KB database row).
+- **Corpus hash** (`corpus_sha256 TEXT`): SHA-256 of the serialized corpus JSON, for integrity verification at regeneration time.
+- **Topic string** (`avatar_topic TEXT`): the topic passed to `generateAvatar()` (currently equals question text).
 
-### What reanalysis would require
+Schema: migration `011_residual_reproducibility.sql`. 130 pre-existing rows have NULL for all four columns (pre-reproducibility-era artifacts).
 
-If Alice should support regenerating ghosts on demand (e.g., to verify stored residuals, recompute after profile model improvements, or audit historical data):
+### Rust changes
 
-1. **Seed column** on `tb_reconstruction_residuals` (backfill historical rows as `NULL`)
-2. **Profile snapshot** at generation time (profiles update as new sessions arrive; reconstructing a January ghost in June requires the January profile state)
-3. **Regeneration API** that takes `(session_id, variant_id, stored_seed, stored_profile)` and produces an identical ghost
-4. **Cross-build ghost determinism in CI** so regeneration is trustworthy across recompilations (PRNG + sorted-vec sampling producing identical sequences for a given seed)
+- `avatar::compute()` returns `SeededAvatarResult` (result + seed). The seed is no longer discarded.
+- `AvatarOutput` (napi boundary) includes `seed: String`.
+- New napi entry point `regenerate_avatar` takes an explicit seed string and calls `compute_seeded()` directly.
+- Cross-build ghost determinism verified by CI: `tests/avatar_reproducibility.rs` snapshots all 5 adversary variants with fixed (corpus, profile, seed) and diffs across clean rebuilds. All 7 snapshots (2 signal + 5 avatar) bit-identical.
 
-### Why this is deferred
+### Verification on production data
 
-Cross-build ghost reproducibility has no current consumer. The ghost is stochastic by design (time-seeded), residuals are computed once and frozen, and the idempotency gate prevents recomputation. Adding cross-build ghost determinism to CI without the seed storage and profile snapshotting infrastructure would be defensive programming with nothing to defend.
+The reproducibility chain was verified end-to-end on real production data using `src/scripts/verify-residual-integration.ts`. The script deletes a pre-reproducibility-era residual, recomputes it via the production pipeline (which now stores seed + profile + hash + topic), then regenerates the ghost from stored inputs and compares per-signal.
 
-The frozen-residual design is defensible: the residual is the scientific artifact, not the ghost. But it forecloses retrospective reanalysis, which may matter as the profile model evolves.
+**Question 86** (seed `1776843941639`, 312 keystrokes, 40 words, "Name as many musical instruments as you can..."):
 
-### Decision point
+| Signal | Family | Stored | Recomputed | Match |
+|--------|--------|--------|------------|-------|
+| permutation_entropy | dynamical | 0.9966825625 | 0.9966825625 | EXACT |
+| dfa_alpha | dynamical | 0.7261043441 | 0.7261043441 | EXACT |
+| rqa_determinism | dynamical | 0.6937524329 | 0.6937524329 | EXACT |
+| rqa_laminarity | dynamical | 0.8164168937 | 0.8164168937 | EXACT |
+| te_dominance | dynamical | 0.0000000000 | 0.0000000000 | EXACT |
+| sample_entropy | motor | 0.6523756287 | 0.6523756287 | EXACT |
+| motor_jerk | motor | 439.0112425783 | 439.0112425783 | EXACT |
+| lapse_rate | motor | 3.8544461387 | 3.8544461387 | EXACT |
+| tempo_drift | motor | 4.2073461319 | 4.2073461319 | EXACT |
+| perplexity | perplexity | 67.3776199753 | 67.3776199753 | EXACT |
 
-Revisit before Stage 2, when the reconstruction residual paradigm is mature enough to know whether reanalysis is a real scientific need or a theoretical nicety.
+**Question 85** (seed `1776844011412`, 566 keystrokes, 77 words, "Describe the taste of black pepper to someone who has never..."):
+
+| Signal | Family | Stored | Recomputed | Match |
+|--------|--------|--------|------------|-------|
+| permutation_entropy | dynamical | 0.9932871508 | 0.9932871508 | EXACT |
+| dfa_alpha | dynamical | 0.7434630019 | 0.7434630019 | EXACT |
+| rqa_determinism | dynamical | 0.6764910266 | 0.6764910266 | EXACT |
+| rqa_laminarity | dynamical | 0.7843978488 | 0.7843978488 | EXACT |
+| te_dominance | dynamical | 5.7556321802 | 5.7556321802 | EXACT |
+| sample_entropy | motor | 0.7015220898 | 0.7015220898 | EXACT |
+| motor_jerk | motor | 496.6321126694 | 496.6321126694 | EXACT |
+| lapse_rate | motor | 4.3036414353 | 4.3036414353 | EXACT |
+| tempo_drift | motor | -9.7296811544 | -9.7296811544 | EXACT |
+| perplexity | perplexity | 83.2449181719 | 83.2449181719 | EXACT |
+
+Both questions: 10/10 dynamical + motor + perplexity signals bit-identical. `ex_gaussian_tau` and `tau_proportion` were null on both stored and recomputed (insufficient data for MLE), correctly matching as null=null.
+
+Semantic signals (idea density, lexical sophistication, epistemic stance, integrative complexity, deep cohesion, text compression ratio) were excluded from verification. They depend on external APIs (Claude, Voyage) that can change behavior independently of Alice's code. Per design, semantic residuals are classified as externally-dependent and are not covered by the bit-reproducibility guarantee.
+
+### Scope of the guarantee
+
+**Dynamical and motor residuals are bit-reproducible end to end.** The full chain: stored seed + stored profile + reconstructed corpus (verified by SHA-256) -> `regenerate_avatar` (seed-deterministic, build-stable per CI) -> signal computation (Neumaier summation, deterministic iteration, pinned toolchain per CI) -> residual values identical to stored.
+
+**Semantic residuals are not.** They are stored and verifiable against regenerated ghost text, but external API drift means bit-identity cannot be guaranteed.
+
+**Pre-reproducibility-era residuals (avatar_seed IS NULL) are frozen artifacts.** Their stored values are the permanent record. They cannot be independently regenerated because the seed and profile state at computation time were not persisted.
+
+### Design lifecycle
+
+1. **Gap identified** (2026-04-22): ghost output is ephemeral, residuals cannot be verified.
+2. **Design deferred** (2026-04-22): no current consumer for cross-build ghost determinism.
+3. **User challenge** (2026-04-22): "residuals should be reproducible scientific artifacts, not frozen measurements."
+4. **Design approved** (2026-04-22): full design doc covering seed persistence, profile snapshotting (Option A: inline JSON, measured at 3.1KB), corpus SHA-256, topic persistence, regeneration API, CI enforcement, verification failure procedure.
+5. **Implementation** (2026-04-22): 7 commits, each independently verified (clippy, unit tests, reproducibility check, CI).
+6. **Verification** (2026-04-22): integration test on production data, 10/10 signals bit-identical on two questions.
 
 ---
 

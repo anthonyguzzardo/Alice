@@ -90,7 +90,29 @@ If `reproducibility-check.sh` reports DIVERGED after a toolchain upgrade:
 2. If the delta is ULP-level (< 1e-14 relative), the toolchain upgrade changed codegen slightly. Update the golden snapshots and document the expected tolerance in the commit message.
 3. If the delta is larger, a summation site was missed or a new HashMap iteration was introduced. Fix the root cause; do not update the snapshots.
 
+## Reconstruction residual reproducibility
+
+As of 2026-04-22, **dynamical and motor reconstruction residuals are bit-identical across regeneration from stored seed and profile snapshot, verified on production data.**
+
+Every residual computed after the 2026-04-22 migration stores the exact inputs needed to regenerate the ghost: PRNG seed, profile snapshot (the exact JSON passed to `generateAvatar()`), corpus SHA-256 hash, and topic string. Given these stored inputs and the response corpus (recoverable from `tb_responses`, verified by SHA-256), any build of Alice on the pinned toolchain can regenerate the identical ghost and verify the residual.
+
+The guarantee composes two independently verified properties:
+1. **Ghost generation is seed-deterministic and build-stable.** `regenerate_avatar` takes an explicit seed and produces bit-identical output across clean rebuilds. Verified by CI (`tests/avatar_reproducibility.rs`): all 5 adversary variants produce identical snapshots across builds.
+2. **Signal computation is bit-identical across clean rebuilds.** The existing guarantee (Neumaier summation, deterministic iteration, pinned toolchain). Verified by CI (`tests/reproducibility.rs`).
+
+**Semantic residuals are not covered.** They depend on external NLP APIs (Claude for idea density, Voyage for embeddings) whose behavior can change independently of Alice's code. Semantic residuals are stored and verifiable against regenerated ghost text, but bit-identity across regeneration is not guaranteed.
+
+**Pre-reproducibility-era residuals** (`avatar_seed IS NULL`, all rows before 2026-04-22) are frozen artifacts. Their stored values are the permanent record; they cannot be independently regenerated.
+
+### Verification script
+
+```
+npx tsx src/scripts/verify-residual-integration.ts
+```
+
+Exercises the full chain on a real stored residual: loads stored seed + profile, reconstructs corpus, verifies SHA-256, regenerates ghost, computes signals, compares per-signal against stored values. Reports EXACT/DELTA per signal with family classification.
+
 ## What is NOT covered
 
 - **Process signals** (`process.rs`) are not included in the reproducibility check because they depend on event log replay with UTF-16 text reconstruction, which is hard to fixture deterministically. Process signals do use Neumaier summation where applicable but are not bit-identity tested.
-- **Avatar generation** uses a time-based seed in production (`SystemTime`). Tests use `compute_seeded()` with a fixed seed and are covered by the avatar determinism tests, but not by the cross-build snapshot check.
+- **Semantic signals** depend on external APIs (Claude, Voyage). See "Reconstruction residual reproducibility" above.
