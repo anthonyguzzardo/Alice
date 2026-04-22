@@ -8,6 +8,86 @@ Newest first.
 
 ---
 
+## INC-009: Construct validity audit and remediation (Waves 1-2)
+
+**Date:** 2026-04-22
+**Type:** Methods correction (presentation layer making unsupported construct claims)
+
+### What was wrong
+
+A systematic audit of all user-facing signal surfaces identified two classes of construct validity failure:
+
+1. **Interpretive labels presented as instrument readings.** Four sets of natural-language labels attached to numeric signal values implied validated construct mappings that do not exist:
+   - Attractor force: "rigid" / "moderate" / "malleable" (coupling page)
+   - Permutation entropy: "exploratory" / "varied" / "patterned" / "formulaic" (entry detail)
+   - Tau proportion: "cognitive-dominant" / "mixed" / "motor-dominant" (entry detail)
+   - RQA laminarity: "fluid" / "moderate" / "sticky" / "trapped" (entry detail)
+
+   These labels imply the signal has been validated to mean what the label says. It has not. A PE value of 0.58 is a measurement. "Formulaic" is an interpretation that requires external validation (e.g., rater agreement, concurrent validity with writing quality assessments). The labels were heuristic thresholds presented without qualification.
+
+   DFA regime labels (white noise / pink / pink-brown / brown noise) were retained because they map to standard spectral classifications with established literature backing.
+
+2. **Statistical notation without adequate sample-size context.** Six presentation-layer behaviors made claims stronger than the data supported:
+   - Deviation callouts used σ notation without disclosing the baseline entry count. A "2.1σ deviation" from a 5-entry baseline is not the same statistical claim as from a 50-entry baseline.
+   - Sustained trend detection triggered at 3-session monotonic runs, which are expected ~1.4 times by chance across 7 dimensions in 8 observations.
+   - Trajectory charts connected 2-4 data points with lines, visually implying temporal structure that few observations cannot support.
+   - Session integrity used "flagged" language at profile counts below 10, where the adaptive threshold is unreliable.
+   - The ghost page labeled the journal/calibration residual gap as "cognitive contribution by question type," an interpretive claim about causation that the data does not establish.
+   - The avatar page displayed positional phase labels ("exploring" / "composing" / "finishing") that implied behavioral classification but were computed purely from stream position (< 20% / < 75% / else).
+
+### Discovery method
+
+Structured audit using the construct validity framework: for each signal surface, (1) what signal is displayed, (2) what does the UI claim about it, (3) what would have to be true for that claim to be honest, (4) is it. Applied to all observatory sub-pages, entry detail, ghost, coupling, trajectory, avatar, research, and dev surfaces.
+
+### Resolution
+
+**Wave 1: Strip unvalidated interpretive labels (4 changes)**
+
+| Surface | Removed | Replaced with |
+|---|---|---|
+| Coupling page: attractor force | "rigid" / "moderate" / "malleable" badges | Numeric value (0.00-1.00) with inline 0-1 scale bar |
+| Entry detail: PE | "exploratory" / "varied" / "patterned" / "formulaic" | Numeric PE value with (0-1) range annotation |
+| Entry detail: tau proportion | "cognitive-dominant" / "mixed" / "motor-dominant" | Numeric tau value in ms only |
+| Entry detail: RQA laminarity | "fluid" / "moderate" / "sticky" / "trapped" | Numeric laminarity percentage only |
+
+**Wave 2: Honest framing for low-n signals (6 changes)**
+
+| Surface | Before | After |
+|---|---|---|
+| Trajectory charts | Connected lines at all n >= 2 | Dots-only for n < 5; lines at n >= 5 |
+| Ghost section header | "cognitive contribution by question type" | "residual gap by session type" |
+| Avatar phase indicator | "exploring" / "composing" / "finishing" labels | Removed entirely |
+| Deviation callouts | "Xσ from baseline" at all n | At n < 15: "Above/Below average (n=X)"; at n >= 15: "Xσ from baseline (n=X)" |
+| Sustained trends | Minimum run length 3 | Minimum run length 4 |
+| Integrity flags | "flagged" at all n | At n < 10: "atypical (based on n=X prior sessions)"; at n >= 10: "flagged" |
+
+### Files changed
+
+| File | Wave | Change |
+|---|---|---|
+| `src/pages/observatory/coupling.astro` | 1 | `attractorBadge()` replaced with `attractorBar()` |
+| `src/pages/observatory/entry/[id].astro` | 1 | `peRegime()`, `tauRegime()`, `lamRegime()` removed |
+| `src/pages/observatory/trajectory.astro` | 2 | Dots-only rendering for n < 5 |
+| `src/pages/observatory/ghost.astro` | 2 | Section header string change |
+| `src/pages/avatar.astro` | 2 | Phase indicator HTML, JS, and CSS removed |
+| `src/pages/api/observatory/synthesis.ts` | 2 | Deviation text generation, trend run threshold |
+| `src/pages/observatory/index.astro` | 2 | Integrity low-n language |
+
+Zero schema changes. Zero computation changes. All modifications are presentation-layer only.
+
+### What this does NOT fix
+
+- **Coupling table significance context.** The coupling page still displays raw Pearson r values without significance tests or confidence intervals for same-domain pairs. The discoveries section has the critical-r gate (INC-008), but the coupling page's raw tables do not. Deferred to a future pass.
+- **PersDyn model validity.** The attractor force computation itself (Ornstein-Uhlenbeck mean-reversion from lag-1 autocorrelation) has construct validity assumptions that were not audited. Removing the labels does not validate the numeric values; it removes claims the numeric values do not support.
+- **Methodology page.** The static `/methodology` page uses "rigid" and "malleable" in explanatory prose describing what the signals measure. This is editorial description of a model, not an instrument reading on a data point. Left intact.
+- **Internal narrative generation.** `libSignals.ts` and `libDynamics.ts` use "rigid"/"malleable" in narrative text fed to the question generation prompt. This is internal context for Claude, not a user-facing claim. Left intact.
+
+### Design principle established
+
+Signal surfaces display measurements. Measurements are numbers with units and sample sizes. Interpretive labels ("rigid," "formulaic," "cognitive-dominant") are construct claims that require external validation before they can be presented as instrument readings. Until validated, show the number and let the reader interpret.
+
+---
+
 ## INC-008: Observatory discovery badges -- statistical rigor pass
 
 **Date:** 2026-04-22
