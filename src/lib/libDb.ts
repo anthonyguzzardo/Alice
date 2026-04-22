@@ -29,6 +29,7 @@ function nowStr(): string {
 // No DDL or migration blocks here.
 // ----------------------------------------------------------------------------
 
+// @region queries -- getTodaysQuestion, getTodaysResponse, saveResponse, scheduleQuestion, getAllResponses, getLatestReflection, saveReflection, logInteractionEvent, hasQuestionForDate, countScheduledSeedQuestions
 // ----------------------------------------------------------------------------
 // QUERIES
 // ----------------------------------------------------------------------------
@@ -120,6 +121,7 @@ export async function countScheduledSeedQuestions(): Promise<number> {
   return (row as { c: number }).c;
 }
 
+// @region sessions -- SessionSummaryInput, saveSessionSummary, getSessionSummary, getAllSessionSummaries, getSessionSummariesForQuestions, saveSessionEvents, getSessionEvents, updateDeletionEvents, saveSessionMetadata, getSessionMetadata, getAllSessionMetadata, getMetadataQuestionIdsAlreadyComputed
 // ----------------------------------------------------------------------------
 // SESSION SUMMARIES
 // ----------------------------------------------------------------------------
@@ -298,6 +300,7 @@ export async function saveSessionSummary(s: SessionSummaryInput, tx?: TxSql): Pr
   `;
 }
 
+// @region bursts -- saveBurstSequence, getBurstSequence, saveRburstSequence, getRburstSequence
 // ----------------------------------------------------------------------------
 // BURST SEQUENCES
 // ----------------------------------------------------------------------------
@@ -645,6 +648,8 @@ export async function getAllSessionSummaries(): Promise<Array<SessionSummaryInpu
   ` as Array<SessionSummaryInput & { date: string }>;
 }
 
+// @region calibration -- CalibrationBaseline, getCalibrationBaselines, getCalibrationSessionsWithText, isCalibrationQuestion, saveCalibrationSession, getUsedCalibrationPrompts, getCalibrationPromptsByRecency, saveCalibrationBaselineSnapshot, getCalibrationHistory, getLatestCalibrationSnapshot, saveQuestionFeedback, getAllQuestionFeedback
+
 export interface CalibrationBaseline {
   avgFirstKeystrokeMs: number | null;
   avgCommitmentRatio: number | null;
@@ -852,6 +857,7 @@ export async function getAllQuestionFeedback(): Promise<Array<{ date: string; la
 }
 
 // ----------------------------------------------------------------------------
+// @region retrieval -- getRecentResponses, getResponsesSince, getResponsesSinceId, getAllReflections, getLatestReflectionWithCoverage, getRecentFeedback, getSessionSummariesForQuestions, getMaxResponseId, insertEmbeddingMeta, isRecordEmbedded, getUnembeddedResponses, searchVecEmbeddings, savePromptTrace
 // SCOPED RETRIEVAL (for RAG-augmented prompts)
 // ----------------------------------------------------------------------------
 
@@ -1114,6 +1120,7 @@ export async function savePromptTrace(trace: PromptTraceInput): Promise<void> {
 }
 
 // ----------------------------------------------------------------------------
+// @region state -- saveWitnessState, getLatestWitnessState, EntryStateRow, saveEntryState, getAllEntryStates, getEntryStateCount, SemanticStateRow, saveSemanticState, saveSemanticDynamics, saveSemanticCoupling, TraitDynamicRow, saveTraitDynamics, getLatestTraitDynamics, saveCouplingMatrix, getLatestCouplingMatrix, saveEmotionBehaviorCoupling, getLatestEmotionBehaviorCoupling
 // WITNESS STATE
 // ----------------------------------------------------------------------------
 
@@ -1409,6 +1416,7 @@ export async function getLatestEmotionBehaviorCoupling(entryCount: number): Prom
 // Stub functions removed 2026-04-20 — no active callers remain.
 
 // ----------------------------------------------------------------------------
+// @region calibration-context -- saveCalibrationContext, getCalibrationContextForQuestion, getRecentCalibrationContext, getCalibrationContextNearDate, saveSessionDelta, getRecentSessionDeltas, getSameDayCalibrationSummary
 // CALIBRATION CONTEXT EXTRACTION
 // ----------------------------------------------------------------------------
 
@@ -1730,6 +1738,7 @@ export async function getRecentSessionDeltas(limit: number = 30): Promise<Sessio
 }
 
 // ===================================================================
+// @region observatory -- getEntryStatesWithDates, getEntryStateByResponseId, getCommentsForPaper, saveComment
 // OBSERVATORY QUERIES
 // ===================================================================
 
@@ -1791,6 +1800,7 @@ export async function saveComment(slug: string, authorName: string, commentText:
 }
 
 // ----------------------------------------------------------------------------
+// @region signals -- saveDynamicalSignals, getDynamicalSignals, saveMotorSignals, getMotorSignals, saveSemanticSignals, getSemanticSignals, saveProcessSignals, getProcessSignals, saveCrossSessionSignals, getCrossSessionSignals, saveReconstructionResidual, getReconstructionResidual, saveSessionIntegrity, getSessionIntegrity
 // DYNAMICAL SIGNALS (persisted, previously on-demand)
 // ----------------------------------------------------------------------------
 

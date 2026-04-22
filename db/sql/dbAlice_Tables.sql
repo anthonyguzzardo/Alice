@@ -42,6 +42,7 @@ SET search_path TO alice, public;
 -- pgvector extension installs in public (shared across schemas)
 CREATE EXTENSION IF NOT EXISTS vector;
 
+-- @region enums -- te_question_source, te_reflection_type, te_interaction_event_type, te_prompt_trace_type, te_embedding_source, te_context_dimension, te_adversary_variants
 -- ============================================================================
 -- ENUM TABLES (static, no footer)
 -- ============================================================================
@@ -126,6 +127,7 @@ INSERT INTO te_adversary_variants (adversary_variant_id, name, description) VALU
   ,(5, 'full_adversary',      'PPM + AR(1) + copula')
 ON CONFLICT (adversary_variant_id) DO NOTHING;
 
+-- @region core -- tb_questions, tb_responses, tb_interaction_events, tb_reflections, tb_question_feedback
 -- ============================================================================
 -- CORE MUTABLE TABLES
 -- ============================================================================
@@ -212,6 +214,8 @@ CREATE TABLE IF NOT EXISTS tb_question_feedback (
 );
 
 -- --------------------------------------------------------------------------
+
+-- @region sessions -- tb_session_summaries, tb_session_events, tb_session_metadata, tb_burst_sequences, tb_rburst_sequences, tb_prompt_traces, tb_embeddings
 
 -- PURPOSE: per-session behavioral summary computed from raw keystroke capture
 -- USE CASE: one row per session, computed at submission time
@@ -391,6 +395,7 @@ CREATE TABLE IF NOT EXISTS tb_embeddings (
 CREATE INDEX IF NOT EXISTS idx_embeddings_vector ON tb_embeddings
   USING hnsw (embedding vector_l2_ops) WITH (m = 16, ef_construction = 64);
 
+-- @region state -- tb_witness_states, tb_entry_states, tb_semantic_states, tb_trait_dynamics, tb_coupling_matrix, tb_emotion_behavior_coupling, tb_semantic_dynamics, tb_semantic_coupling
 -- ============================================================================
 -- WITNESS, STATE, DYNAMICS, COUPLING TABLES
 -- ============================================================================
@@ -668,6 +673,7 @@ CREATE TABLE IF NOT EXISTS tb_semantic_coupling (
   ,created_by            TEXT NOT NULL DEFAULT 'system'
 );
 
+-- @region signals -- tb_dynamical_signals, tb_motor_signals, tb_semantic_signals, tb_process_signals, tb_cross_session_signals
 -- ============================================================================
 -- SIGNAL TABLES (append-only, one row per session)
 -- ============================================================================
@@ -793,6 +799,7 @@ CREATE TABLE IF NOT EXISTS tb_cross_session_signals (
   ,created_by                   TEXT NOT NULL DEFAULT 'system'
 );
 
+-- @region calibration -- tb_calibration_context, tb_calibration_baselines_history, tb_session_delta
 -- ============================================================================
 -- CALIBRATION & CONTEXT TABLES
 -- ============================================================================
@@ -863,6 +870,8 @@ CREATE TABLE IF NOT EXISTS tb_session_delta (
 );
 
 -- --------------------------------------------------------------------------
+
+-- @region profile -- tb_paper_comments, tb_personal_profile, tb_reconstruction_residuals, tb_session_integrity
 
 -- PURPOSE: public paper comments
 -- USE CASE: reader feedback on published research

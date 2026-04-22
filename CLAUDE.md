@@ -9,6 +9,10 @@ A personal, monastic daily thinking journal. One question per day. No gamificati
 - Claude API (@anthropic-ai/sdk) for question generation and pattern surfacing
 - TypeScript (strict)
 
+## Agent Navigation
+- Before data-layer work, run `grep '@region' db/sql/dbAlice_Tables.sql` for the schema table of contents and `grep '@region' src/lib/libDb.ts` for the function table of contents.
+- Before touching unfamiliar areas, check `GOTCHAS.md` for known landmines.
+
 ## Architecture
 - Single user, no auth
 - PostgreSQL database `alice`, schema `alice` (local, connection via `ALICE_PG_URL` env var, `search_path = alice,public`)
