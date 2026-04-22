@@ -171,6 +171,25 @@ interface NativeModule {
     chainSize: number;
     iBurstCount: number;
     variant: number;
+    seed: string;
+  };
+  regenerateAvatar(
+    corpusJson: string,
+    topic: string,
+    profileJson: string,
+    maxWords: number,
+    variant: number,
+    seed: string,
+  ): {
+    text: string;
+    delays: number[];
+    keystrokeStreamJson: string;
+    wordCount: number;
+    order: number;
+    chainSize: number;
+    iBurstCount: number;
+    variant: number;
+    seed: string;
   };
   computeProfileDistance(
     valuesJson: string,
@@ -353,6 +372,43 @@ export function generateAvatar(
     };
   } catch (err) {
     logError('signalsNative.avatar', err);
+    return null;
+  }
+}
+
+// ─── Avatar regeneration (reproducibility verification) ──────────
+
+export function regenerateAvatar(
+  corpusJson: string,
+  topic: string,
+  profileJson: string,
+  maxWords: number,
+  variant: number,
+  seed: string,
+): AvatarResult | null {
+  if (!native) return null;
+
+  try {
+    const t0 = performance.now();
+    const result = native.regenerateAvatar(corpusJson, topic, profileJson, maxWords, variant, seed);
+    console.log(`[signals] rust regenerate avatar v${variant}: ${(performance.now() - t0).toFixed(1)}ms (${result.wordCount} words)`);
+    if (!result.text) return null;
+    const stream: KeystrokeEvent[] = result.keystrokeStreamJson
+      ? JSON.parse(result.keystrokeStreamJson) as KeystrokeEvent[]
+      : [];
+    return {
+      text: result.text,
+      delays: result.delays,
+      keystrokeStream: stream,
+      wordCount: result.wordCount,
+      markovOrder: result.order,
+      chainSize: result.chainSize,
+      iBurstCount: result.iBurstCount,
+      variant: result.variant,
+      seed: result.seed,
+    };
+  } catch (err) {
+    logError('signalsNative.regenerateAvatar', err);
     return null;
   }
 }

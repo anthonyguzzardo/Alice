@@ -31,6 +31,7 @@ import {
   computeDynamicalSignals,
   computeMotorSignals,
   generateAvatar,
+  regenerateAvatar,
   computePerplexity,
   type DynamicalSignals,
   type MotorSignals,
@@ -384,4 +385,141 @@ export async function computeReconstructionResidual(questionId: number): Promise
       logError('reconstruction.variant', err, { questionId, variantId });
     }
   }
+}
+
+// ─── Verification ─────────────────────────────────────────────────
+
+export interface SignalComparison {
+  name: string;
+  family: 'dynamical' | 'motor' | 'semantic' | 'perplexity';
+  stored: number | null;
+  recomputed: number | null;
+  delta: number | null;
+  match: boolean;
+}
+
+export interface VerificationResult {
+  questionId: number;
+  variantId: number;
+  corpusValid: boolean;
+  signals: SignalComparison[];
+  dynamicalMatch: boolean;
+  motorMatch: boolean;
+  semanticMatch: boolean;
+  allMatch: boolean;
+}
+
+/**
+ * Verify a stored residual by regenerating the ghost from stored inputs
+ * and comparing avatar signal values.
+ *
+ * Returns null if the residual is not reproducible (pre-reproducibility-era)
+ * or if the corpus has changed since computation.
+ */
+export async function verifyResidual(
+  questionId: number,
+  variantId: number,
+): Promise<VerificationResult | null> {
+  // 1. Load stored residual
+  const stored = await getReconstructionResidual(questionId, variantId);
+  if (!stored) return null;
+
+  // Gate: must be post-reproducibility-era
+  const row = stored as unknown as Record<string, unknown>;
+  const seed = row.avatar_seed as string | null;
+  const profileJson = row.profile_snapshot_json as string | null;
+  const storedHash = row.corpus_sha256 as string | null;
+  const topic = row.avatar_topic as string | null;
+  if (!seed || !profileJson) return null;
+
+  // 2. Reconstruct corpus
+  const textRows = await sql`
+    SELECT r.text
+    FROM tb_responses r
+    JOIN tb_questions q ON r.question_id = q.question_id
+    ORDER BY q.scheduled_for ASC
+  ` as Array<{ text: string }>;
+
+  const corpusJson = JSON.stringify(textRows.map(r => r.text));
+
+  // 3. Corpus integrity check
+  const corpusSha256 = createHash('sha256').update(corpusJson).digest('hex');
+  const corpusValid = !storedHash || corpusSha256 === storedHash;
+  if (!corpusValid) {
+    return {
+      questionId, variantId, corpusValid: false,
+      signals: [], dynamicalMatch: false, motorMatch: false,
+      semanticMatch: false, allMatch: false,
+    };
+  }
+
+  // 4. Regenerate avatar
+  const realWordCount = (stored.real_word_count as number) ?? 150;
+  const resolvedTopic = topic ?? '';
+  const resolvedProfile = typeof profileJson === 'string' ? profileJson : JSON.stringify(profileJson);
+
+  const avatar = regenerateAvatar(corpusJson, resolvedTopic, resolvedProfile, realWordCount, variantId, seed);
+  if (!avatar) return null;
+
+  // 5. Compute signals on regenerated ghost
+  const avatarDurationMs = avatar.keystrokeStream.length > 0
+    ? avatar.keystrokeStream[avatar.keystrokeStream.length - 1]!.u
+    : 0;
+
+  let regenDyn: DynamicalSignals | null = null;
+  let regenMot: MotorSignals | null = null;
+
+  if (avatar.keystrokeStream.length >= 10) {
+    regenDyn = computeDynamicalSignals(avatar.keystrokeStream);
+    regenMot = computeMotorSignals(avatar.keystrokeStream, avatarDurationMs);
+  }
+
+  // 6. Compare stored avatar signals against recomputed
+  const signals: SignalComparison[] = [];
+
+  function compare(
+    name: string,
+    family: SignalComparison['family'],
+    storedVal: number | null | undefined,
+    recomputedVal: number | null | undefined,
+  ): void {
+    const s = storedVal ?? null;
+    const r = recomputedVal ?? null;
+    const d = (s != null && r != null) ? Math.abs(s - r) : null;
+    const m = s === r || (s == null && r == null);
+    signals.push({ name, family, stored: s, recomputed: r, delta: d, match: m });
+  }
+
+  // Dynamical
+  compare('permutation_entropy', 'dynamical', stored.avatar_permutation_entropy, regenDyn?.permutationEntropy);
+  compare('dfa_alpha', 'dynamical', stored.avatar_dfa_alpha, regenDyn?.dfaAlpha);
+  compare('rqa_determinism', 'dynamical', stored.avatar_rqa_determinism, regenDyn?.rqaDeterminism);
+  compare('rqa_laminarity', 'dynamical', stored.avatar_rqa_laminarity, regenDyn?.rqaLaminarity);
+  compare('te_dominance', 'dynamical', stored.avatar_te_dominance, regenDyn?.teDominance);
+
+  // Motor
+  compare('sample_entropy', 'motor', stored.avatar_sample_entropy, regenMot?.sampleEntropy);
+  compare('motor_jerk', 'motor', stored.avatar_motor_jerk, regenMot?.motorJerk);
+  compare('lapse_rate', 'motor', stored.avatar_lapse_rate, regenMot?.lapseRate);
+  compare('tempo_drift', 'motor', stored.avatar_tempo_drift, regenMot?.tempoDrift);
+  compare('ex_gaussian_tau', 'motor', stored.avatar_ex_gaussian_tau, regenMot?.exGaussianTau);
+  compare('tau_proportion', 'motor', stored.avatar_tau_proportion, regenMot?.tauProportion);
+
+  // Perplexity (computed from corpus + avatar text, deterministic)
+  const regenPerp = computePerplexity(corpusJson, avatar.text);
+  compare('perplexity', 'perplexity', stored.avatar_perplexity, regenPerp?.perplexity);
+
+  // Semantic signals are NOT recomputed here. They depend on external APIs
+  // (Claude, Voyage) that may have changed. Per design: semantic residuals
+  // are externally-dependent and excluded from the bit-reproducibility guarantee.
+
+  const dynamicalMatch = signals.filter(s => s.family === 'dynamical').every(s => s.match);
+  const motorMatch = signals.filter(s => s.family === 'motor').every(s => s.match);
+  const semanticMatch = true; // not tested; externally-dependent
+  const allMatch = dynamicalMatch && motorMatch;
+
+  return {
+    questionId, variantId, corpusValid,
+    signals, dynamicalMatch, motorMatch, semanticMatch, allMatch,
+  };
 }
