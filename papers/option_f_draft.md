@@ -184,7 +184,34 @@ The per-dimension distance profile is the reconstruction validity report. It rep
 
 A reconstruction residual is a scientific measurement. If it cannot be independently reproduced from its inputs, it is an assertion, not a measurement.
 
-To validate reproducibility of reconstruction residuals as scientific artifacts, we independently regenerated ghosts for two randomly selected sessions (Q85, 566 keystrokes; Q86, 312 keystrokes) using only the stored PRNG seed and profile snapshot. All 10 dynamical and motor signals matched the originally-stored values to bit identity across both sessions. The integration test script used to produce this verification is committed to the repository and runs on demand for any residual with reproducibility metadata. Semantic signals were excluded from bit-identity verification per the external-API dependence caveat documented in REPRODUCIBILITY.md.
+First, the signal computation itself must be build-stable. The following values are produced by a deterministic 100-keystroke fixture session. Every clean rebuild of the Rust signal engine on the pinned toolchain (Rust 1.95.0, LLVM 22.1.2, aarch64-apple-darwin) produces these numbers to the bit. CI enforces this via two-clean-build snapshot diffing on every commit.
+
+**Dynamical signal golden values (fixture session):**
+
+| Signal | Value |
+|--------|-------|
+| permutation_entropy | 0.8166391588527645 |
+| dfa_alpha | 0.4822765767735998 |
+| rqa_determinism | 0.6141015921152388 |
+| rqa_laminarity | 0.7035633055344959 |
+| te_hold_to_flight | 0.16977971674099246 |
+| te_flight_to_hold | 0.05842298195931006 |
+| te_dominance | 2.906043324855263 |
+
+**Motor signal golden values (fixture session):**
+
+| Signal | Value |
+|--------|-------|
+| sample_entropy | 0.7388353647313733 |
+| motor_jerk | 49.40374729293968 |
+| tempo_drift | 0.7383869840763395 |
+| ex_gaussian_mu | 22.192482197745814 |
+| ex_gaussian_sigma | 16.22382081065317 |
+| ex_gaussian_tau | 10.000067202433417 |
+| tau_proportion | 0.31063296908003635 |
+| hold_flight_rank_corr | -0.02803064616827978 |
+
+Second, to validate reproducibility of reconstruction residuals as scientific artifacts, we independently regenerated ghosts for two randomly selected sessions (Q85, 566 keystrokes; Q86, 312 keystrokes) using only the stored PRNG seed and profile snapshot. All 10 dynamical and motor signals matched the originally-stored values to bit identity across both sessions. The integration test script used to produce this verification is committed to the repository and runs on demand for any residual with reproducibility metadata. Semantic signals were excluded from bit-identity verification per the external-API dependence caveat documented in REPRODUCIBILITY.md.
 
 **Q86** (seed 1776843941639, 312 keystrokes, 40 words):
 

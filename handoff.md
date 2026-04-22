@@ -32,9 +32,9 @@ The session started with the question "why does cross-build bit-identity matter?
 
 Each layer composes on the one below it:
 
-1. **Signal computation is build-stable.** Neumaier compensated summation, BTreeMap/sorted-vec deterministic iteration, pinned toolchain. CI-enforced via `tests/reproducibility.rs`.
-2. **Ghost generation is seed-deterministic and build-stable.** SplitMix64 PRNG, sorted-vec Markov/PPM sampling. CI-enforced via `tests/avatar_reproducibility.rs`.
-3. **Full residual chain is reproducible.** Stored inputs (seed, profile, corpus hash, topic) -> regenerated ghost -> recomputed signals -> bit-identical to stored values. Verified on production data, runnable on demand.
+1. **Signal computation is build-stable.** Neumaier compensated summation, BTreeMap/sorted-vec deterministic iteration, pinned toolchain. CI-enforced via `tests/reproducibility.rs`. Golden signal values (21 dynamical + motor signals from fixture session) documented in METHODS_PROVENANCE.md INC-005 and paper Section 4.4.
+2. **Ghost generation is seed-deterministic and build-stable.** SplitMix64 PRNG, sorted-vec Markov/PPM sampling. CI-enforced via `tests/avatar_reproducibility.rs`. All 5 variants bit-identical across clean rebuilds.
+3. **Full residual chain is reproducible.** Stored inputs (seed, profile, corpus hash, topic) -> regenerated ghost -> recomputed signals -> bit-identical to stored values. Verified on production data (Q85, Q86: 10/10 signals EXACT), runnable on demand.
 
 ### Scope of the guarantee
 

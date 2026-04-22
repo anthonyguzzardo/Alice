@@ -112,6 +112,41 @@ CI makes the guarantee structural. A PR that breaks bit-identity cannot merge. T
 
 First CI run on PR #1: all steps passed in 1m54s. Clippy zero warnings, unit tests passed, reproducibility check PASS (bit-identical snapshots across clean rebuilds on `macos-14`).
 
+### Golden signal values (fixture session, 100 keystrokes)
+
+These are the exact values produced by the deterministic fixture session in `tests/reproducibility.rs`. Every clean rebuild on the pinned toolchain produces these numbers to the bit. The CI reproducibility check diffs these JSON snapshots byte-for-byte across two clean builds.
+
+**Dynamical signals:**
+
+| Signal | Value |
+|--------|-------|
+| permutation_entropy | 0.8166391588527645 |
+| pe_spectrum | [0.8167, 0.6886, 0.5546, 0.4456, 0.3633] |
+| dfa_alpha | 0.4822765767735998 |
+| rqa_determinism | 0.6141015921152388 |
+| rqa_laminarity | 0.7035633055344959 |
+| rqa_trapping_time | 3.0984974958263773 |
+| rqa_recurrence_rate | 0.1910763436187165 |
+| te_hold_to_flight | 0.16977971674099246 |
+| te_flight_to_hold | 0.05842298195931006 |
+| te_dominance | 2.906043324855263 |
+
+**Motor signals:**
+
+| Signal | Value |
+|--------|-------|
+| sample_entropy | 0.7388353647313733 |
+| motor_jerk | 49.40374729293968 |
+| lapse_rate | 0.0 |
+| tempo_drift | 0.7383869840763395 |
+| iki_compression_ratio | 0.42954545454545456 |
+| ex_gaussian_mu | 22.192482197745814 |
+| ex_gaussian_sigma | 16.22382081065317 |
+| ex_gaussian_tau | 10.000067202433417 |
+| tau_proportion | 0.31063296908003635 |
+| hold_flight_rank_corr | -0.02803064616827978 |
+| adjacent_hold_time_cov | -0.048294022900374656 |
+
 ---
 
 ## INC-004: Numerical edge case closure (batch)
