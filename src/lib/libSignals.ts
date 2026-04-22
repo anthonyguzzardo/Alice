@@ -12,7 +12,7 @@
  *   Structure        — Prompt formatting (2024): labeled sections > flat lists
  */
 
-import type { SessionSummaryInput, CalibrationBaseline } from './libDb.ts';
+import type { SessionSummaryInput } from './libDb.ts';
 import { getCalibrationSessionsWithText, getBurstSequence } from './libDb.ts';
 import type { DynamicsAnalysis } from './libAliceNegative/libDynamics.ts';
 import { avg, stddev, percentileRank, computeMATTR, COGNITIVE_WORDS } from './libAliceNegative/libHelpers.ts';
@@ -601,53 +601,6 @@ export function formatDynamicsContext(
   return `Dynamics(${dimCount}D): phase=${analysis.phase} velocity=${analysis.velocity.toFixed(2)} entropy=${analysis.systemEntropy.toFixed(2)} | ${dimStr}${couplingStr}`;
 }
 
-/**
- * Expanded calibration baselines block.
- * Anchoring research: baseline values presented first set the reference frame.
- */
-export function formatEnrichedCalibration(calibration: CalibrationBaseline, deviceType?: string | null): string {
-  if (calibration.sessionCount === 0) {
-    return 'No calibration baselines yet. Baseline confidence: NONE. You cannot distinguish normal typing from emotionally significant behavior. Default to mundane interpretations for all behavioral signals. State this limitation explicitly.';
-  }
-
-  const lines: string[] = [];
-  lines.push(`Calibration baselines (confidence: ${calibration.confidence}, from ${calibration.sessionCount} sessions${deviceType ? `, matched to ${deviceType}` : ''}):`);
-  lines.push(`- Avg first keystroke: ${calibration.avgFirstKeystrokeMs?.toFixed(0)}ms`);
-  lines.push(`- Avg commitment ratio: ${calibration.avgCommitmentRatio?.toFixed(2)}`);
-  lines.push(`- Avg session duration: ${calibration.avgDurationMs?.toFixed(0)}ms`);
-  lines.push(`- Avg pause count: ${calibration.avgPauseCount?.toFixed(1)}`);
-  lines.push(`- Avg deletion count: ${calibration.avgDeletionCount?.toFixed(1)}`);
-
-  // Enriched baselines (only if calibration sessions include V3 data)
-  if (calibration.avgSmallDeletionCount != null) {
-    lines.push(`- Avg corrections (small deletions <10 chars): ${calibration.avgSmallDeletionCount.toFixed(1)}`);
-  }
-  if (calibration.avgLargeDeletionCount != null) {
-    lines.push(`- Avg revisions (large deletions >=10 chars): ${calibration.avgLargeDeletionCount.toFixed(1)}`);
-  }
-  if (calibration.avgLargeDeletionChars != null) {
-    lines.push(`- Avg chars in large deletions: ${calibration.avgLargeDeletionChars.toFixed(0)}`);
-  }
-  if (calibration.avgCharsPerMinute != null) {
-    lines.push(`- Avg active typing speed: ${calibration.avgCharsPerMinute.toFixed(0)} chars/min`);
-  }
-  if (calibration.avgPBurstCount != null) {
-    lines.push(`- Avg P-burst count: ${calibration.avgPBurstCount.toFixed(1)}`);
-  }
-  if (calibration.avgPBurstLength != null) {
-    lines.push(`- Avg P-burst length: ${calibration.avgPBurstLength.toFixed(0)} chars`);
-  }
-
-  lines.push('');
-  lines.push(
-    calibration.confidence === 'low' ? 'Baseline confidence is low. Too few calibration sessions to draw strong conclusions. Weight behavioral interpretations toward mundane explanations.' :
-    calibration.confidence === 'moderate' ? 'Baseline confidence is moderate. Baseline is forming but not robust. Flag significant deviations but hold interpretations loosely.' :
-    'Baseline confidence is strong. Baseline is reliable. Deviations from it are meaningful signal.'
-  );
-
-  return lines.join('\n');
-}
-
 // ─── Knowledge-transforming detection ─────────────────────────────
 // Baaijen, Galbraith & de Glopper (2012): knowledge-transforming episodes
 // produce shorter initial bursts → longer subsequent bursts, more revisions,
@@ -817,58 +770,4 @@ export async function computeKnowledgeTransformScore(
 // prediction + theory machinery. Data archived under
 // zz_archive_predictions_20260416 / zz_archive_theory_confidence_20260416.
 
-/**
- * Format calibration-relative deviations for the observation prompt.
- * Shows how far each metric deviates from the neutral writing baseline,
- * making predictions anchored to "unusual relative to boring writing"
- * rather than "unusual relative to other emotional writing."
- */
-export function formatCalibrationDeviation(
-  session: SessionSummaryInput,
-  calibration: CalibrationBaseline,
-): string {
-  if (calibration.sessionCount === 0) return '';
-
-  const lines: string[] = [];
-  lines.push('=== CALIBRATION-RELATIVE DEVIATION (how far from neutral writing) ===');
-  lines.push('');
-
-  // Commitment ratio deviation
-  if (session.commitmentRatio != null && calibration.avgCommitmentRatio != null) {
-    const dev = session.commitmentRatio - calibration.avgCommitmentRatio;
-    const pctDev = calibration.avgCommitmentRatio > 0
-      ? (dev / calibration.avgCommitmentRatio * 100).toFixed(0)
-      : '?';
-    const dir = dev < -0.1 ? 'well below' : dev < -0.05 ? 'below' : dev > 0.05 ? 'above' : 'near';
-    lines.push(`- Commitment: ${(session.commitmentRatio * 100).toFixed(0)}% vs neutral ${(calibration.avgCommitmentRatio * 100).toFixed(0)}% (${dir} baseline, ${pctDev}% deviation)`);
-  }
-
-  // First keystroke deviation
-  if (session.firstKeystrokeMs != null && calibration.avgFirstKeystrokeMs != null && calibration.avgFirstKeystrokeMs > 0) {
-    const ratio = session.firstKeystrokeMs / calibration.avgFirstKeystrokeMs;
-    const label = ratio > 3 ? 'dramatically longer' : ratio > 1.5 ? 'notably longer' : ratio > 1.1 ? 'slightly longer' : ratio < 0.5 ? 'much shorter' : 'similar';
-    lines.push(`- First keystroke: ${(session.firstKeystrokeMs / 1000).toFixed(1)}s vs neutral ${(calibration.avgFirstKeystrokeMs / 1000).toFixed(1)}s (${label} than baseline, ${ratio.toFixed(1)}x)`);
-  }
-
-  // P-burst deviation
-  if (session.avgPBurstLength != null && session.avgPBurstLength > 0 && calibration.avgPBurstLength != null && calibration.avgPBurstLength > 0) {
-    const ratio = session.avgPBurstLength / calibration.avgPBurstLength;
-    const label = ratio < 0.5 ? 'much shorter bursts' : ratio < 0.8 ? 'shorter bursts' : ratio > 1.5 ? 'much longer bursts' : ratio > 1.2 ? 'longer bursts' : 'similar bursts';
-    lines.push(`- P-burst length: ${session.avgPBurstLength.toFixed(0)} vs neutral ${calibration.avgPBurstLength.toFixed(0)} chars/burst (${label}, ${ratio.toFixed(1)}x)`);
-  }
-
-  // Chars per minute deviation
-  if (session.charsPerMinute != null && calibration.avgCharsPerMinute != null && calibration.avgCharsPerMinute > 0) {
-    const ratio = session.charsPerMinute / calibration.avgCharsPerMinute;
-    const label = ratio < 0.6 ? 'much slower' : ratio < 0.85 ? 'slower' : ratio > 1.4 ? 'much faster' : ratio > 1.15 ? 'faster' : 'similar speed';
-    lines.push(`- Typing speed: ${session.charsPerMinute.toFixed(0)} vs neutral ${calibration.avgCharsPerMinute.toFixed(0)} cpm (${label}, ${ratio.toFixed(1)}x)`);
-  }
-
-  if (lines.length <= 2) return ''; // no meaningful deviations to report
-
-  lines.push('');
-  lines.push('Deviations from calibration baseline are more meaningful than deviations from journal entry history, because calibration captures what neutral writing looks like — no emotional content, no deep questions, just describing breakfast or the weather.');
-
-  return lines.join('\n');
-}
 

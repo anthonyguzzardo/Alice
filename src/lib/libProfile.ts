@@ -142,7 +142,7 @@ export async function updateProfile(questionId: number): Promise<void> {
 
     // Burst consolidation: per-session second-half/first-half ratio, then average
     const consolidationRatios: number[] = [];
-    const burstsByQuestion = new Map<number, Array<{ burst_index: number; char_count: number }>>();
+    const burstsByQuestion = new Map<number, Array<{ burst_index: number; burst_char_count: number }>>();
     for (const b of burstRows) {
       if (!burstsByQuestion.has(b.question_id)) burstsByQuestion.set(b.question_id, []);
       burstsByQuestion.get(b.question_id)!.push(b);
@@ -152,8 +152,8 @@ export async function updateProfile(questionId: number): Promise<void> {
       const mid = Math.floor(bursts.length / 2);
       const firstHalf = bursts.slice(0, mid);
       const secondHalf = bursts.slice(mid);
-      const firstAvg = mean(firstHalf.map(b => b.char_count));
-      const secondAvg = mean(secondHalf.map(b => b.char_count));
+      const firstAvg = mean(firstHalf.map(b => b.burst_char_count));
+      const secondAvg = mean(secondHalf.map(b => b.burst_char_count));
       if (firstAvg > 0) consolidationRatios.push(secondAvg / firstAvg);
     }
 

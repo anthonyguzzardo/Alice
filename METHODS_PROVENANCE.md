@@ -8,6 +8,58 @@ Newest first.
 
 ---
 
+## INC-007: Daily delta timing fix and dead code removal
+
+**Date:** 2026-04-22
+**Type:** Architectural correction (design flaw, not a data incident)
+
+### What was wrong
+
+The session delta system (`libSessionDelta.ts`) was designed around a same-session assumption: compute the behavioral delta between calibration and journal writing in real time, and inject it into the observation prompt. This assumption was never valid. In the actual daily flow, the user submits the journal session first, then optionally does one or more calibration (free-write) sessions afterward. The delta could never be computed before the journal session's observation, because the calibration didn't exist yet.
+
+Consequences:
+- `runSessionDelta` was exported but never called from any code path.
+- `formatSessionDelta` (observation prompt formatter) was exported but never called.
+- `formatEnrichedCalibration` and `formatCalibrationDeviation` in `libSignals.ts` were exported but never called.
+- `getCalibrationBaselines` and `CalibrationBaseline` in `libDb.ts` were exported but never called.
+- `tb_session_delta` had 2 rows (from a manual test), despite 9 eligible day-pairs existing.
+- `libGenerate.ts` was reading from `tb_session_delta` for delta trend context, but the table was effectively empty, so the delta trend section was silently absent from every generated question prompt.
+
+Additionally, `libProfile.ts` had a column name mismatch: the SQL selected `bs.burst_char_count` but the JavaScript accessed `b.char_count`, causing P-burst consolidation ratios to silently compute on `undefined` values.
+
+### Resolution
+
+**Renamed:** `libSessionDelta.ts` to `libDailyDelta.ts`. The module now frames deltas as retrospective day-N+1 batch computations, not real-time session inputs.
+
+**New:** `runDailyDeltaBackfill()` scans the entire history for dates where both a journal session and at least one calibration exist but no delta row has been computed. Idempotent (skips dates with existing rows, upserts as secondary safety net). Multi-calibration rule: last calibration of the day is used for pairing (closest to journal session, stabilized behavioral state).
+
+**Wired in:** `runDailyDeltaBackfill()` runs at the top of `runGeneration()` in `libGenerate.ts`, before question generation, so delta trends are current when prompts are built.
+
+**Removed (dead code):**
+- `libSessionDelta.ts` (replaced by `libDailyDelta.ts`)
+- `formatSessionDelta` (observation prompt formatter, never called)
+- `formatEnrichedCalibration` from `libSignals.ts` (never called)
+- `formatCalibrationDeviation` from `libSignals.ts` (never called)
+- `CalibrationBaseline` interface + `getCalibrationBaselines` from `libDb.ts` (never called)
+
+**Fixed:** `libProfile.ts` burst consolidation: `b.char_count` corrected to `b.burst_char_count` to match the SQL column name.
+
+**Preserved (untouched):**
+- `libCalibrationExtract.ts` (context tag extraction, fire-and-forget from every calibration submit)
+- `libCalibrationDrift.ts` (drift snapshots from every calibration submit, not just last-of-day)
+- `calibrate.ts` API route
+- All db functions: `saveSessionDelta`, `getRecentSessionDeltas`, `getSameDayCalibrationSummary`, `SessionDeltaRow`
+
+### Backfill result
+
+First run computed 7 new delta rows (April 13, 16-21). 2 pre-existing rows (April 14-15) were skipped. April 22 skipped (no calibration yet). Total: 9 rows covering all eligible day-pairs. Re-run produced 0 new rows (idempotent). Delta magnitude is null for all rows (fewer than 10 days of history for z-score normalization).
+
+### Behavior change in question generation
+
+Before: `getRecentSessionDeltas(14)` returned 0-2 rows. The delta trend section was absent from the generation prompt. After: returns up to 9 rows. `formatCompactDelta` produces a `=== DAILY DELTA TRENDS ===` block showing per-date notable dimension shifts (>1 sigma) and 7-day trends. This is additive context for question selection, not a replacement for any existing signal.
+
+---
+
 ## INC-006: Reconstruction residual reproducibility
 
 **Date:** 2026-04-22

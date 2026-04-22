@@ -1,10 +1,22 @@
 /**
- * Same-Day Session Delta Module
+ * Daily Delta Module (retrospective, day-N+1 batch)
  *
  * Computes the behavioral delta vector between same-day calibration (neutral
  * writing) and journal (reflective writing) sessions. The delta isolates what
  * the reflective question provoked, controlling for within-day confounds
  * (sleep, stress, device, time-of-day, etc.).
+ *
+ * Timing: calibration always happens AFTER the journal session in the daily
+ * flow. Deltas are therefore computed retrospectively — the nightly batch job
+ * scans for completed day-pairs (journal + calibration on the same date) and
+ * fills in any missing delta rows. The output is a stored record, not a
+ * real-time input to any session prompt.
+ *
+ * Multi-calibration rule: when multiple calibrations exist for a single day,
+ * the LAST calibration is used for delta pairing. It is closest in time to
+ * the journal session and reflects stabilized behavioral state after any
+ * warm-up effects. This rule applies only to delta pairing — drift snapshots
+ * (libCalibrationDrift.ts) continue to process every calibration submission.
  *
  * Research basis:
  *   - Pennebaker (1986): Expressive writing paradigm — neutral vs emotional
@@ -22,7 +34,7 @@
  *   - Chenoweth & Hayes (2001): P-burst length as thought-unit fluency.
  *   - Faigley & Witte (1981): Large deletions as substantive revision.
  *
- * Delta dimensions (8 research-backed):
+ * Delta dimensions (10 research-backed):
  *   1. deltaFirstPerson        — self-referential shift (Newman 2003)
  *   2. deltaCognitive          — cognitive load shift (Vrij)
  *   3. deltaHedging            — uncertainty/performance shift
@@ -31,6 +43,8 @@
  *   6. deltaLargeDeletionCount — substantive rethinking (Faigley & Witte)
  *   7. deltaInterKeyIntervalMean — keystroke hesitation shift (Epp et al)
  *   8. deltaAvgPBurstLength    — thought-unit length shift (Chenoweth & Hayes)
+ *   9. deltaHoldTimeMean       — motor press duration shift
+ *  10. deltaFlightTimeMean     — inter-key cognitive pause shift
  *
  * Plus deltaMagnitude: Euclidean distance in z-score normalized delta-space.
  */
@@ -43,6 +57,7 @@ import {
   getRecentSessionDeltas,
   saveSessionDelta,
 } from './libDb.ts';
+import sql from './libDbPool.ts';
 
 // ----------------------------------------------------------------------------
 // DELTA DIMENSION DEFINITIONS
@@ -63,7 +78,7 @@ const DELTA_DIMENSIONS = [
 
 type DeltaDimension = typeof DELTA_DIMENSIONS[number];
 
-/** Maps delta dimension → [calibration field, journal field, label, unit] */
+/** Maps delta dimension -> metadata for formatting */
 const DIMENSION_META: Record<DeltaDimension, {
   calField: keyof SessionSummaryInput;
   label: string;
@@ -228,7 +243,7 @@ export function computeDeltaMagnitude(
     const variance = pastValues.reduce((s, v) => s + (v - mean) ** 2, 0) / pastValues.length;
     const std = Math.sqrt(variance);
 
-    if (std < 1e-10) continue; // no variance — skip dimension
+    if (std < 1e-10) continue; // no variance
 
     const z = (current - mean) / std;
     sumSqZ += z * z;
@@ -240,15 +255,14 @@ export function computeDeltaMagnitude(
 }
 
 // ----------------------------------------------------------------------------
-// FORMATTING: Full (for observe.ts)
+// FORMATTING: Compact (for generate.ts)
 // ----------------------------------------------------------------------------
 
-const MIN_HISTORY_FOR_RANGE = 15;
 const MIN_HISTORY_FOR_TREND = 7;
 
 function getDeltaStats(history: SessionDeltaRow[], dim: DeltaDimension): { mean: number; std: number } | null {
   const values = history.map(h => h[dim]).filter((v): v is number => v != null);
-  if (values.length < MIN_HISTORY_FOR_RANGE) return null;
+  if (values.length < 3) return null;
   const mean = values.reduce((s, v) => s + v, 0) / values.length;
   const variance = values.reduce((s, v) => s + (v - mean) ** 2, 0) / values.length;
   return { mean, std: Math.sqrt(variance) };
@@ -261,7 +275,6 @@ function getTrend(history: SessionDeltaRow[], dim: DeltaDimension): 'rising' | '
     .filter((v): v is number => v != null);
   if (recent.length < 3) return null;
 
-  // Simple linear trend: compare first half mean to second half mean
   const mid = Math.floor(recent.length / 2);
   const firstHalf = recent.slice(mid); // older (history is DESC)
   const secondHalf = recent.slice(0, mid); // newer
@@ -269,9 +282,7 @@ function getTrend(history: SessionDeltaRow[], dim: DeltaDimension): 'rising' | '
   const secondMean = secondHalf.reduce((s, v) => s + v, 0) / secondHalf.length;
 
   const diff = secondMean - firstMean;
-  // Use 20% of the range as threshold for "meaningful" trend
-  const allValues = recent;
-  const range = Math.max(...allValues) - Math.min(...allValues);
+  const range = Math.max(...recent) - Math.min(...recent);
   if (range < 1e-10) return 'stable';
 
   const threshold = range * 0.2;
@@ -280,119 +291,25 @@ function getTrend(history: SessionDeltaRow[], dim: DeltaDimension): 'rising' | '
   return 'stable';
 }
 
-function directionLabel(delta: number): string {
-  if (delta > 0) return 'increased';
-  if (delta < 0) return 'decreased';
-  return 'unchanged';
-}
-
-export function formatSessionDelta(
-  delta: SessionDeltaRow,
-  history: SessionDeltaRow[],
-): string {
-  const lines: string[] = [];
-  lines.push('=== SAME-DAY SESSION DELTA (calibration → journal shift) ===');
-  lines.push('');
-  lines.push('Raw deltas (positive = higher in journal, negative = lower):');
-
-  let hasDelta = false;
-  for (const dim of DELTA_DIMENSIONS) {
-    const meta = DIMENSION_META[dim];
-    const deltaVal = delta[dim];
-    if (deltaVal == null) continue;
-
-    // Get raw values for context
-    const calKey = `calibration${dim.slice(5)}` as keyof SessionDeltaRow; // e.g., deltaFirstPerson → calibrationFirstPerson
-    const journalKey = `journal${dim.slice(5)}` as keyof SessionDeltaRow;
-    const calVal = delta[calKey] as number | null;
-    const journalVal = delta[journalKey] as number | null;
-
-    const calStr = calVal != null ? meta.format(calVal) : '?';
-    const journalStr = journalVal != null ? meta.format(journalVal) : '?';
-    const direction = directionLabel(deltaVal);
-
-    lines.push(`- ${meta.label}: ${calStr} → ${journalStr} (delta: ${deltaVal >= 0 ? '+' : ''}${meta.format(deltaVal)}) — ${direction} ${direction !== 'unchanged' ? meta.higherMeans.replace(/^more /, deltaVal > 0 ? 'more ' : 'less ').replace(/^faster /, deltaVal > 0 ? 'faster ' : 'slower ').replace(/^longer /, deltaVal > 0 ? 'longer ' : 'shorter ').replace(/^kept more/, deltaVal > 0 ? 'kept more' : 'kept less') : ''}`);
-    hasDelta = true;
-  }
-
-  if (!hasDelta) return '';
-
-  // Delta magnitude
-  if (delta.deltaMagnitude != null) {
-    lines.push('');
-    lines.push(`Delta magnitude: ${delta.deltaMagnitude.toFixed(2)} (RMS z-score across dimensions)`);
-  } else {
-    lines.push('');
-    lines.push(`Delta magnitude: insufficient history (need ${MIN_HISTORY_FOR_MAGNITUDE}+ days)`);
-  }
-
-  // Personal delta range (if enough history)
-  if (history.length >= MIN_HISTORY_FOR_RANGE) {
-    lines.push('');
-    lines.push('PERSONAL DELTA RANGE (how typical is today\'s shift):');
-    for (const dim of DELTA_DIMENSIONS) {
-      const deltaVal = delta[dim];
-      if (deltaVal == null) continue;
-      const stats = getDeltaStats(history, dim);
-      if (!stats) continue;
-
-      const sigma = stats.std > 1e-10 ? (deltaVal - stats.mean) / stats.std : 0;
-      const label = Math.abs(sigma) > 2 ? 'WELL OUTSIDE typical'
-        : Math.abs(sigma) > 1 ? 'outside typical'
-        : 'within typical';
-      const meta = DIMENSION_META[dim];
-      lines.push(`- ${meta.label}: ${label} range (today: ${meta.format(deltaVal)}, typical: ${meta.format(stats.mean)} ± ${meta.format(stats.std)}, ${sigma >= 0 ? '+' : ''}${sigma.toFixed(1)}σ)`);
-    }
-  }
-
-  // Delta trend (if enough history)
-  if (history.length >= MIN_HISTORY_FOR_TREND) {
-    const trends: string[] = [];
-    for (const dim of DELTA_DIMENSIONS) {
-      const trend = getTrend(history, dim);
-      if (trend && trend !== 'stable') {
-        const meta = DIMENSION_META[dim];
-        trends.push(`- ${meta.label} delta trending ${trend === 'rising' ? 'UP' : 'DOWN'} over last 7 days`);
-      }
-    }
-    if (trends.length > 0) {
-      lines.push('');
-      lines.push('DELTA TREND (7-day direction):');
-      lines.push(...trends);
-    }
-  }
-
-  lines.push('');
-  lines.push('Same-day deltas control for sleep, stress, device, and time-of-day. A delta near zero means the question provoked no behavioral change beyond neutral writing. When available, prefer this over the historical-average calibration deviation.');
-
-  return lines.join('\n');
-}
-
-// ----------------------------------------------------------------------------
-// FORMATTING: Compact (for generate.ts and reflect.ts)
-// ----------------------------------------------------------------------------
-
 export function formatCompactDelta(deltas: SessionDeltaRow[]): string {
   if (deltas.length === 0) return '';
 
   const lines: string[] = [];
-  lines.push('=== SESSION DELTA TRENDS (calibration → journal shifts) ===');
+  lines.push('=== DAILY DELTA TRENDS (calibration vs journal shifts) ===');
 
-  // Show recent deltas (one line per date, only notable dimensions)
-  const toShow = deltas.slice(0, 14); // most recent 14
+  const toShow = deltas.slice(0, 14);
   for (const d of toShow) {
     const parts: string[] = [];
     for (const dim of DELTA_DIMENSIONS) {
       const val = d[dim];
       if (val == null) continue;
 
-      // Only flag dimensions that seem notable (non-trivial delta)
       const stats = getDeltaStats(deltas, dim);
       if (stats && stats.std > 1e-10) {
         const sigma = (val - stats.mean) / stats.std;
         if (Math.abs(sigma) > 1) {
           const meta = DIMENSION_META[dim];
-          parts.push(`${meta.label}:${sigma >= 0 ? '+' : ''}${sigma.toFixed(1)}σ`);
+          parts.push(`${meta.label}:${sigma >= 0 ? '+' : ''}${sigma.toFixed(1)}s`);
         }
       }
     }
@@ -401,7 +318,6 @@ export function formatCompactDelta(deltas: SessionDeltaRow[]): string {
     lines.push(`[${d.sessionDate}]${magStr}${notable}`);
   }
 
-  // 7-day trends
   if (deltas.length >= MIN_HISTORY_FOR_TREND) {
     const trends: string[] = [];
     for (const dim of DELTA_DIMENSIONS) {
@@ -420,32 +336,79 @@ export function formatCompactDelta(deltas: SessionDeltaRow[]): string {
 }
 
 // ----------------------------------------------------------------------------
-// FIRE-AND-FORGET WRAPPER
+// BATCH JOB: Retrospective daily delta backfill
 // ----------------------------------------------------------------------------
 
-export async function runSessionDelta(journalQuestionId: number, date: string): Promise<void> {
-  try {
-    const calibrationSummary = await getSameDayCalibrationSummary(date);
-    if (!calibrationSummary) {
-      console.log(`[session-delta] No same-day calibration for ${date}, skipping`);
-      return;
-    }
+/**
+ * Find all dates where both a journal session and at least one calibration
+ * session exist, but no delta row has been computed yet.
+ */
+async function getEligibleDatesWithoutDelta(): Promise<Array<{ date: string; journalQuestionId: number }>> {
+  const rows = await sql`
+    SELECT j.scheduled_for::text AS date, j.question_id AS "journalQuestionId"
+    FROM tb_questions j
+    JOIN tb_session_summaries js ON j.question_id = js.question_id
+    WHERE j.question_source_id != 3
+      AND j.scheduled_for IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM tb_questions c
+        JOIN tb_session_summaries cs ON c.question_id = cs.question_id
+        WHERE c.question_source_id = 3
+          AND c.dttm_created_utc::date = j.scheduled_for
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM tb_session_delta d
+        WHERE d.session_date::date = j.scheduled_for
+      )
+    ORDER BY j.scheduled_for ASC
+  `;
+  return rows as Array<{ date: string; journalQuestionId: number }>;
+}
 
-    const journalSummary = await getSessionSummary(journalQuestionId);
-    if (!journalSummary) {
-      console.log(`[session-delta] No journal session summary for question ${journalQuestionId}, skipping`);
-      return;
-    }
-
-    const history = await getRecentSessionDeltas(30);
-    const delta = computeSessionDelta(calibrationSummary, journalSummary, date);
-    delta.deltaMagnitude = computeDeltaMagnitude(delta, history);
-    await saveSessionDelta(delta);
-
-    console.log(
-      `[session-delta] Computed delta for ${date}, magnitude: ${delta.deltaMagnitude?.toFixed(2) ?? 'insufficient history'}`
-    );
-  } catch (err) {
-    console.error('[session-delta] Computation failed (non-blocking):', (err as Error).message);
+/**
+ * Scan the entire history for day-pairs (journal + calibration on the same
+ * date) that have no delta row yet, and compute + store deltas for each.
+ *
+ * Idempotent: days with existing delta rows are skipped. Uses ON CONFLICT
+ * DO UPDATE as a secondary safety net. Safe to re-run after interruption.
+ *
+ * Called from the nightly runGeneration flow before question generation,
+ * and from the standalone backfill script.
+ */
+export async function runDailyDeltaBackfill(): Promise<number> {
+  const eligible = await getEligibleDatesWithoutDelta();
+  if (eligible.length === 0) {
+    console.log('[daily-delta] No new day-pairs to process.');
+    return 0;
   }
+
+  console.log(`[daily-delta] Found ${eligible.length} day-pair(s) to process.`);
+  let computed = 0;
+
+  for (const { date, journalQuestionId } of eligible) {
+    try {
+      // getSameDayCalibrationSummary already returns the LAST calibration
+      // of the day (ORDER BY dttm_created_utc DESC LIMIT 1)
+      const calibrationSummary = await getSameDayCalibrationSummary(date);
+      if (!calibrationSummary) continue; // shouldn't happen given the EXISTS check
+
+      const journalSummary = await getSessionSummary(journalQuestionId);
+      if (!journalSummary) continue;
+
+      const history = await getRecentSessionDeltas(30);
+      const delta = computeSessionDelta(calibrationSummary, journalSummary, date);
+      delta.deltaMagnitude = computeDeltaMagnitude(delta, history);
+      await saveSessionDelta(delta);
+
+      computed++;
+      console.log(
+        `[daily-delta] ${date}: magnitude=${delta.deltaMagnitude?.toFixed(2) ?? 'insufficient history'}`
+      );
+    } catch (err) {
+      console.error(`[daily-delta] Failed for ${date}:`, (err as Error).message);
+    }
+  }
+
+  console.log(`[daily-delta] Backfill complete: ${computed}/${eligible.length} deltas computed.`);
+  return computed;
 }
