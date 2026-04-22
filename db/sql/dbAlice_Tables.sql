@@ -978,6 +978,12 @@ CREATE TABLE IF NOT EXISTS tb_reconstruction_residuals (
   ,question_source_id           SMALLINT
   ,UNIQUE (question_id, adversary_variant_id)
 
+  -- ── Reproducibility inputs (store to regenerate the exact ghost) ─────
+  ,avatar_seed                  TEXT            -- PRNG seed (u64 decimal string). NULL = pre-reproducibility-era.
+  ,profile_snapshot_json        JSONB           -- exact profile JSON passed to generateAvatar(). NULL = pre-reproducibility-era.
+  ,corpus_sha256                TEXT            -- SHA-256 hex digest of corpusJson. NULL = pre-reproducibility-era.
+  ,avatar_topic                 TEXT            -- topic string passed to generateAvatar(). NULL = pre-reproducibility-era.
+
   -- ── Avatar generation metadata ──────────────────────────────────────
   ,avatar_text                  TEXT
   ,avatar_word_count            INT
