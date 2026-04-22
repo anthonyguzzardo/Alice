@@ -9,8 +9,7 @@ import { embedResponse } from '../../lib/libEmbeddings.ts';
 import { logError } from '../../lib/utlErrorLog.ts';
 import { localDateStr } from '../../lib/utlDate.ts';
 import { parseBody } from '../../lib/utlParseBody.ts';
-import { computeLinguisticDensities } from '../../lib/libLinguistic.ts';
-import { computeMATTR } from '../../lib/libAliceNegative/libHelpers.ts';
+import { coerceSessionSummary } from '../../lib/utlSessionSummary.ts';
 import { renderWitnessState } from '../../lib/libAliceNegative/libRenderWitness.ts';
 import { computeSessionMetadata } from '../../lib/libSessionMetadata.ts';
 import { computeAndPersistDerivedSignals } from '../../lib/libSignalPipeline.ts';
@@ -53,18 +52,7 @@ export const POST: APIRoute = async ({ request }) => {
     });
   }
 
-  // Compute linguistic densities and text metrics before the transaction
   const trimmedText = text.trim();
-  const densities = computeLinguisticDensities(trimmedText);
-
-  const mattrWords = trimmedText.toLowerCase().replace(/[^a-z'\s-]/g, '').split(/\s+/).filter((w: string) => w.length > 0);
-  const mattrValue = mattrWords.length >= 25 ? computeMATTR(mattrWords) : null;
-  const sentences = trimmedText.split(/[.!?]+/).filter((s: string) => s.trim().length > 0);
-  const sentWordCounts = sentences.map((s: string) => s.trim().split(/\s+/).filter(Boolean).length);
-  const avgSentLen = sentWordCounts.length > 0
-    ? sentWordCounts.reduce((a: number, b: number) => a + b, 0) / sentWordCounts.length : null;
-  const sentLenVar = sentWordCounts.length > 1 && avgSentLen != null
-    ? sentWordCounts.reduce((sum: number, c: number) => sum + (c - avgSentLen) ** 2, 0) / (sentWordCounts.length - 1) : null;
 
   // All DB writes in a single transaction via the tx handle.
   // Every write function receives tx so it runs on the transaction
@@ -93,84 +81,10 @@ export const POST: APIRoute = async ({ request }) => {
           }, tx);
         }
 
-        await saveSessionSummary({
-          questionId: sessionSummary.questionId,
-          firstKeystrokeMs: sessionSummary.firstKeystrokeMs ?? null,
-          totalDurationMs: sessionSummary.totalDurationMs ?? null,
-          totalCharsTyped: sessionSummary.totalCharsTyped ?? 0,
-          finalCharCount: sessionSummary.finalCharCount ?? 0,
-          commitmentRatio: sessionSummary.commitmentRatio ?? null,
-          pauseCount: sessionSummary.pauseCount ?? 0,
-          totalPauseMs: sessionSummary.totalPauseMs ?? 0,
-          deletionCount: sessionSummary.deletionCount ?? 0,
-          largestDeletion: sessionSummary.largestDeletion ?? 0,
-          totalCharsDeleted: sessionSummary.totalCharsDeleted ?? 0,
-          tabAwayCount: sessionSummary.tabAwayCount ?? 0,
-          totalTabAwayMs: sessionSummary.totalTabAwayMs ?? 0,
-          wordCount: sessionSummary.wordCount ?? 0,
-          sentenceCount: sessionSummary.sentenceCount ?? 0,
-          smallDeletionCount: sessionSummary.smallDeletionCount ?? null,
-          largeDeletionCount: sessionSummary.largeDeletionCount ?? null,
-          largeDeletionChars: sessionSummary.largeDeletionChars ?? null,
-          firstHalfDeletionChars: sessionSummary.firstHalfDeletionChars ?? null,
-          secondHalfDeletionChars: sessionSummary.secondHalfDeletionChars ?? null,
-          activeTypingMs: sessionSummary.activeTypingMs ?? null,
-          charsPerMinute: sessionSummary.charsPerMinute ?? null,
-          pBurstCount: sessionSummary.pBurstCount ?? null,
-          avgPBurstLength: sessionSummary.avgPBurstLength ?? null,
-          ...densities,
-          interKeyIntervalMean: sessionSummary.interKeyIntervalMean ?? null,
-          interKeyIntervalStd: sessionSummary.interKeyIntervalStd ?? null,
-          revisionChainCount: sessionSummary.revisionChainCount ?? null,
-          revisionChainAvgLength: sessionSummary.revisionChainAvgLength ?? null,
-          holdTimeMean: sessionSummary.holdTimeMean ?? null,
-          holdTimeStd: sessionSummary.holdTimeStd ?? null,
-          flightTimeMean: sessionSummary.flightTimeMean ?? null,
-          flightTimeStd: sessionSummary.flightTimeStd ?? null,
-          keystrokeEntropy: sessionSummary.keystrokeEntropy ?? null,
-          mattr: mattrValue,
-          avgSentenceLength: avgSentLen,
-          sentenceLengthVariance: sentLenVar,
-          scrollBackCount: sessionSummary.scrollBackCount ?? null,
-          questionRereadCount: sessionSummary.questionRereadCount ?? null,
-          confirmationLatencyMs: sessionSummary.confirmationLatencyMs ?? null,
-          pasteCount: sessionSummary.pasteCount ?? null,
-          pasteCharsTotal: sessionSummary.pasteCharsTotal ?? null,
-          readBackCount: sessionSummary.readBackCount ?? null,
-          leadingEdgeRatio: sessionSummary.leadingEdgeRatio ?? null,
-          contextualRevisionCount: sessionSummary.contextualRevisionCount ?? null,
-          preContextualRevisionCount: sessionSummary.preContextualRevisionCount ?? null,
-          consideredAndKeptCount: sessionSummary.consideredAndKeptCount ?? null,
-          holdTimeMeanLeft: sessionSummary.holdTimeMeanLeft ?? null,
-          holdTimeMeanRight: sessionSummary.holdTimeMeanRight ?? null,
-          holdTimeStdLeft: sessionSummary.holdTimeStdLeft ?? null,
-          holdTimeStdRight: sessionSummary.holdTimeStdRight ?? null,
-          holdTimeCV: sessionSummary.holdTimeCV ?? null,
-          negativeFlightTimeCount: sessionSummary.negativeFlightTimeCount ?? null,
-          ikiSkewness: sessionSummary.ikiSkewness ?? null,
-          ikiKurtosis: sessionSummary.ikiKurtosis ?? null,
-          errorDetectionLatencyMean: sessionSummary.errorDetectionLatencyMean ?? null,
-          terminalVelocity: sessionSummary.terminalVelocity ?? null,
-          // Mouse/cursor trajectory (BioCatch, Phase 2 expansion)
-          cursorDistanceDuringPauses: sessionSummary.cursorDistanceDuringPauses ?? null,
-          cursorFidgetRatio: sessionSummary.cursorFidgetRatio ?? null,
-          cursorStillnessDuringPauses: sessionSummary.cursorStillnessDuringPauses ?? null,
-          driftToSubmitCount: sessionSummary.driftToSubmitCount ?? null,
-          cursorPauseSampleCount: sessionSummary.cursorPauseSampleCount ?? null,
-          // Precorrection/postcorrection latency (Springer 2021)
-          deletionExecutionSpeedMean: sessionSummary.deletionExecutionSpeedMean ?? null,
-          postcorrectionLatencyMean: sessionSummary.postcorrectionLatencyMean ?? null,
-          // Revision distance (ScriptLog)
-          meanRevisionDistance: sessionSummary.meanRevisionDistance ?? null,
-          maxRevisionDistance: sessionSummary.maxRevisionDistance ?? null,
-          // Punctuation key latency (Plank 2016)
-          punctuationFlightMean: sessionSummary.punctuationFlightMean ?? null,
-          punctuationLetterRatio: sessionSummary.punctuationLetterRatio ?? null,
-          deviceType: sessionSummary.deviceType ?? null,
-          userAgent: sessionSummary.userAgent ?? null,
-          hourOfDay: sessionSummary.hourOfDay ?? null,
-          dayOfWeek: sessionSummary.dayOfWeek ?? null,
-        }, tx);
+        await saveSessionSummary(
+          coerceSessionSummary(sessionSummary, sessionSummary.questionId, trimmedText),
+          tx,
+        );
 
         // Persist deletion event timing log — must run AFTER saveSessionSummary
         // since updateDeletionEvents is an UPDATE on the row it creates.

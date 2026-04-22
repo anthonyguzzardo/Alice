@@ -100,6 +100,12 @@ Without the `tx` parameter, each function uses the module-level connection pool 
 
 ---
 
+## Shared Constants (do not duplicate)
+- **`SESSION_SUMMARY_COLS`** (`libDb.ts`): Single source of truth for the ~37-column SELECT list that maps `tb_session_summaries` columns to `SessionSummaryInput` fields. Every query returning `SessionSummaryInput` MUST use this constant via `sql.unsafe`. Never inline the column list.
+- **`coerceSessionSummary()`** (`utlSessionSummary.ts`): Single source of truth for converting raw client JSON into a typed `SessionSummaryInput`. Handles null coercion, computes MATTR and sentence metrics server-side, merges linguistic densities. Both `calibrate.ts` and `respond.ts` use this. If you add a new session summary field, update `coerceSessionSummary` and `SESSION_SUMMARY_COLS` together.
+
+---
+
 ## Database Conventions
 - **Table prefixes**: `te_` (enumeration/static), `td_` (dictionary), `tb_` (normal/mutable), `tm_` (matrix), `th_` (history)
 - **Surrogate keys**: `table_name_id` (NEVER just `id`)

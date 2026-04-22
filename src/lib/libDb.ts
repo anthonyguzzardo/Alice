@@ -563,39 +563,42 @@ export async function updateDeletionEvents(questionId: number, deletionEventsJso
   `;
 }
 
+// Single source of truth for session summary SELECT columns.
+// All queries that return SessionSummaryInput MUST use this constant.
+// Uses s. prefix so it works in multi-table JOINs. Table alias must be `s`.
 const SESSION_SUMMARY_COLS = `
-  s.question_id AS "questionId", first_keystroke_ms AS "firstKeystrokeMs",
-  total_duration_ms AS "totalDurationMs", total_chars_typed AS "totalCharsTyped",
-  final_char_count AS "finalCharCount", commitment_ratio AS "commitmentRatio",
-  pause_count AS "pauseCount", total_pause_ms AS "totalPauseMs",
-  deletion_count AS "deletionCount", largest_deletion AS "largestDeletion",
-  total_chars_deleted AS "totalCharsDeleted", tab_away_count AS "tabAwayCount",
-  total_tab_away_ms AS "totalTabAwayMs", word_count AS "wordCount",
-  sentence_count AS "sentenceCount",
-  small_deletion_count AS "smallDeletionCount", large_deletion_count AS "largeDeletionCount",
-  large_deletion_chars AS "largeDeletionChars",
-  first_half_deletion_chars AS "firstHalfDeletionChars",
-  second_half_deletion_chars AS "secondHalfDeletionChars",
-  active_typing_ms AS "activeTypingMs", chars_per_minute AS "charsPerMinute",
-  p_burst_count AS "pBurstCount", avg_p_burst_length AS "avgPBurstLength",
-  nrc_anger_density AS "nrcAngerDensity", nrc_fear_density AS "nrcFearDensity",
-  nrc_joy_density AS "nrcJoyDensity", nrc_sadness_density AS "nrcSadnessDensity",
-  nrc_trust_density AS "nrcTrustDensity", nrc_anticipation_density AS "nrcAnticipationDensity",
-  cognitive_density AS "cognitiveDensity", hedging_density AS "hedgingDensity",
-  first_person_density AS "firstPersonDensity",
-  inter_key_interval_mean AS "interKeyIntervalMean",
-  inter_key_interval_std AS "interKeyIntervalStd",
-  revision_chain_count AS "revisionChainCount",
-  revision_chain_avg_length AS "revisionChainAvgLength",
-  hold_time_mean AS "holdTimeMean", hold_time_std AS "holdTimeStd",
-  flight_time_mean AS "flightTimeMean", flight_time_std AS "flightTimeStd",
-  keystroke_entropy AS "keystrokeEntropy",
-  mattr, avg_sentence_length AS "avgSentenceLength",
-  sentence_length_variance AS "sentenceLengthVariance",
-  scroll_back_count AS "scrollBackCount",
-  question_reread_count AS "questionRereadCount",
-  device_type AS "deviceType", user_agent AS "userAgent",
-  hour_of_day AS "hourOfDay", day_of_week AS "dayOfWeek"
+  s.question_id AS "questionId", s.first_keystroke_ms AS "firstKeystrokeMs",
+  s.total_duration_ms AS "totalDurationMs", s.total_chars_typed AS "totalCharsTyped",
+  s.final_char_count AS "finalCharCount", s.commitment_ratio AS "commitmentRatio",
+  s.pause_count AS "pauseCount", s.total_pause_ms AS "totalPauseMs",
+  s.deletion_count AS "deletionCount", s.largest_deletion AS "largestDeletion",
+  s.total_chars_deleted AS "totalCharsDeleted", s.tab_away_count AS "tabAwayCount",
+  s.total_tab_away_ms AS "totalTabAwayMs", s.word_count AS "wordCount",
+  s.sentence_count AS "sentenceCount",
+  s.small_deletion_count AS "smallDeletionCount", s.large_deletion_count AS "largeDeletionCount",
+  s.large_deletion_chars AS "largeDeletionChars",
+  s.first_half_deletion_chars AS "firstHalfDeletionChars",
+  s.second_half_deletion_chars AS "secondHalfDeletionChars",
+  s.active_typing_ms AS "activeTypingMs", s.chars_per_minute AS "charsPerMinute",
+  s.p_burst_count AS "pBurstCount", s.avg_p_burst_length AS "avgPBurstLength",
+  s.nrc_anger_density AS "nrcAngerDensity", s.nrc_fear_density AS "nrcFearDensity",
+  s.nrc_joy_density AS "nrcJoyDensity", s.nrc_sadness_density AS "nrcSadnessDensity",
+  s.nrc_trust_density AS "nrcTrustDensity", s.nrc_anticipation_density AS "nrcAnticipationDensity",
+  s.cognitive_density AS "cognitiveDensity", s.hedging_density AS "hedgingDensity",
+  s.first_person_density AS "firstPersonDensity",
+  s.inter_key_interval_mean AS "interKeyIntervalMean",
+  s.inter_key_interval_std AS "interKeyIntervalStd",
+  s.revision_chain_count AS "revisionChainCount",
+  s.revision_chain_avg_length AS "revisionChainAvgLength",
+  s.hold_time_mean AS "holdTimeMean", s.hold_time_std AS "holdTimeStd",
+  s.flight_time_mean AS "flightTimeMean", s.flight_time_std AS "flightTimeStd",
+  s.keystroke_entropy AS "keystrokeEntropy",
+  s.mattr, s.avg_sentence_length AS "avgSentenceLength",
+  s.sentence_length_variance AS "sentenceLengthVariance",
+  s.scroll_back_count AS "scrollBackCount",
+  s.question_reread_count AS "questionRereadCount",
+  s.device_type AS "deviceType", s.user_agent AS "userAgent",
+  s.hour_of_day AS "hourOfDay", s.day_of_week AS "dayOfWeek"
 `;
 
 export async function getSessionSummary(questionId: number): Promise<SessionSummaryInput | null> {
@@ -607,93 +610,26 @@ export async function getSessionSummary(questionId: number): Promise<SessionSumm
 }
 
 export async function getAllSessionSummaries(): Promise<Array<SessionSummaryInput & { date: string }>> {
-  return await sql`
-    SELECT s.question_id AS "questionId", q.scheduled_for AS date,
-           s.first_keystroke_ms AS "firstKeystrokeMs",
-           s.total_duration_ms AS "totalDurationMs", s.total_chars_typed AS "totalCharsTyped",
-           s.final_char_count AS "finalCharCount", s.commitment_ratio AS "commitmentRatio",
-           s.pause_count AS "pauseCount", s.total_pause_ms AS "totalPauseMs",
-           s.deletion_count AS "deletionCount", s.largest_deletion AS "largestDeletion",
-           s.total_chars_deleted AS "totalCharsDeleted", s.tab_away_count AS "tabAwayCount",
-           s.total_tab_away_ms AS "totalTabAwayMs", s.word_count AS "wordCount",
-           s.sentence_count AS "sentenceCount",
-           s.small_deletion_count AS "smallDeletionCount",
-           s.large_deletion_count AS "largeDeletionCount",
-           s.large_deletion_chars AS "largeDeletionChars",
-           s.first_half_deletion_chars AS "firstHalfDeletionChars",
-           s.second_half_deletion_chars AS "secondHalfDeletionChars",
-           s.active_typing_ms AS "activeTypingMs", s.chars_per_minute AS "charsPerMinute",
-           s.p_burst_count AS "pBurstCount", s.avg_p_burst_length AS "avgPBurstLength",
-           s.nrc_anger_density AS "nrcAngerDensity", s.nrc_fear_density AS "nrcFearDensity",
-           s.nrc_joy_density AS "nrcJoyDensity", s.nrc_sadness_density AS "nrcSadnessDensity",
-           s.nrc_trust_density AS "nrcTrustDensity", s.nrc_anticipation_density AS "nrcAnticipationDensity",
-           s.cognitive_density AS "cognitiveDensity", s.hedging_density AS "hedgingDensity",
-           s.first_person_density AS "firstPersonDensity",
-           s.inter_key_interval_mean AS "interKeyIntervalMean",
-           s.inter_key_interval_std AS "interKeyIntervalStd",
-           s.revision_chain_count AS "revisionChainCount",
-           s.revision_chain_avg_length AS "revisionChainAvgLength",
-           s.hold_time_mean AS "holdTimeMean", s.hold_time_std AS "holdTimeStd",
-           s.flight_time_mean AS "flightTimeMean", s.flight_time_std AS "flightTimeStd",
-           s.keystroke_entropy AS "keystrokeEntropy",
-           s.mattr, s.avg_sentence_length AS "avgSentenceLength",
-           s.sentence_length_variance AS "sentenceLengthVariance",
-           s.scroll_back_count AS "scrollBackCount",
-           s.question_reread_count AS "questionRereadCount",
-           s.device_type AS "deviceType",
-           s.user_agent AS "userAgent", s.hour_of_day AS "hourOfDay", s.day_of_week AS "dayOfWeek"
+  return await sql.unsafe(
+    `SELECT ${SESSION_SUMMARY_COLS}, q.scheduled_for AS date
     FROM tb_session_summaries s
     JOIN tb_questions q ON s.question_id = q.question_id
-    ORDER BY q.scheduled_for ASC
-  ` as Array<SessionSummaryInput & { date: string }>;
+    ORDER BY q.scheduled_for ASC`
+  ) as Array<SessionSummaryInput & { date: string }>;
 }
 
 // @region calibration -- getCalibrationSessionsWithText, isCalibrationQuestion, saveCalibrationSession, getUsedCalibrationPrompts, getCalibrationPromptsByRecency, saveCalibrationBaselineSnapshot, getCalibrationHistory, getLatestCalibrationSnapshot, saveQuestionFeedback, getAllQuestionFeedback
 
 export async function getCalibrationSessionsWithText(): Promise<Array<SessionSummaryInput & { date: string; responseText: string }>> {
-  return await sql`
-    SELECT s.question_id AS "questionId", q.scheduled_for AS date,
-           r.text AS "responseText",
-           s.first_keystroke_ms AS "firstKeystrokeMs",
-           s.total_duration_ms AS "totalDurationMs", s.total_chars_typed AS "totalCharsTyped",
-           s.final_char_count AS "finalCharCount", s.commitment_ratio AS "commitmentRatio",
-           s.pause_count AS "pauseCount", s.total_pause_ms AS "totalPauseMs",
-           s.deletion_count AS "deletionCount", s.largest_deletion AS "largestDeletion",
-           s.total_chars_deleted AS "totalCharsDeleted", s.tab_away_count AS "tabAwayCount",
-           s.total_tab_away_ms AS "totalTabAwayMs", s.word_count AS "wordCount",
-           s.sentence_count AS "sentenceCount",
-           s.small_deletion_count AS "smallDeletionCount",
-           s.large_deletion_count AS "largeDeletionCount",
-           s.large_deletion_chars AS "largeDeletionChars",
-           s.first_half_deletion_chars AS "firstHalfDeletionChars",
-           s.second_half_deletion_chars AS "secondHalfDeletionChars",
-           s.active_typing_ms AS "activeTypingMs", s.chars_per_minute AS "charsPerMinute",
-           s.p_burst_count AS "pBurstCount", s.avg_p_burst_length AS "avgPBurstLength",
-           s.nrc_anger_density AS "nrcAngerDensity", s.nrc_fear_density AS "nrcFearDensity",
-           s.nrc_joy_density AS "nrcJoyDensity", s.nrc_sadness_density AS "nrcSadnessDensity",
-           s.nrc_trust_density AS "nrcTrustDensity", s.nrc_anticipation_density AS "nrcAnticipationDensity",
-           s.cognitive_density AS "cognitiveDensity", s.hedging_density AS "hedgingDensity",
-           s.first_person_density AS "firstPersonDensity",
-           s.inter_key_interval_mean AS "interKeyIntervalMean",
-           s.inter_key_interval_std AS "interKeyIntervalStd",
-           s.revision_chain_count AS "revisionChainCount",
-           s.revision_chain_avg_length AS "revisionChainAvgLength",
-           s.hold_time_mean AS "holdTimeMean", s.hold_time_std AS "holdTimeStd",
-           s.flight_time_mean AS "flightTimeMean", s.flight_time_std AS "flightTimeStd",
-           s.keystroke_entropy AS "keystrokeEntropy",
-           s.mattr, s.avg_sentence_length AS "avgSentenceLength",
-           s.sentence_length_variance AS "sentenceLengthVariance",
-           s.scroll_back_count AS "scrollBackCount",
-           s.question_reread_count AS "questionRereadCount",
-           s.device_type AS "deviceType",
-           s.user_agent AS "userAgent", s.hour_of_day AS "hourOfDay", s.day_of_week AS "dayOfWeek"
+  return await sql.unsafe(
+    `SELECT ${SESSION_SUMMARY_COLS}, q.scheduled_for AS date, r.text AS "responseText"
     FROM tb_session_summaries s
     JOIN tb_questions q ON s.question_id = q.question_id
     JOIN tb_responses r ON q.question_id = r.question_id
     WHERE q.question_source_id = 3
       AND s.word_count >= 10
-    ORDER BY q.question_id ASC
-  ` as Array<SessionSummaryInput & { date: string; responseText: string }>;
+    ORDER BY q.question_id ASC`
+  ) as Array<SessionSummaryInput & { date: string; responseText: string }>;
 }
 
 export async function isCalibrationQuestion(questionId: number): Promise<boolean> {

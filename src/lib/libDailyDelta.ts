@@ -6,6 +6,30 @@
  * the reflective question provoked, controlling for within-day confounds
  * (sleep, stress, device, time-of-day, etc.).
  *
+ * ONE OF THREE CALIBRATION COMPARISON SYSTEMS in Alice:
+ *
+ *   1. Reconstruction residuals (ghost API, libReconstruction.ts)
+ *      Compares journal vs calibration via L2 norms from the ghost engine.
+ *      Measures: how much of the person's behavior the ghost can't reproduce.
+ *      Granularity: per-session, per-adversary-variant.
+ *      Consumers: research page, observatory ghost dashboard.
+ *
+ *   2. Calibration drift (libCalibrationDrift.ts)
+ *      Compares calibration baselines against their own history over time.
+ *      Measures: whether the neutral-writing reference frame is stable.
+ *      Granularity: per-submission snapshot, global + per-device tracks.
+ *      Consumers: observatory drift view.
+ *
+ *   3. Daily delta (this module)
+ *      Compares journal vs last-calibration-of-day across ~10 deterministic
+ *      behavioral/linguistic signals.
+ *      Measures: what the reflective question provoked beyond neutral writing.
+ *      Granularity: one row per day, retrospective batch.
+ *      Consumers: question generation prompts (formatCompactDelta).
+ *
+ * These are complementary, not redundant. They measure different constructs
+ * at different granularities using different comparison methods.
+ *
  * Timing: calibration always happens AFTER the journal session in the daily
  * flow. Deltas are therefore computed retrospectively — the nightly batch job
  * scans for completed day-pairs (journal + calibration on the same date) and
@@ -362,7 +386,7 @@ async function getEligibleDatesWithoutDelta(): Promise<Array<{ date: string; jou
       )
     ORDER BY j.scheduled_for ASC
   `;
-  return rows as Array<{ date: string; journalQuestionId: number }>;
+  return rows as unknown as Array<{ date: string; journalQuestionId: number }>;
 }
 
 /**
