@@ -218,6 +218,8 @@ import '../../styles/styObservatory.css';
         }
 
         const s = data.summary;
+        const lowProfile = s.count < 10;
+        const flagLabel = lowProfile ? 'atypical' : 'flagged';
         const flagged = data.sessions.filter(r => r.flagged);
 
         let html = `
@@ -227,7 +229,7 @@ import '../../styles/styObservatory.css';
               <div class="v">${s.count}</div>
             </div>
             <div class="kpi">
-              <div class="k">flagged</div>
+              <div class="k">${flagLabel}${lowProfile ? ' (based on n=' + s.count + ' prior sessions)' : ''}</div>
               <div class="v">${s.flaggedCount}</div>
             </div>
             <div class="kpi">
@@ -261,7 +263,7 @@ import '../../styles/styObservatory.css';
 
         // Flagged sessions
         if (flagged.length > 0) {
-          html += `<div style="margin-top:0.75rem;font-family:var(--mono);font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-faint);">flagged sessions</div>`;
+          html += `<div style="margin-top:0.75rem;font-family:var(--mono);font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-faint);">${flagLabel} sessions</div>`;
           html += '<table><thead><tr><th>date</th><th>distance</th><th>dims</th><th>threshold</th></tr></thead><tbody>';
           for (const f of flagged) {
             html += `<tr>

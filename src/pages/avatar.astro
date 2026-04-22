@@ -91,9 +91,6 @@ import PublicLayout from '../layouts/layPublic.astro';
       </div>
     </div>
 
-    <div class="av-phase" id="phase" hidden>
-      <span class="av-phase-indicator" id="phase-indicator"></span>
-    </div>
   </section>
 
 </article>
@@ -109,8 +106,6 @@ import PublicLayout from '../layouts/layPublic.astro';
   var cursor = document.getElementById('cursor');
   var meta = document.getElementById('meta');
   var signals = document.getElementById('signals');
-  var phaseEl = document.getElementById('phase');
-  var phaseInd = document.getElementById('phase-indicator');
 
   var sigChars = document.getElementById('sig-chars');
   var sigBursts = document.getElementById('sig-bursts');
@@ -145,7 +140,6 @@ import PublicLayout from '../layouts/layPublic.astro';
     cursor.hidden = false;
     meta.hidden = true;
     signals.hidden = true;
-    phaseEl.hidden = true;
     var oldDone = document.querySelector('.av-done');
     if (oldDone) oldDone.remove();
 
@@ -173,7 +167,6 @@ import PublicLayout from '../layouts/layPublic.astro';
         document.getElementById('meta-sessions').textContent = data.sessionCount + ' sessions profiled';
         meta.hidden = false;
         signals.hidden = false;
-        phaseEl.hidden = false;
 
         // Parse the keystroke stream for replay
         var stream = [];
@@ -222,20 +215,6 @@ import PublicLayout from '../layouts/layPublic.astro';
           return i < text.length ? text[i] : null;
         }
 
-        function updatePhase() {
-          var progress = i / totalEvents;
-          var label;
-          if (progress < 0.2) {
-            label = 'exploring';
-          } else if (progress < 0.75) {
-            label = 'composing';
-          } else {
-            label = 'finishing';
-          }
-          phaseInd.textContent = label;
-          phaseInd.className = 'av-phase-indicator av-phase-' + label;
-        }
-
         function updateTempo() {
           if (recentIkis.length < 3) {
             sigTempo.textContent = '--';
@@ -262,8 +241,6 @@ import PublicLayout from '../layouts/layPublic.astro';
             done.className = 'av-done';
             done.textContent = charCount + ' chars in ' + elapsed.toFixed(1) + 's';
             output.parentNode.appendChild(done);
-            phaseInd.textContent = 'done';
-            phaseInd.className = 'av-phase-indicator av-phase-done';
             return;
           }
 
@@ -329,7 +306,6 @@ import PublicLayout from '../layouts/layPublic.astro';
           sigPauses.textContent = pauseCount;
           sigIki.textContent = ikiCount > 0 ? Math.round(totalIki / ikiCount) + 'ms' : '0ms';
 
-          updatePhase();
           updateTempo();
 
           output.scrollTop = output.scrollHeight;
@@ -626,41 +602,6 @@ import PublicLayout from '../layouts/layPublic.astro';
     font-size: 1.1rem;
     color: var(--text);
     letter-spacing: -0.02em;
-  }
-
-  /* --- Phase indicator --- */
-  .av-phase {
-    padding: 0.5rem 0;
-  }
-
-  .av-phase-indicator {
-    font-family: var(--mono);
-    font-size: 0.65rem;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    padding: 0.3rem 0.8rem;
-    border-radius: 3px;
-    border: 1px solid var(--border);
-    color: var(--text-faint);
-    transition: color 0.4s ease, border-color 0.4s ease;
-  }
-
-  .av-phase-exploring {
-    color: var(--text-faint);
-  }
-
-  .av-phase-composing {
-    color: var(--text-muted);
-    border-color: var(--border-focus);
-  }
-
-  .av-phase-finishing {
-    color: var(--text-faint);
-  }
-
-  .av-phase-done {
-    color: var(--text-faint);
-    border-color: var(--border);
   }
 
   .av-done {

@@ -120,8 +120,11 @@ export const GET: APIRoute = async () => {
           const absD = Math.abs(n.deviation);
           const desc = n.deviation > 0 ? DIM_HIGH[n.dim] : DIM_LOW[n.dim];
           const intensity = absD > 2 ? RARE_PREFIX : '';
+          const measure = behavioralCount >= 15
+            ? `${absD.toFixed(1)}σ from behavioral baseline (n=${behavioralCount}).`
+            : `${n.deviation > 0 ? 'Above' : 'Below'} behavioral average (n=${behavioralCount}).`;
           rightNow.push({
-            text: `${intensity}${capitalize(desc)}. ${absD.toFixed(1)}σ from behavioral baseline.`,
+            text: `${intensity}${capitalize(desc)}. ${measure}`,
             space: 'behavioral',
             dimension: n.dim,
             magnitude: absD,
@@ -150,8 +153,11 @@ export const GET: APIRoute = async () => {
           const absD = Math.abs(n.deviation);
           const desc = n.deviation > 0 ? DIM_HIGH[n.dim] : DIM_LOW[n.dim];
           const intensity = absD > 2 ? RARE_PREFIX : '';
+          const measure = semanticCount >= 15
+            ? `${absD.toFixed(1)}σ from semantic baseline (n=${semanticCount}).`
+            : `${n.deviation > 0 ? 'Above' : 'Below'} semantic average (n=${semanticCount}).`;
           rightNow.push({
-            text: `${intensity}${capitalize(desc)}. ${absD.toFixed(1)}σ from semantic baseline.`,
+            text: `${intensity}${capitalize(desc)}. ${measure}`,
             space: 'semantic',
             dimension: n.dim,
             magnitude: absD,
@@ -187,7 +193,7 @@ export const GET: APIRoute = async () => {
             else if (direction === 'falling' && values[i] < values[i - 1]) runLen++;
             else break;
           }
-          if (runLen >= 3) {
+          if (runLen >= 4) {
             const verb = TREND_VERB[direction];
             const plain = DIM_PLAIN[dim] ?? dim;
             arcs.push({

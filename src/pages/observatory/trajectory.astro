@@ -244,6 +244,17 @@ import '../../styles/styObservatory.css';
 
         if (validPoints.length < 2) return;
 
+        // Below 5 data points: dots only, no lines or fill area
+        if (validPoints.length < 5) {
+          for (const p of validPoints) {
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+            ctx.fillStyle = colLine;
+            ctx.fill();
+          }
+          return;
+        }
+
         // Fill area
         ctx.beginPath();
         ctx.moveTo(validPoints[0].x, zeroY);
