@@ -94,7 +94,29 @@ METHODS_PROVENANCE.md                  -- INC-001 through INC-006
 src-rs/REPRODUCIBILITY.md              -- signal + residual reproducibility guarantees
 ```
 
+## Also built today (2026-04-22): Construct validity remediation
+
+### INC-008: Discovery badges with dynamic critical-r gate
+Observatory discoveries now use `max(criticalR(n), 0.3)` instead of a hardcoded 0.3 floor. Two-state badge system: "established" (passes critical-r + stability CV < 0.5) / "provisional" (passes critical-r only). Wired `libCouplingStability.ts` into synthesis for the first time. New utility: `src/lib/utlCriticalR.ts`.
+
+### INC-009: Interpretive label strip + low-n framing (Waves 1-2)
+Audit found two material gaps (attractor force badges, PE/tau/laminarity regime labels) and six minor gaps. All resolved across two waves. See METHODS_PROVENANCE.md INC-009 for full before/after tables.
+
+### Daily delta verification
+All 9 backfilled delta rows confirmed present in generation prompt via `formatCompactDelta`. Next generated question (April 24) will be the first with delta context. `deltaMagnitude` is null for all rows (needs 10+ day-pairs for z-score composite; roughly 2-3 more journaling days).
+
 ## What's next
+
+### Deferred from construct validity session
+
+| Item | Why deferred | When it matters |
+|---|---|---|
+| `/papers/reconstruction-validity` content audit | Product decision, not methods correction | Before external eyes see `/research` (it links to the paper) |
+| PersDyn computation-layer audit | Phase two; Wave 1 stripped the labels, the numeric model is untouched | Before making claims about attractor force as a validated construct |
+| Persistent prompt logging in `tb_prompt_traces` | Schema change, separate decision | When you want to audit what context fed a specific generated question |
+| Same-domain coupling stability | `libCouplingStability` only covers emotion-behavior pairs | Before behavioral/semantic couplings can reach "established" badge |
+| FDR correction on discoveries | 784-test surface uncorrected; critical-r handles single-test significance only | When n is large enough that corrected vs uncorrected changes which discoveries survive |
+| Coupling table significance context | Raw r values on `/observatory/coupling` have no significance annotation | Low priority; designer-facing page, not user-facing |
 
 ### Publish reconstruction-validity crate
 Owner to create GitHub repo, commit, push, publish to crates.io. Code complete at `../reconstruction-validity/`.
