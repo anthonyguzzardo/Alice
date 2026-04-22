@@ -36,6 +36,12 @@ Things that look wrong but aren't, things that will bite you, things that are no
 
 - **`tb_dynamical_signals_contaminated_20260421` and `tb_dynamical_signals_pre_alignment_fix_20260421` are intentional audit artifacts, not orphans.** They preserve pre-fix values from the HoldFlight alignment bug for methods provenance (INC-001). Do not drop them. Do not "clean up" the schema by removing them.
 
+## Observatory
+
+- **Discovery badges: same-domain couplings capped at "provisional".** `libCouplingStability.ts` only analyzes emotion->behavior cross-domain pairs. Behavioral-only and semantic-only couplings pass through `pushCouplings()` in `synthesis.ts`, which hardcodes `strength: 'provisional'` because there is no stability data to promote them. If you see every same-domain coupling stuck at "provisional" regardless of sample size or correlation strength, this is why. Phase-two follow-up: extend the stability system to same-domain pairs. See INC-008 in `METHODS_PROVENANCE.md`.
+
+- **Discovery critical-r gate suppresses most couplings at low n.** The discoveries section uses a dynamic significance threshold: `max(criticalR(n), 0.3)`. At n=10 (minimum for coupling computation), r_crit is 0.624. At n=25, it's 0.40. Most early couplings will be filtered out. This is intentional: a correlation of r=0.5 from 10 data points is not evidence of anything. If discoveries appear empty despite coupling data existing in the raw tables, check the entry count.
+
 ## Signal Pipeline
 
 - **`return` in signal family blocks exits the entire pipeline function.** In `libSignalPipeline.ts`, the dynamical, motor, and process signal blocks each have `if (!ds) return;` / `if (!ms) return;` / `if (!ps) return;` when the Rust engine is unavailable. These `return` statements exit `computeAndPersistDerivedSignals` entirely, skipping all subsequent families. This means if dynamical signals fail, motor/semantic/process/cross-session/integrity/profile/reconstruction all get skipped. This is semi-intentional (if Rust is down, most families can't compute) but surprising if you add a new family that doesn't depend on Rust.

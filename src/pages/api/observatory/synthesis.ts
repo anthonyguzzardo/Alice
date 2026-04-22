@@ -22,6 +22,8 @@ import {
   LOW_N_DEVIATIONS, LOW_N_TRENDS,
   MIN_N_DEVIATIONS, MIN_N_TRENDS,
 } from '../../../lib/libObservatoryVocabulary.ts';
+import { criticalR } from '../../../lib/utlCriticalR.ts';
+import { computeCouplingStability } from '../../../lib/libCouplingStability.ts';
 
 const BEHAVIORAL_DIMS = ['fluency', 'deliberation', 'revision', 'commitment', 'volatility', 'thermal', 'presence'] as const;
 const SEMANTIC_DIMS = [
@@ -32,7 +34,7 @@ const SEMANTIC_DIMS = [
 
 interface Insight { text: string; space?: 'behavioral' | 'semantic'; dimension?: string; magnitude?: number; }
 interface Arc { text: string; space: 'behavioral' | 'semantic'; dimension: string; direction: 'rising' | 'falling'; length: number; }
-interface Discovery { text: string; evidence: string; strength: 'strong' | 'moderate'; source: 'behavioral' | 'semantic' | 'emotion-behavior'; }
+interface Discovery { text: string; evidence: string; strength: 'established' | 'provisional'; source: 'behavioral' | 'semantic' | 'emotion-behavior'; }
 
 export const GET: APIRoute = async () => {
   try {
@@ -205,15 +207,40 @@ export const GET: APIRoute = async () => {
     }
 
     // ---- 3. DISCOVERIES: top couplings ----
+    // Dynamic critical-r gate: only show correlations that would be
+    // significant at alpha=0.05 (two-tailed) given current sample size,
+    // floored at 0.3 to suppress low-variance noise at large n.
     const discoveries: Discovery[] = [];
+
+    // Load stability data for emotion-behavior badge resolution.
+    // Behavioral-only and semantic-only couplings have no stability
+    // analysis and default to 'provisional'.
+    //
+    // KNOWN LIMITATION: libCouplingStability only analyzes emotion->behavior
+    // cross-domain pairs. Same-domain (behavioral-only, semantic-only)
+    // couplings can never reach 'established' under this design. Phase-two
+    // follow-up: extend stability system to same-domain pairs. See
+    // GOTCHAS.md "Discovery badges: same-domain couplings capped at
+    // provisional" and INC-008 in METHODS_PROVENANCE.md.
+    let stableEmoKeys: Set<string>;
+    try {
+      const stability = await computeCouplingStability();
+      stableEmoKeys = new Set(
+        stability.stablePairs.map(p => `${p.emotionDim}|${p.behaviorDim}`),
+      );
+    } catch {
+      stableEmoKeys = new Set();
+    }
+
     function lagLabel(lag: number): string {
       return lag === 0 ? 'at the same time' : `${lag} session${lag > 1 ? 's' : ''} later`;
     }
-    function pushCouplings(rows: any[], source: 'behavioral' | 'semantic', topN: number) {
+    function pushCouplings(rows: any[], source: 'behavioral' | 'semantic', topN: number, n: number) {
+      const rCrit = Math.max(criticalR(n), 0.3);
       const sorted = [...rows].sort((a: any, b: any) => Math.abs(b.correlation) - Math.abs(a.correlation));
       for (const c of sorted.slice(0, topN)) {
         const absR = Math.abs(c.correlation);
-        if (absR < 0.3) continue;
+        if (absR < rCrit) continue;
         const leader = DIM_PLAIN[c.leader] || c.leader;
         const follower = DIM_PLAIN[c.follower] || c.follower;
         const text = c.direction < 0
@@ -222,26 +249,29 @@ export const GET: APIRoute = async () => {
         discoveries.push({
           text,
           evidence: `r=${c.direction > 0 ? '+' : '-'}${absR.toFixed(2)}`,
-          strength: absR >= 0.5 ? 'strong' : 'moderate',
+          strength: 'provisional',
           source,
         });
       }
     }
-    pushCouplings(behavioralCouplings, 'behavioral', 4);
-    pushCouplings(semanticCouplings, 'semantic', 3);
+    pushCouplings(behavioralCouplings, 'behavioral', 4, behavioralCount);
+    pushCouplings(semanticCouplings, 'semantic', 3, semanticCount);
 
-    // Emotion → behavior cross-domain
+    // Emotion -> behavior cross-domain
+    const emoCouplingN = Math.min(behavioralCount, semanticCount);
+    const emoRCrit = Math.max(criticalR(emoCouplingN), 0.3);
     const sortedEmo = [...emotionCouplings].sort((a: any, b: any) => Math.abs(b.correlation) - Math.abs(a.correlation));
     for (const c of sortedEmo.slice(0, 3)) {
       const absR = Math.abs(c.correlation);
-      if (absR < 0.3) continue;
+      if (absR < emoRCrit) continue;
       const emotion = EMO_PLAIN[c.emotion_dim] || c.emotion_dim;
       const behavior = DIM_PLAIN[c.behavior_dim] || c.behavior_dim;
       const effect = c.direction > 0 ? 'increases' : 'drops';
+      const isStable = stableEmoKeys.has(`${c.emotion_dim}|${c.behavior_dim}`);
       discoveries.push({
         text: `When ${emotion} increases, ${behavior} ${effect} ${lagLabel(c.lag_sessions)}.`,
         evidence: `r=${c.direction > 0 ? '+' : '-'}${absR.toFixed(2)}`,
-        strength: absR >= 0.5 ? 'strong' : 'moderate',
+        strength: isStable ? 'established' : 'provisional',
         source: 'emotion-behavior',
       });
     }

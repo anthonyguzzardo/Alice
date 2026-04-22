@@ -125,7 +125,7 @@ import '../../styles/styObservatory.css';
         container.innerHTML = discoveries.map(d => `
           <div class="discovery">
             <div>${d.text}</div>
-            <div class="ev">${d.evidence} · <span class="pill ${d.strength === 'strong' ? 'high' : 'mod'}">${d.strength}</span> · <span class="src">${d.source}</span></div>
+            <div class="ev">${d.evidence} · <span class="pill ${d.strength === 'established' ? 'high' : 'mod'}">${d.strength}</span> · <span class="src">${d.source}</span></div>
           </div>
         `).join('');
       }
