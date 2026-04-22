@@ -243,13 +243,14 @@ export async function verifyResidual(
 ```
 
 This function:
-1. Loads the stored residual row (seed, profile snapshot, variant, question text, word count).
-2. Reconstructs the corpus from current response history.
-3. Checks `corpus_size` matches stored value. If not, returns null (corpus changed, verification impossible).
-4. Calls `regenerateAvatar()` with the stored seed and profile snapshot.
-5. Runs signals on the regenerated ghost's keystroke stream.
-6. Computes residuals and compares against stored values.
-7. Returns match status and any deltas.
+1. Loads the stored residual row (seed, profile snapshot, topic, corpus hash, variant, word count).
+2. Gates on reproducibility: if `avatar_seed` or `profile_snapshot_json` is NULL, returns null (historical row, cannot verify).
+3. Reconstructs the corpus from current response history.
+4. Computes SHA-256 of reconstructed corpus. If it doesn't match `corpus_sha256`, returns null (corpus changed, verification impossible). `corpus_size` serves as a fast pre-check before hashing.
+5. Calls `regenerateAvatar()` with the stored seed, stored profile snapshot, and stored topic.
+6. Runs signals on the regenerated ghost's keystroke stream.
+7. Computes residuals and compares against stored values.
+8. Returns match status and per-signal deltas.
 
 This is the consumer of cross-build ghost determinism. If the ghost engine is not build-stable for a given seed, this function returns false positives.
 
@@ -386,11 +387,11 @@ Commit order for clean review:
 
 3. **Rust: avatar reproducibility CI test.** New `tests/avatar_reproducibility.rs`. Snapshot-based cross-build diff for all five variants with fixed inputs. Extend `reproducibility-check.sh` to diff avatar snapshots.
 
-4. **Schema migration.** Add `avatar_seed` and `profile_snapshot_json` columns to `tb_reconstruction_residuals`. Update `dbAlice_Tables.sql` to include the new columns in the CREATE TABLE definition.
+4. **Schema migration.** Add `avatar_seed`, `profile_snapshot_json`, `corpus_sha256`, and `avatar_topic` columns to `tb_reconstruction_residuals`. Update `dbAlice_Tables.sql` to include the new columns in the CREATE TABLE definition.
 
-5. **TypeScript: persist seed and profile snapshot.** `libReconstruction.ts` captures seed from generation result and profile JSON from the already-constructed object. `saveReconstructionResidual` writes both new columns.
+5. **TypeScript: persist seed, profile snapshot, corpus hash, and topic.** `libReconstruction.ts` captures seed from generation result, profile JSON from the already-constructed object, SHA-256 of corpus JSON, and the topic string. `saveReconstructionResidual` writes all new columns.
 
-6. **TypeScript: `regenerateAvatar` + `verifyResidual`.** New functions in `libSignalsNative.ts` and `libReconstruction.ts`. Not wired to any API route yet; available for scripts and future use.
+6. **TypeScript: `regenerateAvatar` + `verifyResidual` + integration test.** New functions in `libSignalsNative.ts` and `libReconstruction.ts`. Integration test script (`src/scripts/verify-residual-integration.ts`) exercises the full chain on a real stored residual. Not wired to any API route; available for scripts, manual verification, and future automated sweeps.
 
 7. **Documentation.** Update `REPRODUCIBILITY.md`, `METHODS_PROVENANCE.md` (convert DEFERRED entry to implemented), `CLAUDE.md` if needed.
 
@@ -398,10 +399,95 @@ Each commit is independently shippable. Commits 1-3 are Rust-only. Commit 4 is s
 
 ---
 
-## Open questions
+## Component 7: Verification Failure Procedure
 
-1. **Corpus integrity check beyond `corpus_size`.** The current design uses `corpus_size` (count of responses) as a coarse check that the corpus hasn't changed. A hash of the corpus JSON would be stronger but adds a column and computation. Is the count sufficient, or do we want a SHA-256?
+`verifyResidual()` returns `match: false` when stored and recomputed residuals diverge. Three possible causes, each with different scientific implications:
 
-2. **Question text as input.** The ghost uses `topic` (derived from question text) as a seed word for Markov generation. Question text is immutable and recoverable from `tb_questions`. No snapshot needed, but worth noting as an implicit input.
+### Cause 1: Pipeline bug introduced post-hoc
 
-3. **`max_words` source.** Currently derived from `tb_session_summaries.word_count`. This is immutable per session. No snapshot needed, already stored as `real_word_count` on the residual row.
+A code change after the residual was computed altered signal behavior. The stored residual was correct at computation time; recomputation produces a different result because the signal pipeline changed.
+
+**Detection:** The divergence appears only for residuals computed before a specific commit. Residuals computed after the same commit verify successfully.
+
+**Procedure:**
+1. Identify the commit that introduced the divergence (bisect against known-good verification).
+2. Log to METHODS_PROVENANCE.md as an incident.
+3. Flag affected residuals: `verification_status = 'mismatch_post_hoc'`, `verification_note = 'pipeline change in commit {sha}'`.
+4. Do not overwrite stored residuals. They are the historical record. The mismatch itself is the evidence of the pipeline change.
+
+### Cause 2: Pipeline bug present at original computation
+
+The residual was wrong when it was computed. Recomputation with the same inputs (which is now possible) reveals the error. This is the scenario that reproducibility was designed to catch.
+
+**Detection:** The divergence is present for a specific session regardless of when verification runs. The recomputed value is consistent across multiple verification runs.
+
+**Procedure:**
+1. Investigate the original computation. What was wrong?
+2. Log to METHODS_PROVENANCE.md as an incident with full root cause analysis.
+3. Flag affected residuals: `verification_status = 'mismatch_original_bug'`, `verification_note = 'original computation was incorrect; see INC-NNN'`.
+4. Optionally store the corrected residual in a parallel column or new row (do not overwrite the original).
+
+### Cause 3: Cross-build determinism failure
+
+The ghost engine or signal pipeline produces different output across builds for the same inputs. Should be impossible given CI enforcement, but CI tests a fixture, not every possible input.
+
+**Detection:** Verification fails intermittently (different results on different machines or after recompilation), but succeeds on the same binary that computed the original.
+
+**Procedure:**
+1. This is a reproducibility incident. Treat as severity: produces-wrong-number.
+2. Identify the non-determinism source (new HashMap iteration? uncovered summation site? LLVM codegen change?).
+3. Fix, add regression test to CI reproducibility suite.
+4. Flag affected residuals: `verification_status = 'mismatch_nondeterminism'`, `verification_note = 'cross-build drift; see INC-NNN'`.
+
+### Schema support
+
+Add a `verification_status` column in a future migration (not part of the initial rollout). For now, verification results are logged and any mismatches become METHODS_PROVENANCE incidents manually. The column becomes necessary when verification is automated (e.g., a nightly sweep of recent residuals).
+
+```sql
+-- Future migration, not part of initial rollout:
+ALTER TABLE tb_reconstruction_residuals
+  ADD COLUMN verification_status TEXT,       -- NULL, 'verified', 'mismatch_post_hoc', 'mismatch_original_bug', 'mismatch_nondeterminism'
+  ADD COLUMN verification_note TEXT,
+  ADD COLUMN dttm_verified_utc TIMESTAMPTZ;
+```
+
+---
+
+## Component 8: TypeScript Integration Test
+
+Commit 6 includes a TypeScript-level integration test that exercises the full `verifyResidual` chain on a real stored residual (one computed after the migration, with seed and profile snapshot present).
+
+### What it tests
+
+The Rust CI test (Commit 3) verifies ghost generation is bit-identical across clean rebuilds. The TS integration test verifies the **full pipeline**: regeneration from stored inputs, signal computation on regenerated ghost, residual comparison against stored values.
+
+### Test structure
+
+Script: `src/scripts/verify-residual-integration.ts`
+
+```typescript
+// 1. Pick the most recent reproducible residual (avatar_seed IS NOT NULL)
+// 2. Call verifyResidual(questionId, variantId)
+// 3. Assert match === true
+// 4. Assert recomputed signals are within tolerance (exact match for
+//    dynamical/motor signals on same build; semantic signals may have
+//    external API drift if they call Claude/Voyage)
+```
+
+### Semantic signal caveat
+
+Semantic signals (`libSemanticSignals.ts`) may call external APIs (Claude for idea density, Voyage for embeddings). These are not deterministic across API versions. The integration test should:
+- Verify dynamical and motor residuals match exactly (same Rust engine, same build).
+- Verify semantic residuals match within a tolerance, or skip them with a documented reason if external API responses have drifted.
+
+This caveat does not weaken the reproducibility claim for the signal engine (Rust). It bounds the claim honestly: dynamical and motor residuals are bit-reproducible end to end; semantic residuals are reproducible to the extent that external NLP APIs are stable.
+
+---
+
+## Resolved questions
+
+1. **Corpus integrity:** SHA-256 hash of the serialized `corpusJson` string. Stored as `corpus_sha256 TEXT`. Catches edits, deletions, and corruption that a simple count would miss.
+
+2. **Topic as input:** Stored as `avatar_topic TEXT`. Currently equals question text (passed directly, no derivation function). Closes the door on future topic derivation drift.
+
+3. **`max_words` source:** Already stored as `real_word_count` on the residual row. No additional persistence needed. Derived from `tb_session_summaries.word_count`, which is immutable per session.

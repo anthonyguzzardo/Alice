@@ -11,8 +11,8 @@ Newest first.
 ## DEFERRED: Residual reanalysis capability
 
 **Date noted:** 2026-04-22
-**Type:** Architectural decision (deferred)
-**Status:** Current architecture is frozen-residual. No action needed before Stage 2.
+**Type:** Architectural decision (deferred -> **approved for implementation**)
+**Status:** Design approved. Full design doc: `docs/design-residual-reproducibility.md`. Implementation pending.
 
 ### Current state
 
