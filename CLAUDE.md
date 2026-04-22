@@ -11,6 +11,7 @@ A personal, monastic daily thinking journal. One question per day. No gamificati
 
 ## Agent Navigation
 - Before data-layer work, run `grep '@region' db/sql/dbAlice_Tables.sql` for the schema table of contents and `grep '@region' src/lib/libDb.ts` for the function table of contents.
+- When adding new tables or exported functions to these files, update the nearest `@region` marker to include the new name. When adding a new gotcha, append it to `GOTCHAS.md`.
 - Before touching unfamiliar areas, check `GOTCHAS.md` for known landmines.
 
 ## Architecture
