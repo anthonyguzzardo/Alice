@@ -88,6 +88,36 @@ Semantic signals (idea density, lexical sophistication, epistemic stance, integr
 5. **Implementation** (2026-04-22): 7 commits, each independently verified (clippy, unit tests, reproducibility check, CI).
 6. **Verification** (2026-04-22): integration test on production data, 10/10 signals bit-identical on two questions.
 
+### Scope note
+
+The reproducibility claim is explicitly scoped to dynamical and motor signals. Process signals are computed by the same Rust engine with the same numerical discipline but are not in the cross-build snapshot test. Semantic signals depend on external APIs and are inherently outside build-time reproducibility guarantees. Process signal verification is tracked as a followup below.
+
+---
+
+## Followup: Process signal cross-build verification
+
+**Date noted:** 2026-04-22
+**Type:** Open followup (scope boundary, not an incident)
+**Priority:** Low. Close before Stage 2 if not sooner.
+
+Process signals (pause/burst classification, R-burst detection, strategy shifts, text reconstruction) are not currently in the cross-build snapshot test. The numerical discipline used in those functions is the same as dynamical/motor (Neumaier summation, no HashMap iteration on output paths), so drift is unlikely, but the guarantee is not enforced.
+
+### To close
+
+Construct a realistic keystroke event fixture including:
+
+1. Cursor position tracking
+2. Deletion events (both single-character and multi-character)
+3. Insertion events at non-terminal positions (I-bursts)
+4. UTF-16 offsets for multi-byte characters (emoji, curly quotes)
+5. Enough editing history to exercise strategy shift detection
+
+Add as a new integration test in `tests/reproducibility.rs` (or a new `tests/process_reproducibility.rs`) writing to `REPRO_SNAPSHOT_DIR`. The existing `reproducibility-check.sh` diff loop and CI workflow pick up new snapshot files automatically.
+
+### Why this is low priority
+
+Process signal outputs are mostly counts and ratios (burst count, pause percentages, deletion rates, R-burst sizes, strategy shift count). These are less sensitive to floating-point accumulation order than the iterated nonlinear computations in dynamical and motor signals (PE, DFA, RQA, transfer entropy, ex-Gaussian MLE). The riskiest process signal path is windowed strategy shift detection, which involves a comparison of burst length distributions across session halves.
+
 ---
 
 ## INC-005: Reproducibility check wired into CI

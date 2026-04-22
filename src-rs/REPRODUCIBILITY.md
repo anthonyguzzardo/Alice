@@ -112,7 +112,8 @@ npx tsx src/scripts/verify-residual-integration.ts
 
 Exercises the full chain on a real stored residual: loads stored seed + profile, reconstructs corpus, verifies SHA-256, regenerates ghost, computes signals, compares per-signal against stored values. Reports EXACT/DELTA per signal with family classification.
 
-## What is NOT covered
+## Scope of the Rust engine guarantee
 
-- **Process signals** (`process.rs`) are not included in the reproducibility check because they depend on event log replay with UTF-16 text reconstruction, which is hard to fixture deterministically. Process signals do use Neumaier summation where applicable but are not bit-identity tested.
-- **Semantic signals** depend on external APIs (Claude, Voyage). See "Reconstruction residual reproducibility" above.
+Dynamical and motor signals are verified bit-identical across clean rebuilds via the cross-build snapshot test (see `signal-reproducibility.yml`). Process signals are computed by the same Rust engine with the same numerical discipline (Neumaier summation, BTreeMap iteration where applicable) but are not currently in the cross-build snapshot test. Adding process signals to the check requires a realistic keystroke event fixture with cursor positions, deletions, insertions, and UTF-16 offsets; the current fixture is a linear forward-typing sequence that does not exercise the text reconstruction path. This is tracked as a followup in METHODS_PROVENANCE.md.
+
+Semantic signals depend on external APIs (Claude for idea density, Voyage for embeddings) and are not subject to build-time reproducibility guarantees. This is documented as an inherent scope limitation, not a gap to close.

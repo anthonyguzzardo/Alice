@@ -105,6 +105,9 @@ Scale Alice to multi-user (auth, multi-tenancy, IRB) or keep monastic and let th
 ### Difficulty-residual correlation
 Difficulty classification began at session 54. Correlation between difficulty and motor residual testable as generated questions accumulate.
 
+### Process signal cross-build verification
+Process signals (pause/burst, R-burst, strategy shifts, text reconstruction) use the same numerical discipline as dynamical/motor but are not in the cross-build snapshot test. Needs a realistic event fixture with cursor positions, deletions, insertions, and UTF-16 offsets. Low priority (mostly counts and ratios, drift unlikely). Tracked in METHODS_PROVENANCE.md. Close before Stage 2.
+
 ### Observatory reproducibility indicator
 The ghost page (`observatory/ghost.astro`) already shows residuals live. Adding reproducibility status (seed present, verifiable, last verification result) is natural instrument state. Not urgent.
 
