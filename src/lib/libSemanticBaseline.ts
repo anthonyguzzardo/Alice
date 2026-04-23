@@ -217,7 +217,7 @@ async function getTopicMatchedValues(
 function distributionStats(values: number[]): { mean: number; stdDev: number } | null {
   if (values.length < 2) return null;
   const mean = values.reduce((s, v) => s + v, 0) / values.length;
-  const variance = values.reduce((s, v) => s + (v - mean) ** 2, 0) / values.length;
+  const variance = values.reduce((s, v) => s + (v - mean) ** 2, 0) / (values.length - 1);
   return { mean, stdDev: Math.sqrt(variance) };
 }
 

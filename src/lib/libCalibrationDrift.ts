@@ -129,7 +129,7 @@ async function getJournalDispersion(field: keyof BaselineRowInput): Promise<numb
   const sourceCol = BASELINE_TO_COLUMN[field];
   if (!sourceCol) return null;
 
-  // Population std on journal-session column. Postgres has stddev_pop but
+  // Sample std on journal-session column. Postgres has stddev_samp but
   // we compute manually to stay consistent with the existing approach.
   const rows = await sql.unsafe(
     `SELECT s.${sourceCol} as v
@@ -141,7 +141,7 @@ async function getJournalDispersion(field: keyof BaselineRowInput): Promise<numb
   if (rows.length < 3) return null;
   const vals = rows.map(r => r.v);
   const mean = vals.reduce((s, v) => s + v, 0) / vals.length;
-  const variance = vals.reduce((s, v) => s + (v - mean) ** 2, 0) / vals.length;
+  const variance = vals.reduce((s, v) => s + (v - mean) ** 2, 0) / (vals.length - 1);
   return Math.sqrt(variance);
 }
 
