@@ -14,6 +14,21 @@ import PublicLayout from '../layouts/layPublic.astro';
 import { listPapers } from '../lib/libPapers.ts';
 
 const papers = listPapers('published');
+
+const crateInstall = `cargo add reconstruction-validity`;
+const crateUsage = `use reconstruction_validity::{Session, FiveVariant};
+
+let session = Session::from_keystroke_stream(&events)?;
+let residuals = session.run_adversaries(FiveVariant::default())?;
+
+for r in &residuals {
+    println!("{}: motor={:.4}", r.variant, r.motor_residual);
+}`;
+const crateOutput = `baseline:        motor=0.4721
+conditional:     motor=0.4318
+copula_motor:    motor=0.4156
+ppm_text:        motor=0.4689
+full_adversary:  motor=0.3947`;
 ---
 
 <PublicLayout title="Alice -- Research" active="research" description="The scientific case for a cognitive instrument built on unmediated writing.">
@@ -37,21 +52,21 @@ const papers = listPapers('published');
 
   <!-- ===== SIDEBAR NAV ===== -->
   <nav class="r-nav" aria-label="Page sections">
-    <div class="r-nav-group">
-      <span class="r-nav-group-label">The Problem</span>
+    <div class="r-nav-group" data-stage="1">
+      <span class="r-nav-group-label"><span class="r-nav-stage">1 / 4</span> The Problem</span>
       <a href="#evidence" class="r-nav-link" data-section="evidence">The evidence base</a>
       <a href="#population" class="r-nav-link" data-section="population">The wrong population</a>
       <a href="#window" class="r-nav-link" data-section="window">The closing window</a>
       <a href="#construct" class="r-nav-link" data-section="construct">Construct replacement</a>
     </div>
-    <div class="r-nav-group">
-      <span class="r-nav-group-label">The Shift</span>
+    <div class="r-nav-group" data-stage="2">
+      <span class="r-nav-group-label"><span class="r-nav-stage">2 / 4</span> The Shift</span>
       <a href="#precedent" class="r-nav-link" data-section="precedent">Clock-drawing precedent</a>
       <a href="#paradigm" class="r-nav-link" data-section="paradigm">Self-referential baselines</a>
       <a href="#gap" class="r-nav-link" data-section="gap">The instrument gap</a>
     </div>
-    <div class="r-nav-group">
-      <span class="r-nav-group-label">The Instrument</span>
+    <div class="r-nav-group" data-stage="3">
+      <span class="r-nav-group-label"><span class="r-nav-stage">3 / 4</span> The Instrument</span>
       <a href="#writing" class="r-nav-link" data-section="writing">Why writing</a>
       <a href="#landscape" class="r-nav-link" data-section="landscape">Existing instruments</a>
       <a href="#observer" class="r-nav-link" data-section="observer">The observer effect</a>
@@ -60,8 +75,8 @@ const papers = listPapers('published');
       <a href="#extensions" class="r-nav-link" data-section="extensions">Theoretical extensions</a>
       <a href="#open" class="r-nav-link" data-section="open">Open questions</a>
     </div>
-    <div class="r-nav-group">
-      <span class="r-nav-group-label">Output</span>
+    <div class="r-nav-group" data-stage="4">
+      <span class="r-nav-group-label"><span class="r-nav-stage">4 / 4</span> Output</span>
       <a href="#publications" class="r-nav-link" data-section="publications">Papers & tools</a>
     </div>
   </nav>
@@ -631,6 +646,14 @@ const papers = listPapers('published');
   </section>
 
 
+  <!-- ===== AUTHOR ===== -->
+  <div class="r-author">
+    <span class="r-author-name">Anthony Guzzardo</span>
+    <span class="r-author-background">Product engineer. Background in behavioral data systems and measurement infrastructure. Builder of Alice.</span>
+    <span class="r-author-positioning">The arguments on this page stand on published literature. The instrument is the author's attempt to act on them before the window described above closes.</span>
+  </div>
+
+
   <!-- ===== SECTION 15: PUBLICATIONS & TOOLS ===== -->
   <section class="r-section" id="publications">
     <h2>Papers and tools</h2>
@@ -646,11 +669,29 @@ const papers = listPapers('published');
         </a>
       ))}
 
-      <a href="https://github.com/anthonyguzzardo/reconstruction-validity" target="_blank" rel="noopener" class="r-pub-card r-pub-tool">
-        <div class="r-pub-meta">Rust crate &middot; MIT license</div>
-        <div class="r-pub-title">reconstruction-validity</div>
-        <div class="r-pub-abstract">A framework for validating behavioral measurement instruments via adversarial reconstruction. Implements the five-variant adversary system from the reconstruction validity paper. Any instrument that extracts features from temporal behavioral streams can use it.</div>
-      </a>
+    </div>
+
+    <div class="r-crate">
+      <div class="r-crate-header">
+        <span class="r-crate-name">reconstruction-validity</span>
+        <span class="r-crate-meta">Rust &middot; MIT license &middot; <a href="https://github.com/anthonyguzzardo/reconstruction-validity" target="_blank" rel="noopener">GitHub</a></span>
+      </div>
+      <p class="r-crate-desc">A framework for validating behavioral measurement instruments via adversarial reconstruction. Any instrument that extracts features from temporal behavioral streams can define its signal pipeline, and the crate builds the strongest statistical reconstruction it can, then reports where the reconstruction fails. The residual surface is the validity evidence.</p>
+      <div class="r-crate-blocks">
+        <div class="r-crate-block">
+          <span class="r-crate-label">Install</span>
+          <pre><code set:text={crateInstall} /></pre>
+        </div>
+        <div class="r-crate-block">
+          <span class="r-crate-label">Usage</span>
+          <pre><code set:text={crateUsage} /></pre>
+        </div>
+        <div class="r-crate-block">
+          <span class="r-crate-label">Output</span>
+          <pre><code set:text={crateOutput} /></pre>
+        </div>
+      </div>
+      <p class="r-crate-note">Five adversary variants, each adding one statistical improvement. The motor floor that survives the full adversary is the irreducible gap between statistical reconstruction and genuine composition. Implements the methodology from <a class="r-cite" href="/papers/reconstruction-validity">Guzzardo 2026c</a>.</p>
     </div>
   </section>
 
@@ -686,6 +727,8 @@ const papers = listPapers('published');
       return id ? document.getElementById(id) : null;
     }).filter(Boolean) as HTMLElement[];
 
+    const groups = nav.querySelectorAll('.r-nav-group');
+
     const observer = new IntersectionObserver((entries) => {
       for (const entry of entries) {
         if (entry.isIntersecting) {
@@ -693,6 +736,12 @@ const papers = listPapers('published');
           links.forEach(link => {
             link.classList.toggle('active', link.getAttribute('data-section') === id);
           });
+          // Update active stage group
+          const activeLink = nav.querySelector(`.r-nav-link[data-section="${id}"]`);
+          if (activeLink) {
+            const activeGroup = activeLink.closest('.r-nav-group');
+            groups.forEach(g => g.classList.toggle('active', g === activeGroup));
+          }
         }
       }
     }, { rootMargin: '-20% 0px -60% 0px' });
@@ -2043,5 +2092,159 @@ const papers = listPapers('published');
     font-style: normal;
     font-size: 0.95rem;
     letter-spacing: 0.02em;
+  }
+
+  /* --- Stage indicator in sidebar --- */
+  .r-nav-stage {
+    display: block;
+    font-family: var(--mono);
+    font-size: 0.55rem;
+    letter-spacing: 0.1em;
+    color: var(--border);
+    margin-bottom: 0.15rem;
+    transition: color 0.2s ease;
+  }
+
+  .r-nav-group.active .r-nav-stage {
+    color: var(--accent);
+  }
+
+  .r-nav-group.active .r-nav-group-label {
+    color: var(--text);
+  }
+
+  /* --- Author block --- */
+  .r-author {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    padding: 1.5rem 0;
+    border-top: 1px solid var(--border);
+    margin-top: 1rem;
+  }
+
+  .r-author-name {
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text);
+  }
+
+  .r-author-background {
+    font-family: var(--serif-body);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: var(--text);
+  }
+
+  .r-author-positioning {
+    font-family: var(--serif-body);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: var(--text-muted);
+  }
+
+  /* --- Crate component --- */
+  .r-crate {
+    border: 1px dashed var(--border);
+    border-radius: 6px;
+    padding: 1.5rem;
+    margin-top: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .r-crate-header {
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .r-crate-name {
+    font-family: var(--mono);
+    font-size: 1rem;
+    color: var(--text);
+    letter-spacing: 0.02em;
+  }
+
+  .r-crate-meta {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-faint);
+  }
+
+  .r-crate-meta a {
+    color: inherit;
+    text-decoration: none;
+    border-bottom: 1px dotted var(--text-muted);
+  }
+
+  .r-crate-meta a:hover {
+    border-bottom-color: var(--accent);
+  }
+
+  .r-crate-desc {
+    font-family: var(--serif-body);
+    font-size: 0.95rem;
+    line-height: 1.6;
+    color: var(--text);
+    margin: 0;
+    max-width: 720px;
+  }
+
+  .r-crate-blocks {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1rem;
+  }
+
+  .r-crate-block {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .r-crate-label {
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-faint);
+  }
+
+  .r-crate-block pre {
+    margin: 0;
+    padding: 0.75rem;
+    background: var(--bg-dim);
+    border-radius: 4px;
+    overflow-x: auto;
+    flex: 1;
+  }
+
+  .r-crate-block code {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    line-height: 1.6;
+    color: var(--text);
+    white-space: pre;
+  }
+
+  .r-crate-note {
+    font-family: var(--serif-body);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: var(--text-muted);
+    margin: 0;
+  }
+
+  @media (max-width: 768px) {
+    .r-crate-blocks {
+      grid-template-columns: 1fr;
+    }
   }
 </style>
