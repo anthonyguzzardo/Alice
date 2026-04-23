@@ -314,11 +314,14 @@ async function computeForVariant(
 // ─── Main ──────────────────────────────────────────────────────────
 
 export async function computeReconstructionResidual(questionId: number): Promise<void> {
-  // Fetch corpus (shared across all variants)
+  // Fetch corpus (shared across all variants).
+  // Exclude calibration responses (question_source_id = 3): calibrations are
+  // prompted neutral writing that would corrupt the Markov/PPM language model.
   const textRows = await sql`
     SELECT r.text
     FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
+    WHERE q.question_source_id != 3
     ORDER BY q.scheduled_for ASC
   ` as Array<{ text: string }>;
 
@@ -463,11 +466,12 @@ export async function verifyResidual(
   const topic = row.avatar_topic as string | null;
   if (!seed || !profileJson) return null;
 
-  // 2. Reconstruct corpus
+  // 2. Reconstruct corpus (must match computation-time filter)
   const textRows = await sql`
     SELECT r.text
     FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
+    WHERE q.question_source_id != 3
     ORDER BY q.scheduled_for ASC
   ` as Array<{ text: string }>;
 

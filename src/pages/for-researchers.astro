@@ -2,9 +2,9 @@
 /**
  * Researcher landing page.
  *
- * The page you link in a cold email. Not in the nav. Direct-link only.
- * A researcher needs to see, in 60 seconds: what data this instrument
- * captures, whether it's rigorous, and what the next step is.
+ * The page you link in a cold email. A researcher needs to see, in
+ * 60 seconds: what data this instrument captures, whether it's
+ * rigorous, and what the next step is.
  */
 import PublicLayout from '../layouts/layPublic.astro';
 ---
@@ -24,16 +24,16 @@ import PublicLayout from '../layouts/layPublic.astro';
 
     <div class="fr-channels">
       <div class="fr-channel">
-        <span class="fr-channel-label">Process channel</span>
-        <p>Key-down and key-up timestamps at millisecond precision. Full temporal microstructure: inter-key intervals, hold durations, flight times, pause architecture, deletion sequences, burst segmentation. Captured from unmediated character-by-character input. No autocomplete, no predictive text.</p>
+        <span class="fr-channel-label">Behavioral channel</span>
+        <p>Key-down and key-up timestamps at millisecond precision. Full temporal microstructure: inter-key intervals, hold durations, flight times, pause architecture, deletion sequences, burst segmentation. Captured from unmediated character-by-character input. No autocomplete, no predictive text. Null model: a five-variant reconstruction adversary that generates synthetic keystroke streams from your statistical profile and measures the residual.</p>
       </div>
       <div class="fr-channel">
-        <span class="fr-channel-label">Content channel</span>
-        <p>Final submitted text. Linguistic analysis: idea density, lexical sophistication, epistemic stance, integrative complexity, cohesion, emotional valence, text compression ratio. NRC emotion word densities. MATTR vocabulary diversity.</p>
+        <span class="fr-channel-label">Semantic channel</span>
+        <p>Final submitted text. Deterministic linguistic analysis: idea density, lexical sophistication, epistemic stance, integrative complexity, cohesion, emotional valence, text compression ratio. NRC emotion word densities. MATTR vocabulary diversity. Null model: longitudinal self-referencing baselines, topic-matched against prior sessions via archived embedding model (Qwen3-Embedding-0.6B, SHA-256 identified weights, FP32 CPU inference, bit-reproducible).</p>
       </div>
     </div>
 
-    <p>The two channels are analyzed jointly. A decline in lexical diversity with stable production fluency means vocabulary contraction. The same decline with slowed production means retrieval difficulty. You need both to distinguish them.</p>
+    <p>The two channels are analyzed jointly. A decline in lexical diversity with stable production fluency means vocabulary contraction. The same decline with slowed production means retrieval difficulty. You need both to distinguish them. Each channel has its own null model and its own reproducibility guarantee, under a matched standard of mathematical rigor.</p>
   </section>
 
   <!-- ===== SIGNAL PIPELINE ===== -->
@@ -96,8 +96,16 @@ import PublicLayout from '../layouts/layPublic.astro';
         <span class="fr-state-value">2 published preprints. 3 in progress. Establishing the problem space, not yet reporting longitudinal results.</span>
       </div>
       <div class="fr-state-row">
+        <span class="fr-state-label">Reproducibility</span>
+        <span class="fr-state-value">Bit-reproducible signal engine (pinned Rust toolchain, Neumaier compensated summation, deterministic iteration). Reconstruction residuals store PRNG seed, profile snapshot, and corpus hash for regeneration. Embedding weights archived by SHA-256 hash with versioned inference environment. CI enforces two-clean-build reproducibility on every PR.</span>
+      </div>
+      <div class="fr-state-row">
+        <span class="fr-state-label">Contamination</span>
+        <span class="fr-state-value">No AI in the writing path. Unmediated character-by-character input. Contamination boundary attested per session with versioned specification, audited code paths, and git commit hash. Clean cognitive corpus by design.</span>
+      </div>
+      <div class="fr-state-row">
         <span class="fr-state-label">Validation</span>
-        <span class="fr-state-value">Not yet possible at n=1. The instrument is designed to produce the data that would enable validation.</span>
+        <span class="fr-state-value">Not yet possible at n=1. The instrument is designed to produce the data that would enable validation. Reconstruction validity (computable from n=1) characterizes what the instrument captures; external-criterion validation requires longitudinal outcome data.</span>
       </div>
     </div>
   </section>
