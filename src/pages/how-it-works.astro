@@ -1,0 +1,693 @@
+---
+/**
+ * How It Works -- instrument architecture page.
+ *
+ * Genre: visual system walkthrough. Shows how Alice's signals, the ghost,
+ * and semantic data capture work together as a unified measurement system,
+ * and how the system has grown through methodological correction.
+ *
+ * Distinct from /instrument (technical credibility) and /methodology
+ * (signal catalog). This page explains the connections and the growth.
+ *
+ * Audience: anyone trying to understand the architecture as a whole.
+ */
+import PublicLayout from '../layouts/layPublic.astro';
+---
+
+<PublicLayout title="Alice -- How It Works" active="how-it-works" description="How Alice's signal engine, reconstruction adversary, and semantic capture work together as a unified measurement system.">
+
+<article class="how-it-works">
+
+  <header class="hw-hero">
+    <h1>A single writing session produces 38 signals across five measurement families. Here is how.</h1>
+    <p class="hw-lead">Three systems work together: a native signal engine measures the temporal and structural shape of your writing, a reconstruction adversary tests which dimensions of that shape are irreducible, and a semantic pipeline captures the linguistic content. This page explains the architecture and the corrections that shaped it.</p>
+  </header>
+
+  <!-- ===== SECTION 1: SESSION FLOW ===== -->
+  <section class="hw-section" id="session-flow">
+    <h2>The session flow</h2>
+    <p>Every writing session follows the same path, from keystroke to stored measurement. The synchronous transaction guarantees the session is saved before any derived computation begins. The fire-and-forget pipeline runs five independent signal families; if one fails, the others still complete.</p>
+
+    <!-- Flow diagram -->
+    <div class="hw-flow">
+
+      <!-- Stage 1: Capture -->
+      <div class="hw-stage hw-stage-capture">
+        <div class="hw-stage-marker">
+          <span class="hw-stage-number">1</span>
+          <span class="hw-stage-line"></span>
+        </div>
+        <div class="hw-stage-content">
+          <span class="hw-stage-label">Capture</span>
+          <h3>Two channels, recorded simultaneously</h3>
+          <div class="hw-channels">
+            <div class="hw-channel">
+              <span class="hw-channel-tag hw-tag-process">Process channel</span>
+              <p>Every key-down and key-up event with millisecond timestamps. Character identity, cursor position, deletion events. The full temporal microstructure of how you type.</p>
+              <div class="hw-channel-detail">
+                <code>{c, d, u}</code> per keystroke &middot; <code>[offset, cursor, deleted, inserted]</code> per edit event
+              </div>
+            </div>
+            <div class="hw-channel">
+              <span class="hw-channel-tag hw-tag-content">Content channel</span>
+              <p>The final submitted text, word count, session duration, and the question that prompted the response. What you wrote, not just how you typed it.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Connector -->
+      <div class="hw-connector">
+        <span class="hw-connector-label">POST /api/respond</span>
+      </div>
+
+      <!-- Stage 2: Transaction -->
+      <div class="hw-stage hw-stage-transaction">
+        <div class="hw-stage-marker">
+          <span class="hw-stage-number">2</span>
+          <span class="hw-stage-line"></span>
+        </div>
+        <div class="hw-stage-content">
+          <span class="hw-stage-label">Synchronous transaction</span>
+          <h3>Atomic write: all or nothing</h3>
+          <p>The session is persisted in a single database transaction. If any write fails, the entire session rolls back. The pipeline that follows runs after the transaction commits, so pipeline failures never affect session persistence.</p>
+          <div class="hw-table-list">
+            <div class="hw-table-item">
+              <code>tb_responses</code>
+              <span>Raw text, question reference</span>
+            </div>
+            <div class="hw-table-item">
+              <code>tb_session_summaries</code>
+              <span>100+ computed fields from keystroke data</span>
+            </div>
+            <div class="hw-table-item">
+              <code>tb_session_events</code>
+              <span>Keystroke stream + event log (JSON)</span>
+            </div>
+            <div class="hw-table-item">
+              <code>tb_burst_sequences</code>
+              <span>P-bursts (text produced between pauses)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Connector -->
+      <div class="hw-connector">
+        <span class="hw-connector-label">Transaction committed</span>
+      </div>
+
+      <!-- Stage 3: Signal pipeline -->
+      <div class="hw-stage hw-stage-pipeline">
+        <div class="hw-stage-marker">
+          <span class="hw-stage-number">3</span>
+          <span class="hw-stage-line"></span>
+        </div>
+        <div class="hw-stage-content">
+          <span class="hw-stage-label">Fire-and-forget pipeline</span>
+          <h3>Five families, computed independently</h3>
+          <p>Each signal family runs in isolation. A failure in one family does not prevent the others from completing. If the Rust engine is unavailable, dynamical, motor, and process signals return null and the session saves without them. The health endpoint surfaces this state.</p>
+
+          <div class="hw-families">
+            <details class="hw-family">
+              <summary>
+                <span class="hw-family-tag hw-tag-dynamical">Dynamical</span>
+                <span class="hw-family-engine">Rust</span>
+                <span class="hw-family-count">13 signals</span>
+              </summary>
+              <div class="hw-family-body">
+                <p>Nonlinear dynamics of the IKI series. Treats keystroke timing as output of a complex adaptive system.</p>
+                <div class="hw-signal-chips">
+                  <span>PE spectrum (orders 3-7)</span>
+                  <span>DFA alpha</span>
+                  <span>RQA (4 metrics)</span>
+                  <span>Transfer entropy (KSG)</span>
+                  <span>TE dominance</span>
+                </div>
+                <div class="hw-family-dest"><code>tb_dynamical_signals</code></div>
+              </div>
+            </details>
+
+            <details class="hw-family">
+              <summary>
+                <span class="hw-family-tag hw-tag-motor">Motor</span>
+                <span class="hw-family-engine">Rust</span>
+                <span class="hw-family-count">13 signals</span>
+              </summary>
+              <div class="hw-family-body">
+                <p>Statistical shape of keystroke timing distributions. Motor control, rhythmic consistency, and neuromuscular execution.</p>
+                <div class="hw-signal-chips">
+                  <span>Sample entropy</span>
+                  <span>Ex-Gaussian (MLE/EM)</span>
+                  <span>Autocorrelation (lags 1-5)</span>
+                  <span>Motor jerk</span>
+                  <span>Lapse rate</span>
+                  <span>Tempo drift</span>
+                  <span>Compression ratio</span>
+                  <span>Digraph latency</span>
+                  <span>Hold-flight coupling</span>
+                </div>
+                <div class="hw-family-dest"><code>tb_motor_signals</code></div>
+              </div>
+            </details>
+
+            <details class="hw-family">
+              <summary>
+                <span class="hw-family-tag hw-tag-process">Process</span>
+                <span class="hw-family-engine">Rust</span>
+                <span class="hw-family-count">10 signals</span>
+              </summary>
+              <div class="hw-family-body">
+                <p>Writing process mechanics. Text reconstruction from the event log to classify pause locations, burst types, revision behavior, and strategy shifts.</p>
+                <div class="hw-signal-chips">
+                  <span>Pause location (3 types)</span>
+                  <span>R-bursts</span>
+                  <span>I-bursts</span>
+                  <span>Abandoned thoughts</span>
+                  <span>Vocab expansion rate</span>
+                  <span>Phase transition</span>
+                  <span>Strategy shifts</span>
+                </div>
+                <div class="hw-family-dest"><code>tb_process_signals</code></div>
+              </div>
+            </details>
+
+            <details class="hw-family">
+              <summary>
+                <span class="hw-family-tag hw-tag-semantic">Semantic</span>
+                <span class="hw-family-engine">TypeScript</span>
+                <span class="hw-family-count">8 signals</span>
+              </summary>
+              <div class="hw-family-body">
+                <p>Linguistic content analysis via deterministic word-list methods. What you wrote, measured as density metrics.</p>
+                <div class="hw-signal-chips">
+                  <span>Idea density</span>
+                  <span>Lexical sophistication</span>
+                  <span>Epistemic stance</span>
+                  <span>Integrative complexity</span>
+                  <span>Deep cohesion</span>
+                  <span>Referential cohesion</span>
+                  <span>Emotional valence arc</span>
+                  <span>Text compression ratio</span>
+                </div>
+                <div class="hw-family-dest"><code>tb_semantic_signals</code></div>
+              </div>
+            </details>
+
+            <details class="hw-family">
+              <summary>
+                <span class="hw-family-tag hw-tag-cross">Cross-session</span>
+                <span class="hw-family-engine">TypeScript</span>
+                <span class="hw-family-count">7 signals</span>
+              </summary>
+              <div class="hw-family-body">
+                <p>Longitudinal consistency metrics. How your current session relates to your own history.</p>
+                <div class="hw-signal-chips">
+                  <span>Self-perplexity</span>
+                  <span>NCD (4 lags)</span>
+                  <span>Vocab recurrence decay</span>
+                  <span>Digraph stability</span>
+                  <span>Text network density</span>
+                </div>
+                <div class="hw-family-dest"><code>tb_cross_session_signals</code></div>
+              </div>
+            </details>
+          </div>
+        </div>
+      </div>
+
+      <!-- Connector -->
+      <div class="hw-connector">
+        <span class="hw-connector-label">Signals persisted</span>
+      </div>
+
+      <!-- Stage 4: Downstream -->
+      <div class="hw-stage hw-stage-downstream">
+        <div class="hw-stage-marker">
+          <span class="hw-stage-number">4</span>
+        </div>
+        <div class="hw-stage-content">
+          <span class="hw-stage-label">Downstream computation</span>
+          <h3>From signals to understanding</h3>
+          <p>After all signal families complete, downstream systems synthesize the measurements into longitudinal context.</p>
+
+          <div class="hw-downstream-grid">
+            <div class="hw-downstream-item">
+              <span class="hw-downstream-label">Embeddings</span>
+              <p>Response text embedded via self-hosted Qwen3-Embedding-0.6B (512-dim, L2-normalized). Stored with SHA-256 identified weights for reproducibility.</p>
+            </div>
+            <div class="hw-downstream-item">
+              <span class="hw-downstream-label">Semantic baselines</span>
+              <p>Rolling z-scores per semantic dimension against your own history. Detects meaningful deviations from personal baseline.</p>
+            </div>
+            <div class="hw-downstream-item">
+              <span class="hw-downstream-label">Personal profile</span>
+              <p>Rolling aggregate of all signal dimensions. Your accumulated behavioral fingerprint. Updated after every session.</p>
+            </div>
+            <div class="hw-downstream-item">
+              <span class="hw-downstream-label">Reconstruction residual</span>
+              <p>Profile-predicted signals vs. actual signals. The gap between what your history predicts and what you actually produced.</p>
+            </div>
+            <div class="hw-downstream-item">
+              <span class="hw-downstream-label">Question generation</span>
+              <p>RAG assembly (recent + similar + contrarian entries) + behavioral signals + dynamics context + life context, sent to Claude to generate tomorrow's question.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Sections 2 and 3 will be added in subsequent blocks -->
+
+</article>
+
+</PublicLayout>
+
+<style is:global>
+  .how-it-works {
+    padding-bottom: 4rem;
+  }
+
+  /* ===== HERO ===== */
+  .hw-hero {
+    padding: 5rem 0 3rem;
+    max-width: 720px;
+  }
+
+  .hw-hero h1 {
+    font-family: var(--serif-display);
+    font-size: 2.2rem;
+    font-weight: 400;
+    line-height: 1.35;
+    color: var(--text);
+    margin-bottom: 1.5rem;
+  }
+
+  .hw-lead {
+    font-family: var(--serif-body);
+    font-size: 1.1rem;
+    line-height: 1.75;
+    color: var(--text-muted);
+  }
+
+  /* ===== SECTIONS ===== */
+  .hw-section {
+    padding: 3rem 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .hw-section > h2 {
+    font-family: var(--serif-display);
+    font-size: 1.5rem;
+    font-weight: 400;
+    color: var(--text);
+    margin-bottom: 1.25rem;
+  }
+
+  .hw-section > p {
+    font-family: var(--serif-body);
+    font-size: 1.05rem;
+    line-height: 1.75;
+    color: var(--text);
+    max-width: 720px;
+    margin-bottom: 2rem;
+  }
+
+  /* ===== FLOW DIAGRAM ===== */
+  .hw-flow {
+    max-width: 860px;
+  }
+
+  /* --- Stages --- */
+  .hw-stage {
+    display: grid;
+    grid-template-columns: 48px 1fr;
+    gap: 1.25rem;
+  }
+
+  .hw-stage-marker {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .hw-stage-number {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+
+  .hw-stage-line {
+    flex: 1;
+    width: 1px;
+    background: var(--border);
+    margin-top: 0.5rem;
+  }
+
+  .hw-stage-content {
+    padding-bottom: 0.5rem;
+  }
+
+  .hw-stage-label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-faint);
+    margin-bottom: 0.35rem;
+  }
+
+  .hw-stage-content h3 {
+    font-family: var(--serif-body);
+    font-size: 1.15rem;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 0.75rem;
+  }
+
+  .hw-stage-content > p {
+    font-family: var(--serif-body);
+    font-size: 0.95rem;
+    line-height: 1.65;
+    color: var(--text-muted);
+    max-width: 680px;
+    margin-bottom: 1.25rem;
+  }
+
+  /* --- Connectors --- */
+  .hw-connector {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem 0 0.75rem 23px;
+  }
+
+  .hw-connector-label {
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-faint);
+    padding-left: 2rem;
+    position: relative;
+  }
+
+  .hw-connector-label::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 1.25rem;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* --- Dual channels (Stage 1) --- */
+  .hw-channels {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+
+  .hw-channel {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1.25rem;
+  }
+
+  .hw-channel-tag {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 0.2rem 0.5rem;
+    border-radius: 2px;
+    margin-bottom: 0.75rem;
+  }
+
+  .hw-tag-process {
+    color: var(--accent);
+    border: 1px solid var(--accent);
+  }
+
+  .hw-tag-content {
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+  }
+
+  .hw-channel p {
+    font-family: var(--serif-body);
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: var(--text-muted);
+  }
+
+  .hw-channel-detail {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    color: var(--text-faint);
+    line-height: 1.6;
+  }
+
+  .hw-channel-detail code {
+    color: var(--text-muted);
+    font-size: 0.7rem;
+  }
+
+  /* --- Table list (Stage 2) --- */
+  .hw-table-list {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .hw-table-item {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 1rem;
+    padding: 0.6rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+    align-items: baseline;
+  }
+
+  .hw-table-item:last-child {
+    border-bottom: none;
+  }
+
+  .hw-table-item code {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--accent);
+  }
+
+  .hw-table-item span {
+    font-family: var(--serif-body);
+    font-size: 0.88rem;
+    color: var(--text-muted);
+  }
+
+  /* --- Signal families (Stage 3) --- */
+  .hw-families {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .hw-family {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+  }
+
+  .hw-family summary {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1.25rem;
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .hw-family summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .hw-family summary::before {
+    content: '+';
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    color: var(--text-faint);
+    width: 1rem;
+    flex-shrink: 0;
+  }
+
+  .hw-family[open] summary::before {
+    content: '\2212';
+  }
+
+  .hw-family-tag {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 0.15rem 0.45rem;
+    border-radius: 2px;
+  }
+
+  .hw-tag-dynamical {
+    color: var(--accent);
+    border: 1px solid var(--accent);
+  }
+
+  .hw-tag-motor {
+    color: var(--accent);
+    border: 1px solid var(--accent);
+  }
+
+  .hw-tag-semantic {
+    color: #7a5a7a;
+    border: 1px solid #7a5a7a;
+  }
+
+  [data-theme="dark"] .hw-tag-semantic {
+    color: #9a7a9a;
+    border-color: #9a7a9a;
+  }
+
+  .hw-tag-cross {
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+  }
+
+  .hw-family-engine {
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    color: var(--text-faint);
+    letter-spacing: 0.04em;
+  }
+
+  .hw-family-count {
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    color: var(--text-faint);
+    margin-left: auto;
+  }
+
+  .hw-family-body {
+    padding: 0 1.25rem 1.25rem 2.5rem;
+  }
+
+  .hw-family-body p {
+    font-family: var(--serif-body);
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: var(--text-muted);
+    margin-bottom: 0.75rem;
+  }
+
+  .hw-signal-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .hw-signal-chips span {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.02em;
+    color: var(--text-muted);
+    background: var(--bg-dim);
+    padding: 0.25rem 0.55rem;
+    border-radius: 2px;
+    border: 1px solid var(--border);
+  }
+
+  .hw-family-dest {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--text-faint);
+  }
+
+  .hw-family-dest code {
+    color: var(--text-faint);
+    font-size: 0.65rem;
+  }
+
+  /* --- Downstream (Stage 4) --- */
+  .hw-downstream-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+
+  .hw-downstream-item {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1.25rem;
+  }
+
+  .hw-downstream-label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+  }
+
+  .hw-downstream-item p {
+    font-family: var(--serif-body);
+    font-size: 0.88rem;
+    line-height: 1.55;
+    color: var(--text-muted);
+  }
+
+  .hw-downstream-item:last-child {
+    grid-column: 1 / -1;
+  }
+
+  /* ===== MOBILE ===== */
+  @media (max-width: 768px) {
+    .hw-hero { padding: 4rem 0 2rem; }
+    .hw-hero h1 { font-size: 1.6rem; }
+
+    .hw-stage {
+      grid-template-columns: 36px 1fr;
+      gap: 0.75rem;
+    }
+
+    .hw-stage-number {
+      width: 28px;
+      height: 28px;
+      font-size: 0.65rem;
+    }
+
+    .hw-channels { grid-template-columns: 1fr; }
+
+    .hw-table-item {
+      grid-template-columns: 1fr;
+      gap: 0.2rem;
+    }
+
+    .hw-downstream-grid { grid-template-columns: 1fr; }
+    .hw-downstream-item:last-child { grid-column: auto; }
+
+    .hw-connector { padding-left: 13px; }
+  }
+</style>

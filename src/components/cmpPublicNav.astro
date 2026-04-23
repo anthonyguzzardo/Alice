@@ -22,6 +22,7 @@ const { active = '' } = Astro.props;
         <div class="nav-col">
           <div class="nav-heading">Instrument</div>
           <a href="/instrument" class:list={[{ current: active === 'instrument' }]}>Overview</a>
+          <a href="/how-it-works" class:list={[{ current: active === 'how-it-works' }]}>How It Works</a>
           <a href="/methodology" class:list={[{ current: active === 'methodology' }]}>Methodology</a>
           <a href="/research#publications" class:list={[{ current: active === 'papers' }]}>Papers</a>
           <a href="/log" class:list={[{ current: active === 'log' }]}>Log</a>
