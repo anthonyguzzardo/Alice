@@ -842,46 +842,14 @@ export async function getRecentFeedback(limit: number): Promise<Array<{ date: st
 
 export async function getSessionSummariesForQuestions(questionIds: number[]): Promise<Array<SessionSummaryInput & { date: string }>> {
   if (questionIds.length === 0) return [];
-  return await sql`
-    SELECT s.question_id AS "questionId", q.scheduled_for AS date,
-           s.first_keystroke_ms AS "firstKeystrokeMs",
-           s.total_duration_ms AS "totalDurationMs", s.total_chars_typed AS "totalCharsTyped",
-           s.final_char_count AS "finalCharCount", s.commitment_ratio AS "commitmentRatio",
-           s.pause_count AS "pauseCount", s.total_pause_ms AS "totalPauseMs",
-           s.deletion_count AS "deletionCount", s.largest_deletion AS "largestDeletion",
-           s.total_chars_deleted AS "totalCharsDeleted", s.tab_away_count AS "tabAwayCount",
-           s.total_tab_away_ms AS "totalTabAwayMs", s.word_count AS "wordCount",
-           s.sentence_count AS "sentenceCount",
-           s.small_deletion_count AS "smallDeletionCount",
-           s.large_deletion_count AS "largeDeletionCount",
-           s.large_deletion_chars AS "largeDeletionChars",
-           s.first_half_deletion_chars AS "firstHalfDeletionChars",
-           s.second_half_deletion_chars AS "secondHalfDeletionChars",
-           s.active_typing_ms AS "activeTypingMs", s.chars_per_minute AS "charsPerMinute",
-           s.p_burst_count AS "pBurstCount", s.avg_p_burst_length AS "avgPBurstLength",
-           s.nrc_anger_density AS "nrcAngerDensity", s.nrc_fear_density AS "nrcFearDensity",
-           s.nrc_joy_density AS "nrcJoyDensity", s.nrc_sadness_density AS "nrcSadnessDensity",
-           s.nrc_trust_density AS "nrcTrustDensity", s.nrc_anticipation_density AS "nrcAnticipationDensity",
-           s.cognitive_density AS "cognitiveDensity", s.hedging_density AS "hedgingDensity",
-           s.first_person_density AS "firstPersonDensity",
-           s.inter_key_interval_mean AS "interKeyIntervalMean",
-           s.inter_key_interval_std AS "interKeyIntervalStd",
-           s.revision_chain_count AS "revisionChainCount",
-           s.revision_chain_avg_length AS "revisionChainAvgLength",
-           s.hold_time_mean AS "holdTimeMean", s.hold_time_std AS "holdTimeStd",
-           s.flight_time_mean AS "flightTimeMean", s.flight_time_std AS "flightTimeStd",
-           s.keystroke_entropy AS "keystrokeEntropy",
-           s.mattr, s.avg_sentence_length AS "avgSentenceLength",
-           s.sentence_length_variance AS "sentenceLengthVariance",
-           s.scroll_back_count AS "scrollBackCount",
-           s.question_reread_count AS "questionRereadCount",
-           s.device_type AS "deviceType",
-           s.user_agent AS "userAgent", s.hour_of_day AS "hourOfDay", s.day_of_week AS "dayOfWeek"
+  return await sql.unsafe(
+    `SELECT ${SESSION_SUMMARY_COLS}, q.scheduled_for AS date
     FROM tb_session_summaries s
     JOIN tb_questions q ON s.question_id = q.question_id
-    WHERE s.question_id = ANY(${questionIds})
-    ORDER BY q.scheduled_for ASC
-  ` as Array<SessionSummaryInput & { date: string }>;
+    WHERE s.question_id = ANY($1)
+    ORDER BY q.scheduled_for ASC`,
+    [questionIds]
+  ) as Array<SessionSummaryInput & { date: string }>;
 }
 
 export async function getMaxResponseId(): Promise<number> {

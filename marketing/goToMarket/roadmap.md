@@ -138,7 +138,7 @@ Based on the landscape research, these are the people who would use this tomorro
 
 ---
 
-## Phase 2: Consumer Launch (Months 6 through 12)
+## Phase 2: Consumer Launch (Months 6 through 18)
 
 **Goal: 100 to 300 paying users who use Alice daily**
 
@@ -408,15 +408,15 @@ Reach out to cognitive science, psychology, and computer science departments for
 
 ## Revenue Projections
 
-Realistic numbers for a solo-to-small-team operation building credibility before scale.
+Realistic numbers for a solo-to-small-team operation building credibility before scale. All timelines are relative to Phase 0 completion (Reconstruction Validity paper on arXiv), not calendar months from today. If Phase 0 takes six months instead of three, every row shifts accordingly.
 
-| Phase | Timeline | Revenue Source | ARR (conservative) | ARR (strong) |
-|-------|----------|---------------|---------------------|--------------|
-| 0 | Months 0 to 3 | $0 (foundation) | $0 | $0 |
-| 1 | Months 3 to 9 | Research support tiers | $18K | $36K |
-| 2 | Months 6 to 18 | Consumer subscriptions (100 to 300 users) | $10K | $32K |
-| 3 | Months 12 to 36 | Clinical pilots + exploratory pharma endpoints | $150K | $500K |
-| 4 | Months 24 to 36 | Enterprise (5 to 10 customers) | $450K | $1.8M |
+| Phase | Timeline (from Phase 0 end) | Revenue Source | ARR (conservative) | ARR (strong) |
+|-------|----------------------------|---------------|---------------------|--------------|
+| 0 | Month 0 (foundation) | $0 | $0 | $0 |
+| 1 | Months 0 to 6 | Research support tiers | $18K | $36K |
+| 2 | Months 3 to 15 | Consumer subscriptions (100 to 300 users) | $10K | $32K |
+| 3 | Months 9 to 33 | Clinical pilots + exploratory pharma endpoints | $150K | $500K |
+| 4 | Months 21 to 33 | Enterprise (5 to 10 customers) | $450K | $1.8M |
 
 Phase 2 consumer revenue alone does not sustain the business. The bridge is research grants (SBIR Phase I at $275K, NIH R01 at $250K to $500K/year) plus clinical pilot contracts. Consumer adoption matters for longitudinal data and cultural credibility, not for cash flow. Sustainability likely arrives when clinical and enterprise revenue overlap, somewhere in year two to three.
 
@@ -433,6 +433,10 @@ Phase 2 consumer revenue alone does not sustain the business. The bridge is rese
 4. **You burn out.** This is a multi-year, multi-phase roadmap and you're a solo builder. Mitigation: Phase 1 and Phase 2 generate revenue and research partnerships that let you hire. The first hire should be a research coordinator who manages lab partnerships. The second should be a Rust/systems engineer who can share the signal engine work.
 
 5. **Privacy breach or data scandal.** Even with the black box architecture, any perception that keystroke data was misused would be devastating. Mitigation: publish the architecture. Open-source the data handling layer. Get a third-party security audit before consumer launch. Make the privacy story so transparent that a breach is technically impossible, not just unlikely.
+
+6. **The paper doesn't land.** The preprint goes up, but peer review rejects it, requests major revisions, or drags out for 18+ months. The preprint still establishes priority and supports researcher outreach, but institutional credibility (the kind that unlocks clinical partnerships and enterprise sales) requires a peer-reviewed venue. Mitigation: target multiple venues in parallel (cognitive science journal for the method, HCI venue for the instrument, clinical informatics for the application). A rejection from one venue is a redirect, not a dead end. But the gap between "preprint on arXiv" and "published in a journal" is real, and Phase 1 credibility with cautious lab directors depends on which side of that gap you're on.
+
+7. **The normative database never coheres.** Multi-population research deployments run on different question schedules, different participant demographics, different IRB-mandated data handling procedures. The data comes back in shapes that don't combine cleanly into a shared normative reference. Mitigation: define the minimum shared schema before the first research deployment (which signal families, which metadata, which export format). The Research Edition product spec should enforce this at the instrument level, not rely on post-hoc harmonization. If three labs export different column sets, you've already lost.
 
 ---
 
