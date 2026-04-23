@@ -34,6 +34,7 @@ import { computeReconstructionResidual } from './libReconstruction.ts';
 import { computeSessionIntegrity } from './libIntegrity.ts';
 import { saveSessionIntegrity, getSessionIntegrity } from './libDb.ts';
 import { updateRburstTrajectoryShape } from './libSessionMetadata.ts';
+import { updateSemanticBaselines } from './libSemanticBaseline.ts';
 import { logError } from './utlErrorLog.ts';
 
 async function getKeystrokeStream(questionId: number): Promise<KeystrokeEvent[] | null> {
@@ -153,6 +154,13 @@ export async function computeAndPersistDerivedSignals(questionId: number): Promi
     } catch (err) {
       logError('signal-pipeline.semantic', err, { questionId });
     }
+  }
+
+  // ── Semantic baselines (longitudinal z-scores, runs after semantic signals) ──
+  try {
+    await updateSemanticBaselines(questionId);
+  } catch (err) {
+    logError('signal-pipeline.semantic-baseline', err, { questionId });
   }
 
   // ── Process signals ──

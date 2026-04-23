@@ -8,6 +8,25 @@
  * The residual is what CANNOT be reconstructed from the statistical profile.
  * It is the cognitive signature.
  *
+ * ── Residual partitioning ──────────────────────────────────────────────
+ *
+ * The ghost validates BEHAVIORAL signals (motor + dynamical + perplexity).
+ * These residuals are meaningful because the ghost reconstructs motor
+ * timing from the person's statistical profile, and the residual measures
+ * what that profile cannot reproduce.
+ *
+ * Semantic residuals (idea density, lexical sophistication, etc.) are
+ * STORED but NOT included in the paper-reported aggregate. The ghost
+ * generates Markov/PPM word salad; semantic signals computed on that
+ * output measure "coherent text vs gibberish," a trivially explained
+ * difference with no discriminative information across sessions. Semantic
+ * measurement uses a self-referencing longitudinal baseline instead
+ * (see libSemanticBaseline.ts).
+ *
+ * behavioral_l2_norm:  dynamical + motor + perplexity (paper-reported)
+ * semantic_l2_norm:    semantic signals only (stored, Phase 2 baseline)
+ * total_l2_norm:       all families (backward compat, not paper-reported)
+ *
  * Adversary variants (te_adversary_variants):
  *   1. Baseline:           Order-2 Markov + independent ex-Gaussian
  *   2. Conditional Timing: Order-2 Markov + AR(1) conditioned IKI
@@ -158,15 +177,25 @@ async function computeForVariant(
     compress: delta(realSem?.text_compression_ratio, avatarSem?.textCompressionRatio),
   };
 
-  // Aggregate norms
+  // Aggregate norms -- partitioned into behavioral (paper-reported) and semantic (stored)
   const dynNorm = l2(Object.values(dynResiduals));
   const motNorm = l2(Object.values(motResiduals));
   const semNorm = l2(Object.values(semResiduals));
-  const allResiduals = [
+  const perplexityResidual = delta(realPerp?.perplexity ?? null, avatarPerp?.perplexity ?? null);
+
+  // Behavioral: dynamical + motor + perplexity (ghost-validated, paper-reported)
+  const behavioralResiduals = [
     ...Object.values(dynResiduals),
     ...Object.values(motResiduals),
+    perplexityResidual,
+  ];
+  const behavioralNorm = l2(behavioralResiduals);
+  const behavioralCount = behavioralResiduals.filter(isFiniteNum).length;
+
+  // Total: all families including semantic (backward compat)
+  const allResiduals = [
+    ...behavioralResiduals,
     ...Object.values(semResiduals),
-    delta(realPerp?.perplexity ?? null, avatarPerp?.perplexity ?? null),
   ];
   const totalNorm = l2(allResiduals);
   const residualCount = allResiduals.filter(isFiniteNum).length;
@@ -192,7 +221,7 @@ async function computeForVariant(
     real_known_fraction: realPerp?.knownFraction ?? null,
     avatar_perplexity: avatarPerp?.perplexity ?? null,
     avatar_known_fraction: avatarPerp?.knownFraction ?? null,
-    perplexity_residual: delta(realPerp?.perplexity ?? null, avatarPerp?.perplexity ?? null),
+    perplexity_residual: perplexityResidual,
 
     real_permutation_entropy: realDyn?.permutation_entropy ?? null,
     avatar_permutation_entropy: avatarDyn?.permutationEntropy ?? null,
@@ -271,6 +300,8 @@ async function computeForVariant(
     semantic_l2_norm: semNorm,
     total_l2_norm: totalNorm,
     residual_count: residualCount,
+    behavioral_l2_norm: behavioralNorm,
+    behavioral_residual_count: behavioralCount,
   };
 
   try {

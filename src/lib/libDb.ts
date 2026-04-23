@@ -1971,6 +1971,8 @@ export interface ReconstructionResidualInput {
   semantic_l2_norm: number | null;
   total_l2_norm: number | null;
   residual_count: number | null;
+  behavioral_l2_norm: number | null;
+  behavioral_residual_count: number | null;
 }
 
 export async function saveReconstructionResidual(
@@ -2007,6 +2009,7 @@ export async function saveReconstructionResidual(
       ,real_text_compression_ratio, avatar_text_compression_ratio, residual_text_compression_ratio
       ,dynamical_l2_norm, motor_l2_norm, semantic_l2_norm, total_l2_norm
       ,residual_count
+      ,behavioral_l2_norm, behavioral_residual_count
     ) VALUES (
        ${questionId}
       ,${s.adversary_variant_id}
@@ -2036,6 +2039,7 @@ export async function saveReconstructionResidual(
       ,${s.real_text_compression_ratio}, ${s.avatar_text_compression_ratio}, ${s.residual_text_compression_ratio}
       ,${s.dynamical_l2_norm}, ${s.motor_l2_norm}, ${s.semantic_l2_norm}, ${s.total_l2_norm}
       ,${s.residual_count}
+      ,${s.behavioral_l2_norm}, ${s.behavioral_residual_count}
     )
     ON CONFLICT (question_id, adversary_variant_id) DO NOTHING
     RETURNING reconstruction_residual_id

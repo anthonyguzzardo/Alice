@@ -44,6 +44,8 @@ Things that look wrong but aren't, things that will bite you, things that are no
 
 ## Signal Pipeline
 
+- **Semantic residuals are stored but NOT ghost-validated.** The reconstruction adversary validates motor and dynamical signals. Semantic residuals (ghost word salad vs real text) are a trivially explained difference, not a cognitive measurement. `behavioral_l2_norm` is the paper-reported aggregate (dynamical + motor + perplexity). `semantic_l2_norm` is stored for the Phase 2 self-referencing longitudinal baseline system (`libSemanticBaseline.ts`). `total_l2_norm` includes both families for backward compat but is NOT the paper-reported number. If you see semantic residuals that are large and consistent across all sessions, that is correct behavior, not a bug.
+
 - **`return` in signal family blocks exits the entire pipeline function.** In `libSignalPipeline.ts`, the dynamical, motor, and process signal blocks each have `if (!ds) return;` / `if (!ms) return;` / `if (!ps) return;` when the Rust engine is unavailable. These `return` statements exit `computeAndPersistDerivedSignals` entirely, skipping all subsequent families. This means if dynamical signals fail, motor/semantic/process/cross-session/integrity/profile/reconstruction all get skipped. This is semi-intentional (if Rust is down, most families can't compute) but surprising if you add a new family that doesn't depend on Rust.
 
 - **Signal pipeline ordering matters.** Integrity must run BEFORE profile update (it compares against prior profile). Reconstruction must run AFTER profile update (it uses the current profile). Cross-session signals depend on motor signals being persisted first. Don't reorder blocks without understanding the dependency chain.

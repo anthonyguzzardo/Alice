@@ -871,7 +871,7 @@ CREATE TABLE IF NOT EXISTS tb_session_delta (
 
 -- --------------------------------------------------------------------------
 
--- @region profile -- tb_paper_comments, tb_personal_profile, tb_reconstruction_residuals, tb_session_integrity
+-- @region profile -- tb_paper_comments, tb_personal_profile, tb_reconstruction_residuals, tb_session_integrity, tb_semantic_baselines, tb_semantic_trajectory
 
 -- PURPOSE: public paper comments
 -- USE CASE: reader feedback on published research
@@ -1079,9 +1079,11 @@ CREATE TABLE IF NOT EXISTS tb_reconstruction_residuals (
   -- ── Aggregate norms ─────────────────────────────────────────────────
   ,dynamical_l2_norm            DOUBLE PRECISION
   ,motor_l2_norm                DOUBLE PRECISION
-  ,semantic_l2_norm             DOUBLE PRECISION
-  ,total_l2_norm                DOUBLE PRECISION
-  ,residual_count               INT
+  ,semantic_l2_norm             DOUBLE PRECISION   -- stored, not ghost-validated; see Phase 2 self-referencing baselines
+  ,total_l2_norm                DOUBLE PRECISION   -- backward compat: includes all families
+  ,residual_count               INT                -- backward compat: includes all families
+  ,behavioral_l2_norm           DOUBLE PRECISION   -- paper-reported: dynamical + motor + perplexity only
+  ,behavioral_residual_count    INT                -- paper-reported: excludes semantic residuals
 
   -- ── Footer ──────────────────────────────────────────────────────────
   ,dttm_created_utc             TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -1108,4 +1110,54 @@ CREATE TABLE IF NOT EXISTS tb_session_integrity (
   ,profile_session_count  INT
   ,dttm_created_utc       TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
   ,created_by             TEXT NOT NULL DEFAULT 'system'
+);
+
+-- --------------------------------------------------------------------------
+
+-- PURPOSE: running per-signal distribution for semantic baseline (Welford's online algorithm)
+-- USE CASE: incremental mean/variance updated after each session; provides the
+--           personal baseline against which semantic trajectory is measured.
+--           Ghost comparison is invalid for semantic signals (Markov word salad
+--           produces trivially explained residuals). Self-referencing baseline
+--           answers: "how does this session compare to this person's own norm?"
+-- MUTABILITY: updated after each session via Welford's algorithm
+-- REFERENCED BY: tb_semantic_trajectory (provides baseline for z-score computation)
+-- FOOTER: yes (modified)
+CREATE TABLE IF NOT EXISTS tb_semantic_baselines (
+   semantic_baseline_id   INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,signal_name            TEXT NOT NULL UNIQUE
+  ,running_mean           DOUBLE PRECISION NOT NULL DEFAULT 0
+  ,running_m2             DOUBLE PRECISION NOT NULL DEFAULT 0
+  ,session_count          INT NOT NULL DEFAULT 0
+  ,last_question_id       INT
+  ,dttm_created_utc       TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ,created_by             TEXT NOT NULL DEFAULT 'system'
+  ,dttm_modified_utc      TIMESTAMPTZ
+  ,modified_by            TEXT
+);
+
+-- --------------------------------------------------------------------------
+
+-- PURPOSE: per-session semantic z-scores against personal baselines
+-- USE CASE: one row per (session, signal). Stores z-scores against both the
+--           global personal baseline and a topic-matched subset (via HNSW on
+--           tb_embeddings). Gated: z-scores below minimum-n are flagged as
+--           unreliable. Over months/years, the z-score series feeds drift
+--           detection (CUSUM, changepoint) for cognitive trajectory monitoring.
+-- MUTABILITY: insert once per session per signal
+-- REFERENCED BY: none (leaf table, consumed by drift detection layer)
+-- FOOTER: created only
+CREATE TABLE IF NOT EXISTS tb_semantic_trajectory (
+   semantic_trajectory_id  INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,question_id             INT NOT NULL
+  ,signal_name             TEXT NOT NULL
+  ,raw_value               DOUBLE PRECISION
+  ,global_z_score          DOUBLE PRECISION
+  ,topic_z_score           DOUBLE PRECISION
+  ,topic_match_count       INT
+  ,baseline_n              INT NOT NULL
+  ,gated                   BOOLEAN NOT NULL DEFAULT TRUE
+  ,UNIQUE (question_id, signal_name)
+  ,dttm_created_utc        TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ,created_by              TEXT NOT NULL DEFAULT 'system'
 );
