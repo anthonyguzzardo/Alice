@@ -158,13 +158,16 @@ CREATE TABLE IF NOT EXISTS tb_questions (
 -- REFERENCED BY: tb_entry_states, tb_semantic_states, tb_embeddings
 -- FOOTER: yes
 CREATE TABLE IF NOT EXISTS tb_responses (
-   response_id        INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
-  ,question_id        INT NOT NULL UNIQUE
-  ,text               TEXT NOT NULL
-  ,dttm_created_utc   TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-  ,created_by         TEXT NOT NULL DEFAULT 'user'
-  ,dttm_modified_utc  TIMESTAMPTZ
-  ,modified_by        TEXT
+   response_id                     INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,question_id                     INT NOT NULL UNIQUE
+  ,text                            TEXT NOT NULL
+  ,contamination_boundary_version  TEXT NOT NULL DEFAULT 'v1'
+  ,audited_code_paths_ref          TEXT NOT NULL DEFAULT 'docs/contamination-boundary-v1.md'
+  ,code_commit_hash                TEXT NOT NULL DEFAULT 'pre-attestation'
+  ,dttm_created_utc                TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ,created_by                      TEXT NOT NULL DEFAULT 'user'
+  ,dttm_modified_utc               TIMESTAMPTZ
+  ,modified_by                     TEXT
 );
 
 -- --------------------------------------------------------------------------
@@ -215,7 +218,7 @@ CREATE TABLE IF NOT EXISTS tb_question_feedback (
 
 -- --------------------------------------------------------------------------
 
--- @region sessions -- tb_session_summaries, tb_session_events, tb_session_metadata, tb_burst_sequences, tb_rburst_sequences, tb_prompt_traces, tb_embeddings
+-- @region sessions -- tb_session_summaries, tb_session_events, tb_session_metadata, tb_burst_sequences, tb_rburst_sequences, tb_prompt_traces, tb_embedding_model_versions, tb_embeddings
 
 -- PURPOSE: per-session behavioral summary computed from raw keystroke capture
 -- USE CASE: one row per session, computed at submission time
@@ -379,17 +382,44 @@ CREATE TABLE IF NOT EXISTS tb_prompt_traces (
 -- vector(512): pgvector stores as array of float4 (32-bit). This is intentional;
 -- embedding dimensions do not benefit from float64 precision (models output
 -- float32). 512 dims * 4 bytes = 2048 bytes per vector.
+-- PURPOSE: Embedding model version registry. Tracks exact weights, inference
+--          environment, and lifecycle of each model used for embedding.
+-- USE CASE: One row per model deployment. Links to tb_embeddings for provenance.
+-- MUTABILITY: Insert on model change. active_to set when retired.
+-- REFERENCED BY: tb_embeddings.embedding_model_version_id
+-- FOOTER: created only
+CREATE TABLE IF NOT EXISTS tb_embedding_model_versions (
+   embedding_model_version_id  INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,model_name                  TEXT NOT NULL
+  ,weights_sha256              TEXT NOT NULL
+  ,inference_environment       JSONB NOT NULL
+  ,active_from                 DATE NOT NULL
+  ,active_to                   DATE
+  ,notes                       TEXT
+  ,dttm_created_utc            TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ,created_by                  TEXT NOT NULL DEFAULT 'system'
+);
+
+-- --------------------------------------------------------------------------
+
+-- PURPOSE: pgvector embeddings for semantic similarity search
+-- USE CASE: one row per (source, record, model version). Topic-matching via HNSW.
+-- MUTABILITY: insert only. Soft-invalidated via invalidated_at when model changes.
+-- REFERENCED BY: tb_semantic_trajectory (topic-matched z-scores via HNSW)
+-- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_embeddings (
-   embedding_id          INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
-  ,embedding_source_id   SMALLINT NOT NULL
-  ,source_record_id      INT      NOT NULL
-  ,embedded_text         TEXT NOT NULL
-  ,source_date           DATE
-  ,model_name            TEXT NOT NULL DEFAULT 'voyage-3-lite'
-  ,embedding             vector(512)
-  ,dttm_created_utc      TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-  ,created_by            TEXT NOT NULL DEFAULT 'system'
-  ,UNIQUE(embedding_source_id, source_record_id)
+   embedding_id                INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,embedding_source_id         SMALLINT NOT NULL
+  ,source_record_id            INT      NOT NULL
+  ,embedded_text               TEXT NOT NULL
+  ,source_date                 DATE
+  ,model_name                  TEXT NOT NULL DEFAULT 'Qwen3-Embedding-0.6B'
+  ,embedding_model_version_id  INT
+  ,embedding                   vector(512)
+  ,invalidated_at              TIMESTAMPTZ
+  ,dttm_created_utc            TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ,created_by                  TEXT NOT NULL DEFAULT 'system'
+  ,UNIQUE(embedding_source_id, source_record_id, embedding_model_version_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_embeddings_vector ON tb_embeddings

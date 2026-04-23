@@ -49,17 +49,22 @@ function buildSummary(sessions: any[]) {
     count: sessions.length,
     journalCount: journalSessions.length,
     calibrationCount: calSessions.length,
-    avgTotalL2: avg(sessions, 'totalL2'),
+    // Primary: behavioral L2 (paper-reported, ghost-validated)
+    avgBehavioralL2: avg(sessions, 'behavioralL2'),
+    journalBehavioralL2: avg(journalSessions, 'behavioralL2'),
+    calibrationBehavioralL2: avg(calSessions, 'behavioralL2'),
+    latestBehavioralL2: latest?.behavioralL2 ?? null,
+    // Component breakdowns
     avgDynL2: avg(sessions, 'dynL2'),
     avgMotL2: avg(sessions, 'motL2'),
-    avgSemL2: avg(sessions, 'semL2'),
-    journalAvgL2: avg(journalSessions, 'totalL2'),
-    calibrationAvgL2: avg(calSessions, 'totalL2'),
-    latestTotalL2: latest?.totalL2 ?? null,
     avgRealPerplexity: avg(sessions, 'realPerplexity'),
     avgAvatarPerplexity: avg(sessions, 'avatarPerplexity'),
     avgSelfPerplexity: avg(sessions, 'selfPerplexity'),
     te: { finiteCount: finiteTE.length, mean: teMean, stdDev: teStdDev, cv: teCV },
+    // Semantic: stored but NOT ghost-validated (Phase 2 baseline system)
+    avgSemL2: avg(sessions, 'semL2'),
+    // Deprecated: total includes semantic, not paper-reported
+    avgTotalL2: avg(sessions, 'totalL2'),
   };
 }
 
@@ -75,6 +80,8 @@ export const GET: APIRoute = async ({ request }) => {
         r.adversary_variant_id   AS "variantId",
         q.scheduled_for::text    AS date,
         r.question_source_id     AS "sourceId",
+        r.behavioral_l2_norm     AS "behavioralL2",
+        r.behavioral_residual_count AS "behavioralCount",
         r.total_l2_norm          AS "totalL2",
         r.dynamical_l2_norm      AS "dynL2",
         r.motor_l2_norm          AS "motL2",
@@ -146,15 +153,15 @@ export const GET: APIRoute = async ({ request }) => {
       };
     });
 
-    // Comparison: avg L2 norms per variant
-    const comparison: Record<number, { avgTotal: number | null; avgDyn: number | null; avgMot: number | null; avgSem: number | null }> = {};
+    // Comparison: avg L2 norms per variant (behavioral is primary)
+    const comparison: Record<number, { avgBehavioral: number | null; avgDyn: number | null; avgMot: number | null; avgSem: number | null }> = {};
     for (const v of variants) {
       const avg = (key: string) => {
         const vals = v.sessions.map((s: any) => s[key]).filter((x: any) => x != null && Number.isFinite(x));
         return vals.length ? vals.reduce((a: number, b: number) => a + b, 0) / vals.length : null;
       };
       comparison[v.id] = {
-        avgTotal: avg('totalL2'),
+        avgBehavioral: avg('behavioralL2'),
         avgDyn: avg('dynL2'),
         avgMot: avg('motL2'),
         avgSem: avg('semL2'),

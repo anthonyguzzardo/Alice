@@ -1,7 +1,17 @@
 /**
  * Semantic Baseline Engine (Phase 2)
  *
- * Self-referencing longitudinal baselines for semantic signals.
+ * Self-referencing longitudinal baselines for seven semantic signals:
+ *   1. idea_density
+ *   2. lexical_sophistication
+ *   3. epistemic_stance
+ *   4. integrative_complexity
+ *   5. deep_cohesion
+ *   6. text_compression_ratio
+ *   7. referential_cohesion (added beyond the original six-signal spec;
+ *      content-word overlap measure with within-person stability properties
+ *      relevant to longitudinal trajectory; already computed and stored in
+ *      tb_semantic_signals at the time of inclusion)
  *
  * The reconstruction adversary (ghost) is the correct null model for motor
  * and dynamical signals. It is the WRONG null model for semantic signals:
@@ -151,7 +161,7 @@ async function getTopicMatchedValues(
   signalName: string,
   k: number,
 ): Promise<{ values: number[]; matchCount: number }> {
-  // Get current session's embedding
+  // Get current session's embedding (exclude invalidated rows from prior model versions)
   const embRows = await sql`
     SELECT e.embedding
     FROM tb_embeddings e
@@ -159,6 +169,7 @@ async function getTopicMatchedValues(
     WHERE e.embedding_source_id = 1
       AND r.question_id = ${questionId}
       AND e.embedding IS NOT NULL
+      AND e.invalidated_at IS NULL
   `;
 
   if (embRows.length === 0) return { values: [], matchCount: 0 };
@@ -173,6 +184,7 @@ async function getTopicMatchedValues(
     JOIN tb_semantic_signals ss ON r.question_id = ss.question_id
     WHERE e.embedding_source_id = 1
       AND e.embedding IS NOT NULL
+      AND e.invalidated_at IS NULL
       AND r.question_id != ${questionId}
       AND ss.${sql(signalName)} IS NOT NULL
     ORDER BY e.embedding <-> ${embedding}::vector

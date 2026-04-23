@@ -5,6 +5,8 @@
 -- to regenerate the ghost: PRNG seed, profile snapshot, corpus hash, and
 -- topic string. Historical rows get NULL (pre-reproducibility-era).
 
+SET search_path = alice, public;
+
 ALTER TABLE tb_reconstruction_residuals
   ADD COLUMN avatar_seed              TEXT,
   ADD COLUMN profile_snapshot_json    JSONB,

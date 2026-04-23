@@ -51,11 +51,19 @@ export async function getTodaysResponse(): Promise<{ response_id: number; text: 
   return (rows[0] as { response_id: number; text: string }) ?? null;
 }
 
-export async function saveResponse(questionId: number, text: string, tx?: TxSql): Promise<number> {
+export async function saveResponse(
+  questionId: number,
+  text: string,
+  tx?: TxSql,
+  attestation?: { boundaryVersion: string; codePathsRef: string; commitHash: string },
+): Promise<number> {
   const q = tx ?? sql;
+  const bv = attestation?.boundaryVersion ?? 'v1';
+  const ref = attestation?.codePathsRef ?? 'docs/contamination-boundary-v1.md';
+  const hash = attestation?.commitHash ?? 'pre-attestation';
   const [row] = await q`
-    INSERT INTO tb_responses (question_id, text, dttm_created_utc)
-    VALUES (${questionId}, ${text}, ${nowStr()})
+    INSERT INTO tb_responses (question_id, text, contamination_boundary_version, audited_code_paths_ref, code_commit_hash, dttm_created_utc)
+    VALUES (${questionId}, ${text}, ${bv}, ${ref}, ${hash}, ${nowStr()})
     RETURNING response_id
   `;
   return row.response_id;
@@ -666,8 +674,12 @@ export async function getCalibrationPromptsByRecency(): Promise<string[]> {
 export async function saveCalibrationSession(
   promptText: string,
   responseText: string,
-  summary: SessionSummaryInput
+  summary: SessionSummaryInput,
+  attestation?: { boundaryVersion: string; codePathsRef: string; commitHash: string },
 ): Promise<number> {
+  const bv = attestation?.boundaryVersion ?? 'v1';
+  const ref = attestation?.codePathsRef ?? 'docs/contamination-boundary-v1.md';
+  const hash = attestation?.commitHash ?? 'pre-attestation';
   return await sql.begin(async (tx) => {
     const [qRow] = await tx`
       INSERT INTO tb_questions (text, question_source_id)
@@ -677,8 +689,8 @@ export async function saveCalibrationSession(
     const questionId = qRow.question_id as number;
 
     await tx`
-      INSERT INTO tb_responses (question_id, text)
-      VALUES (${questionId}, ${responseText})
+      INSERT INTO tb_responses (question_id, text, contamination_boundary_version, audited_code_paths_ref, code_commit_hash)
+      VALUES (${questionId}, ${responseText}, ${bv}, ${ref}, ${hash})
     `;
 
     await saveSessionSummary({ ...summary, questionId }, tx);
@@ -715,7 +727,7 @@ export async function getAllQuestionFeedback(): Promise<Array<{ date: string; la
 }
 
 // ----------------------------------------------------------------------------
-// @region retrieval -- getRecentResponses, getResponsesSince, getResponsesSinceId, getAllReflections, getLatestReflectionWithCoverage, getRecentFeedback, getSessionSummariesForQuestions, getMaxResponseId, insertEmbeddingMeta, isRecordEmbedded, getUnembeddedResponses, searchVecEmbeddings, savePromptTrace
+// @region retrieval -- getRecentResponses, getResponsesSince, getResponsesSinceId, getAllReflections, getLatestReflectionWithCoverage, getRecentFeedback, getSessionSummariesForQuestions, getMaxResponseId, insertEmbeddingMeta, isRecordEmbedded, getUnembeddedResponses, searchVecEmbeddings, getActiveEmbeddingModelVersionId, savePromptTrace
 // SCOPED RETRIEVAL (for RAG-augmented prompts)
 // ----------------------------------------------------------------------------
 
@@ -862,36 +874,48 @@ export async function insertEmbeddingMeta(
   sourceRecordId: number,
   embeddedText: string,
   sourceDate: string | null,
-  modelName: string = 'voyage-3-lite',
+  modelName: string = 'Qwen3-Embedding-0.6B',
   embedding?: number[],
+  embeddingModelVersionId?: number,
 ): Promise<number> {
   if (embedding) {
     const vectorString = `[${embedding.join(',')}]`;
     const [row] = await sql`
-      INSERT INTO tb_embeddings (embedding_source_id, source_record_id, embedded_text, source_date, model_name, embedding)
-      VALUES (${embeddingSourceId}, ${sourceRecordId}, ${embeddedText}, ${sourceDate}, ${modelName}, ${vectorString}::vector)
-      ON CONFLICT (embedding_source_id, source_record_id) DO NOTHING
+      INSERT INTO tb_embeddings (embedding_source_id, source_record_id, embedded_text, source_date, model_name, embedding, embedding_model_version_id)
+      VALUES (${embeddingSourceId}, ${sourceRecordId}, ${embeddedText}, ${sourceDate}, ${modelName}, ${vectorString}::vector, ${embeddingModelVersionId ?? null})
+      ON CONFLICT (embedding_source_id, source_record_id, embedding_model_version_id) DO NOTHING
       RETURNING embedding_id
     `;
     return row?.embedding_id ?? 0;
   }
   const [row] = await sql`
-    INSERT INTO tb_embeddings (embedding_source_id, source_record_id, embedded_text, source_date, model_name)
-    VALUES (${embeddingSourceId}, ${sourceRecordId}, ${embeddedText}, ${sourceDate}, ${modelName})
-    ON CONFLICT (embedding_source_id, source_record_id) DO NOTHING
+    INSERT INTO tb_embeddings (embedding_source_id, source_record_id, embedded_text, source_date, model_name, embedding_model_version_id)
+    VALUES (${embeddingSourceId}, ${sourceRecordId}, ${embeddedText}, ${sourceDate}, ${modelName}, ${embeddingModelVersionId ?? null})
+    ON CONFLICT (embedding_source_id, source_record_id, embedding_model_version_id) DO NOTHING
     RETURNING embedding_id
   `;
   return row?.embedding_id ?? 0;
 }
 
-export async function isRecordEmbedded(embeddingSourceId: number, sourceRecordId: number): Promise<boolean> {
-  const rows = await sql`
-    SELECT 1 FROM tb_embeddings WHERE embedding_source_id = ${embeddingSourceId} AND source_record_id = ${sourceRecordId}
-  `;
+export async function isRecordEmbedded(embeddingSourceId: number, sourceRecordId: number, embeddingModelVersionId?: number): Promise<boolean> {
+  const rows = embeddingModelVersionId
+    ? await sql`
+        SELECT 1 FROM tb_embeddings
+        WHERE embedding_source_id = ${embeddingSourceId}
+          AND source_record_id = ${sourceRecordId}
+          AND embedding_model_version_id = ${embeddingModelVersionId}
+          AND invalidated_at IS NULL
+      `
+    : await sql`
+        SELECT 1 FROM tb_embeddings
+        WHERE embedding_source_id = ${embeddingSourceId}
+          AND source_record_id = ${sourceRecordId}
+          AND invalidated_at IS NULL
+      `;
   return rows.length > 0;
 }
 
-export async function getUnembeddedResponses(): Promise<Array<{
+export async function getUnembeddedResponses(embeddingModelVersionId?: number): Promise<Array<{
   response_id: number; question: string; response: string; date: string;
 }>> {
   return await sql`
@@ -901,7 +925,10 @@ export async function getUnembeddedResponses(): Promise<Array<{
     WHERE q.question_source_id != 3
       AND NOT EXISTS (
         SELECT 1 FROM tb_embeddings e
-        WHERE e.embedding_source_id = 1 AND e.source_record_id = r.response_id
+        WHERE e.embedding_source_id = 1
+          AND e.source_record_id = r.response_id
+          AND e.invalidated_at IS NULL
+          ${embeddingModelVersionId ? sql`AND e.embedding_model_version_id = ${embeddingModelVersionId}` : sql``}
       )
     ORDER BY q.scheduled_for ASC
   ` as Array<{
@@ -922,6 +949,7 @@ export async function searchVecEmbeddings(queryVector: number[], k: number): Pro
              (e.embedding <-> ${vectorString}::vector) AS distance
       FROM tb_embeddings e
       WHERE e.embedding IS NOT NULL
+        AND e.invalidated_at IS NULL
       ORDER BY e.embedding <-> ${vectorString}::vector
       LIMIT ${k}
     ` as Array<{
@@ -932,6 +960,16 @@ export async function searchVecEmbeddings(queryVector: number[], k: number): Pro
     console.error('[searchVecEmbeddings] Vector search failed, returning empty:', (err as Error).message);
     return [];
   }
+}
+
+export async function getActiveEmbeddingModelVersionId(): Promise<number | null> {
+  const rows = await sql`
+    SELECT embedding_model_version_id FROM tb_embedding_model_versions
+    WHERE active_to IS NULL
+    ORDER BY active_from DESC
+    LIMIT 1
+  `;
+  return (rows[0] as { embedding_model_version_id: number } | undefined)?.embedding_model_version_id ?? null;
 }
 
 // ----------------------------------------------------------------------------

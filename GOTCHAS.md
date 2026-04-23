@@ -10,6 +10,8 @@ Things that look wrong but aren't, things that will bite you, things that are no
 
 - **Question IDs 42, 63, 64 are intentional orphans.** These are early calibration sessions (2026-04-14, 2026-04-17) that have responses but no session summaries or session events. They predate the calibration event-logging pipeline. They are NOT bugs or transaction failures. The response text is real. The health endpoint explicitly excludes them from the "sessions missing summary" anomaly count.
 
+- **Every migration file must begin with `SET search_path = alice, public;`.** Migrations are run via `psql -f` without a wrapper that sets the search path. If you omit it, the migration runs against the `public` schema and silently creates duplicate tables/columns in the wrong schema. Migrations 002-010 and 014-015 all include it. Migrations 011-013 were missing it (fixed 2026-04-23). The canonical schema file `dbAlice_Tables.sql` sets it at line 40.
+
 - **No physical foreign keys.** The entire schema uses logical FKs only. JOINs work, but there are no cascade deletes and no referential integrity checks. Deleting a parent row silently orphans children. See CLAUDE.md for the cascade dependency map. When in doubt, don't delete.
 
 - **Unquoted camelCase aliases get lowercased.** PostgreSQL lowercases unquoted identifiers. `SELECT col AS totalDurationMs` becomes `totaldurationms`. Always double-quote: `SELECT col AS "totalDurationMs"`. Every query in libDb.ts does this correctly; don't break the pattern.
@@ -66,9 +68,19 @@ Things that look wrong but aren't, things that will bite you, things that are no
 
 ## Embeddings
 
-- **VoyageAI is loaded via `createRequire` (CJS shim).** The `voyageai` package is CommonJS. Alice is ESM (`"type": "module"`). The import uses `createRequire(import.meta.url)` to bridge this. TypeScript can't resolve types through this path, so `VoyageClient` is typed as `InstanceType<typeof VoyageAIClient>` and embed results are cast to `{ data?: Array<{ embedding?: number[] }> }`. This looks wrong but is the correct workaround.
+- **Embeddings require TEI running on port 8090.** `libEmbeddings.ts` calls `http://localhost:8090/embed` (configurable via `ALICE_TEI_URL`). The server is a CPU-only build of TEI at `~/.cargo/bin/text-embeddings-router`. Start with: `~/.cargo/bin/text-embeddings-router --model-id Qwen/Qwen3-Embedding-0.6B --dtype float32 --port 8090`. If TEI is not running, embedding calls fail gracefully and the response saves without an embedding.
 
-- **Embedding failures are never fatal.** `embedResponse` runs fire-and-forget after submission. If Voyage API is down or the key is missing, it logs a warning and the response saves without an embedding. Backfill later with `npm run backfill`. **Analytical implication:** `tb_embeddings` is not a reliable index of which responses exist. A response can be saved without a successful embedding. Any analysis that assumes "responses with embeddings = all responses" will be wrong.
+- **Matryoshka truncation happens client-side.** TEI outputs 1024-dim vectors (model native). `libEmbeddings.ts` truncates to 512 dims and L2-renormalizes before storage. The schema is `vector(512)`. If you bypass `generateEmbedding()` and call TEI directly, you'll get 1024-dim vectors that won't match the schema.
+
+- **Invalidated embeddings coexist with active ones.** `tb_embeddings` has an `invalidated_at` column. The 10 original voyage-3-lite rows are preserved but invalidated. All queries (HNSW search, topic matching, `isRecordEmbedded`) filter `invalidated_at IS NULL`. If you add a new query against `tb_embeddings`, include this filter.
+
+- **Embedding failures are never fatal.** `embedResponse` runs fire-and-forget after submission. If TEI is down, it logs a warning and the response saves without an embedding. Backfill later with `npm run backfill`. **Analytical implication:** `tb_embeddings` is not a reliable index of which responses exist. A response can be saved without a successful embedding. Any analysis that assumes "responses with embeddings = all responses" will be wrong.
+
+## Semantic Baselines
+
+- **`tb_semantic_trajectory` z-scores are gated.** Rows with `gated = true` have z-scores computed from baselines with fewer than 10 sessions (MINIMUM_N). These z-scores are unreliable and stored only for completeness. Any analytical consumer (drift detection, CUSUM, trajectory visualization) MUST filter `WHERE gated = false`. Currently no consumer reads this table analytically; when one is added, enforce this filter.
+
+- **Baselines exclude calibration sessions.** The semantic baseline backfill processes only non-calibration sessions (question_source_id != 3). Calibration text is prompted and does not represent organic thinking. Including it would contaminate the within-person baseline.
 
 ## Question Generation
 

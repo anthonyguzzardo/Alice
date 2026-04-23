@@ -13,6 +13,8 @@
 -- total_l2_norm and residual_count are preserved for backward compatibility
 -- but are no longer the paper-reported aggregate.
 
+SET search_path = alice, public;
+
 ALTER TABLE tb_reconstruction_residuals
   ADD COLUMN behavioral_l2_norm         DOUBLE PRECISION,
   ADD COLUMN behavioral_residual_count  INT;

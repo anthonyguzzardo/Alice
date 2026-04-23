@@ -8,6 +8,144 @@ Newest first.
 
 ---
 
+## INC-010: Embedding model migration (voyage-3-lite to Qwen3-Embedding-0.6B)
+
+**Date:** 2026-04-23
+**Type:** Architecture correction (replacing API-dependent embedding model with self-hosted archivable weights)
+
+### What was wrong
+
+The embedding pipeline used VoyageAI's `voyage-3-lite` model via API (`voyageai` npm package v0.2.1, authenticated by `VOYAGE_API_KEY`). This failed three of Alice's four constitutional requirements for measurement infrastructure:
+
+1. **Not archivable.** Vendor-hosted weights with no SHA-256 identifier. VoyageAI can deprecate, retrain, or silently update the model at any time. A methods section citing "voyage-3-lite" is citing a moving target.
+2. **Not deterministic across vendor changes.** Two concurrent API calls returned bit-identical vectors (cosine 1.0, max element diff 0), but this is a property of concurrent calls to the same live model, not a guarantee across model version changes or deprecation events.
+3. **No lifecycle control.** No mechanism to pin a model version, detect a silent update, or reproduce historical vectors after a vendor change.
+
+The fourth requirement (sufficient quality for topic matching on a corpus of tens to low-thousands of journal entries) was satisfied. The model worked; the provenance chain was broken.
+
+### Discovery method
+
+Systematic audit of the semantic channel infrastructure during Phase 2 baseline work. The embedding model's provenance gap was identified while specifying the topic-matched z-score pipeline (`libSemanticBaseline.ts`), which depends on HNSW similarity against stored embeddings. A model that can silently change under the pipeline invalidates all downstream z-scores.
+
+### Decision: Qwen3-Embedding-0.6B
+
+**Model:** `Qwen/Qwen3-Embedding-0.6B` (Hugging Face, Apache 2.0)
+**Weights SHA-256:** `0437e45c94563b09e13cb7a64478fc406947a93cb34a7e05870fc8dcd48e23fd`
+**HF commit:** `97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3`
+**Parameters:** 0.6B (2.4 GB at FP32)
+**Architecture:** Qwen3ForCausalLM with last-token pooling
+**Output dimension:** 1024 native, truncated to 512 via Matryoshka Representation Learning
+
+Selected from four candidate paths after Qwen3-Embedding-4B (originally specified) was found to exceed the 16 GB RAM constraint at FP32. The 0.6B satisfies all four constitutional requirements: archivable weights under Apache 2.0, testable bit-reproducibility under FP32 deterministic inference, sufficient quality for single-user topic matching, and fits the hardware.
+
+Topic matching on journal text is not a frontier NLP task. The 4B's additional capacity optimizes for cross-lingual retrieval, code retrieval, and long-context understanding, which do not meaningfully discriminate on Alice's task.
+
+**Licensing note:** GitHub issue `QwenLM/Qwen3-Embedding#166` raises a question about MS MARCO training data licensing (non-commercial use clause) potentially affecting the Apache 2.0 release. Acceptable for Paper One research use. Flagged for Phase Two commercial deployment review.
+
+### Serving layer decision: TEI CPU-only build
+
+**Problem:** Hugging Face Text Embeddings Inference (TEI) v1.9.3 via Homebrew segfaults during warmup when loading Qwen3-Embedding-0.6B on Metal. The Homebrew binary is compiled with `cargo install --path router -F candle -F metal`. The `metal_is_available()` check in candle is compile-time (`cfg!(feature = "metal")`), not runtime. There is no environment variable or flag to force CPU in a Metal-compiled binary. `CANDLE_USE_CPU=1` does not exist in the TEI or candle source code.
+
+**Cross-cutting finding:** Metal FP32 computation on Apple Silicon is not bit-reproducible. Metal kernels use batch-dependent reduction patterns and adaptive tiling that produce ~1e-4 relative error on identical inputs across runs. This affects every framework that offloads to Metal (TEI/candle, PyTorch MPS, MLX, llama.cpp with GPU layers). The only path to FP32 bit-reproducibility on Apple Silicon is CPU-only inference.
+
+**Candidates evaluated:**
+
+| Path | FP32 | Determinism | Pooling verified | Verdict |
+|---|---|---|---|---|
+| TEI v1.9.3 Homebrew (Metal) | Yes | No (Metal non-deterministic + segfaults) | Yes | Eliminated |
+| TEI source build (CPU-only candle) | Yes | Yes | Yes | **Selected** |
+| llama.cpp with F32 GGUF | Yes | Yes (`-ngl 0`) | Yes (`--pooling last`) | Viable backup |
+| sentence-transformers (Python CPU) | Yes | Yes (`eager` attn workaround) | Yes (reference impl) | Viable backup |
+| Ollama | No (FP16 max) | No control | Yes | Eliminated |
+| MLX | Yes but non-deterministic | No (Metal only) | Unverified | Eliminated |
+| fastembed-rs (Rust/candle) | Yes | Yes (CPU) | Unverified | Deferred |
+
+**Resolution:** Built TEI v1.9.3 from source with `cargo install --path router -F candle` (no `-F metal`). Binary at `~/.cargo/bin/text-embeddings-router`. CPU-only by construction.
+
+### Bit-reproducibility verification
+
+TEI CPU-only + FP32 + Qwen3-Embedding-0.6B, two successive calls with identical input:
+
+| Observable | 1024-dim (native) | 512-dim (Matryoshka) |
+|---|---|---|
+| Cosine similarity | 1.0000000000000002 | 1.0000000000000002 |
+| Max element difference | 0 | 0 |
+| Vectors identical | Yes | Yes |
+
+### Schema changes
+
+| Change | Migration |
+|---|---|
+| `tb_embedding_model_versions` table created | 014 |
+| `embedding_model_version_id` column on `tb_embeddings` | 014 |
+| `invalidated_at` column on `tb_embeddings` | 014 |
+| UNIQUE constraint updated to `(source_id, record_id, model_version_id)` | 014 |
+| Qwen3-Embedding-0.6B registered as model version 1 | 014 |
+| 10 voyage-3-lite rows soft-invalidated (`invalidated_at = now()`) | 014 |
+
+### Data migration
+
+1. All 10 non-calibration sessions re-embedded under Qwen3-Embedding-0.6B (10/10 succeeded, 0 failed).
+2. New embeddings: 512-dimensional, L2-normalized, tagged with `embedding_model_version_id = 1`.
+3. All embedding queries updated to filter `invalidated_at IS NULL`: `searchVecEmbeddings`, `getTopicMatchedValues`, `isRecordEmbedded`, `getUnembeddedResponses`.
+4. Semantic baselines regenerated from scratch against new embeddings. 185 stale trajectory rows deleted, 48 new rows computed. All 48 have topic z-scores. All 48 correctly gated (baseline_n < MINIMUM_N = 10).
+
+### Contamination attestation schema (co-landed)
+
+Three columns added to `tb_responses` (migration 015):
+- `contamination_boundary_version` (default `'v1'`)
+- `audited_code_paths_ref` (default `'docs/contamination-boundary-v1.md'`)
+- `code_commit_hash` (populated at session-write time via `git rev-parse HEAD`)
+
+All 65 existing rows backfilled with v1 attestation and `'pre-attestation'` commit hash. Both `respond.ts` and `calibrate.ts` wired to populate commit hash on new sessions.
+
+Boundary document `docs/contamination-boundary-v1.md` enumerates five audited code paths and explicitly excludes `src/pages/app/index.astro` (unwired textarea).
+
+### Behavioral L2 norm backfill (co-landed)
+
+140 historical rows in `tb_reconstruction_residuals` backfilled with `behavioral_l2_norm` (RMS of dynamical + motor + perplexity residuals, filtering non-finite values). Three spot-checks verified SQL-computed values match TypeScript `l2()` to 6 decimal places.
+
+Observatory pages updated to display `behavioral_l2_norm` as the primary aggregate:
+- `instrument-status.ts`: primary metric is `behavioralL2`
+- `observatory/ghost.ts`: summary uses `avgBehavioralL2`, comparison uses `avgBehavioral`
+- `observatory/difficulty.ts`: groups by `behavioralL2`
+
+`total_l2_norm` preserved in API responses but no longer rendered as the primary number.
+
+### Migration search_path fix (co-landed)
+
+Migrations 011-013 were missing `SET search_path = alice, public;`. Fixed. Gotcha added to `GOTCHAS.md`.
+
+### Files changed
+
+| File | Change |
+|---|---|
+| `src/lib/libEmbeddings.ts` | Rewritten: VoyageAI API replaced with TEI HTTP calls, Matryoshka truncation + L2 normalization |
+| `src/lib/libDb.ts` | `insertEmbeddingMeta`, `isRecordEmbedded`, `getUnembeddedResponses`, `searchVecEmbeddings` updated for model versioning and invalidation; `saveResponse` and `saveCalibrationSession` accept attestation; `getActiveEmbeddingModelVersionId` added |
+| `src/lib/libSemanticBaseline.ts` | `invalidated_at IS NULL` filter on both embedding queries; module header updated with seven-signal list |
+| `src/lib/utlGitCommit.ts` | New: git commit hash at process startup |
+| `src/pages/api/respond.ts` | Attestation columns populated at session-write time |
+| `src/pages/api/calibrate.ts` | Attestation columns populated at session-write time |
+| `src/pages/api/instrument-status.ts` | Primary metric switched to `behavioralL2` |
+| `src/pages/api/observatory/ghost.ts` | `behavioralL2` in SELECT and summary; comparison uses `avgBehavioral` |
+| `src/pages/api/observatory/difficulty.ts` | Groups by `behavioralL2` |
+| `db/sql/dbAlice_Tables.sql` | `tb_embedding_model_versions` added; `tb_embeddings` updated (model version FK, invalidated_at, new UNIQUE); `tb_responses` updated (attestation columns) |
+| `db/sql/migrations/014_embedding_model_versions.sql` | New migration |
+| `db/sql/migrations/015_contamination_attestation.sql` | New migration |
+| `db/sql/migrations/011-013` | `SET search_path` added |
+| `docs/embedding-methods.md` | New: canonical methods specification for Paper One citation |
+| `docs/contamination-boundary-v1.md` | New: boundary audit document |
+| `src/scripts/backfill-semantic-baselines.ts` | New: regeneration script for baselines after embedding model change |
+| `GOTCHAS.md` | VoyageAI gotcha replaced with TEI gotcha; invalidated embeddings gotcha; migration search_path gotcha; semantic trajectory gating gotcha; semantic baseline calibration exclusion gotcha |
+
+### What this does NOT fix
+
+- **Calibration sessions are not embedded.** The embedding pipeline (`getUnembeddedResponses`) filters `question_source_id != 3`. Calibration text is prompted, not organic. If calibration embeddings are ever needed (e.g., for cross-session-type topic similarity), a separate pipeline with explicit scope would be required.
+- **Semantic baselines include only non-calibration sessions.** The backfill processes question_source_id != 3 only. Previous baselines (n=13-29) included calibration sessions. New baselines (n=6-7) are lower but methodologically correct: calibration text does not represent within-person organic trajectory.
+- **`voyageai` npm package remains in `package.json`.** Not removed in this migration to avoid unnecessary churn. It is no longer imported by any live code. Can be removed in a future cleanup.
+
+---
+
 ## INC-009: Construct validity audit and remediation (Waves 1-2)
 
 **Date:** 2026-04-22

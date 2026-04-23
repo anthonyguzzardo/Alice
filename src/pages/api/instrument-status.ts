@@ -64,26 +64,27 @@ export const GET: APIRoute = async () => {
     // Prior to multi-adversary (migration 010), all rows have adversary_variant_id = 1.
     const convergenceQuery = (variantId: number) => sql`
       SELECT
-        ROUND(AVG(motor_l2_norm)::numeric, 1)       AS "motorL2",
-        ROUND(AVG(semantic_l2_norm)::numeric, 3)     AS "semanticL2",
-        ROUND(AVG(dynamical_l2_norm)::numeric, 3)    AS "dynamicalL2",
-        ROUND(AVG(total_l2_norm)::numeric, 1)        AS "totalL2",
-        ROUND(AVG(residual_count)::numeric, 1)       AS "avgSignals",
-        ROUND(AVG(perplexity_residual)::numeric, 1)  AS "perpResidual",
-        ROUND(AVG(CASE WHEN question_source_id != 3 THEN total_l2_norm END)::numeric, 1) AS "journalL2",
-        ROUND(AVG(CASE WHEN question_source_id = 3 THEN total_l2_norm END)::numeric, 1)  AS "calibrationL2"
+        ROUND(AVG(behavioral_l2_norm)::numeric, 1)   AS "behavioralL2",
+        ROUND(AVG(behavioral_residual_count)::numeric, 1) AS "behavioralSignals",
+        ROUND(AVG(motor_l2_norm)::numeric, 1)         AS "motorL2",
+        ROUND(AVG(dynamical_l2_norm)::numeric, 3)     AS "dynamicalL2",
+        ROUND(AVG(perplexity_residual)::numeric, 1)   AS "perpResidual",
+        ROUND(AVG(CASE WHEN question_source_id != 3 THEN behavioral_l2_norm END)::numeric, 1) AS "journalBehavioralL2",
+        ROUND(AVG(CASE WHEN question_source_id = 3 THEN behavioral_l2_norm END)::numeric, 1)  AS "calibrationBehavioralL2",
+        ROUND(AVG(semantic_l2_norm)::numeric, 3)      AS "semanticL2",
+        ROUND(AVG(total_l2_norm)::numeric, 1)         AS "totalL2"
       FROM tb_reconstruction_residuals
       WHERE adversary_variant_id = ${variantId}
     `;
 
-    // Per-variant motor L2 summary for multi-adversary comparison
+    // Per-variant behavioral L2 summary for multi-adversary comparison
     const variantSummary = await sql`
       SELECT
         adversary_variant_id AS "variantId",
+        ROUND(AVG(behavioral_l2_norm)::numeric, 1) AS "behavioralL2",
         ROUND(AVG(motor_l2_norm)::numeric, 1) AS "motorL2",
         ROUND(AVG(dynamical_l2_norm)::numeric, 3) AS "dynamicalL2",
         ROUND(AVG(semantic_l2_norm)::numeric, 3) AS "semanticL2",
-        ROUND(AVG(total_l2_norm)::numeric, 1) AS "totalL2",
         COUNT(*)::int AS "sessions"
       FROM tb_reconstruction_residuals
       GROUP BY adversary_variant_id
@@ -98,14 +99,16 @@ export const GET: APIRoute = async () => {
     const parseConv = (rows: Array<Record<string, unknown>>) => {
       const r = (rows[0] ?? {}) as Record<string, string | null>;
       return {
+        behavioralL2: r.behavioralL2 ? Number(r.behavioralL2) : null,
+        behavioralSignals: r.behavioralSignals ? Number(r.behavioralSignals) : null,
         motorL2: r.motorL2 ? Number(r.motorL2) : null,
-        semanticL2: r.semanticL2 ? Number(r.semanticL2) : null,
         dynamicalL2: r.dynamicalL2 ? Number(r.dynamicalL2) : null,
-        totalL2: r.totalL2 ? Number(r.totalL2) : null,
-        avgSignals: r.avgSignals ? Number(r.avgSignals) : null,
         perpResidual: r.perpResidual ? Number(r.perpResidual) : null,
-        journalL2: r.journalL2 ? Number(r.journalL2) : null,
-        calibrationL2: r.calibrationL2 ? Number(r.calibrationL2) : null,
+        journalBehavioralL2: r.journalBehavioralL2 ? Number(r.journalBehavioralL2) : null,
+        calibrationBehavioralL2: r.calibrationBehavioralL2 ? Number(r.calibrationBehavioralL2) : null,
+        // Semantic and total preserved as diagnostics (not paper-reported)
+        semanticL2: r.semanticL2 ? Number(r.semanticL2) : null,
+        totalL2: r.totalL2 ? Number(r.totalL2) : null,
       };
     };
 
@@ -129,10 +132,10 @@ export const GET: APIRoute = async () => {
       // Per-variant summary for multi-adversary comparison
       variants: variantSummary.map(v => ({
         variantId: Number(v.variantId),
+        behavioralL2: v.behavioralL2 ? Number(v.behavioralL2) : null,
         motorL2: v.motorL2 ? Number(v.motorL2) : null,
         dynamicalL2: v.dynamicalL2 ? Number(v.dynamicalL2) : null,
         semanticL2: v.semanticL2 ? Number(v.semanticL2) : null,
-        totalL2: v.totalL2 ? Number(v.totalL2) : null,
         sessions: Number(v.sessions),
       })),
     }), {

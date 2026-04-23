@@ -14,6 +14,8 @@
 -- tb_semantic_trajectory: per-session z-scores against global and
 --   topic-matched baselines. Gated by minimum-n threshold.
 
+SET search_path = alice, public;
+
 CREATE TABLE IF NOT EXISTS tb_semantic_baselines (
    semantic_baseline_id   INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
   ,signal_name            TEXT NOT NULL UNIQUE

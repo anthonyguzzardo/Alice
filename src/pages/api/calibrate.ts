@@ -6,6 +6,7 @@ import { snapshotCalibrationBaselinesAfterSubmit } from '../../lib/libCalibratio
 import { computeAndPersistDerivedSignals } from '../../lib/libSignalPipeline.ts';
 import { logError } from '../../lib/utlErrorLog.ts';
 import { parseBody } from '../../lib/utlParseBody.ts';
+import { getGitCommitHash } from '../../lib/utlGitCommit.ts';
 import { coerceSessionSummary } from '../../lib/utlSessionSummary.ts';
 
 export const GET: APIRoute = async () => {
@@ -52,7 +53,11 @@ export const POST: APIRoute = async ({ request }) => {
 
   const trimmedText = text.trim();
   const coerced = coerceSessionSummary(sessionSummary, 0, trimmedText);
-  const questionId = await saveCalibrationSession(prompt, trimmedText, coerced);
+  const questionId = await saveCalibrationSession(prompt, trimmedText, coerced, {
+    boundaryVersion: 'v1',
+    codePathsRef: 'docs/contamination-boundary-v1.md',
+    commitHash: getGitCommitHash(),
+  });
 
   // Store event log + keystroke stream for calibration sessions (same as journal)
   if (Array.isArray(sessionSummary.eventLog) && sessionSummary.eventLog.length > 0) {

@@ -8,6 +8,7 @@ import { runGeneration } from '../../lib/libGenerate.ts';
 import { embedResponse } from '../../lib/libEmbeddings.ts';
 import { logError } from '../../lib/utlErrorLog.ts';
 import { localDateStr } from '../../lib/utlDate.ts';
+import { getGitCommitHash } from '../../lib/utlGitCommit.ts';
 import { parseBody } from '../../lib/utlParseBody.ts';
 import { coerceSessionSummary } from '../../lib/utlSessionSummary.ts';
 import { renderWitnessState } from '../../lib/libAliceNegative/libRenderWitness.ts';
@@ -60,7 +61,11 @@ export const POST: APIRoute = async ({ request }) => {
   let responseId: number;
   try {
     responseId = await sql.begin(async (tx) => {
-      const responseId = await saveResponse(questionId, trimmedText, tx);
+      const responseId = await saveResponse(questionId, trimmedText, tx, {
+        boundaryVersion: 'v1',
+        codePathsRef: 'docs/contamination-boundary-v1.md',
+        commitHash: getGitCommitHash(),
+      });
 
       if (sessionSummary) {
         if (Array.isArray(sessionSummary.burstSequence) && sessionSummary.burstSequence.length > 0) {
