@@ -40,6 +40,28 @@ The positioning advantage: you don't have to pick one. You sequence them. Resear
 - Papers take time. Peer review is slow. Preprints move faster but carry less institutional weight.
 - Open-sourcing the signal engine means someone could theoretically build a competitor. But they'd be building it on your published framework, citing your papers, using your terminology. You become the field, not just a player in it.
 
+### Phase 0 Is the Critical Path
+
+Every downstream phase depends on the Reconstruction Validity paper existing as a citable preprint. If Phase 0 takes six months instead of three, every phase shifts by three months. The dependency chain:
+
+```
+Reconstruction Validity paper (arXiv preprint)
+├── Phase 1: researcher outreach requires a paper to attach to the cold email
+├── Phase 2: consumer credibility ("published research" vs "a guy with a journal app")
+├── Phase 3: clinical partnerships require published methodology
+└── Phase 4: enterprise sales require published + clinical evidence
+
+Option C paper
+├── Phase 2: demand-creation essay depends on this existing
+└── Independent of Reconstruction Validity (can be sequenced separately)
+
+Open-source signal engine
+├── Phase 1: researchers need the crate to evaluate the instrument
+└── Depends on Reconstruction Validity paper (releasing the code before the method is published lets others claim the paradigm)
+```
+
+**Sequencing decision for Option C**: Publishing Option C alongside the Reconstruction Validity paper puts the thesis out ahead of the evidence. The thesis identifies a gap (AI eroding cognitive reserve) that Alice is positioned to test but has not yet tested. There's a safe version: Option C explicitly identifies the gap and defers the instrument validation to the Reconstruction Validity paper and future work. There's a risky version: Option C becomes the thing Alice is known for, and if the instrument later produces null results on cognitive reserve, the credibility damage hits both the paper and the product. The safe version requires disciplined scoping of what Option C claims. It should identify the problem and propose the measurement modality. It should not claim Alice has validated anything about cognitive reserve. That claim waits for data.
+
 ---
 
 ## Phase 1: Research Adoption (Months 3 through 9)
@@ -333,14 +355,18 @@ Do not allocate engineering time to platform infrastructure until external deman
 - Headline: "Building the first process-level cognitive measurement instrument | Keystroke dynamics + Rust + Cognitive science"
 - About: The n=1 story. "I've been answering one question a day for [X] months. I never see my answers again. But I measure how I write them." 3 to 4 paragraphs. End with the Option C thesis in one sentence.
 
-### Content Calendar (Weekly)
+### Content Calendar (Biweekly, Two Types)
 
-| Week | Post Type | Example |
-|------|----------|---------|
-| 1 | Research dispatch | "Week 60 of measuring my own cognition. Here's what happened to my permutation entropy when I switched from morning to evening sessions." |
-| 2 | Thesis post | "AI is eroding something we can't measure with the tools AI has contaminated. Here's the gap." |
-| 3 | Technical deep dive | "Why I wrote a signal engine in Rust instead of Python, and what measurement instruments demand that applications don't." |
-| 4 | Story/philosophy | "The black box is the product. Here's why you should never see your own journal entries again." |
+Four post types on a weekly cadence is a content calendar that a solo builder abandons inside three months. Pick two and do them well. The two that carry the most signal for this audience:
+
+| Cadence | Post Type | Example |
+|---------|----------|---------|
+| Week 1 | Research dispatch | "Week 60 of measuring my own cognition. Here's what happened to my permutation entropy when I switched from morning to evening sessions." |
+| Week 2 | Thesis / philosophy | "AI is eroding something we can't measure with the tools AI has contaminated. Here's the gap." |
+
+Research dispatches are the anchor. They're unique to you (nobody else has this longitudinal n=1 data), they demonstrate the instrument in action, and they attract the researchers you want to reach in Phase 1. Thesis posts provide the "why this matters" framing that connects the dispatches to the broader conversation.
+
+Technical deep dives and story posts are good occasional content when something genuinely warrants it (a new Rust module lands, a paper drops, a design decision crystallizes). They're not sustainable as scheduled weekly obligations. Write them when the material is there, not because the calendar says to.
 
 ### Engagement Strategy
 
@@ -424,10 +450,10 @@ When to take funding, and from whom. Or whether to take it at all.
 
 ## What You Do Tomorrow
 
-1. Finish the Reconstruction Validity paper. Get it on arXiv within 30 days.
-2. Rewrite the Option C essay for a general audience and publish it.
+1. Finish the Reconstruction Validity paper. Get it on arXiv. This is the single dependency that everything else waits on.
+2. Scope the Option C essay carefully: identify the gap, propose the measurement modality, defer validation claims to future work. Decide whether it publishes alongside or after the Reconstruction Validity paper based on how cleanly you can separate the thesis from the evidence.
 3. Rewrite your LinkedIn profile.
-4. Email Leow at UIC and Crossley at Vanderbilt with the preprints attached.
-5. Submit a demo paper to CogSci or CHI (whichever deadline is next).
+4. Email Leow at UIC and Crossley at Vanderbilt with the Reconstruction Validity preprint attached. (Option C can follow separately if it's ready.)
+5. Check CogSci and CHI submission deadlines. Submit a demo paper to whichever is next.
 
-The roadmap is sequential but the foundation work starts now. Everything downstream depends on being citable. Everything citable depends on finishing the papers. The papers are the ignition.
+The roadmap is sequential and the Reconstruction Validity paper is the critical path. If it takes three months, downstream phases start at three months. If it takes six, they start at six. Everything else can be prepared in parallel but nothing launches until the instrument is citable.
