@@ -360,7 +360,69 @@ export function formatCompactDelta(deltas: SessionDeltaRow[]): string {
 }
 
 // ----------------------------------------------------------------------------
-// BATCH JOB: Retrospective daily delta backfill
+// REGULAR FLOW: Compute prior day's delta on journal submission
+// ----------------------------------------------------------------------------
+
+/**
+ * Compute the daily delta for the most recent completed prior day.
+ *
+ * Called from respond.ts on every journal submission. When you submit
+ * today's journal, yesterday is finished -- its journal and calibrations
+ * are all in the database. This function finds that day and computes its
+ * delta. If no eligible prior day exists, it returns null silently.
+ *
+ * "Eligible" means: has a journal with a session summary, has at least
+ * one calibration with a session summary on the same date, and does not
+ * already have a delta row.
+ *
+ * Self-healing: if a prior delta save failed, the next journal submission
+ * finds that date as the most recent eligible and retries it.
+ */
+export async function computePriorDayDelta(currentDate: string): Promise<string | null> {
+  const rows = await sql`
+    SELECT j.scheduled_for::text AS date, j.question_id AS "journalQuestionId"
+    FROM tb_questions j
+    JOIN tb_session_summaries js ON j.question_id = js.question_id
+    WHERE j.question_source_id != 3
+      AND j.scheduled_for IS NOT NULL
+      AND j.scheduled_for < ${currentDate}::date
+      AND EXISTS (
+        SELECT 1 FROM tb_questions c
+        JOIN tb_session_summaries cs ON c.question_id = cs.question_id
+        WHERE c.question_source_id = 3
+          AND c.dttm_created_utc::date = j.scheduled_for
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM tb_session_delta d
+        WHERE d.session_date::date = j.scheduled_for
+      )
+    ORDER BY j.scheduled_for DESC
+    LIMIT 1
+  `;
+
+  if (rows.length === 0) return null;
+
+  const { date, journalQuestionId } = rows[0] as unknown as { date: string; journalQuestionId: number };
+
+  const calibrationSummary = await getSameDayCalibrationSummary(date);
+  if (!calibrationSummary) return null;
+
+  const journalSummary = await getSessionSummary(journalQuestionId);
+  if (!journalSummary) return null;
+
+  const history = await getRecentSessionDeltas(30);
+  const delta = computeSessionDelta(calibrationSummary, journalSummary, date);
+  delta.deltaMagnitude = computeDeltaMagnitude(delta, history);
+  await saveSessionDelta(delta);
+
+  console.log(
+    `[daily-delta] ${date}: magnitude=${delta.deltaMagnitude?.toFixed(2) ?? 'insufficient history'}`
+  );
+  return date;
+}
+
+// ----------------------------------------------------------------------------
+// BATCH JOB: Retrospective daily delta backfill (standalone script only)
 // ----------------------------------------------------------------------------
 
 /**

@@ -27,7 +27,7 @@ import {
 import { computeEntryStates } from './libAliceNegative/libStateEngine.ts';
 import { computeDynamics } from './libAliceNegative/libDynamics.ts';
 import { computeMATTR } from './libAliceNegative/libHelpers.ts';
-import { formatCompactDelta, runDailyDeltaBackfill } from './libDailyDelta.ts';
+import { formatCompactDelta } from './libDailyDelta.ts';
 
 const SEED_DAYS = 30;
 const RECENT_WINDOW = 14;
@@ -54,10 +54,6 @@ export async function runGeneration(options?: GenerationOptions): Promise<void> 
   const tomorrowStr = localDateStr(tomorrow);
 
   if (await hasQuestionForDate(tomorrowStr)) return;
-
-  // Backfill daily deltas for any completed day-pairs before generating.
-  // Runs before question generation so delta trends are current in the prompt.
-  await runDailyDeltaBackfill();
 
   const responseCount = await getResponseCount();
   const seedThreshold = options?.seedDaysOverride ?? SEED_DAYS;

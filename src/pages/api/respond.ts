@@ -5,6 +5,7 @@ import sql, {
   updateDeletionEvents, saveSessionEvents, saveSessionMetadata, getBurstSequence,
 } from '../../lib/libDb.ts';
 import { runGeneration } from '../../lib/libGenerate.ts';
+import { computePriorDayDelta } from '../../lib/libDailyDelta.ts';
 import { embedResponse } from '../../lib/libEmbeddings.ts';
 import { logError } from '../../lib/utlErrorLog.ts';
 import { localDateStr } from '../../lib/utlDate.ts';
@@ -143,6 +144,9 @@ export const POST: APIRoute = async ({ request }) => {
   // tagged with its stage so you can see exactly what broke.
   (async () => {
     const ctx = { questionId, responseId, responseCount };
+    try { await computePriorDayDelta(localDateStr()); }
+    catch (err) { logError('respond.daily-delta', err, ctx); }
+
     try { await runGeneration(); }
     catch (err) { logError('respond.generation', err, ctx); }
 
