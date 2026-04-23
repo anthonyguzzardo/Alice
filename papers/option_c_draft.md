@@ -201,7 +201,7 @@ These are not objections to the argument. They are the research program the argu
 
 There is a temporal dimension to this problem that compresses the available timeline for action.
 
-A companion paper (Guzzardo 2026) describes a closing window in the keystroke-cognition literature: the population that will arrive at the at-risk age for cognitive decline with high typing proficiency is the same population arriving with heavy AI-mediation exposure. The clean signal the demographic shift would have produced is being partially foreclosed by a technology shift operating on a faster timeline.
+A companion paper (Guzzardo 2026A) describes a closing window in the keystroke-cognition literature: the population that will arrive at the at-risk age for cognitive decline with high typing proficiency is the same population arriving with heavy AI-mediation exposure. The clean signal the demographic shift would have produced is being partially foreclosed by a technology shift operating on a faster timeline. The information-theoretic argument for why this loss is irreversible is developed in Guzzardo 2026G.
 
 The same closing-window logic applies to the cognitive reserve question, but more urgently. If the argument of this paper is correct, the people who are establishing their AI usage patterns *right now* — in 2026 — are the ones whose cognitive reserve trajectories are being shaped. By the time the effect becomes visible in clinical outcomes (2045 to 2055), the window for establishing unmediated baselines in those individuals will have closed decades ago.
 
@@ -217,7 +217,7 @@ There is a compounding problem that deserves its own section because it transfor
 
 The digital biomarker field's trajectory has been toward passive, ambient cognitive assessment — monitoring cognition through the behavioral signals people produce during normal daily life, without clinical visits or controlled tasks. Smartphone keystroke timing, texting patterns, speech characteristics during phone calls, vocabulary diversity in emails. The premise is that naturalistic behavior, captured at scale, can reveal cognitive trajectories that periodic clinical assessments miss.
 
-AI-mediation of daily language production is undermining that premise. When a person's emails are drafted by an LLM, their text messages shaped by autocomplete, and their documents polished by AI writing assistants, the linguistic content of their daily output no longer reflects their cognitive state. Vocabulary diversity in an AI-assisted email measures the model's lexical range, not the person's. Syntactic complexity in an AI-drafted report reflects the model's training distribution, not the writer's planning capacity. The Stanford HAI study (Liang et al. 2024) has already documented measurable homogenization of vocabulary and style in academic papers since the introduction of ChatGPT. The same homogenization, applied to the daily language output of hundreds of millions of people, degrades the diagnostic signal that passive linguistic biomarkers depend on.
+AI-mediation of daily language production is undermining that premise (Guzzardo 2026B develops this as a general construct replacement problem for behavioral measurement). When a person's emails are drafted by an LLM, their text messages shaped by autocomplete, and their documents polished by AI writing assistants, the linguistic content of their daily output no longer reflects their cognitive state. Vocabulary diversity in an AI-assisted email measures the model's lexical range, not the person's. Syntactic complexity in an AI-drafted report reflects the model's training distribution, not the writer's planning capacity. The Stanford HAI study (Liang et al. 2024) has already documented measurable homogenization of vocabulary and style in academic papers since the introduction of ChatGPT. The same homogenization, applied to the daily language output of hundreds of millions of people, degrades the diagnostic signal that passive linguistic biomarkers depend on.
 
 The field has not fully reckoned with this. Speech-based biomarker work (Winterlight Labs, now Cambridge Cognition) achieves 87 percent accuracy for MCI detection using combined linguistic and acoustic features — but in controlled clinical settings where the patient speaks without AI assistance. The Biogen-Apple Intuition study enrolled 23,000 participants for smartphone-based passive cognitive monitoring — but the study was designed before AI-mediated text production became prevalent, and its linguistic biomarker components face a signal environment that is changing underneath them.
 
@@ -289,6 +289,12 @@ Dell'Acqua, F., McFowland, E., Mollick, E. R., Lifshitz-Assaf, H., Kellogg, K., 
 Faigley, L., & Witte, S. (1981). Analyzing revision. *College Composition and Communication*, 32(4), 400-414.
 
 Giancardo, L., Sánchez-Ferro, A., Arroyo-Gallego, T., Butterworth, I., Mendoza, C. S., et al. (2016). Computer keyboard interaction as an indicator of early Parkinson's disease. *Scientific Reports*, 6, 34468.
+
+Guzzardo, A. (2026A). A closing window: The demographic confound in keystroke-based cognitive biomarkers and the AI-mediation threat to the paradigm that would replace it. Preprint.
+
+Guzzardo, A. (2026B). Construct replacement: When AI-mediated input invalidates behavioral measurement. Preprint.
+
+Guzzardo, A. (2026G). Irreversible loss: Why process-level preservation cannot wait. Preprint.
 
 Illich, I. (1973). *Tools for Conviviality*. Harper & Row.
 

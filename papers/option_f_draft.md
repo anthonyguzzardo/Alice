@@ -16,7 +16,7 @@ April 2026
 
 ---
 
-*Author's note: The author is developing a longitudinal journaling system that implements the measurement instrument and reconstruction pipeline described in this paper. The reconstruction validity framework is a general contribution to measurement theory that does not depend on any specific implementation. Readers should apply additional scrutiny to the implementation sections where the framework is demonstrated using the author's system.*
+*Author's note: The author has built and operates a longitudinal journaling system that implements the measurement instrument and reconstruction pipeline described in this paper. The system captures sessions under a per-session contamination boundary attestation (docs/contamination-boundary-v1.md), computes signals via a bit-reproducible Rust engine with CI-enforced cross-build verification, and stores embeddings under a self-hosted open-weights model with archived weights and deterministic FP32 inference (docs/embedding-methods.md). The reconstruction validity framework is a general contribution to measurement theory that does not depend on any specific implementation. Readers should apply additional scrutiny to the implementation sections where the framework is demonstrated using the author's system.*
 
 ---
 
@@ -104,7 +104,7 @@ The reconstruction validity framework is general. Any instrument that extracts f
 
 ### 4.1 The Instrument
 
-The instrument is a writing-process measurement system embedded in a daily journaling application. The user responds to one question per day by typing in a standard text input field. The system captures the full keystroke stream: every key-down and key-up event with millisecond timestamps and character identity.
+The instrument is a writing-process measurement system embedded in a daily journaling application. The user responds to one question per day by typing in a standard text input field. The system captures the full keystroke stream: every key-down and key-up event with millisecond timestamps and character identity. The absence of AI mediation in the capture pipeline is attested per session via a contamination boundary specification (docs/contamination-boundary-v1.md) that enumerates the audited code paths between keystroke and storage.
 
 A signal pipeline, implemented as a native Rust module accessed via napi-rs, extracts six families of features from the raw keystroke stream:
 
@@ -114,7 +114,7 @@ A signal pipeline, implemented as a native Rust module accessed via napi-rs, ext
 
 **Process signals.** Full text reconstruction from the keystroke stream, recovering the editing history including deletions, insertions, and cursor movements. Pause classification by linguistic boundary: within-word, between-word, and between-sentence (Wengelin 2006). P-burst segmentation (production bursts bounded by pauses exceeding 2 seconds, following Chenoweth and Hayes 2001). R-burst and I-burst classification for revision and insertion episodes.
 
-**Semantic signals.** Moving-average type-token ratio (MATTR, Covington and McFall 2010). Vocabulary metrics.
+**Semantic signals.** Seven longitudinal semantic signals computed per session: idea density, lexical sophistication, epistemic stance, integrative complexity, deep cohesion, text compression ratio, and referential cohesion. Moving-average type-token ratio (MATTR, Covington and McFall 2010). Semantic signals are tracked via a separate self-referencing longitudinal baseline system (Welford running distributions, topic-matched z-scoring via HNSW retrieval, minimum-n gating) and are excluded from the ghost-validated behavioral aggregate reported in this paper. The ghost produces Markov/PPM word salad; semantic residuals between coherent text and word salad are trivially explained and carry no discriminative information across sessions.
 
 **Cross-session signals.** Session-over-session trajectory features comparing the current session's signal profile to the rolling personal baseline.
 
@@ -128,7 +128,7 @@ The reconstruction pipeline takes the instrument's accumulated outputs (the pers
 
 **Text generation.** A word-level Markov chain is trained on the full journal corpus. The tokenizer preserves punctuation as separate tokens. Sentence-initial tokens are recorded as chain starters. At fewer than 10 corpus entries, the chain operates at order 1 (unigram context). At 10 or more entries, it upgrades to order 2 (bigram context). Text generation is seeded with a topic word: the chain searches for a starting state containing the seed, falling back to a random starter. Generation uses Witten-Bell interpolated backoff (Jelinek and Mercer 1980): at each step, the order-2 and order-1 distributions are blended probabilistically, with the interpolation weight proportional to the number of unique continuations observed in the higher-order context. Dead ends at both orders trigger a jump to a random starter. This produces smoother generation than hard fallback because every sample incorporates evidence from both context lengths.
 
-**Convergence metric.** Per-word log2 perplexity of real responses under the Markov model, computed using Absolute Discounting (Chen and Goodman 1999) with unigram backoff. Discount parameter d = n1 / (n1 + 2*n2). Absolute Discounting produces tighter estimates than Laplace smoothing on small personal corpora because it avoids assigning excess mass to impossible transitions. Perplexity should decrease monotonically with corpus size.
+**Convergence metric.** Per-word log2 perplexity of real responses under the Markov model, computed using Absolute Discounting (Chen and Goodman 1999) with unigram backoff. Discount parameter d = n1 / (n1 + 2*n2). Absolute Discounting produces tighter estimates than Laplace smoothing on small personal corpora because it avoids assigning excess mass to impossible transitions. Perplexity generally decreases with corpus size as the model captures more of the person's vocabulary and transition structure, though individual entries may produce local increases if they introduce atypical vocabulary.
 
 The choice of a Markov chain over a neural language model is methodologically load-bearing. The reconstruction must be bounded by what the instrument captures. The personal behavioral profile includes vocabulary, word transition probabilities (implicitly, through the corpus), and statistical properties of the writing process. It does not include a model of meaning, argument structure, or narrative coherence. An LLM trained on the corpus would introduce coherence from the model's own capabilities, not from the instrument's measurements. The Markov chain generates text using only the statistical structure the instrument can observe: which words follow which other words in this person's writing. The incoherence of the output at low corpus sizes is informative, not a failure. It shows the ceiling of text reconstruction from the instrument's measurement set.
 
@@ -184,7 +184,7 @@ The per-dimension distance profile is the reconstruction validity report. It rep
 
 A reconstruction residual is a scientific measurement. If it cannot be independently reproduced from its inputs, it is an assertion, not a measurement.
 
-First, the signal computation itself must be build-stable. The following values are produced by a deterministic 100-keystroke fixture session. Every clean rebuild of the Rust signal engine on the pinned toolchain (Rust 1.95.0, LLVM 22.1.2, aarch64-apple-darwin) produces these numbers to the bit. CI enforces this via two-clean-build snapshot diffing on every commit.
+First, the signal computation itself must be build-stable. The following values are produced by a deterministic 100-keystroke fixture session. Every clean rebuild of the Rust signal engine on the pinned toolchain (Rust 1.95.0, LLVM 22.1.2, aarch64-apple-darwin) produces these numbers to the bit. CI enforces this via two-clean-build snapshot diffing on every commit. The full audit trail is documented in METHODS_PROVENANCE.md: INC-001 (HoldFlight vector alignment correction), INC-002 (Neumaier compensated summation and deterministic iteration), INC-005 (CI enforcement of cross-build bit-identity), and INC-006 (residual reproducibility as scientific artifact).
 
 **Dynamical signal golden values (fixture session):**
 
@@ -211,7 +211,7 @@ First, the signal computation itself must be build-stable. The following values 
 | tau_proportion | 0.31063296908003635 |
 | hold_flight_rank_corr | -0.02803064616827978 |
 
-Second, to validate reproducibility of reconstruction residuals as scientific artifacts, we independently regenerated ghosts for two randomly selected sessions (Q85, 566 keystrokes; Q86, 312 keystrokes) using only the stored PRNG seed and profile snapshot. All 10 dynamical and motor signals matched the originally-stored values to bit identity across both sessions. The integration test script used to produce this verification is committed to the repository and runs on demand for any residual with reproducibility metadata. Semantic signals were excluded from bit-identity verification per the external-API dependence caveat documented in REPRODUCIBILITY.md.
+Second, to validate reproducibility of reconstruction residuals as scientific artifacts, we independently regenerated ghosts for two randomly selected sessions (Q85, 566 keystrokes; Q86, 312 keystrokes) using only the stored PRNG seed and profile snapshot. All 10 dynamical and motor signals matched the originally-stored values to bit identity across both sessions. The integration test script used to produce this verification is committed to the repository and runs on demand for any residual with reproducibility metadata. Semantic signal *computation* (idea density, lexical sophistication, etc.) depends on the Claude API and is excluded from bit-identity verification. The *embedding layer*, previously API-dependent (voyage-3-lite), has been migrated to a self-hosted open-weights model (Qwen3-Embedding-0.6B) with archived weights (SHA-256: 0437e45c...23fd), FP32 CPU-only inference via TEI, and verified bit-reproducibility (cosine 1.0, max element difference 0 across successive calls). See docs/embedding-methods.md for the full specification.
 
 **Q86** (seed 1776843941639, 312 keystrokes, 40 words):
 
@@ -247,7 +247,7 @@ This guarantee rests on three independently verified properties, each enforced b
 
 1. **Signal computation is build-stable.** Neumaier compensated summation, deterministic iteration (BTreeMap for entropy computation, sorted vecs for Markov chain sampling), and toolchain pinning (Rust 1.95.0, LLVM 22.1.2, aarch64-apple-darwin) eliminate floating-point nondeterminism. Two-clean-build snapshot diffing verifies bit-identity on every commit touching the signal engine.
 
-2. **Ghost generation is seed-deterministic and build-stable.** All randomness flows from a single u64 PRNG seed via SplitMix64 (Steele, Lea, and Flood 2014). Markov chain and PPM trie data structures use sorted vecs (constructed from HashMaps, then frozen and sorted by key) to ensure deterministic sampling order. Cross-build snapshot tests verify bit-identical ghost output for all five adversary variants.
+2. **Ghost generation is seed-deterministic and build-stable.** All randomness flows from a single u64 PRNG seed via SplitMix64 (Steele, Lea, and Flood 2014). Markov chain and PPM trie data structures use sorted vecs (constructed from HashMaps, then frozen and sorted by key) to ensure deterministic sampling order. Cross-build snapshot tests verify bit-identical ghost output for all five adversary variants. This is CI-enforced (METHODS_PROVENANCE.md INC-006), not merely manually checked.
 
 3. **Residual inputs are persisted.** Every residual computed after the reproducibility migration stores the exact PRNG seed, profile snapshot (the JSON passed to the ghost engine), corpus integrity hash (SHA-256), and topic string. Given these stored inputs, any build of the instrument on the pinned toolchain can regenerate the identical ghost and verify the residual.
 
@@ -277,7 +277,7 @@ Sixty-three journal and calibration entries across 26 sessions with full signal 
 
 **Markov chain convergence.** *Prediction:* Perplexity of real responses under the Markov model should decrease monotonically with corpus size, with a step decrease at the order-2 transition. *Result:* Confirmed. Average real perplexity = 21.3 across 20 reconstruction sessions. Average ghost perplexity = 78.5. The person is substantially more internally consistent than their statistical profile predicts. The Markov model overgenerates: it produces plausible word sequences that the person would not actually write in context.
 
-**Motor profile convergence.** *Prediction:* Timing synthesis should achieve high fidelity on motor dimensions within 15-20 sessions. *Result:* **Falsified.** Motor L2 norm = 90.0 (mean across 20 sessions, range 46-144). This is the largest residual family by two orders of magnitude. Dynamical L2 < 1.3, semantic L2 < 0.35. The timing synthesis draws from the correct ex-Gaussian and digraph distributions, but the resulting motor signal profile does not match real sessions. The ghost types from the right distributions in the wrong sequences. Motor execution encodes temporal structure that persists beyond what distributional matching can reproduce.
+**Motor profile convergence.** *Prediction:* Timing synthesis should achieve high fidelity on motor dimensions within 15-20 sessions. *Result:* **Falsified.** Motor L2 norm = 90.0 (mean across 20 sessions, range 46-144). This is the largest residual family by two orders of magnitude. Dynamical L2 < 1.3. The timing synthesis draws from the correct ex-Gaussian and digraph distributions, but the resulting motor signal profile does not match real sessions. The ghost types from the right distributions in the wrong sequences. Motor execution encodes temporal structure that persists beyond what distributional matching can reproduce.
 
 This falsification is the most important empirical result of the reconstruction validity framework. It was predicted that motor dimensions would converge because the synthesis has access to the same motor parameters the instrument extracts. The prediction was wrong because motor execution in genuine composition is not independent of cognitive state. The coupling between what the person is thinking and how they are physically typing produces motor signatures that distributional sampling cannot reconstruct. The motor residual is not noise; it is the instrument detecting cognitive engagement through the motor channel.
 
@@ -287,7 +287,7 @@ This falsification is the most important empirical result of the reconstruction 
 
 ### 6.3 Additional Findings
 
-**Journal questions produce larger ghosts than calibration questions.** Journal sessions (questions generated to probe cognitive depth) have mean total L2 = 59.6. Calibration sessions (standardized free-write prompts) have mean total L2 = 51.1. The gap is consistent with the cognitive residual hypothesis: when the question demands more cognitive engagement, the distance between person and reconstruction widens. This is a falsifiable test of whether the residual is cognitive: if it were purely biomechanical, question type should not affect it.
+**Journal questions produce larger ghosts than calibration questions.** Journal sessions (questions generated to probe cognitive depth) have mean behavioral L2 = 59.6. Calibration sessions (standardized free-write prompts) have mean behavioral L2 = 51.1. The gap is consistent with the cognitive residual hypothesis: when the question demands more cognitive engagement, the distance between person and reconstruction widens. This is a falsifiable test of whether the residual is cognitive: if it were purely biomechanical, question type should not affect it.
 
 **Two-scale perplexity divergence.** Word-level Markov perplexity (average 21.3) and character-level trigram perplexity (average 9.0) provide independent measures at different linguistic scales. The ratio of approximately 2.4x indicates that the person's writing is more predictable at the character level (familiar letter sequences) than at the word level (less predictable word choices). The reconstruction matches character-level patterns more closely than word-level patterns, consistent with the Markov chain capturing local statistical structure but not global semantic coherence.
 
@@ -295,15 +295,17 @@ This falsification is the most important empirical result of the reconstruction 
 
 The five-variant system tests whether the motor residual is an artifact of weak synthesis. Each variant adds one statistical improvement. The results below are averaged across 26 sessions with 63 corpus entries. (Note: all values recomputed after the HoldFlight vector alignment fix documented in METHODS_PROVENANCE.md INC-001. The copula parameter `hold_flight_rank_correlation` and all transfer entropy values were recalculated from corrected hold-flight pairs.)
 
-| Variant | Avg Total L2 | Avg Motor L2 | Avg Dynamical L2 | Avg Semantic L2 |
-|---------|-------------|-------------|-----------------|----------------|
-| 1. Baseline | 52.3 | 90.8 | 1.35 | 0.159 |
-| 2. Conditional Timing | 92.1 | 88.8 | 73.75 | 0.158 |
-| 3. Copula Motor | 57.7 | 99.9 | 0.67 | 0.169 |
-| 4. PPM Text | 55.0 | 98.0 | 0.31 | 0.134 |
-| 5. Full Adversary | 59.1 | 91.1 | 0.33 | 0.169 |
+| Variant | Avg Behavioral L2 | Avg Motor L2 | Avg Dynamical L2 |
+|---------|-------------------|-------------|-----------------|
+| 1. Baseline | 52.3 | 90.8 | 1.35 |
+| 2. Conditional Timing | 92.1 | 88.8 | 73.75 |
+| 3. Copula Motor | 57.7 | 99.9 | 0.67 |
+| 4. PPM Text | 55.0 | 98.0 | 0.31 |
+| 5. Full Adversary | 59.1 | 91.1 | 0.33 |
 
-**Conditional Timing (variant 2) has the lowest motor L2 (88.8) but the highest total L2 (92.1).** The AR(1) process preserves keystroke rhythm and modestly closes the motor gap. But it creates artificial complexity patterns that the dynamical signals detect as anomalous, increasing dynamical L2 from 1.35 to 73.75. The AR(1) process is too regular; real cognitive events produce temporal complexity that a simple autoregressive model cannot replicate.
+Semantic L2 (range 0.13-0.17 across all variants) is excluded from this table. The ghost produces Markov/PPM word salad; the semantic residual between coherent text and word salad is trivially low and uninformative for cross-session comparison. Semantic measurement uses a separate self-referencing longitudinal baseline system (see Section 4.1).
+
+**Conditional Timing (variant 2) has the lowest motor L2 (88.8) but the highest behavioral L2 (92.1).** The AR(1) process preserves keystroke rhythm and modestly closes the motor gap. But it creates artificial complexity patterns that the dynamical signals detect as anomalous, increasing dynamical L2 from 1.35 to 73.75. The AR(1) process is too regular; real cognitive events produce temporal complexity that a simple autoregressive model cannot replicate.
 
 **Copula Motor (variant 3) makes motor worse (99.9 vs 90.8).** Coupling hold and flight times jointly introduces motor patterns that diverge further from real execution. The empirical rank correlation (rho = -0.189) is mild, and imposing it on the synthesis creates a coupling artifact the motor signals detect.
 
@@ -338,11 +340,11 @@ The single-ghost falsification (v3) revealed that distributional equivalence is 
 
 The motor signals the instrument extracts (sample entropy, motor jerk, tempo drift, IKI autocorrelation) are sensitive to the *sequence* of intervals, not just their distribution. Genuine composition produces motor sequences structured by cognitive events. Statistical sampling, even with preserved serial dependence and coupling, produces motor sequences that the instrument reliably distinguishes from real ones. The motor channel detects the mind. Five independent strategies have now failed to close that gap.
 
-### 7.2 Content Residual (Predicted: Decreasing. Measured: Confirmed.)
+### 7.2 Content Residual (Predicted: Decreasing. Observed: Trivially Small, Excluded from Aggregate.)
 
-The Markov chain's vocabulary and transitions converge on the person's actual language production as the corpus grows. The semantic L2 norm is 0.35, the smallest family. The content residual is small and, as predicted, converges with corpus size. The Markov model approximates surface linguistic features (idea density, lexical sophistication, compression ratio) because these features are primarily distributional.
+The Markov chain's vocabulary and transitions converge on the person's actual language production as the corpus grows. Semantic L2 norms range from 0.13 to 0.17 across all five adversary variants. This is expected rather than informative: the ghost produces word salad while real sessions produce coherent text, so semantic signals (idea density, lexical sophistication, compression ratio) trivially diverge in a direction that is constant across sessions. The semantic residual does not discriminate between sessions and is therefore excluded from the paper-reported behavioral aggregate.
 
-The rate of convergence is informative: at 54 sessions, semantic fidelity is already high. This confirms that the person's vocabulary and writing style are compressible into a relatively low-dimensional statistical model. What the reconstruction gets right is exactly what a statistical model should get right: the surface statistics of language use.
+The content residual confirms that surface linguistic features are primarily distributional and compressible into a low-dimensional statistical model. This is what a Markov chain should get right. The scientifically interesting question is not why the semantic residual is small, but why the motor residual is large despite increasingly sophisticated synthesis. That question is answered in 7.3.
 
 ### 7.3 Cognitive Residual (Predicted: Persistent. Measured: Confirmed, But Not Where Expected.)
 
@@ -352,7 +354,7 @@ This reframes the cognitive residual. It is not an abstract quantity inferred fr
 
 The cognitive residual is the most important output of the reconstruction validity framework. The empirical results show it is concentrated in the motor channel, exactly where the instrument has the richest feature extraction (ex-Gaussian decomposition, digraph profiles, sample entropy, motor jerk, tempo drift, IKI autocorrelation, DFA, transfer entropy). The instrument is most sensitive where the cognitive signal is strongest.
 
-This is the quantitative answer to the question: what does the instrument capture that matters, beyond what can be reconstructed from measurements? The persistent motor residual IS the cognitive engagement. It is the thing that builds cognitive reserve (Stern et al. 2023), the thing that AI mediation replaces (Guzzardo 2026b), and the thing that Condrey's non-identifiability result says timing-only instruments cannot detect (Condrey 2026a). But Condrey's result concerns timing *distributions*. The instrument measures timing *sequences*. The distinction is precisely where the cognitive residual lives.
+This is the quantitative answer to the question: what does the instrument capture that matters, beyond what can be reconstructed from measurements? The persistent motor residual IS the cognitive engagement. It is the thing that builds cognitive reserve (Stern et al. 2023; see Guzzardo 2026C for the cognitive reserve argument), the thing that AI mediation replaces (Guzzardo 2026B), and the thing that Condrey's non-identifiability result says timing-only instruments cannot detect (Condrey 2026a). But Condrey's result concerns timing *distributions*. The instrument measures timing *sequences*. The distinction is precisely where the cognitive residual lives.
 
 ---
 
@@ -382,6 +384,8 @@ Each modality has its own synthesis challenges and fidelity metrics. But the val
 
 **Self-referential validation.** Reconstruction validity evaluates the instrument in its own feature space. The instrument cannot validate features it does not compute. If the behavioral stream contains information that the instrument's pipeline does not extract, reconstruction validity will not detect the omission. It is a test of sufficiency within the instrument's measurement space, not a test of completeness. External-criterion validity remains necessary for claims about what the measurements mean.
 
+**Deferred longitudinal analysis.** The semantic measurement channel uses a separate self-referencing baseline system (Welford running distributions, topic-matched z-scoring) rather than ghost comparison. Three components of that system are intentionally deferred pending data depth: change-point drift detection (requires approximately 300+ sessions per signal), trait-versus-state signal classification (requires 3-6 months of within-person data for ICC estimation), and baseline model sophistication beyond Welford (requires 1-2 years to evaluate stationarity assumptions). These deferments are formally documented in METHODS_PROVENANCE.md DEF-001 through DEF-003. Nothing in the current paper's claims depends on them.
+
 **No-LLM constraint.** Bounding reconstruction by the instrument's measurements (Section 4.2) preserves the interpretability of the residual. The PPM variant confirms that better text generation within this constraint closes the semantic gap without affecting motor, showing the constraint is not hiding a semantic limitation.
 
 **Revision synthesis is statistical, not cognitive.** The reconstruction now includes revision episodes (R-bursts and I-bursts) parameterized from the personal revision profile. However, the placement and content of revisions are stochastic: the reconstruction deletes at profile-matching rates and retypes Markov-generated variant text. Real revision reflects cognitive deliberation about meaning. The gap between stochastic and genuine revision is itself a component of the cognitive residual, but this limitation means the revision channel's contribution to reconstruction validity is bounded by the expressiveness of the statistical revision model.
@@ -406,7 +410,7 @@ Design a transcription protocol: the same user transcribes LLM-generated text un
 
 ### 10.4 Adaptive Difficulty Correlation
 
-The question generation pipeline now logs difficulty classification alongside each generated question. Direct correlation between question difficulty and reconstruction residual magnitude would confirm that the motor residual is cognitive rather than biomechanical: if harder questions produce larger motor residuals, the residual tracks cognitive engagement. Data collection is underway.
+The question generation pipeline now logs difficulty classification alongside each generated question. Direct correlation between question difficulty and reconstruction residual magnitude would confirm that the motor residual is cognitive rather than biomechanical: if harder questions produce larger motor residuals, the residual tracks cognitive engagement. The difficulty classification infrastructure is operational and logging per-question difficulty alongside residuals; the analysis requires sufficient data depth to compute meaningful correlations.
 
 ---
 
@@ -446,9 +450,13 @@ Corral-Acero, J., et al. (2020). The digital twin to enable the vision of precis
 
 Covington, M. A., & McFall, J. D. (2010). Cutting the Gordian knot: The moving-average type-token ratio (MATTR). *Journal of Quantitative Linguistics*, 17(2), 94-100.
 
-Guzzardo, A. (2026a). A closing window: The demographic confound in keystroke-based cognitive biomarkers and the AI-mediation threat to the paradigm that would replace it. Preprint.
+Guzzardo, A. (2026A). A closing window: The demographic confound in keystroke-based cognitive biomarkers and the AI-mediation threat to the paradigm that would replace it. Preprint.
 
-Guzzardo, A. (2026b). Construct replacement: When AI-mediated input invalidates behavioral measurement. Preprint.
+Guzzardo, A. (2026B). Construct replacement: When AI-mediated input invalidates behavioral measurement. Preprint.
+
+Guzzardo, A. (2026C). The quiet debt: Cognitive reserve, AI offloading, and the instruments we don't yet have. Preprint.
+
+Guzzardo, A. (2026G). Irreversible loss: Why process-level preservation cannot wait. Preprint.
 
 Hausdorff, J. M. (2007). Gait dynamics, fractals and falls: Finding meaning in the stride-to-stride fluctuations of human walking. *Human Movement Science*, 26(4), 555-589.
 
