@@ -196,11 +196,13 @@ function referentialCohesion(text: string): number | null {
   );
 
   let totalOverlap = 0;
+  let validPairs = 0;
   for (let i = 1; i < sentenceContentWords.length; i++) {
     const prev = sentenceContentWords[i - 1];
     const curr = sentenceContentWords[i];
     if (prev.size === 0 || curr.size === 0) continue;
 
+    validPairs++;
     let overlap = 0;
     for (const w of curr) {
       if (prev.has(w)) overlap++;
@@ -208,7 +210,8 @@ function referentialCohesion(text: string): number | null {
     totalOverlap += overlap / Math.max(prev.size, curr.size);
   }
 
-  return totalOverlap / (sentenceContentWords.length - 1);
+  if (validPairs === 0) return null;
+  return totalOverlap / validPairs;
 }
 
 // ─── Emotional Valence Arc (Reagan et al. 2016) ─────────────────────

@@ -32,8 +32,11 @@ marketing/
 ├── insurance/             Insurance and actuarial
 │   └── campaign-brief.md     Trajectory underwriting for cognitive risk.
 │
-└── aging/                 Aging-in-place and longevity
-    └── campaign-brief.md     Dignified cognitive monitoring.
+├── aging/                 Aging-in-place and longevity
+│   └── campaign-brief.md     Dignified cognitive monitoring.
+│
+└── goToMarket/            Phased go-to-market roadmap
+    └── roadmap.md            Foundation through platform: sequenced market entry
 ```
 
 ## How the Verticals Connect
