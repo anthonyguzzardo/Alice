@@ -13,6 +13,10 @@
  *      relevant to longitudinal trajectory; already computed and stored in
  *      tb_semantic_signals at the time of inclusion)
  *
+ * Classification of these signals as trait-like or state-like is deferred
+ * pending empirical within-person ICC validation. See METHODS_PROVENANCE.md
+ * "Deferred for Data Depth" DEF-002.
+ *
  * The reconstruction adversary (ghost) is the correct null model for motor
  * and dynamical signals. It is the WRONG null model for semantic signals:
  * Markov/PPM word salad vs coherent text produces a trivially explained
@@ -30,6 +34,14 @@
  *   4. Minimum-n gating: z-scores below threshold are stored but flagged
  *      as unreliable. The instrument refuses to produce a trajectory
  *      claim until the baseline is stable.
+ *
+ * Trajectory analysis (change-point detection) over the z-score series is
+ * deferred pending data depth. See METHODS_PROVENANCE.md "Deferred for
+ * Data Depth" DEF-001.
+ *
+ * Baseline model sophistication (EWMA, seasonal decomposition) is deferred
+ * pending evidence that stationary baselines are insufficient. See
+ * METHODS_PROVENANCE.md "Deferred for Data Depth" DEF-003.
  *
  * References:
  *   Welford (1962) - online variance algorithm

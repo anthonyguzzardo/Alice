@@ -684,3 +684,43 @@ for i in 1..stream.len() {
 ### Followups
 
 - **Flight time upper bound** (`ft < 5000.0`) may be too aggressive for deep reflection sessions. Q7 had a 5093ms flight flagged as invalid that is almost certainly a legitimate cognitive pause. The threshold conflates journal sessions (deep reflection, long pauses expected) with calibration sessions (timed typing, long pauses are distraction). Documented in GOTCHAS.md as a separate follow-up with analysis plan. Not bundled with the alignment fix.
+
+---
+
+# Deferred for Data Depth
+
+The following components of the semantic measurement infrastructure are intentionally deferred pending sufficient longitudinal data accumulation. Each is named here to distinguish intentional scope discipline from incomplete work, and to specify the empirical conditions under which each becomes appropriate to build or validate. The instrument's current scope makes no claims that depend on these components.
+
+## DEF-001: Drift detection layer
+
+**What it is:** Change-point detection on the semantic trajectory z-score series (`tb_semantic_trajectory`), intended to identify sustained shifts in within-person semantic measurement over time. Candidate methods include CUSUM, Bayesian online changepoint detection, and comparable sequential analysis techniques.
+
+**Why it is deferred:** Change-point detection algorithms require a sufficiently long z-score series to distinguish genuine signal from noise. The current trajectory depth is approximately 6-7 sessions per signal (as of 2026-04-23). At this depth, change-point analysis produces statistically meaningless output dominated by noise. Running these methods on short series does not produce "preliminary results" -- it produces artifacts indistinguishable from false positives.
+
+**Empirical condition for revisiting:** Approximately one year of accumulated daily trajectory data (300+ sessions per signal) provides the minimum series length where change-point methods produce defensible output. The exact threshold is itself an empirical question to be revisited as the corpus deepens. The gating mechanism (`tb_semantic_trajectory.gated`) already distinguishes reliable from unreliable z-scores at the per-session level; drift detection is the longitudinal extension of this principle.
+
+**Current handling:** Trajectory z-scores (global and topic-matched) are computed and persisted per session in `tb_semantic_trajectory`. The z-score series is the input that drift detection will eventually consume. When the data depth justifies it, drift detection becomes a downstream analysis layer over the existing z-score series. No data is lost or unrecoverable by deferring. The `gated` column ensures that only z-scores computed from baselines with n >= 10 (MINIMUM_N) are eligible for downstream analysis.
+
+## DEF-002: Tier separation of stable versus volatile semantic signals
+
+**What it is:** Classification of each of the seven semantic signals (idea density, lexical sophistication, epistemic stance, integrative complexity, deep cohesion, text compression ratio, referential cohesion) as trait-like (stable within-person across sessions, useful for longitudinal trajectory) or state-like (variable session-to-session, more reflective of immediate context than long-term cognitive trajectory).
+
+**Why it is deferred:** Population-level literature provides general guidance. Pakhomov et al. (2013) and the propositional density tradition suggest idea density and lexical sophistication are typically trait-like; epistemic stance and integrative complexity are more state-dependent and responsive to question provocation. However, within-person classification for any specific user must be validated empirically against accumulated data, not assumed from population norms. Trait-versus-state classification depends on intraclass correlation (ICC) computed across many within-person observations. Applying population-level ICC estimates to a single user's data is a Simpson's paradox risk: the within-person variance structure can differ substantially from the between-person variance structure that population studies measure.
+
+**Empirical condition for revisiting:** Approximately 3 to 6 months of accumulated daily session data per signal provides sufficient within-person variance to compute meaningful intraclass correlations and validate the trait-versus-state classification empirically. At 7 sessions per signal, ICC estimates are unreliable.
+
+**Current handling:** All seven semantic signals are computed, baselined via Welford's online algorithm (`tb_semantic_baselines`), and trajectory-tracked under identical methodology (`tb_semantic_trajectory`). The Phase Two analysis layer that interprets these signals will eventually weight trait-like and state-like signals differently, but the measurement itself is uniform until the empirical classification is available. This is the correct default: measure everything the same way, then differentiate interpretation based on evidence about each signal's within-person stability.
+
+## DEF-003: Baseline model sophistication
+
+**What it is:** The running distribution store currently uses Welford's online algorithm to maintain running mean and variance for each semantic signal across all prior non-calibration sessions. More sophisticated baseline models exist, including exponentially weighted moving averages (EWMA, which would weight recent sessions more heavily than ancient ones), seasonal decomposition (which would separate cyclical patterns such as weekly or monthly variation from genuine longitudinal trajectory), and regime-switching models (which would accommodate discrete baseline shifts rather than treating the baseline as stationary).
+
+**Why it is deferred:** Welford is mathematically correct and sufficient for the current scope. It computes exact running mean and variance with O(1) memory per signal, updates incrementally, and makes no assumptions about the data's temporal structure beyond stationarity. The question of whether more sophisticated baseline models would improve the within-person trajectory measurement is an empirical question that requires sufficient data to evaluate. Premature commitment to a specific alternative baseline model risks encoding assumptions about the data's structure (recency weighting implies recent sessions are more representative; seasonal decomposition implies cyclical patterns exist; regime-switching implies discrete baseline shifts occur) that may not hold for this instrument's data.
+
+**Empirical condition for revisiting:** Substantial accumulated data (likely 1 to 2 years) is required to evaluate whether the assumption of stationary baselines holds, whether seasonal patterns exist in within-person semantic measurement, and whether weighting schemes would meaningfully improve trajectory detection over the simple Welford baseline. Until this evidence exists, the simple-and-correct choice is preferred over the sophisticated-but-unjustified choice.
+
+**Current handling:** Welford running statistics are computed and persisted in `tb_semantic_baselines`. The trajectory z-scores produced from these baselines are mathematically valid under the assumption of stationary within-person distributions. If future evidence challenges this assumption, the historical raw signal values remain available in `tb_semantic_signals` for re-baselining under alternative models. The backfill script (`src/scripts/backfill-semantic-baselines.ts`) demonstrates that baselines can be regenerated from scratch against the full historical corpus, so the choice of baseline model is not a one-way door.
+
+---
+
+These deferments reflect a deliberate principle: the instrument's measurement methodology should commit to the simplest defensible approach at each layer, with more sophisticated approaches deferred until accumulated data justifies the additional complexity. This protects the methodology from premature optimization and preserves the option to revisit each layer as the longitudinal corpus deepens. Nothing in the current scope of the instrument depends on these deferred components; their absence is by design, not oversight.
