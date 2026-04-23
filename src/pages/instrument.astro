@@ -19,7 +19,7 @@ import PublicLayout from '../layouts/layPublic.astro';
 
   <header class="i-hero">
     <h1>A running measurement system, not a whitepaper.</h1>
-    <p class="i-lead">Alice captures keystroke-level temporal data and submitted text from daily writing sessions. A native signal engine computes cognitive process markers across three families. The architecture enforces six validity constraints by design, not by policy.</p>
+    <p class="i-lead">Alice captures keystroke-level temporal data and submitted text from daily writing sessions. Six signal families measure two orthogonal cognitive channels: motor/dynamical execution (via a native Rust engine) and semantic/propositional output (via deterministic text analysis). The architecture enforces six validity constraints by design, not by policy.</p>
   </header>
 
   <!-- ===== CAPTURE ===== -->
@@ -60,11 +60,12 @@ import PublicLayout from '../layouts/layPublic.astro';
   <section class="i-section" id="signals">
     <h2>The signal engine</h2>
 
-    <p>Signal computation runs in a native Rust engine compiled to a platform-specific binary. Rust is the single source of truth for all measurements. There is no fallback implementation. A measurement instrument cannot have two sources of truth.</p>
+    <p>The behavioral channel runs in a native Rust engine compiled to a platform-specific binary. Rust is the single source of truth for motor, dynamical, and process measurements. There is no fallback implementation. A measurement instrument cannot have two sources of truth. The semantic channel runs server-side via deterministic word-list methods, with no LLM in the computation path.</p>
 
     <div class="i-families">
       <div class="i-family">
         <span class="i-family-label">Dynamical signals</span>
+        <span class="i-family-engine">Rust</span>
         <p>Complexity and structure of the temporal process. How ordered or disordered your keystroke timing is, and at what scales.</p>
         <div class="i-signals">
           <span>Permutation entropy spectrum (orders 3-7)</span>
@@ -75,6 +76,7 @@ import PublicLayout from '../layouts/layPublic.astro';
       </div>
       <div class="i-family">
         <span class="i-family-label">Motor signals</span>
+        <span class="i-family-engine">Rust</span>
         <p>The statistical shape of your keystroke timing distribution. How your motor system executes the physical act of typing.</p>
         <div class="i-signals">
           <span>Ex-Gaussian parameters (mu, sigma, tau via MLE)</span>
@@ -85,12 +87,48 @@ import PublicLayout from '../layouts/layPublic.astro';
       </div>
       <div class="i-family">
         <span class="i-family-label">Process signals</span>
+        <span class="i-family-engine">Rust</span>
         <p>The structural shape of how you wrote. Pause patterns, burst dynamics, revision behavior.</p>
         <div class="i-signals">
           <span>Pause-burst segmentation</span>
           <span>I-burst detection and counting</span>
           <span>Deletion density and revision patterns</span>
           <span>Text reconstruction from keystroke stream</span>
+        </div>
+      </div>
+      <div class="i-family">
+        <span class="i-family-label">Semantic signals</span>
+        <span class="i-family-engine">TypeScript</span>
+        <p>What you wrote, measured as density metrics. Propositional content, lexical choice, epistemic stance, cohesion structure.</p>
+        <div class="i-signals">
+          <span>Idea density</span>
+          <span>Lexical sophistication</span>
+          <span>Epistemic stance</span>
+          <span>Integrative complexity</span>
+          <span>Deep and referential cohesion</span>
+          <span>Emotional valence arc</span>
+        </div>
+      </div>
+      <div class="i-family">
+        <span class="i-family-label">Cross-session signals</span>
+        <span class="i-family-engine">TypeScript</span>
+        <p>How your current session relates to your own history. Longitudinal consistency and drift.</p>
+        <div class="i-signals">
+          <span>Self-perplexity</span>
+          <span>Normalized compression distance (4 lags)</span>
+          <span>Vocabulary recurrence decay</span>
+          <span>Digraph stability</span>
+          <span>Text network density</span>
+        </div>
+      </div>
+      <div class="i-family">
+        <span class="i-family-label">Behavioral state</span>
+        <span class="i-family-engine">TypeScript</span>
+        <p>Eight-dimensional state vector derived from session summaries. Fluency, deliberation, revision, commitment, volatility, thermal, presence, convergence.</p>
+        <div class="i-signals">
+          <span>PersDyn dynamics (baseline, variability, attractor force)</span>
+          <span>Cross-dimension coupling matrix</span>
+          <span>Trajectory deviation from personal baseline</span>
         </div>
       </div>
     </div>
@@ -327,12 +365,21 @@ import PublicLayout from '../layouts/layPublic.astro';
   }
 
   .i-family-label {
-    display: block;
+    display: inline-block;
     font-family: var(--mono);
     font-size: 0.7rem;
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--accent);
+    margin-bottom: 0.5rem;
+  }
+
+  .i-family-engine {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    color: var(--text-faint);
+    margin-left: 0.5rem;
     margin-bottom: 0.5rem;
   }
 
