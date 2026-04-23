@@ -88,7 +88,7 @@ The current state of affairs is this: we have built extraordinary infrastructure
 
 If the argument so far is correct, process data is both the most information-rich and the most vulnerable of the three record types. But how do we know it is information-rich? The claim that process data contains meaningful information about the person who produced it needs more than a theoretical argument. It needs a demonstration.
 
-The demonstration exists (Guzzardo 2026F provides the full technical framework). It is possible to take process-level measurements extracted from a person's writing sessions, motor timing distributions, digraph-specific latencies, pause architecture, revision patterns, vocabulary transition probabilities, and use them to reconstruct the writing behavior. The reconstruction is not a replay of recorded data. It is a generation of new behavior from the extracted measurements: text produced by a Markov chain trained on the person's corpus, timed character by character from their motor profile, with revision episodes injected at their characteristic rates and positions.
+The demonstration exists (Guzzardo 2026f provides the full technical framework). It is possible to take process-level measurements extracted from a person's writing sessions, motor timing distributions, digraph-specific latencies, pause architecture, revision patterns, vocabulary transition probabilities, and use them to reconstruct the writing behavior. The reconstruction is not a replay of recorded data. It is a generation of new behavior from the extracted measurements: text produced by a Markov chain trained on the person's corpus, timed character by character from their motor profile, with revision episodes injected at their characteristic rates and positions.
 
 The reconstruction is imperfect. The generated text follows the person's vocabulary and word transitions but lacks semantic coherence, because meaning requires the mind, not a statistical model. The timing matches the person's motor fingerprint but lacks the content-process coupling that makes a real writing session responsive to what is being written. The revision follows the person's deletion rates and timing bias but is stochastically placed rather than semantically motivated.
 
@@ -106,9 +106,9 @@ Keystroke logging can capture the full temporal microstructure of writing at mil
 
 But the behavior those instruments would capture is being replaced. When a person writes with AI assistance, the process record at the point of mediation encodes suggestion evaluation, not lexical retrieval. When a voice assistant completes a sentence, the process record encodes acceptance, not production. The surface artifact is the same. The process is different. The instruments can capture what happens, but what happens is no longer unmediated biological cognition.
 
-This creates a paradox: the instruments to capture process records arrived at the same historical moment as the technology that is making the behavior worth capturing disappear. The window opened and began closing in the same generation (Guzzardo 2026A documents the specific demographic timeline for the keystroke-cognition field). The people alive today who still write without AI assistance, who still compose their own sentences from retrieval rather than selection, are producing process records that are simultaneously the most capturable and the most endangered in history.
+This creates a paradox: the instruments to capture process records arrived at the same historical moment as the technology that is making the behavior worth capturing disappear. The window opened and began closing in the same generation (Guzzardo 2026a documents the specific demographic timeline for the keystroke-cognition field). The people alive today who still write without AI assistance, who still compose their own sentences from retrieval rather than selection, are producing process records that are simultaneously the most capturable and the most endangered in history.
 
-The supply of unmediated process data is decreasing. The scientific demand for understanding unmediated cognition, in clinical assessment, in cognitive aging research, in writing process studies, in any field that infers mental states from behavioral output, is not decreasing. It is increasing, because the construct validity questions raised by AI mediation (Guzzardo 2026B) make uncontaminated baselines more valuable, not less. A corpus of unmediated writing process data from the mid-2020s will be, by the mid-2030s, a record of cognitive behavior that cannot be recollected from a population whose writing is predominantly AI-mediated.
+The supply of unmediated process data is decreasing. The scientific demand for understanding unmediated cognition, in clinical assessment, in cognitive aging research, in writing process studies, in any field that infers mental states from behavioral output, is not decreasing. It is increasing, because the construct validity questions raised by AI mediation (Guzzardo 2026b) make uncontaminated baselines more valuable, not less. A corpus of unmediated writing process data from the mid-2020s will be, by the mid-2030s, a record of cognitive behavior that cannot be recollected from a population whose writing is predominantly AI-mediated.
 
 Data that is not captured now is data that is permanently lost. This is not a prediction about the future. It is a statement about the entropy rate of process records. The information exists in the present moment. If it is not recorded, it is gone by the next moment. The accumulation of unrecorded moments is the accumulation of irreversible loss.
 
@@ -118,7 +118,7 @@ Data that is not captured now is data that is permanently lost. This is not a pr
 
 Preserving process records is not a passive activity. It is not archiving. Process records do not accumulate in libraries or databases unless someone builds the instruments to capture them, builds the infrastructure to store them, and creates the conditions under which the behavior that generates them still occurs.
 
-The instruments must capture temporal microstructure at the resolution the data requires: millisecond-level for keystroke and motor dynamics, sub-second for speech and gaze. They must capture behavior during natural practice, not during constrained laboratory tasks, because the ecological validity of the process record depends on the behavior being representative of how the person actually works. They must build personal baselines over time, because the scientific value of process data is longitudinal: a single session is a snapshot; a year of sessions is a trajectory (Guzzardo 2026C develops the cognitive reserve argument for why this longitudinal record is uniquely irreplaceable).
+The instruments must capture temporal microstructure at the resolution the data requires: millisecond-level for keystroke and motor dynamics, sub-second for speech and gaze. They must capture behavior during natural practice, not during constrained laboratory tasks, because the ecological validity of the process record depends on the behavior being representative of how the person actually works. They must build personal baselines over time, because the scientific value of process data is longitudinal: a single session is a snapshot; a year of sessions is a trajectory (Guzzardo 2026c develops the cognitive reserve argument for why this longitudinal record is uniquely irreplaceable).
 
 And they must operate under conditions of unassisted input. An instrument that captures the process record of AI-mediated writing is capturing a record of human-AI interaction, which is valuable for different reasons but is not a record of biological cognition. The instruments must either ensure that the captured behavior is unmediated, or at minimum flag which segments were mediated and which were not, so that downstream analysis can distinguish them.
 
@@ -155,13 +155,13 @@ Galbraith, D. (1999). Writing as a knowledge-constituting process. In M. Torranc
 
 Gleick, J. (2011). *The Information: A History, A Theory, A Flood*. Pantheon.
 
-Guzzardo, A. (2026A). A closing window: The demographic confound in keystroke-based cognitive biomarkers and the AI-mediation threat to the paradigm that would replace it. Preprint.
+Guzzardo, A. (2026a). A closing window: The demographic confound in keystroke-based cognitive biomarkers and the AI-mediation threat to the paradigm that would replace it. Preprint.
 
-Guzzardo, A. (2026B). Construct replacement: When AI-mediated input invalidates behavioral measurement. Preprint.
+Guzzardo, A. (2026b). Construct replacement: When AI-mediated input invalidates behavioral measurement. Preprint.
 
-Guzzardo, A. (2026C). The quiet debt: Cognitive reserve, AI offloading, and the instruments we don't yet have. Preprint.
+Guzzardo, A. (2026c). The quiet debt: Cognitive reserve, AI offloading, and the instruments we don't yet have. Preprint.
 
-Guzzardo, A. (2026F). Reconstruction validity: Self-validation of process-level behavioral instruments via adversarial synthesis. Preprint.
+Guzzardo, A. (2026f). Reconstruction validity: Self-validation of process-level behavioral instruments via adversarial synthesis. Preprint.
 
 Gruber, H. E. (1974). *Darwin on Man: A Psychological Study of Scientific Creativity*. Dutton.
 

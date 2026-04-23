@@ -114,7 +114,7 @@ A signal pipeline, implemented as a native Rust module accessed via napi-rs, ext
 
 **Process signals.** Full text reconstruction from the keystroke stream, recovering the editing history including deletions, insertions, and cursor movements. Pause classification by linguistic boundary: within-word, between-word, and between-sentence (Wengelin 2006). P-burst segmentation (production bursts bounded by pauses exceeding 2 seconds, following Chenoweth and Hayes 2001). R-burst and I-burst classification for revision and insertion episodes.
 
-**Semantic signals.** Seven longitudinal semantic signals computed per session: idea density, lexical sophistication, epistemic stance, integrative complexity, deep cohesion, text compression ratio, and referential cohesion. Moving-average type-token ratio (MATTR, Covington and McFall 2010). Semantic signals are tracked via a separate self-referencing longitudinal baseline system (Welford running distributions, topic-matched z-scoring via HNSW retrieval, minimum-n gating) and are excluded from the ghost-validated behavioral aggregate reported in this paper. The ghost produces Markov/PPM word salad; semantic residuals between coherent text and word salad are trivially explained and carry no discriminative information across sessions.
+**Semantic signals.** Seven longitudinal semantic signals computed per session: idea density, lexical sophistication, epistemic stance, integrative complexity, deep cohesion, text compression ratio, and referential cohesion. Moving-average type-token ratio (MATTR, Covington and McFall 2010). Semantic signals are tracked via a separate self-referencing longitudinal baseline system (Welford running distributions, topic-matched z-scoring via HNSW retrieval, minimum-n gating) and are excluded from the ghost-validated behavioral aggregate reported in this paper. The ghost produces Markov/PPM word salad; semantic residuals between coherent text and word salad are trivially explained and carry no discriminative information across sessions. The semantic infrastructure is operational and accumulating data continuously alongside the behavioral channel. Its longitudinal validation requires data depth not yet available and is reserved for future work (Guzzardo, in preparation). This paper's reconstruction validity claims apply to the behavioral channel only; the semantic infrastructure is described here for completeness of the instrument architecture, not as a validated measurement system.
 
 **Cross-session signals.** Session-over-session trajectory features comparing the current session's signal profile to the rolling personal baseline.
 
@@ -281,13 +281,13 @@ Sixty-three journal and calibration entries across 26 sessions with full signal 
 
 This falsification is the most important empirical result of the reconstruction validity framework. It was predicted that motor dimensions would converge because the synthesis has access to the same motor parameters the instrument extracts. The prediction was wrong because motor execution in genuine composition is not independent of cognitive state. The coupling between what the person is thinking and how they are physically typing produces motor signatures that distributional sampling cannot reconstruct. The motor residual is not noise; it is the instrument detecting cognitive engagement through the motor channel.
 
-**Process signal partial convergence.** *Prediction:* Revision synthesis would partially converge, but genuine cognitive deliberation would produce persistent divergence. *Result:* Consistent with prediction. The process signal family contributes to the overall residual. The reconstruction's stochastic revision events match distributional properties (deletion rates, timing bias) but not the structural placement of revisions relative to content evolution.
+**Process signal partial convergence.** *Prediction:* Revision synthesis would partially converge, but genuine cognitive deliberation would produce persistent divergence. *Result:* Consistent with prediction. The process signal family shows partial convergence. The reconstruction's stochastic revision events match distributional properties (deletion rates, timing bias) but not the structural placement of revisions relative to content evolution.
 
 **Dynamical signal partial convergence.** *Prediction:* PE should partially converge; DFA may diverge. *Result:* Dynamical L2 < 1.3 across sessions. The dynamical signal family shows the smallest residual, indicating that the temporal complexity structure (permutation entropy, DFA, RQA) is largely reproducible from the statistical profile. The synthesis's ex-Gaussian timing produces keystroke series with similar complexity signatures to real sessions. This confirms that dynamical signals primarily index motor timing distributions rather than cognitive dynamics in this instrument.
 
 ### 6.3 Additional Findings
 
-**Journal questions produce larger ghosts than calibration questions.** Journal sessions (questions generated to probe cognitive depth) have mean behavioral L2 = 59.6. Calibration sessions (standardized free-write prompts) have mean behavioral L2 = 51.1. The gap is consistent with the cognitive residual hypothesis: when the question demands more cognitive engagement, the distance between person and reconstruction widens. This is a falsifiable test of whether the residual is cognitive: if it were purely biomechanical, question type should not affect it.
+**Journal questions produce larger motor residuals than calibration questions.** Under the baseline ghost (variant 1), journal sessions (questions generated to probe cognitive depth) have mean motor L2 = 116.0. Calibration sessions (standardized free-write prompts) have mean motor L2 = 88.3. The gap is consistent with the cognitive residual hypothesis: when the question demands more cognitive engagement, the motor distance between person and reconstruction widens. This is a falsifiable test of whether the motor residual is cognitive: if it were purely biomechanical, question type should not affect it.
 
 **Two-scale perplexity divergence.** Word-level Markov perplexity (average 21.3) and character-level trigram perplexity (average 9.0) provide independent measures at different linguistic scales. The ratio of approximately 2.4x indicates that the person's writing is more predictable at the character level (familiar letter sequences) than at the word level (less predictable word choices). The reconstruction matches character-level patterns more closely than word-level patterns, consistent with the Markov chain capturing local statistical structure but not global semantic coherence.
 
@@ -295,23 +295,23 @@ This falsification is the most important empirical result of the reconstruction 
 
 The five-variant system tests whether the motor residual is an artifact of weak synthesis. Each variant adds one statistical improvement. The results below are averaged across 26 sessions with 63 corpus entries. (Note: all values recomputed after the HoldFlight vector alignment fix documented in METHODS_PROVENANCE.md INC-001. The copula parameter `hold_flight_rank_correlation` and all transfer entropy values were recalculated from corrected hold-flight pairs.)
 
-| Variant | Avg Behavioral L2 | Avg Motor L2 | Avg Dynamical L2 |
-|---------|-------------------|-------------|-----------------|
-| 1. Baseline | 52.3 | 90.8 | 1.35 |
-| 2. Conditional Timing | 92.1 | 88.8 | 73.75 |
-| 3. Copula Motor | 57.7 | 99.9 | 0.67 |
-| 4. PPM Text | 55.0 | 98.0 | 0.31 |
-| 5. Full Adversary | 59.1 | 91.1 | 0.33 |
+| Variant | Avg Motor L2 | Avg Dynamical L2 |
+|---------|-------------|-----------------|
+| 1. Baseline | 92.6 | 1.47 |
+| 2. Conditional Timing | 88.8 | 73.75 |
+| 3. Copula Motor | 99.9 | 0.67 |
+| 4. PPM Text | 98.0 | 0.31 |
+| 5. Full Adversary | 91.1 | 0.33 |
 
-Semantic L2 (range 0.13-0.17 across all variants) is excluded from this table. The ghost produces Markov/PPM word salad; the semantic residual between coherent text and word salad is trivially low and uninformative for cross-session comparison. Semantic measurement uses a separate self-referencing longitudinal baseline system (see Section 4.1).
+Semantic L2 (range 0.13-0.17 across all variants) is not reported. The ghost produces Markov/PPM word salad; the semantic residual between coherent text and word salad is trivially low and uninformative for cross-session comparison. Semantic measurement uses a separate self-referencing longitudinal baseline system (see Section 4.1).
 
-**Conditional Timing (variant 2) has the lowest motor L2 (88.8) but the highest behavioral L2 (92.1).** The AR(1) process preserves keystroke rhythm and modestly closes the motor gap. But it creates artificial complexity patterns that the dynamical signals detect as anomalous, increasing dynamical L2 from 1.35 to 73.75. The AR(1) process is too regular; real cognitive events produce temporal complexity that a simple autoregressive model cannot replicate.
+**Conditional Timing (variant 2) achieves the lowest motor L2 (88.8) but at the cost of substantial dynamical inflation (73.75).** The AR(1) process preserves keystroke rhythm and modestly closes the motor gap. But it creates artificial complexity patterns that the dynamical signals detect as anomalous, increasing dynamical L2 from 1.47 to 73.75. The AR(1) process is too regular; real cognitive events produce temporal complexity that a simple autoregressive model cannot replicate.
 
-**Copula Motor (variant 3) makes motor worse (99.9 vs 90.8).** Coupling hold and flight times jointly introduces motor patterns that diverge further from real execution. The empirical rank correlation (rho = -0.189) is mild, and imposing it on the synthesis creates a coupling artifact the motor signals detect.
+**Copula Motor (variant 3) makes motor worse (99.9 vs 92.6).** Coupling hold and flight times jointly introduces motor patterns that diverge further from real execution. The empirical rank correlation (rho = -0.189) is mild, and imposing it on the synthesis creates a coupling artifact the motor signals detect.
 
-**PPM Text (variant 4) wins on semantics (0.134 vs 0.159) and dynamical (0.31 vs 1.35).** Better text generation closes the gaps that better text should close, without affecting motor. The text generation and timing synthesis axes are independent in the measurement.
+**PPM Text (variant 4) wins on semantics (0.134 vs 0.159) and dynamical (0.31 vs 1.47).** Better text generation closes the gaps that better text should close, without affecting motor. The text generation and timing synthesis axes are independent in the measurement.
 
-**Full Adversary (variant 5) lands at motor 91.1.** The combination of all improvements produces a negligible motor change over baseline (91.1 vs 90.8). The motor floor remains in the 89-100 range across all five variants.
+**Full Adversary (variant 5) lands at motor 91.1.** The combination of all improvements produces a negligible motor change over baseline (91.1 vs 92.6). The motor floor remains in the 89-100 range across all five variants.
 
 **The motor residual is not an artifact of weak synthesis.** Five different statistical strategies, three specifically targeting motor execution, and the floor has not meaningfully moved. The objection that the baseline generator might be too crude is empirically addressed.
 
@@ -336,13 +336,13 @@ The reconstruction residual, the structured gap between synthetic and real sessi
 
 The timing synthesis draws from the same distributions the instrument fits to real data. The prediction was that the motor residual would be small and decrease with corpus size. The measured motor L2 norm is 89-100 across five adversary variants, the largest residual family by two orders of magnitude regardless of the statistical strategy.
 
-The single-ghost falsification (v3) revealed that distributional equivalence is not behavioral equivalence. The multi-adversary system (v4) tests whether the gap closes when specific distributional limitations are addressed. It does not. Preserving IKI serial dependence via AR(1) modestly reduces the motor gap (88.8 vs 90.8) but creates dynamical artifacts (L2 = 73.75). Coupling hold and flight times via Gaussian copula makes motor worse (99.9). Combining all improvements (Full Adversary) lands at 91.1. The motor floor is not an artifact of independent sampling, missing correlations, or weak text generation. It persists under every statistical improvement the instrument's own measurements can supply.
+The single-ghost falsification (v3) revealed that distributional equivalence is not behavioral equivalence. The multi-adversary system (v4) tests whether the gap closes when specific distributional limitations are addressed. It does not. Preserving IKI serial dependence via AR(1) modestly reduces the motor gap (88.8 vs 92.6) but creates dynamical artifacts (L2 = 73.75). Coupling hold and flight times via Gaussian copula makes motor worse (99.9). Combining all improvements (Full Adversary) lands at 91.1. The motor floor is not an artifact of independent sampling, missing correlations, or weak text generation. It persists under every statistical improvement the instrument's own measurements can supply.
 
 The motor signals the instrument extracts (sample entropy, motor jerk, tempo drift, IKI autocorrelation) are sensitive to the *sequence* of intervals, not just their distribution. Genuine composition produces motor sequences structured by cognitive events. Statistical sampling, even with preserved serial dependence and coupling, produces motor sequences that the instrument reliably distinguishes from real ones. The motor channel detects the mind. Five independent strategies have now failed to close that gap.
 
-### 7.2 Content Residual (Predicted: Decreasing. Observed: Trivially Small, Excluded from Aggregate.)
+### 7.2 Content Residual (Predicted: Decreasing. Observed: Trivially Small, Not Reported.)
 
-The Markov chain's vocabulary and transitions converge on the person's actual language production as the corpus grows. Semantic L2 norms range from 0.13 to 0.17 across all five adversary variants. This is expected rather than informative: the ghost produces word salad while real sessions produce coherent text, so semantic signals (idea density, lexical sophistication, compression ratio) trivially diverge in a direction that is constant across sessions. The semantic residual does not discriminate between sessions and is therefore excluded from the paper-reported behavioral aggregate.
+The Markov chain's vocabulary and transitions converge on the person's actual language production as the corpus grows. Semantic L2 norms range from 0.13 to 0.17 across all five adversary variants. This is expected rather than informative: the ghost produces word salad while real sessions produce coherent text, so semantic signals (idea density, lexical sophistication, compression ratio) trivially diverge in a direction that is constant across sessions. The semantic residual does not discriminate between sessions and is not reported as a validity metric in this paper.
 
 The content residual confirms that surface linguistic features are primarily distributional and compressible into a low-dimensional statistical model. This is what a Markov chain should get right. The scientifically interesting question is not why the semantic residual is small, but why the motor residual is large despite increasingly sophisticated synthesis. That question is answered in 7.3.
 
@@ -354,7 +354,7 @@ This reframes the cognitive residual. It is not an abstract quantity inferred fr
 
 The cognitive residual is the most important output of the reconstruction validity framework. The empirical results show it is concentrated in the motor channel, exactly where the instrument has the richest feature extraction (ex-Gaussian decomposition, digraph profiles, sample entropy, motor jerk, tempo drift, IKI autocorrelation, DFA, transfer entropy). The instrument is most sensitive where the cognitive signal is strongest.
 
-This is the quantitative answer to the question: what does the instrument capture that matters, beyond what can be reconstructed from measurements? The persistent motor residual IS the cognitive engagement. It is the thing that builds cognitive reserve (Stern et al. 2023; see Guzzardo 2026C for the cognitive reserve argument), the thing that AI mediation replaces (Guzzardo 2026B), and the thing that Condrey's non-identifiability result says timing-only instruments cannot detect (Condrey 2026a). But Condrey's result concerns timing *distributions*. The instrument measures timing *sequences*. The distinction is precisely where the cognitive residual lives.
+This is the quantitative answer to the question: what does the instrument capture that matters, beyond what can be reconstructed from measurements? The persistent motor residual IS the cognitive engagement. It is the thing that builds cognitive reserve (Stern et al. 2023; see Guzzardo 2026c for the cognitive reserve argument), the thing that AI mediation replaces (Guzzardo 2026b), and the thing that Condrey's non-identifiability result says timing-only instruments cannot detect (Condrey 2026a). But Condrey's result concerns timing *distributions*. The instrument measures timing *sequences*. The distinction is precisely where the cognitive residual lives.
 
 ---
 
@@ -450,13 +450,13 @@ Corral-Acero, J., et al. (2020). The digital twin to enable the vision of precis
 
 Covington, M. A., & McFall, J. D. (2010). Cutting the Gordian knot: The moving-average type-token ratio (MATTR). *Journal of Quantitative Linguistics*, 17(2), 94-100.
 
-Guzzardo, A. (2026A). A closing window: The demographic confound in keystroke-based cognitive biomarkers and the AI-mediation threat to the paradigm that would replace it. Preprint.
+Guzzardo, A. (2026a). A closing window: The demographic confound in keystroke-based cognitive biomarkers and the AI-mediation threat to the paradigm that would replace it. Preprint.
 
-Guzzardo, A. (2026B). Construct replacement: When AI-mediated input invalidates behavioral measurement. Preprint.
+Guzzardo, A. (2026b). Construct replacement: When AI-mediated input invalidates behavioral measurement. Preprint.
 
-Guzzardo, A. (2026C). The quiet debt: Cognitive reserve, AI offloading, and the instruments we don't yet have. Preprint.
+Guzzardo, A. (2026c). The quiet debt: Cognitive reserve, AI offloading, and the instruments we don't yet have. Preprint.
 
-Guzzardo, A. (2026G). Irreversible loss: Why process-level preservation cannot wait. Preprint.
+Guzzardo, A. (2026g). Irreversible loss: Why process-level preservation cannot wait. Preprint.
 
 Hausdorff, J. M. (2007). Gait dynamics, fractals and falls: Finding meaning in the stride-to-stride fluctuations of human walking. *Human Movement Science*, 26(4), 555-589.
 
