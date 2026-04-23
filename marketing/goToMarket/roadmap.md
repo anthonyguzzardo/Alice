@@ -141,11 +141,15 @@ You are NOT competing with:
 
 You ARE the only product in a category that doesn't exist yet: **cognitive self-measurement**. The closest analogy is Oura Ring for your mind. Oura doesn't tell you to sleep better. It measures your sleep and lets you draw your own conclusions. Alice doesn't tell you to think better. It measures how you think and lets the shape speak for itself.
 
+### The Black Box Problem
+
+The black box is philosophically coherent with Alice's thesis and a genuine differentiator. It is also real adoption friction. Most people want to re-read their journals. The black box means Alice's addressable market is not "everyone who journals" but the subset who values the act of writing over the artifact of having written. That subset is real (3M+ copies of "Burn After Writing," Pennebaker's 200+ studies showing benefits are identical whether writing is kept or destroyed), but it is smaller than the journaling market and the marketing has to be honest about what Alice is asking people to give up.
+
+The narrative should lead with what Alice gives (measurement of how you think, questions that sharpen over time), acknowledge what it costs (you don't get to re-read), and frame the cost as load-bearing (if you could re-read, you'd perform for your future self, and the measurement would degrade). The constraint needs to be marketed around, not disguised as a feature.
+
 ### The Consumer Narrative
 
 "Every day, Alice asks you one question. You answer it. You never see your answer again. But Alice remembers how you wrote it: how long you paused, when you revised, whether your rhythm was steady or chaotic, how your vocabulary shifted mid-thought. Over weeks and months, a shape emerges. Not what you think. How you think. And that shape is yours."
-
-This narrative is the marketing. It doesn't need to be dressed up. The philosophy IS the pitch.
 
 ### Channels
 

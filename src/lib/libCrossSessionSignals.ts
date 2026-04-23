@@ -50,6 +50,7 @@ async function getPriorTexts(currentQuestionId: number): Promise<Array<{ text: s
     FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
     WHERE r.question_id != ${currentQuestionId}
+      AND q.question_source_id != 3
     ORDER BY q.scheduled_for DESC
   ` as Array<{ text: string; scheduled_for: string }>;
 
@@ -215,11 +216,14 @@ async function digraphStability(questionId: number): Promise<number | null> {
 
   if (!currentRow?.digraph_latency_json) return null;
 
-  // Get prior sessions' digraph profiles (last 5)
+  // Get prior journal sessions' digraph profiles (last 5, excluding calibrations)
   const priorRows = await sql`
-    SELECT digraph_latency_json FROM tb_motor_signals
-    WHERE question_id != ${questionId} AND digraph_latency_json IS NOT NULL
-    ORDER BY motor_signal_id DESC LIMIT 5
+    SELECT ms.digraph_latency_json FROM tb_motor_signals ms
+    JOIN tb_questions q ON ms.question_id = q.question_id
+    WHERE ms.question_id != ${questionId}
+      AND q.question_source_id != 3
+      AND ms.digraph_latency_json IS NOT NULL
+    ORDER BY ms.motor_signal_id DESC LIMIT 5
   ` as Array<{ digraph_latency_json: string }>;
 
   if (priorRows.length < 2) return null;
@@ -335,7 +339,16 @@ function textNetworkAnalysis(text: string): GraphResult {
 export async function computeCrossSessionSignals(
   questionId: number,
   currentText: string,
-): Promise<CrossSessionSignals> {
+): Promise<CrossSessionSignals | null> {
+  // Calibration sessions (question_source_id = 3) are prompted neutral writing.
+  // Cross-session comparisons between prompted and reflective writing produce
+  // meaningless deltas driven by the task difference, not cognitive trajectory.
+  const sourceRows = await sql`
+    SELECT question_source_id FROM tb_questions WHERE question_id = ${questionId}
+  `;
+  if (sourceRows.length === 0) return null;
+  if ((sourceRows[0] as { question_source_id: number }).question_source_id === 3) return null;
+
   const priorTexts = await getPriorTexts(questionId);
   const priorTextStrings = priorTexts.map(p => p.text);
 

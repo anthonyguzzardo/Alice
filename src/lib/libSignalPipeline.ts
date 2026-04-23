@@ -202,18 +202,20 @@ export async function computeAndPersistDerivedSignals(questionId: number): Promi
       const text = await getResponseText(questionId);
       if (text && text.length >= 20) {
         const cs = await computeCrossSessionSignals(questionId, text);
-        await saveCrossSessionSignals(questionId, {
-          self_perplexity: cs.selfPerplexity,
-          ncd_lag_1: cs.ncdLag1,
-          ncd_lag_3: cs.ncdLag3,
-          ncd_lag_7: cs.ncdLag7,
-          ncd_lag_30: cs.ncdLag30,
-          vocab_recurrence_decay: cs.vocabRecurrenceDecay,
-          digraph_stability: cs.digraphStability,
-          text_network_density: cs.textNetworkDensity,
-          text_network_communities: cs.textNetworkCommunities,
-          bridging_ratio: cs.bridgingRatio,
-        });
+        if (cs) {
+          await saveCrossSessionSignals(questionId, {
+            self_perplexity: cs.selfPerplexity,
+            ncd_lag_1: cs.ncdLag1,
+            ncd_lag_3: cs.ncdLag3,
+            ncd_lag_7: cs.ncdLag7,
+            ncd_lag_30: cs.ncdLag30,
+            vocab_recurrence_decay: cs.vocabRecurrenceDecay,
+            digraph_stability: cs.digraphStability,
+            text_network_density: cs.textNetworkDensity,
+            text_network_communities: cs.textNetworkCommunities,
+            bridging_ratio: cs.bridgingRatio,
+          });
+        }
       }
     } catch (err) {
       logError('signal-pipeline.crossSession', err, { questionId });
