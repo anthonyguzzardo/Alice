@@ -46,7 +46,7 @@ function contentWords(text: string): Set<string> {
 async function getPriorTexts(currentQuestionId: number): Promise<Array<{ text: string; daysAgo: number }>> {
   const rows = await sql`
     SELECT r.text as text,
-           q.scheduled_for as scheduled_for
+           q.scheduled_for::text as scheduled_for
     FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
     WHERE r.question_id != ${currentQuestionId}
@@ -58,7 +58,7 @@ async function getPriorTexts(currentQuestionId: number): Promise<Array<{ text: s
 
   // Get current entry's date
   const currentRows = await sql`
-    SELECT q.scheduled_for as scheduled_for
+    SELECT q.scheduled_for::text as scheduled_for
     FROM tb_questions q WHERE q.question_id = ${currentQuestionId}
   `;
   const currentRow = currentRows[0] as { scheduled_for: string } | undefined;
