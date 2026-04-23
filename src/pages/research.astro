@@ -22,7 +22,7 @@ const papers = listPapers('published');
 <header class="r-hero">
   <div class="r-hero-text">
     <h1>The window for measuring unmediated cognition is closing, and the instruments do not exist.</h1>
-    <p class="r-subtitle">AI mediation is replacing the cognitive processes that behavioral measurement depends on. The first generation with lifelong typing fluency is entering midlife. Within 10-15 years, unassisted character-by-character text production may no longer be the default. No validated instrument exists to capture longitudinal cognitive baselines from this data before it disappears.</p>
+    <p class="r-subtitle">AI mediation is replacing the cognitive processes that behavioral measurement depends on. The first generation with lifelong typing fluency is entering midlife. Within 10-15 years, unassisted character-by-character text production may no longer be the default. No instrument has yet captured these baselines at validated longitudinal scale. The infrastructure to do so is only beginning to exist.</p>
   </div>
   <div class="r-hero-viz">
     <canvas id="window-viz" width="480" height="360" aria-hidden="true"></canvas>
@@ -440,6 +440,24 @@ const papers = listPapers('published');
         </div>
         <p class="r-landscape-failure">Closest to addressing the observer-effect problem. Entries fade or vanish, removing the feedback loop. But without data retention, no longitudinal analysis is possible. They solve the reactivity problem by abandoning the longitudinal one.</p>
       </div>
+
+      <div class="r-landscape-card r-residual-card-key">
+        <h3>Alice</h3>
+        <div class="r-landscape-has">
+          <span class="r-landscape-check">Process-level keystroke capture (IKI, hold time, flight time, burst architecture)</span>
+          <span class="r-landscape-check">Dual-channel measurement (behavioral signals + semantic signals, jointly analyzed)</span>
+          <span class="r-landscape-check">Longitudinal intra-individual baselines (running distribution, topic-matched z-scoring, minimum-n gating)</span>
+          <span class="r-landscape-check">Participant-blind measurement (no signals, traits, or computed metrics surfaced)</span>
+          <span class="r-landscape-check">Contamination boundary attestation (versioned spec, git commit hash, audited code paths per session)</span>
+          <span class="r-landscape-check">Archived reproducible methodology (bit-reproducible signal engine, archived embedding weights, methods provenance journal)</span>
+        </div>
+        <div class="r-landscape-lacks">
+          <span class="r-landscape-x">Longitudinal validation against clinical outcomes</span>
+          <span class="r-landscape-x">Corpus depth beyond n=1</span>
+          <span class="r-landscape-x">Cross-modality migration (keyboard to voice, gesture, or neural input)</span>
+        </div>
+        <p class="r-landscape-failure">Architecturally satisfies the six requirements. Validation requires the longitudinal data the instrument is designed to accumulate. The gap between implemented and validated is the work that remains.</p>
+      </div>
     </div>
 
     <p>The structural pattern: every approach that accumulates participant data surfaces it back to the participant. Every approach that avoids the observer effect discards the data. No existing instrument combines longitudinal accumulation with participant-blind measurement. The combination is architecturally difficult because the standard model for justifying sustained participant engagement is showing them what you've learned. An instrument that learns but does not show must find a different mechanism for retention.</p>
@@ -479,7 +497,7 @@ const papers = listPapers('published');
       </div>
       <div class="r-design-item">
         <span class="r-design-constraint">Unmediated input</span>
-        <span class="r-design-solution">No autocomplete, predictive text, or AI assistance during the writing task. Any mediation replaces the cognitive construct being measured (Section 4). The input environment must guarantee that every character reflects a discrete motor and cognitive act.</span>
+        <span class="r-design-solution">No autocomplete, predictive text, or AI assistance during the writing task. Any mediation replaces the cognitive construct being measured (Section 4). The input environment must guarantee that every character reflects a discrete motor and cognitive act. Alice implements this as <a class="r-cite" href="/docs/contamination-boundary-v1">Contamination Boundary v1</a>: each session record carries a cryptographic attestation of the audited code paths active at session-write time and the git commit hash of the running codebase. The boundary is a versioned specification. Any future writing surface that could mediate input requires an explicit boundary version bump and fresh audit before sessions from that path are admitted to the corpus.</span>
       </div>
       <div class="r-design-item">
         <span class="r-design-constraint">Dual-channel capture</span>
@@ -487,7 +505,7 @@ const papers = listPapers('published');
       </div>
       <div class="r-design-item">
         <span class="r-design-constraint">Intra-individual baselines</span>
-        <span class="r-design-solution">Deviation must be measured against the participant's own history, not a population norm. Calibration sessions provide within-person same-day controls that account for transient state variation (fatigue, illness, mood).</span>
+        <span class="r-design-solution">Deviation must be measured against the participant's own history, not a population norm. Calibration sessions provide within-person same-day controls that account for transient state variation (fatigue, illness, mood). Alice's semantic baseline infrastructure is operational across seven semantic signals (idea density, lexical sophistication, epistemic stance, integrative complexity, deep cohesion, compression ratio, referential cohesion), with running distribution stores, topic-matched z-scoring via embedding similarity, and minimum-n gating. Longitudinal trajectory analysis is deferred for data depth. See <a class="r-cite" href="/docs/embedding-methods">methods provenance</a>.</span>
       </div>
       <div class="r-design-item">
         <span class="r-design-constraint">Participant-blind measurement</span>
@@ -552,7 +570,13 @@ const papers = listPapers('published');
 
     <p>Every reconstruction residual is a reproducible artifact. The PRNG seed, motor profile snapshot, and corpus integrity hash are stored alongside each residual. Any future build of the instrument can regenerate the identical ghost and verify the stored residual to bit identity. This is not a design aspiration; it is a <a class="r-cite" href="/papers/reconstruction-validity">verified property</a>, demonstrated on production data across all dynamical and motor signal families.</p>
 
+    <p>The semantic measurement pipeline runs against a self-hosted, archivable embedding model (Qwen3-Embedding-0.6B, Apache 2.0, weights archived by SHA-256 hash, FP32 CPU inference verified bit-reproducible). The vector geometry of every embedding in the corpus can be reproduced from the archived weights and the documented inference environment. See <a class="r-cite" href="/docs/embedding-methods">methods specification</a>.</p>
+
     <p>This framework also provides a direct empirical response to <a class="r-cite" href="https://arxiv.org/abs/2601.17280" target="_blank" rel="noopener">Condrey (2026a)</a>, who proved that keystroke timing alone cannot distinguish composition from transcription. Five reconstructions are timing-calibrated and meaning-absent. The instrument's full signal set distinguishes all five from real sessions. It captures the content-process binding that Condrey's result says timing-only instruments cannot detect. The multi-adversary system turns that from a single data point into a surface. The surface's shape is the validity evidence.</p>
+
+    <div class="r-callout">
+      <p>The methodological commitments described here are not standard practice in writing-process measurement research. Archivable model weights with SHA-256 provenance. Versioned inference environments with verified bit-reproducibility. Cryptographic contamination attestation on every session record. A signal engine whose output is identical across builds, verified by CI on every code change. Alice treats these as preconditions. The cohort artifact argument depends on them being met today: instruments built without long-horizon reproducibility cannot establish the baselines that future validation studies will need.</p>
+    </div>
   </section>
 
 
@@ -594,7 +618,7 @@ const papers = listPapers('published');
   <section class="r-section" id="open">
     <h2>Open questions and limitations</h2>
 
-    <p>Alice is a prototype implementation of this instrument design, accumulating data at n=1 since April 2026. It satisfies the six requirements architecturally. Whether it satisfies them in practice is an empirical question that cannot be answered at current scale. The following problems remain open.</p>
+    <p>Alice implements this instrument design and has verified its architectural commitments: bit-reproducible signal computation, cryptographically attested contamination boundary, archived embedding methodology with pinned weights and deterministic inference, and a fully operational measurement pipeline across behavioral and semantic signal families. The instrument has been accumulating data since April 2026. The empirical questions that remain are about longitudinal validation, generalization beyond n=1, sustained engagement without gamification, and modality migration. The following problems remain open.</p>
 
     <div class="r-design-list">
       <div class="r-design-item">
