@@ -590,31 +590,7 @@ const papers = listPapers('published');
   </section>
 
 
-  <!-- ===== SECTION 13: OPEN QUESTIONS ===== -->
-  <!-- ===== PUBLICATIONS & TOOLS ===== -->
-  <section class="r-section" id="publications">
-    <h2>Papers and tools</h2>
-
-    <p>The research program behind Alice produces versioned papers, open-source tools, and empirical results. Each paper addresses a different facet of the same problem. The tool makes the methodology available to other instruments.</p>
-
-    <div class="r-pub-list">
-      {papers.map(paper => (
-        <a href={`/papers/${paper.slug}`} class="r-pub-card">
-          <div class="r-pub-meta">{paper.date} &middot; v{paper.version}</div>
-          <div class="r-pub-title">{paper.title}</div>
-          <div class="r-pub-abstract">{paper.abstract.length > 200 ? paper.abstract.slice(0, 200).replace(/\s+\S*$/, '') + '...' : paper.abstract}</div>
-        </a>
-      ))}
-
-      <a href="https://github.com/anthonyguzzardo/reconstruction-validity" target="_blank" rel="noopener" class="r-pub-card r-pub-tool">
-        <div class="r-pub-meta">Rust crate &middot; MIT license</div>
-        <div class="r-pub-title">reconstruction-validity</div>
-        <div class="r-pub-abstract">A framework for validating behavioral measurement instruments via adversarial reconstruction. Implements the five-variant adversary system from the reconstruction validity paper. Any instrument that extracts features from temporal behavioral streams can use it.</div>
-      </a>
-    </div>
-  </section>
-
-
+  <!-- ===== SECTION 14: OPEN QUESTIONS ===== -->
   <section class="r-section" id="open">
     <h2>Open questions and limitations</h2>
 
@@ -651,6 +627,30 @@ const papers = listPapers('published');
       <a href="#publications">Papers and tools</a>
       <a href="/instrument">See the architecture</a>
       <a href="/vision">The broader vision</a>
+    </div>
+  </section>
+
+
+  <!-- ===== SECTION 15: PUBLICATIONS & TOOLS ===== -->
+  <section class="r-section" id="publications">
+    <h2>Papers and tools</h2>
+
+    <p>The research program behind Alice produces versioned papers, open-source tools, and empirical results. Each paper addresses a different facet of the same problem. The tool makes the methodology available to other instruments.</p>
+
+    <div class="r-pub-list">
+      {papers.map(paper => (
+        <a href={`/papers/${paper.slug}`} class="r-pub-card">
+          <div class="r-pub-meta">{paper.date} &middot; v{paper.version}</div>
+          <div class="r-pub-title">{paper.title}</div>
+          <div class="r-pub-abstract">{paper.abstract.length > 200 ? paper.abstract.slice(0, 200).replace(/\s+\S*$/, '') + '...' : paper.abstract}</div>
+        </a>
+      ))}
+
+      <a href="https://github.com/anthonyguzzardo/reconstruction-validity" target="_blank" rel="noopener" class="r-pub-card r-pub-tool">
+        <div class="r-pub-meta">Rust crate &middot; MIT license</div>
+        <div class="r-pub-title">reconstruction-validity</div>
+        <div class="r-pub-abstract">A framework for validating behavioral measurement instruments via adversarial reconstruction. Implements the five-variant adversary system from the reconstruction validity paper. Any instrument that extracts features from temporal behavioral streams can use it.</div>
+      </a>
     </div>
   </section>
 
