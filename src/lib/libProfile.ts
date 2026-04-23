@@ -1,13 +1,13 @@
 /**
  * Personal Behavioral Profile
  *
- * Computes and persists a rolling behavioral profile from all journal
- * sessions. Single row in tb_personal_profile, updated in place after
- * each session. This is the data structure a writing avatar would
- * eventually read from.
+ * Computes and persists a rolling behavioral profile from journal
+ * sessions only (calibration sessions excluded). Single row in
+ * tb_personal_profile, rebuilt from scratch after each journal session.
+ * This is the data structure the ghost avatar reads from.
  *
  * Called as the final step in the signal pipeline after all per-session
- * signals are computed.
+ * signals are computed. Skips calibration sessions entirely.
  */
 
 import sql from './libDbPool.ts';
@@ -39,7 +39,17 @@ const nn = (vals: (number | null)[]): number[] => vals.filter((v): v is number =
 
 export async function updateProfile(questionId: number): Promise<void> {
   try {
-    // ── Gather all session data (journal + calibration) ──
+    // Calibration sessions (question_source_id = 3) are prompted neutral writing.
+    // The profile models the person's natural writing process; including calibration
+    // data would contaminate the ghost's motor fingerprint, digraph latencies, and
+    // pause architecture via libReconstruction.ts.
+    const sourceRows = await sql`
+      SELECT question_source_id FROM tb_questions WHERE question_id = ${questionId}
+    `;
+    if (sourceRows.length === 0) return;
+    if ((sourceRows[0] as { question_source_id: number }).question_source_id === 3) return;
+
+    // ── Gather all journal session data (calibrations excluded) ──
     const summaries = await sql`
       SELECT ss.question_id,
              ss.total_duration_ms, ss.word_count, ss.total_chars_typed,
@@ -54,6 +64,8 @@ export async function updateProfile(questionId: number): Promise<void> {
              ss.first_half_deletion_chars, ss.second_half_deletion_chars,
              ss.mattr
       FROM tb_session_summaries ss
+      JOIN tb_questions q ON ss.question_id = q.question_id
+      WHERE q.question_source_id != 3
       ORDER BY ss.session_summary_id ASC
     ` as any[];
 
@@ -65,6 +77,8 @@ export async function updateProfile(questionId: number): Promise<void> {
              ms.digraph_latency_json, ms.iki_autocorrelation_json,
              ms.hold_flight_rank_corr
       FROM tb_motor_signals ms
+      JOIN tb_questions q ON ms.question_id = q.question_id
+      WHERE q.question_source_id != 3
     ` as any[];
 
     // ── Process signals (pause location, bursts) ──
@@ -72,12 +86,16 @@ export async function updateProfile(questionId: number): Promise<void> {
       SELECT ps.pause_within_word, ps.pause_between_word, ps.pause_between_sentence,
              ps.r_burst_count, ps.i_burst_count
       FROM tb_process_signals ps
+      JOIN tb_questions q ON ps.question_id = q.question_id
+      WHERE q.question_source_id != 3
     ` as any[];
 
     // ── Burst sequences for consolidation ──
     const burstRows = await sql`
       SELECT bs.question_id, bs.burst_index, bs.burst_char_count
       FROM tb_burst_sequences bs
+      JOIN tb_questions q ON bs.question_id = q.question_id
+      WHERE q.question_source_id != 3
       ORDER BY bs.question_id, bs.burst_index
     ` as any[];
 
@@ -86,6 +104,8 @@ export async function updateProfile(questionId: number): Promise<void> {
       SELECT rs.question_id, rs.burst_index, rs.deleted_char_count,
              rs.burst_duration_ms, rs.is_leading_edge
       FROM tb_rburst_sequences rs
+      JOIN tb_questions q ON rs.question_id = q.question_id
+      WHERE q.question_source_id != 3
       ORDER BY rs.question_id, rs.burst_index
     ` as any[];
 
@@ -94,6 +114,7 @@ export async function updateProfile(questionId: number): Promise<void> {
       SELECT r.text
       FROM tb_responses r
       JOIN tb_questions q ON r.question_id = q.question_id
+      WHERE q.question_source_id != 3
       ORDER BY q.scheduled_for ASC
     ` as any[];
 
