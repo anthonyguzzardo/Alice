@@ -5,7 +5,10 @@
  * run in the fire-and-forget block after session submission. Each signal
  * family is computed independently so one failure doesn't block the rest.
  *
- * Called from /api/respond.ts after renderWitnessState().
+ * Called from /api/respond.ts after embedResponse() completes.
+ * The semantic baseline updater queries tb_embeddings via HNSW for
+ * topic-matched z-scores, so the current session's embedding must
+ * exist before this function runs.
  */
 
 import sql, {

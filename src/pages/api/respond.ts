@@ -130,10 +130,6 @@ export const POST: APIRoute = async ({ request }) => {
     });
   }
 
-  // Fire-and-forget: embed the new response for RAG retrieval
-  embedResponse(responseId, question.text, trimmedText, localDateStr())
-    .catch(err => logError('respond.embed', err, { responseId, questionId }));
-
   const responseCount = await getResponseCount();
 
   // Determine if we should ask "did it land?" (every 5th daily response)
@@ -152,6 +148,13 @@ export const POST: APIRoute = async ({ request }) => {
 
     try { await renderWitnessState(); }
     catch (err) { logError('respond.witness', err, ctx); }
+
+    // Embed BEFORE derived signals: the semantic baseline updater inside
+    // computeAndPersistDerivedSignals queries tb_embeddings via HNSW to
+    // find topic-matched prior sessions. If the embedding hasn't been
+    // written yet, topic z-scores silently become null.
+    try { await embedResponse(responseId, question.text, trimmedText, localDateStr()); }
+    catch (err) { logError('respond.embed', err, { responseId, ...ctx }); }
 
     try { await computeAndPersistDerivedSignals(questionId); }
     catch (err) { logError('respond.derived-signals', err, ctx); }
