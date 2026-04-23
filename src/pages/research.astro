@@ -677,11 +677,11 @@ full_adversary:  motor=0.3947`;
         <span class="r-crate-meta">Rust &middot; MIT license &middot; <a href="https://github.com/anthonyguzzardo/reconstruction-validity" target="_blank" rel="noopener">GitHub</a></span>
       </div>
       <p class="r-crate-desc">A framework for validating behavioral measurement instruments via adversarial reconstruction. Any instrument that extracts features from temporal behavioral streams can define its signal pipeline, and the crate builds the strongest statistical reconstruction it can, then reports where the reconstruction fails. The residual surface is the validity evidence.</p>
-      <div class="r-crate-blocks">
-        <div class="r-crate-block">
-          <span class="r-crate-label">Install</span>
-          <pre><code set:text={crateInstall} /></pre>
-        </div>
+      <div class="r-crate-install">
+        <span class="r-crate-label">Install</span>
+        <pre><code set:text={crateInstall} /></pre>
+      </div>
+      <div class="r-crate-columns">
         <div class="r-crate-block">
           <span class="r-crate-label">Usage</span>
           <pre><code set:text={crateUsage} /></pre>
@@ -2149,30 +2149,30 @@ full_adversary:  motor=0.3947`;
   .r-crate {
     border: 1px dashed var(--border);
     border-radius: 6px;
-    padding: 1.5rem;
+    padding: 1.25rem 1.5rem;
     margin-top: 2rem;
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: 0.75rem;
   }
 
   .r-crate-header {
     display: flex;
     align-items: baseline;
-    gap: 1rem;
+    gap: 0.75rem;
     flex-wrap: wrap;
   }
 
   .r-crate-name {
     font-family: var(--mono);
-    font-size: 1rem;
+    font-size: 0.9rem;
     color: var(--text);
     letter-spacing: 0.02em;
   }
 
   .r-crate-meta {
     font-family: var(--mono);
-    font-size: 0.65rem;
+    font-size: 0.6rem;
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text-faint);
@@ -2190,61 +2190,89 @@ full_adversary:  motor=0.3947`;
 
   .r-crate-desc {
     font-family: var(--serif-body);
-    font-size: 0.95rem;
-    line-height: 1.6;
-    color: var(--text);
+    font-size: 0.9rem;
+    line-height: 1.55;
+    color: var(--text-muted);
     margin: 0;
     max-width: 720px;
   }
 
-  .r-crate-blocks {
+  .r-crate-install {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+  }
+
+  .r-crate-install pre {
+    margin: 0;
+    padding: 0.4rem 0.75rem;
+    background: var(--bg-dim);
+    border-radius: 4px;
+    overflow-x: auto;
+  }
+
+  .r-crate-install code {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--text);
+    white-space: pre;
+  }
+
+  .r-crate-columns {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 1rem;
+    grid-template-columns: 3fr 2fr;
+    gap: 1px;
+    background: var(--border);
+    border-radius: 4px;
+    overflow: hidden;
   }
 
   .r-crate-block {
     display: flex;
     flex-direction: column;
-    gap: 0.4rem;
+    gap: 0;
+    background: var(--bg-dim);
   }
 
   .r-crate-label {
     font-family: var(--mono);
-    font-size: 0.6rem;
+    font-size: 0.55rem;
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-faint);
+    padding: 0.5rem 0.75rem 0;
   }
 
   .r-crate-block pre {
     margin: 0;
-    padding: 0.75rem;
-    background: var(--bg-dim);
-    border-radius: 4px;
+    padding: 0.4rem 0.75rem 0.75rem;
+    background: transparent;
     overflow-x: auto;
-    flex: 1;
   }
 
   .r-crate-block code {
     font-family: var(--mono);
-    font-size: 0.75rem;
-    line-height: 1.6;
+    font-size: 0.7rem;
+    line-height: 1.7;
     color: var(--text);
     white-space: pre;
   }
 
   .r-crate-note {
     font-family: var(--serif-body);
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     line-height: 1.5;
-    color: var(--text-muted);
+    color: var(--text-faint);
     margin: 0;
   }
 
   @media (max-width: 768px) {
-    .r-crate-blocks {
+    .r-crate-columns {
       grid-template-columns: 1fr;
+    }
+    .r-crate-install {
+      flex-direction: column;
+      gap: 0.3rem;
     }
   }
 </style>
