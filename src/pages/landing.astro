@@ -20,8 +20,8 @@
  *     closing contracts. Like actual breathing, not a grid.
  *
  *   - No CTA styling. "Enter" is a word that happens to be a link, not a
- *     button. No border, no uppercase, no padding. Lagom: it is there
- *     when you are ready. It does not ask to be noticed.
+ *     button performing as a button. Lagom: it is there when you are
+ *     ready. It does not ask to be noticed. First click navigates.
  *
  *   - No negation lists ("not a journal, not a therapist"). Enumerating
  *     what you are not is still performing. The page only says what is true.
@@ -34,20 +34,11 @@
  *     that exists whether or not you walk into it. "Begin" / "Get started"
  *     imply transformation and create subconscious urgency.
  *
- *   - The generative connectome: as the user scrolls, a WebGL neural
- *     network grows across the viewport behind the text. Neurons are
- *     placed procedurally, connections form between nearby nodes as
- *     scroll depth increases. Rendered on the GPU with soft glow
- *     shaders. The visual reference is a connectome or cortical
- *     column: the biological substrate that Alice's signal pipeline
- *     measures through. Seeded from today's date. Different every day.
- *     The network structure only grows when you scroll, but once
- *     connections exist, impulses fire along them randomly and
- *     unpredictably (using Math.random, not the seeded PRNG).
- *     They cascade across connected neurons like actual signal
- *     propagation. The network is alive even when you stop
- *     scrolling. The thing you're reading about is the thing
- *     forming behind the words.
+ *   - The connectome is a texture, not an event. Faint neurons and
+ *     connections are present at page load, seeded from today's date.
+ *     Different every day but static within that day. No scroll-gating,
+ *     no impulse animations, no reward for engagement. The network is
+ *     the background substrate, not a spectacle.
  */
 import PublicLayout from '../layouts/layPublic.astro';
 ---
@@ -67,10 +58,6 @@ import PublicLayout from '../layouts/layPublic.astro';
     </section>
 
     <section class="breath">
-      <p>That's it.</p>
-    </section>
-
-    <section class="breath">
       <p>Your entries go in and do not come back out.</p>
     </section>
 
@@ -79,9 +66,8 @@ import PublicLayout from '../layouts/layPublic.astro';
     </section>
 
     <section class="breath closing">
-      <a href="/app" class="enter-orb" id="enter-orb" aria-label="Enter Alice">
+      <a href="/app" class="enter-orb" aria-label="Enter Alice">
         <span class="enter-ring"></span>
-        <span class="enter-ripple"></span>
         <span class="enter-text">Enter</span>
       </a>
     </section>
@@ -92,26 +78,18 @@ import PublicLayout from '../layouts/layPublic.astro';
 
 <script is:inline>
   /**
-   * GPU-rendered generative connectome.
+   * Static generative connectome.
    *
-   * A WebGL visualization of a neural network that grows as the user
-   * scrolls. Neurons are soft, glowing points. Synapses are fine lines
-   * connecting nearby neurons, fading with distance. Scroll progress
-   * controls connection density: at zero scroll, scattered dark nodes.
-   * At full scroll, a dense luminous network spans the viewport.
-   *
-   * All geometry is computed on the CPU (seeded PRNG for stable layout),
-   * rendered on the GPU via WebGL shaders for smooth glow and blending.
-   *
-   * Seeded from today's date. Same network all day, different tomorrow.
-   * No self-animation. Grows only when you scroll.
+   * Faint neurons and connections rendered once on the GPU via WebGL.
+   * Seeded from today's date: same network all day, different tomorrow.
+   * No animation, no scroll interaction, no impulses. A texture.
    */
   (function () {
     var canvas = document.getElementById('connectome');
     if (!canvas) return;
 
     var gl = canvas.getContext('webgl', { alpha: true, antialias: true, premultipliedAlpha: false });
-    if (!gl) return; // Fallback: page works fine without the visual
+    if (!gl) return;
 
     // --- PRNG seeded from today ---
     var today = new Date();
@@ -127,21 +105,18 @@ import PublicLayout from '../layouts/layPublic.astro';
     var rand = mulberry32(seed);
 
     // --- Generate neuron positions ---
-    // Clustered distribution: several nuclei with gaussian scatter,
-    // mimicking cortical column organization rather than uniform noise.
     var NUM_NEURONS = 160;
     var NUM_CLUSTERS = 6;
 
     var clusters = [];
     for (var c = 0; c < NUM_CLUSTERS; c++) {
       clusters.push({
-        x: rand() * 1.6 - 0.3,  // allow some off-screen for edge density
+        x: rand() * 1.6 - 0.3,
         y: rand() * 1.6 - 0.3,
         spread: rand() * 0.15 + 0.08
       });
     }
 
-    // Box-Muller for gaussian scatter
     function gaussRand() {
       var u = rand(), v = rand();
       return Math.sqrt(-2 * Math.log(u + 0.0001)) * Math.cos(6.2832 * v);
@@ -152,15 +127,12 @@ import PublicLayout from '../layouts/layPublic.astro';
       var cl = clusters[Math.floor(rand() * NUM_CLUSTERS)];
       var nx = cl.x + gaussRand() * cl.spread;
       var ny = cl.y + gaussRand() * cl.spread;
-      // Neuron size varies: some large soma, mostly small
-      // Clear zone around Enter button (center of viewport)
-      // Push neurons outward if they land too close
+      // Clear zone around Enter orb
       var orbCx = 0.5, orbCy = 0.58;
-      var orbR = 0.14; // exclusion radius in normalized coords
+      var orbR = 0.14;
       var ddx = nx - orbCx, ddy = ny - orbCy;
       var dd = Math.sqrt(ddx * ddx + ddy * ddy);
       if (dd < orbR && dd > 0.001) {
-        // Push to just outside the exclusion zone
         nx = orbCx + (ddx / dd) * (orbR + rand() * 0.03);
         ny = orbCy + (ddy / dd) * (orbR + rand() * 0.03);
       }
@@ -168,9 +140,7 @@ import PublicLayout from '../layouts/layPublic.astro';
       neurons.push({ x: nx, y: ny, size: size });
     }
 
-    // --- Pre-compute connections (edges) ---
-    // Connect neurons within a distance threshold, sorted by distance
-    // so shorter connections appear first as scroll increases.
+    // --- Pre-compute connections ---
     var MAX_DIST = 0.14;
     var edges = [];
     for (var i = 0; i < neurons.length; i++) {
@@ -179,7 +149,6 @@ import PublicLayout from '../layouts/layPublic.astro';
         var dy = neurons[i].y - neurons[j].y;
         var d = Math.sqrt(dx * dx + dy * dy);
         if (d < MAX_DIST) {
-          // Skip edges whose midpoint falls inside the Enter button zone
           var mx = (neurons[i].x + neurons[j].x) / 2;
           var my = (neurons[i].y + neurons[j].y) / 2;
           var mdx = mx - 0.5, mdy = my - 0.58;
@@ -188,80 +157,8 @@ import PublicLayout from '../layouts/layPublic.astro';
         }
       }
     }
-    // Sort by distance: closest connections form first
-    edges.sort(function (a, b) { return a.dist - b.dist; });
-
-    // --- Impulse system ---
-    // Neural impulses travel along synapses. They fire randomly and
-    // unpredictably, like actual neural activity. Each impulse is a
-    // bright point that travels from one neuron to another along a
-    // connection, then may cascade to adjacent connections (signal
-    // propagation). Uses Math.random() deliberately, not the seeded
-    // PRNG, so firing patterns are different every moment.
-    var MAX_IMPULSES = 60;
-    var impulses = [];
-
-    function spawnImpulse(edgeIdx) {
-      if (impulses.length >= MAX_IMPULSES) return;
-      var e = edges[edgeIdx];
-      impulses.push({
-        edge: edgeIdx,
-        t: 0,
-        speed: 0.003 + Math.random() * 0.006, // variable speed
-        direction: Math.random() > 0.5 ? 1 : -1, // either direction
-        brightness: 0.5 + Math.random() * 0.5
-      });
-    }
-
-    function updateImpulses(numVisible) {
-      if (numVisible < 1) return;
-
-      // Randomly fire new impulses. More connections = more activity.
-      // Unpredictable: sometimes quiet, sometimes bursts.
-      var fireChance = 0.03 + (numVisible / edges.length) * 0.12;
-      // Occasional bursts: 5% chance of firing several at once
-      if (Math.random() < 0.05 && numVisible > 10) {
-        var burstSize = Math.floor(Math.random() * 6) + 3;
-        for (var b = 0; b < burstSize; b++) {
-          spawnImpulse(Math.floor(Math.random() * numVisible));
-        }
-      } else if (Math.random() < fireChance) {
-        spawnImpulse(Math.floor(Math.random() * numVisible));
-      }
-
-      // Update existing impulses
-      for (var i = impulses.length - 1; i >= 0; i--) {
-        var imp = impulses[i];
-        imp.t += imp.speed;
-
-        if (imp.t >= 1) {
-          // Impulse reached the end. Chance to cascade to adjacent edges.
-          var arrivedNeuron = imp.direction > 0 ? edges[imp.edge].b : edges[imp.edge].a;
-          // 30% chance to propagate to a random connected edge
-          if (Math.random() < 0.3 && numVisible > 1) {
-            for (var attempt = 0; attempt < 3; attempt++) {
-              var nextEdge = Math.floor(Math.random() * numVisible);
-              var ne = edges[nextEdge];
-              if (ne.a === arrivedNeuron || ne.b === arrivedNeuron) {
-                var newImp = {
-                  edge: nextEdge,
-                  t: 0,
-                  speed: 0.003 + Math.random() * 0.006,
-                  direction: ne.a === arrivedNeuron ? 1 : -1,
-                  brightness: imp.brightness * 0.75
-                };
-                if (impulses.length < MAX_IMPULSES) impulses.push(newImp);
-                break;
-              }
-            }
-          }
-          impulses.splice(i, 1);
-        }
-      }
-    }
 
     // --- WebGL shaders ---
-    // Vertex shader shared by points and lines
     var vertSrc = [
       'attribute vec2 a_pos;',
       'attribute float a_size;',
@@ -269,13 +166,12 @@ import PublicLayout from '../layouts/layPublic.astro';
       'varying float v_alpha;',
       'void main() {',
       '  gl_Position = vec4(a_pos * 2.0 - 1.0, 0.0, 1.0);',
-      '  gl_Position.y = -gl_Position.y;', // flip Y so 0,0 is top-left
+      '  gl_Position.y = -gl_Position.y;',
       '  gl_PointSize = a_size;',
       '  v_alpha = a_alpha;',
       '}'
     ].join('\n');
 
-    // Fragment shader for neurons: soft radial glow
     var fragPointSrc = [
       'precision mediump float;',
       'varying float v_alpha;',
@@ -283,13 +179,11 @@ import PublicLayout from '../layouts/layPublic.astro';
       'void main() {',
       '  vec2 pc = gl_PointCoord - 0.5;',
       '  float r = length(pc) * 2.0;',
-      // Soft glow: bright center fading to nothing
       '  float glow = exp(-r * r * 3.0);',
       '  gl_FragColor = vec4(u_color, glow * v_alpha);',
       '}'
     ].join('\n');
 
-    // Fragment shader for connections: simple alpha
     var fragLineSrc = [
       'precision mediump float;',
       'varying float v_alpha;',
@@ -317,7 +211,6 @@ import PublicLayout from '../layouts/layPublic.astro';
     var pointProg = createProgram(vertSrc, fragPointSrc);
     var lineProg = createProgram(vertSrc, fragLineSrc);
 
-    // --- Attribute locations ---
     var pLocs = {
       pos: gl.getAttribLocation(pointProg, 'a_pos'),
       size: gl.getAttribLocation(pointProg, 'a_size'),
@@ -338,10 +231,8 @@ import PublicLayout from '../layouts/layPublic.astro';
     var neuronAlphaBuf = gl.createBuffer();
     var lineBuf = gl.createBuffer();
     var lineAlphaBuf = gl.createBuffer();
-    // Dummy size buffer for lines (not used but attribute must exist)
     var lineSizeBuf = gl.createBuffer();
 
-    // Static neuron position data
     var posArr = new Float32Array(NUM_NEURONS * 2);
     var sizeArr = new Float32Array(NUM_NEURONS);
     for (var i = 0; i < NUM_NEURONS; i++) {
@@ -355,9 +246,46 @@ import PublicLayout from '../layouts/layPublic.astro';
     gl.bindBuffer(gl.ARRAY_BUFFER, neuronSizeBuf);
     gl.bufferData(gl.ARRAY_BUFFER, sizeArr, gl.STATIC_DRAW);
 
-    // --- Parse CSS color ---
-    // Light theme: use --text (dark lines on cream) so synapses read clearly.
-    // Dark theme: use --text-muted (soft lines on dark) to avoid harshness.
+    // Pre-compute static line geometry (all connections visible at load)
+    var lineVerts = new Float32Array(edges.length * 4);
+    var lineAlphas = new Float32Array(edges.length * 2);
+    var lineSizes = new Float32Array(edges.length * 2);
+
+    for (var i = 0; i < edges.length; i++) {
+      var e = edges[i];
+      lineVerts[i * 4] = neurons[e.a].x;
+      lineVerts[i * 4 + 1] = neurons[e.a].y;
+      lineVerts[i * 4 + 2] = neurons[e.b].x;
+      lineVerts[i * 4 + 3] = neurons[e.b].y;
+      var alpha = (1 - e.dist / MAX_DIST) * 0.15;
+      lineAlphas[i * 2] = alpha;
+      lineAlphas[i * 2 + 1] = alpha;
+      lineSizes[i * 2] = 1.0;
+      lineSizes[i * 2 + 1] = 1.0;
+    }
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, lineBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, lineVerts, gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, lineAlphaBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, lineAlphas, gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, lineSizeBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, lineSizes, gl.STATIC_DRAW);
+
+    // Pre-compute static neuron alphas
+    var neuronAlphas = new Float32Array(NUM_NEURONS);
+    for (var i = 0; i < NUM_NEURONS; i++) {
+      neuronAlphas[i] = 0.12;
+    }
+    for (var i = 0; i < edges.length; i++) {
+      var e = edges[i];
+      neuronAlphas[e.a] = Math.min(neuronAlphas[e.a] + 0.06, 0.5);
+      neuronAlphas[e.b] = Math.min(neuronAlphas[e.b] + 0.06, 0.5);
+    }
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, neuronAlphaBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, neuronAlphas, gl.STATIC_DRAW);
+
+    // --- Color ---
     function getColor() {
       var style = getComputedStyle(document.documentElement);
       var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
@@ -387,7 +315,6 @@ import PublicLayout from '../layouts/layPublic.astro';
       canvas.style.height = h + 'px';
       gl.viewport(0, 0, canvas.width, canvas.height);
 
-      // Update point sizes for DPR
       for (var i = 0; i < NUM_NEURONS; i++) {
         sizeArr[i] = neurons[i].size * dpr;
       }
@@ -395,13 +322,8 @@ import PublicLayout from '../layouts/layPublic.astro';
       gl.bufferData(gl.ARRAY_BUFFER, sizeArr, gl.STATIC_DRAW);
     }
 
-    // --- Draw ---
+    // --- Draw (called once, and on resize/theme change) ---
     function draw() {
-      var scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-      var docHeight = document.documentElement.scrollHeight - window.innerHeight;
-      if (docHeight <= 0) return;
-      var progress = Math.min(scrollTop / docHeight, 1);
-
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.enable(gl.BLEND);
@@ -409,65 +331,28 @@ import PublicLayout from '../layouts/layPublic.astro';
 
       var color = getColor();
 
-      // --- Draw connections ---
-      // Number of visible edges scales with scroll progress (quadratic for acceleration)
-      var numVisible = Math.floor(progress * progress * edges.length);
-
-      if (numVisible > 0) {
-        var lineVerts = new Float32Array(numVisible * 4); // 2 points * 2 coords
-        var lineAlphas = new Float32Array(numVisible * 2);
-        var lineSizes = new Float32Array(numVisible * 2);
-
-        for (var i = 0; i < numVisible; i++) {
-          var e = edges[i];
-          lineVerts[i * 4] = neurons[e.a].x;
-          lineVerts[i * 4 + 1] = neurons[e.a].y;
-          lineVerts[i * 4 + 2] = neurons[e.b].x;
-          lineVerts[i * 4 + 3] = neurons[e.b].y;
-          // Closer connections are more visible, farther ones are ghostly
-          var alpha = (1 - e.dist / MAX_DIST) * 0.22;
-          lineAlphas[i * 2] = alpha;
-          lineAlphas[i * 2 + 1] = alpha;
-          lineSizes[i * 2] = 1.0;
-          lineSizes[i * 2 + 1] = 1.0;
-        }
-
+      // Draw connections
+      if (edges.length > 0) {
         gl.useProgram(lineProg);
         gl.uniform3f(lLocs.color, color[0], color[1], color[2]);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, lineBuf);
-        gl.bufferData(gl.ARRAY_BUFFER, lineVerts, gl.DYNAMIC_DRAW);
         gl.enableVertexAttribArray(lLocs.pos);
         gl.vertexAttribPointer(lLocs.pos, 2, gl.FLOAT, false, 0, 0);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, lineAlphaBuf);
-        gl.bufferData(gl.ARRAY_BUFFER, lineAlphas, gl.DYNAMIC_DRAW);
         gl.enableVertexAttribArray(lLocs.alpha);
         gl.vertexAttribPointer(lLocs.alpha, 1, gl.FLOAT, false, 0, 0);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, lineSizeBuf);
-        gl.bufferData(gl.ARRAY_BUFFER, lineSizes, gl.DYNAMIC_DRAW);
         gl.enableVertexAttribArray(lLocs.size);
         gl.vertexAttribPointer(lLocs.size, 1, gl.FLOAT, false, 0, 0);
 
         gl.lineWidth(1.0);
-        gl.drawArrays(gl.LINES, 0, numVisible * 2);
+        gl.drawArrays(gl.LINES, 0, edges.length * 2);
       }
 
-      // --- Draw neurons ---
-      // Neurons become visible and brighter as connections reach them
-      var neuronAlphas = new Float32Array(NUM_NEURONS);
-      // Base: faint but visible at all scroll positions
-      for (var i = 0; i < NUM_NEURONS; i++) {
-        neuronAlphas[i] = progress * 0.15;
-      }
-      // Brighten neurons that have connections
-      for (var i = 0; i < numVisible; i++) {
-        var e = edges[i];
-        neuronAlphas[e.a] = Math.min(neuronAlphas[e.a] + 0.08, 0.7);
-        neuronAlphas[e.b] = Math.min(neuronAlphas[e.b] + 0.08, 0.7);
-      }
-
+      // Draw neurons
       gl.useProgram(pointProg);
       gl.uniform3f(pLocs.color, color[0], color[1], color[2]);
 
@@ -480,127 +365,24 @@ import PublicLayout from '../layouts/layPublic.astro';
       gl.vertexAttribPointer(pLocs.size, 1, gl.FLOAT, false, 0, 0);
 
       gl.bindBuffer(gl.ARRAY_BUFFER, neuronAlphaBuf);
-      gl.bufferData(gl.ARRAY_BUFFER, neuronAlphas, gl.DYNAMIC_DRAW);
       gl.enableVertexAttribArray(pLocs.alpha);
       gl.vertexAttribPointer(pLocs.alpha, 1, gl.FLOAT, false, 0, 0);
 
       gl.drawArrays(gl.POINTS, 0, NUM_NEURONS);
-
-      // --- Draw impulses ---
-      // Impulses are bright points traveling along connections.
-      // Rendered as GL_POINTS with the glow shader, larger and
-      // brighter than resting neurons.
-      updateImpulses(numVisible);
-
-      if (impulses.length > 0) {
-        var impPos = new Float32Array(impulses.length * 2);
-        var impSize = new Float32Array(impulses.length);
-        var impAlpha = new Float32Array(impulses.length);
-        var dpr = window.devicePixelRatio || 1;
-
-        for (var i = 0; i < impulses.length; i++) {
-          var imp = impulses[i];
-          var e = edges[imp.edge];
-          var ax = neurons[e.a].x, ay = neurons[e.a].y;
-          var bx = neurons[e.b].x, by = neurons[e.b].y;
-          // Position along the edge
-          var t = imp.direction > 0 ? imp.t : (1 - imp.t);
-          impPos[i * 2] = ax + (bx - ax) * t;
-          impPos[i * 2 + 1] = ay + (by - ay) * t;
-          // Pulse shape: brightest at center of travel, fading at ends
-          var pulse = Math.sin(imp.t * 3.14159);
-          impSize[i] = (3 + pulse * 4) * dpr;
-          impAlpha[i] = imp.brightness * pulse * 0.8;
-        }
-
-        var impPosBuf = gl.createBuffer();
-        var impSizeBuf = gl.createBuffer();
-        var impAlphaBuf = gl.createBuffer();
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, impPosBuf);
-        gl.bufferData(gl.ARRAY_BUFFER, impPos, gl.DYNAMIC_DRAW);
-        gl.enableVertexAttribArray(pLocs.pos);
-        gl.vertexAttribPointer(pLocs.pos, 2, gl.FLOAT, false, 0, 0);
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, impSizeBuf);
-        gl.bufferData(gl.ARRAY_BUFFER, impSize, gl.DYNAMIC_DRAW);
-        gl.enableVertexAttribArray(pLocs.size);
-        gl.vertexAttribPointer(pLocs.size, 1, gl.FLOAT, false, 0, 0);
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, impAlphaBuf);
-        gl.bufferData(gl.ARRAY_BUFFER, impAlpha, gl.DYNAMIC_DRAW);
-        gl.enableVertexAttribArray(pLocs.alpha);
-        gl.vertexAttribPointer(pLocs.alpha, 1, gl.FLOAT, false, 0, 0);
-
-        gl.drawArrays(gl.POINTS, 0, impulses.length);
-
-        gl.deleteBuffer(impPosBuf);
-        gl.deleteBuffer(impSizeBuf);
-        gl.deleteBuffer(impAlphaBuf);
-      }
-    }
-
-    // --- Animation loop ---
-    // Continuous loop so impulses fire and travel even when not
-    // scrolling. The network structure only changes on scroll,
-    // but the activity within it is alive and unpredictable.
-    var scrollProgress = 0;
-    function onScroll() {
-      var scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-      var docHeight = document.documentElement.scrollHeight - window.innerHeight;
-      if (docHeight > 0) scrollProgress = Math.min(scrollTop / docHeight, 1);
-    }
-
-    function loop() {
-      draw();
-      requestAnimationFrame(loop);
     }
 
     resize();
-    window.addEventListener('resize', function () { resize(); });
-    window.addEventListener('scroll', onScroll, { passive: true });
-    onScroll();
-    loop();
-  })();
-</script>
+    draw();
 
-<script is:inline>
-  (function () {
-    var orb = document.getElementById('enter-orb');
-    if (!orb) return;
+    window.addEventListener('resize', function () { resize(); draw(); });
 
-    var threshold = 3 + Math.floor(Math.random() * 3); // 3, 4, or 5
-    var clicks = 0;
-    var reactions = ['ripple', 'recoil', 'spin', 'fracture', 'bloom'];
-
-    orb.addEventListener('click', function (e) {
-      clicks++;
-      if (clicks >= threshold) return; // let the link navigate
-      e.preventDefault();
-
-      var reaction = reactions[(clicks - 1) % reactions.length];
-
-      // Cancel any in-flight animation immediately
-      for (var i = 0; i < reactions.length; i++) {
-        orb.classList.remove('react-' + reactions[i]);
-      }
-
-      // Force reflow so re-adding the same class restarts the animation
-      void orb.offsetWidth;
-      orb.classList.add('react-' + reaction);
-    });
+    // Redraw on theme toggle so colors update
+    var observer = new MutationObserver(function () { draw(); });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
   })();
 </script>
 
 <style is:global>
-  /*
-   * No special classes for visual emphasis. Every .breath is styled
-   * identically except for vertical spacing (ma). The CSS is as
-   * minimal as the content. If you are tempted to add a hover
-   * animation, a fade-in, or a font-size bump, re-read the
-   * design comment above.
-   */
-
   .landing {
     position: relative;
     max-width: 520px;
@@ -617,12 +399,10 @@ import PublicLayout from '../layouts/layPublic.astro';
     justify-content: center;
   }
 
-  /* Longer opening: you just arrived, settle in */
   .breath.opening {
     min-height: 85vh;
   }
 
-  /* Shorter closing: the page does not linger */
   .breath.closing {
     min-height: 35vh;
     padding-bottom: 8rem;
@@ -696,89 +476,6 @@ import PublicLayout from '../layouts/layPublic.astro';
     50% { transform: scale(1.04); opacity: 0.9; }
   }
 
-  /* Ripple element (used by ripple reaction) */
-  .enter-ripple {
-    position: absolute;
-    inset: 0;
-    border-radius: 50%;
-    border: 1px solid var(--text-faint);
-    opacity: 0;
-    pointer-events: none;
-  }
-
-  /* --- Reaction 1: Ripple --- ring expands outward and fades */
-  .react-ripple .enter-ripple {
-    animation: ripple-out 0.8s ease-out forwards;
-  }
-  @keyframes ripple-out {
-    0% { transform: scale(1); opacity: 0.6; }
-    100% { transform: scale(2.2); opacity: 0; }
-  }
-
-  /* --- Reaction 2: Recoil --- orb flinches away then drifts back */
-  .react-recoil {
-    animation: recoil 0.7s ease-in-out forwards;
-  }
-  @keyframes recoil {
-    0% { transform: scale(1); }
-    20% { transform: scale(0.7); }
-    60% { transform: scale(1.05); }
-    100% { transform: scale(1); }
-  }
-
-  /* --- Reaction 3: Spin --- text rotates once */
-  .react-spin .enter-text {
-    animation: spin-once 0.6s ease-in-out;
-  }
-  @keyframes spin-once {
-    0% { transform: rotate(0deg); opacity: 1; }
-    50% { transform: rotate(180deg); opacity: 0.3; }
-    100% { transform: rotate(360deg); opacity: 1; }
-  }
-
-  /* --- Reaction 4: Fracture --- ring becomes dashed then reforms */
-  .react-fracture .enter-ring {
-    animation: fracture 0.8s ease-in-out forwards;
-  }
-  @keyframes fracture {
-    0% { border-style: solid; opacity: 0.5; transform: scale(1); }
-    30% { border-style: dashed; opacity: 0.8; transform: scale(1.1) rotate(15deg); }
-    70% { border-style: dashed; opacity: 0.6; transform: scale(1.05) rotate(-10deg); }
-    100% { border-style: solid; opacity: 0.5; transform: scale(1) rotate(0deg); }
-  }
-
-  /* --- Reaction 5: Bloom --- orb swells with glow then settles */
-  .react-bloom {
-    animation: bloom-scale 0.9s ease-in-out;
-  }
-  .react-bloom .enter-ring {
-    animation: bloom-glow 0.9s ease-in-out;
-  }
-  @keyframes bloom-scale {
-    0% { transform: scale(1); }
-    40% { transform: scale(1.35); }
-    100% { transform: scale(1); }
-  }
-  @keyframes bloom-glow {
-    0% { box-shadow: none; opacity: 0.5; }
-    40% { box-shadow: 0 0 50px rgba(154, 149, 144, 0.3), inset 0 0 30px rgba(154, 149, 144, 0.1); opacity: 1; }
-    100% { box-shadow: none; opacity: 0.5; }
-  }
-  [data-theme="dark"] .react-bloom .enter-ring {
-    animation: bloom-glow-dark 0.9s ease-in-out;
-  }
-  @keyframes bloom-glow-dark {
-    0% { box-shadow: none; opacity: 0.5; }
-    40% { box-shadow: 0 0 60px rgba(200, 195, 190, 0.2), inset 0 0 40px rgba(200, 195, 190, 0.06); opacity: 1; }
-    100% { box-shadow: none; opacity: 0.5; }
-  }
-
-  /*
-   * The WebGL canvas covers the viewport, fixed behind everything.
-   * Transparent background so the page color shows through. Neurons
-   * and connections are rendered with soft alpha blending. The network
-   * is the background, never the foreground.
-   */
   #connectome {
     position: fixed;
     top: 0;
