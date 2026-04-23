@@ -127,6 +127,16 @@ async function computeThreshold(dimensionCount: number): Promise<number> {
 // ─── Main computation ───────────────────────────────────────────────
 
 export async function computeSessionIntegrity(questionId: number): Promise<IntegrityResult | null> {
+  // Calibration sessions (question_source_id = 3) are prompted neutral writing
+  // that produces systematically large distances against the journal-derived
+  // profile. Allowing them in would inflate the threshold and mask genuine
+  // journal anomalies.
+  const sourceRows = await sql`
+    SELECT question_source_id FROM tb_questions WHERE question_id = ${questionId}
+  `;
+  if (sourceRows.length === 0) return null;
+  if ((sourceRows[0] as { question_source_id: number }).question_source_id === 3) return null;
+
   const profile = await loadProfile();
   if (!profile || !profile.session_count || (profile.session_count as number) < 5) return null;
 

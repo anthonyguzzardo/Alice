@@ -98,7 +98,7 @@ function welfordUpdate(state: WelfordState, value: number): WelfordState {
 
 function welfordVariance(state: WelfordState): number | null {
   if (state.n < 2) return null;
-  return state.m2 / state.n;
+  return state.m2 / (state.n - 1);
 }
 
 function welfordStdDev(state: WelfordState): number | null {
