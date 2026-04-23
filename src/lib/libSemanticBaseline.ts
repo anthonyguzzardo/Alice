@@ -188,16 +188,18 @@ async function getTopicMatchedValues(
 
   const embedding = (embRows[0] as { embedding: string }).embedding;
 
-  // Find k nearest prior sessions (excluding current)
+  // Find k nearest prior journal sessions (excluding current and calibrations)
   const matches = await sql`
     SELECT ss.${sql(signalName)} AS signal_value
     FROM tb_embeddings e
     JOIN tb_responses r ON e.source_record_id = r.response_id
+    JOIN tb_questions q ON r.question_id = q.question_id
     JOIN tb_semantic_signals ss ON r.question_id = ss.question_id
     WHERE e.embedding_source_id = 1
       AND e.embedding IS NOT NULL
       AND e.invalidated_at IS NULL
       AND r.question_id != ${questionId}
+      AND q.question_source_id != 3
       AND ss.${sql(signalName)} IS NOT NULL
     ORDER BY e.embedding <-> ${embedding}::vector
     LIMIT ${k}
@@ -228,6 +230,15 @@ function distributionStats(values: number[]): { mean: number; stdDev: number } |
  * Idempotent: skips signals already present in tb_semantic_trajectory.
  */
 export async function updateSemanticBaselines(questionId: number): Promise<void> {
+  // Calibration sessions (question_source_id = 3) are prompted neutral writing,
+  // fundamentally different from reflective journal sessions. Including them
+  // would shift the within-person baseline mean and inflate variance.
+  const sourceRows = await sql`
+    SELECT question_source_id FROM tb_questions WHERE question_id = ${questionId}
+  `;
+  if (sourceRows.length === 0) return;
+  if ((sourceRows[0] as { question_source_id: number }).question_source_id === 3) return;
+
   const sem = await getSemanticSignals(questionId);
   if (!sem) return;
 
