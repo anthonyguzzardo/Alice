@@ -8,6 +8,81 @@ Newest first.
 
 ---
 
+## INC-011: Daily delta trigger failure and calibration pairing corrections
+
+**Date:** 2026-04-23
+**Type:** Architectural correction (dead code path) + data correction (wrong calibration pairings)
+
+### What was wrong
+
+Three issues discovered in the daily delta system:
+
+1. **Dead trigger.** INC-007 (2026-04-22) moved the daily delta backfill into `runGeneration()` but placed it after an early return gate:
+
+   ```typescript
+   if (await hasQuestionForDate(tomorrowStr)) return;  // line 56
+   await runDailyDeltaBackfill();                       // line 60 -- NEVER REACHED
+   ```
+
+   Once tomorrow's question is generated (which happens on the first journal submission each day), every subsequent call to `runGeneration()` exits at line 56. The delta backfill executed once on April 22 and never again. April 22 and 23 had eligible day-pairs with no delta rows.
+
+2. **Wrong calibration pairings.** Two delta rows from the initial INC-007 backfill paired with the wrong calibration sessions:
+   - April 14: paired with question 31 (created April 13, wrong day entirely). Correct: question 44 (last calibration of April 14).
+   - April 15: paired with question 47 (mid-day calibration). Correct: question 52 (last calibration of April 15).
+
+3. **Missing reconstruction residual.** Calibration 65 (April 17, 23:51) had keystroke data, dynamical signals, and motor signals, but zero rows in `tb_reconstruction_residuals`. The two calibrations adjacent to it (62 and 66) had full 5-variant residuals. The reconstruction pipeline skipped or errored on this single session with no retry mechanism.
+
+### Discovery method
+
+Direct database inspection during a system review. The daily delta trigger failure was traced by reading the `runGeneration()` control flow. The calibration mispairing was found by comparing `calibration_question_id` in `tb_session_delta` against `getSameDayCalibrationSummary()` output for each date. The missing residual was found by querying for sessions with dynamical signals but no reconstruction residual rows.
+
+### Resolution
+
+**Daily delta trigger:** Replaced the backfill-inside-generation design with a targeted per-submission computation. New function `computePriorDayDelta(currentDate)` in `libDailyDelta.ts` finds the most recent date before `currentDate` with a complete journal+calibration pair and no delta row, computes one delta, and saves it. Called from `respond.ts` in the fire-and-forget block before `runGeneration()`, with its own try/catch. Independent of question generation. Self-healing: if a delta save fails, the next journal submission finds the same date eligible and retries.
+
+`runDailyDeltaBackfill()` removed from `runGeneration()`. Standalone backfill script retained for historical repair.
+
+**Calibration pairings:** April 14 and 15 delta rows deleted and recomputed via backfill. All 11 rows verified: `calibration_question_id` matches `getSameDayCalibrationSummary()` output for every date.
+
+**Missing residual:** Calibration 65 backfilled via `backfill-reconstruction.ts`. All 5 adversary variants computed. Zero gaps remain (31 sessions with signals, 31 with residuals, 155 total rows).
+
+### Verification
+
+Post-fix database state:
+
+| System | Status |
+|--------|--------|
+| Daily deltas | 11/11 eligible day-pairs computed. 0 missing. |
+| Delta calibration pairings | 11/11 match `getSameDayCalibrationSummary()` |
+| Reconstruction residuals | 31 sessions, 155 rows, 5 variants each. 0 gaps. |
+| Signal pipeline | Every session with keystroke data has dynamical + motor signals. 0 gaps. |
+| Semantic baselines | 7 signals tracked, 7-9 sessions each, all gated (n < 10). |
+| Embeddings | 21 active (Qwen3), 10 invalidated (voyage). |
+
+Simulated the new flow: deleted April 23 delta, called `computePriorDayDelta('2026-04-24')`, verified it recomputed April 23's delta with correct pairing. Second call returned null (idempotent).
+
+### Pre-instrument-era data
+
+Sessions from April 13-17 have varying pipeline coverage depending on when each subsystem came online:
+
+| Date | Keystroke capture | Signal pipeline | Reconstruction |
+|------|------------------|----------------|----------------|
+| April 13-16 | Not active | Not active | Not possible |
+| April 17 | Partial (3/6 calibrations) | Active for sessions with keystrokes | Active (with 1 gap, now fixed) |
+| April 18+ | Active | Active | Active |
+
+Journal questions 1-5 (April 13-17) have response text and session summaries but no keystroke streams. Dynamical, motor, and reconstruction signals cannot be computed retroactively. Semantic signals and embeddings are present for questions 4-5 (text-only, no keystroke dependency). Questions 1-3 predate all derived signal systems.
+
+### Files changed
+
+| File | Change |
+|------|--------|
+| `src/lib/libDailyDelta.ts` | Added `computePriorDayDelta()`. `runDailyDeltaBackfill()` retained for standalone script. |
+| `src/pages/api/respond.ts` | Wired `computePriorDayDelta` as first step in fire-and-forget block. |
+| `src/lib/libGenerate.ts` | Removed `runDailyDeltaBackfill` import and call. |
+
+---
+
 ## INC-010: Embedding model migration (voyage-3-lite to Qwen3-Embedding-0.6B)
 
 **Date:** 2026-04-23
@@ -720,6 +795,18 @@ The following components of the semantic measurement infrastructure are intentio
 **Empirical condition for revisiting:** Substantial accumulated data (likely 1 to 2 years) is required to evaluate whether the assumption of stationary baselines holds, whether seasonal patterns exist in within-person semantic measurement, and whether weighting schemes would meaningfully improve trajectory detection over the simple Welford baseline. Until this evidence exists, the simple-and-correct choice is preferred over the sophisticated-but-unjustified choice.
 
 **Current handling:** Welford running statistics are computed and persisted in `tb_semantic_baselines`. The trajectory z-scores produced from these baselines are mathematically valid under the assumption of stationary within-person distributions. If future evidence challenges this assumption, the historical raw signal values remain available in `tb_semantic_signals` for re-baselining under alternative models. The backfill script (`src/scripts/backfill-semantic-baselines.ts`) demonstrates that baselines can be regenerated from scratch against the full historical corpus, so the choice of baseline model is not a one-way door.
+
+---
+
+## DEF-004: Recursive language model architecture for question generation
+
+**What it is:** The question generation pipeline (`libGenerate.ts`) currently pre-assembles a fixed context window (recent entries, RAG-similar entries, contrarian entries, reflections, behavioral signals, dynamics, life context) and sends it to Claude in a single call. All retrieval decisions are made before the LLM reasons over the context. Recursive Language Models (Zhang, Kraska & Khattab 2026; arXiv:2512.24601v2) demonstrate an alternative: the LLM treats the corpus as a queryable environment, programmatically decomposing and recursively processing slices of context via sub-LM calls inside a REPL. In benchmarks, RLMs outperform vanilla LLMs and retrieval agents even on shorter contexts (91.3% vs 51.0% on BrowseComp+ at comparable cost), because the quality gain comes from how the model reasons over context, not from fitting more of it.
+
+**Why it is deferred:** At n=65 sessions the pre-assembled context fits comfortably in Claude's context window and the fixed retrieval strategy (embedding similarity + recency weighting + contrarian distance) covers the corpus adequately. The RLM pattern becomes valuable when the corpus is large enough that pre-selection misses important context, or when question quality plateaus because the retrieval strategy cannot surface the right entries for novel question directions.
+
+**Empirical condition for revisiting:** Corpus size exceeding approximately 200 sessions (roughly 6 to 8 months of daily use), or observable plateau in question quality despite adequate signal and semantic context. At that scale, the generation model would benefit from actively querying the corpus (embedding search, signal lookups, temporal filtering) as part of its reasoning process rather than receiving a pre-curated package.
+
+**Current handling:** The RAG stack (Qwen3-Embedding-0.6B via TEI, pgvector HNSW, `libRag.ts` retrieval with recency-weighted re-ranking and contrarian search) is the compression layer. It reduces the corpus to a curated context window before Claude sees it. The paper is archived locally at `systemDesign/rl_models.pdf`.
 
 ---
 

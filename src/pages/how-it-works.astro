@@ -259,7 +259,258 @@ import PublicLayout from '../layouts/layPublic.astro';
     </div>
   </section>
 
-  <!-- Sections 2 and 3 will be added in subsequent blocks -->
+  <!-- ===== SECTION 2: THE GHOST ===== -->
+  <section class="hw-section" id="ghost">
+    <h2>The reconstruction adversary</h2>
+    <p>A measurement is only meaningful if you can say what it would look like without the thing you are measuring. Alice's ghost is a reconstruction adversary: it generates a synthetic writing session from your statistical profile alone, then runs the same signal engine on both streams. The residual between real and ghost measurements is what your profile cannot explain.</p>
+
+    <div class="hw-ghost">
+
+      <!-- Side-by-side comparison -->
+      <div class="hw-ghost-comparison">
+        <div class="hw-ghost-side hw-ghost-real">
+          <span class="hw-ghost-side-label">Real session</span>
+          <div class="hw-ghost-flow-item">
+            <span class="hw-ghost-flow-tag">Input</span>
+            <p>Your actual keystroke stream from today's writing session</p>
+          </div>
+          <div class="hw-ghost-flow-arrow"></div>
+          <div class="hw-ghost-flow-item">
+            <span class="hw-ghost-flow-tag">Engine</span>
+            <p>Rust signal engine computes 38 measurements</p>
+          </div>
+          <div class="hw-ghost-flow-arrow"></div>
+          <div class="hw-ghost-flow-item">
+            <span class="hw-ghost-flow-tag">Output</span>
+            <p>Real signal values</p>
+          </div>
+        </div>
+
+        <div class="hw-ghost-residual">
+          <span class="hw-ghost-residual-label">Residual</span>
+          <p>What your profile can reconstruct vs. what requires the actual person</p>
+        </div>
+
+        <div class="hw-ghost-side hw-ghost-synthetic">
+          <span class="hw-ghost-side-label">Ghost session</span>
+          <div class="hw-ghost-flow-item">
+            <span class="hw-ghost-flow-tag">Input</span>
+            <p>Your accumulated statistical profile (ex-Gaussian params, digraph latencies, burst structure, revision rates)</p>
+          </div>
+          <div class="hw-ghost-flow-arrow"></div>
+          <div class="hw-ghost-flow-item">
+            <span class="hw-ghost-flow-tag">Engine</span>
+            <p>Avatar engine generates synthetic keystrokes, then the same Rust signal engine computes 38 measurements</p>
+          </div>
+          <div class="hw-ghost-flow-arrow"></div>
+          <div class="hw-ghost-flow-item">
+            <span class="hw-ghost-flow-tag">Output</span>
+            <p>Ghost signal values</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Variant ladder -->
+      <div class="hw-variants">
+        <h3>Five adversary variants</h3>
+        <p>Each variant adds one modeling improvement, isolating which dimension of behavior carries the most signal. Comparing reconstruction residuals across variants reveals what a statistical profile can reproduce and what it cannot.</p>
+
+        <div class="hw-variant-ladder">
+          <div class="hw-variant">
+            <div class="hw-variant-header">
+              <span class="hw-variant-number">1</span>
+              <span class="hw-variant-name">Baseline</span>
+            </div>
+            <p>Order-2 Markov text generation with independent ex-Gaussian IKI sampling and fixed hold times. The simplest adversary: text statistics plus independent timing.</p>
+          </div>
+
+          <div class="hw-variant-step">
+            <span>+ AR(1) IKI correlation</span>
+          </div>
+
+          <div class="hw-variant">
+            <div class="hw-variant-header">
+              <span class="hw-variant-number">2</span>
+              <span class="hw-variant-name">Conditional timing</span>
+            </div>
+            <p>Adds serial dependence to inter-keystroke intervals. Tests whether IKI autocorrelation structure carries information beyond the marginal distribution.</p>
+          </div>
+
+          <div class="hw-variant-step">
+            <span>+ Gaussian copula hold-flight coupling</span>
+          </div>
+
+          <div class="hw-variant">
+            <div class="hw-variant-header">
+              <span class="hw-variant-number">3</span>
+              <span class="hw-variant-name">Copula motor</span>
+            </div>
+            <p>Adds hold-flight time coupling via rank correlation. Tests whether motor execution coordination (the relationship between how long you press and how long you travel) is informative.</p>
+          </div>
+
+          <div class="hw-variant-step">
+            <span>+ PPM variable-order text prediction</span>
+          </div>
+
+          <div class="hw-variant">
+            <div class="hw-variant-header">
+              <span class="hw-variant-number">4</span>
+              <span class="hw-variant-name">PPM text</span>
+            </div>
+            <p>Replaces order-2 Markov with prediction by partial matching. Tests whether better text modeling reduces the residual, or whether the text channel is already well-captured.</p>
+          </div>
+
+          <div class="hw-variant-step">
+            <span>+ all of the above combined</span>
+          </div>
+
+          <div class="hw-variant">
+            <div class="hw-variant-header">
+              <span class="hw-variant-number">5</span>
+              <span class="hw-variant-name">Full adversary</span>
+            </div>
+            <p>PPM text, AR(1) correlated IKI, Gaussian copula motor coupling. The strongest reconstruction within the measurement space. What remains in the residual after this variant is what the profile genuinely cannot explain.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Reproducibility note -->
+      <div class="hw-ghost-note">
+        <span class="hw-ghost-note-label">Reproducibility</span>
+        <p>Every ghost session stores the PRNG seed, the exact profile snapshot, the corpus hash, and the topic string. Given these inputs, the avatar engine produces bit-identical output across rebuilds. The seed is a 64-bit integer initialized via SplitMix64 and advanced by xoshiro128+. Reproducibility is verified on production data and enforced in CI.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ===== SECTION 3: PROVENANCE TIMELINE ===== -->
+  <section class="hw-section" id="provenance">
+    <h2>How the system got here</h2>
+    <p>A measurement instrument earns its rigor through correction, not assertion. This timeline shows the methodological incidents that shaped Alice's signal engine. Each entry documents what was wrong, how it was discovered, and what changed. The full provenance log is maintained in the codebase.</p>
+
+    <div class="hw-timeline">
+
+      <div class="hw-timeline-entry">
+        <div class="hw-timeline-marker">
+          <span class="hw-timeline-id">INC-010</span>
+          <span class="hw-timeline-date">2026-04-23</span>
+        </div>
+        <div class="hw-timeline-body">
+          <span class="hw-timeline-type hw-type-architecture">Architecture correction</span>
+          <h3>Embedding sovereignty</h3>
+          <details>
+            <summary>Replaced vendor API with self-hosted archivable weights</summary>
+            <p>VoyageAI's <code>voyage-3-lite</code> failed three of four constitutional requirements: not archivable (no SHA-256 identifier), not deterministic across vendor changes, no lifecycle control. Migrated to Qwen3-Embedding-0.6B via self-hosted TEI, CPU-only build for bit-reproducibility. Metal FP32 on Apple Silicon is not bit-reproducible due to batch-dependent reduction patterns. All 10 non-calibration sessions re-embedded; semantic baselines regenerated from scratch.</p>
+          </details>
+        </div>
+      </div>
+
+      <div class="hw-timeline-entry">
+        <div class="hw-timeline-marker">
+          <span class="hw-timeline-id">INC-009</span>
+          <span class="hw-timeline-date">2026-04-22</span>
+        </div>
+        <div class="hw-timeline-body">
+          <span class="hw-timeline-type hw-type-methods">Methods correction</span>
+          <h3>Construct validity</h3>
+          <details>
+            <summary>Stripped unvalidated interpretive labels from signal surfaces</summary>
+            <p>Audit identified two classes of failure: interpretive labels presented as instrument readings (e.g., "rigid"/"malleable" for attractor force without validation), and statistical notation without adequate sample-size context (sigma notation without baseline entry counts). Wave 1 removed four sets of unvalidated labels. Wave 2 added honest framing for low-n signals: dots-only for n&lt;5, explicit sample sizes on deviation callouts, minimum run length 4 for trend detection.</p>
+          </details>
+        </div>
+      </div>
+
+      <div class="hw-timeline-entry">
+        <div class="hw-timeline-marker">
+          <span class="hw-timeline-id">INC-008</span>
+          <span class="hw-timeline-date">2026-04-22</span>
+        </div>
+        <div class="hw-timeline-body">
+          <span class="hw-timeline-type hw-type-methods">Methods correction</span>
+          <h3>Statistical rigor for discovery badges</h3>
+          <details>
+            <summary>Dynamic critical-r gate replaced hardcoded thresholds</summary>
+            <p>Coupling correlations displayed as "strong" or "moderate" based on hardcoded thresholds without significance testing. A correlation of r=0.55 from n=10 displayed as "strong" despite p&gt;0.05. Replaced with dynamic <code>max(criticalR(n), 0.3)</code> gate using Cornish-Fisher approximation. Two-state badge system: "established" requires both significance and stability; "provisional" for significant but unvalidated couplings.</p>
+          </details>
+        </div>
+      </div>
+
+      <div class="hw-timeline-entry">
+        <div class="hw-timeline-marker">
+          <span class="hw-timeline-id">INC-006</span>
+          <span class="hw-timeline-date">2026-04-22</span>
+        </div>
+        <div class="hw-timeline-body">
+          <span class="hw-timeline-type hw-type-architecture">Architecture correction</span>
+          <h3>Reconstruction residual reproducibility</h3>
+          <details>
+            <summary>Residuals now store exact inputs for regeneration</summary>
+            <p>Every ghost session stores the PRNG seed, profile snapshot (3.1KB measured), corpus SHA-256 hash, and topic string. Given these inputs, regeneration produces bit-identical dynamical and motor signals. Verified 10/10 on production data. Semantic residuals remain excluded (depend on external embedding model).</p>
+          </details>
+        </div>
+      </div>
+
+      <div class="hw-timeline-entry">
+        <div class="hw-timeline-marker">
+          <span class="hw-timeline-id">INC-005</span>
+          <span class="hw-timeline-date">2026-04-22</span>
+        </div>
+        <div class="hw-timeline-body">
+          <span class="hw-timeline-type hw-type-infra">Infrastructure</span>
+          <h3>CI reproducibility enforcement</h3>
+          <details>
+            <summary>Two-clean-build reproducibility check on every PR touching Rust</summary>
+            <p>Automated CI workflow builds the signal engine twice from clean state and diffs the output JSON on a fixture session. Any bit-level divergence fails the PR. Golden signal values documented for the 100-keystroke fixture.</p>
+          </details>
+        </div>
+      </div>
+
+      <div class="hw-timeline-entry">
+        <div class="hw-timeline-marker">
+          <span class="hw-timeline-id">INC-002</span>
+          <span class="hw-timeline-date">2026-04-21</span>
+        </div>
+        <div class="hw-timeline-body">
+          <span class="hw-timeline-type hw-type-data">Data incident</span>
+          <h3>Floating-point summation order</h3>
+          <details>
+            <summary>Naive summation sensitive to compiler auto-vectorization; replaced with Neumaier compensated summation</summary>
+            <p>Discovered that naive floating-point sums across 17 accumulation sites were sensitive to LLVM auto-vectorization and loop unrolling order. Replaced all with Neumaier compensated summation (error bound O(epsilon) independent of n). Also fixed HashMap iteration nondeterminism in permutation entropy (converted to BTreeMap) and pinned the Rust toolchain to 1.95.0 + LLVM 22.1.2 on aarch64-apple-darwin.</p>
+          </details>
+        </div>
+      </div>
+
+      <div class="hw-timeline-entry">
+        <div class="hw-timeline-marker">
+          <span class="hw-timeline-id">INC-001</span>
+          <span class="hw-timeline-date">2026-04-21</span>
+        </div>
+        <div class="hw-timeline-body">
+          <span class="hw-timeline-type hw-type-data">Data incident</span>
+          <h3>Hold-flight vector misalignment</h3>
+          <details>
+            <summary>27/27 sessions affected, transfer entropy values shifted 130%+</summary>
+            <p>Hold times and flight times were filtered independently, causing misalignment when rollover typing produced valid holds with invalid flights. 6,589 total misaligned events across all sessions. Transfer entropy values shifted by over 130% mean, with 5 sign flips. Fixed by paired filtering: both hold and flight are kept or dropped together for the same keystroke event. Original data preserved as a snapshot table.</p>
+          </details>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="hw-timeline-coda">
+      <p>Seven incidents across three days. Each one made the instrument more honest. The full provenance log, including four additional incidents (INC-003, INC-004, INC-007, INC-010) and four deferred design decisions, is maintained in the codebase and available for review.</p>
+    </div>
+  </section>
+
+  <!-- ===== CLOSING ===== -->
+  <section class="hw-section hw-close">
+    <p>Three systems, one instrument. The signal engine measures. The ghost tests whether those measurements are irreducible. The semantic pipeline captures what was said, not just how it was typed. Together, they produce a longitudinal record of cognitive process that no single system could provide alone.</p>
+    <div class="hw-close-links">
+      <a href="/instrument">What Alice captures</a>
+      <a href="/methodology">Every signal, documented</a>
+      <a href="/research">Why this instrument needs to exist</a>
+    </div>
+  </section>
 
 </article>
 
@@ -662,6 +913,379 @@ import PublicLayout from '../layouts/layPublic.astro';
     grid-column: 1 / -1;
   }
 
+  /* ===== GHOST (Section 2) ===== */
+  .hw-ghost {
+    max-width: 860px;
+  }
+
+  .hw-ghost-comparison {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 0;
+    margin-bottom: 2.5rem;
+  }
+
+  .hw-ghost-side {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1.5rem;
+  }
+
+  .hw-ghost-side-label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 1.25rem;
+  }
+
+  .hw-ghost-real .hw-ghost-side-label {
+    color: var(--accent);
+  }
+
+  .hw-ghost-synthetic .hw-ghost-side-label {
+    color: var(--text-faint);
+  }
+
+  .hw-ghost-flow-item {
+    margin-bottom: 0.5rem;
+  }
+
+  .hw-ghost-flow-tag {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 0.55rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-faint);
+    margin-bottom: 0.25rem;
+  }
+
+  .hw-ghost-flow-item p {
+    font-family: var(--serif-body);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: var(--text-muted);
+  }
+
+  .hw-ghost-flow-arrow {
+    width: 1px;
+    height: 16px;
+    background: var(--border);
+    margin: 0.25rem 0 0.25rem 1rem;
+  }
+
+  .hw-ghost-residual {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem 1.25rem;
+    min-width: 140px;
+  }
+
+  .hw-ghost-residual-label {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--negative);
+    margin-bottom: 0.75rem;
+  }
+
+  .hw-ghost-residual p {
+    font-family: var(--serif-body);
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--text-faint);
+    text-align: center;
+  }
+
+  /* --- Variant ladder --- */
+  .hw-variants {
+    margin-bottom: 2rem;
+  }
+
+  .hw-variants h3 {
+    font-family: var(--serif-body);
+    font-size: 1.1rem;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 0.5rem;
+  }
+
+  .hw-variants > p {
+    font-family: var(--serif-body);
+    font-size: 0.95rem;
+    line-height: 1.65;
+    color: var(--text-muted);
+    max-width: 680px;
+    margin-bottom: 1.5rem;
+  }
+
+  .hw-variant-ladder {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .hw-variant {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1rem 1.25rem;
+  }
+
+  .hw-variant-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .hw-variant-number {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--text-faint);
+    flex-shrink: 0;
+  }
+
+  .hw-variant-name {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text);
+  }
+
+  .hw-variant p {
+    font-family: var(--serif-body);
+    font-size: 0.88rem;
+    line-height: 1.55;
+    color: var(--text-muted);
+    padding-left: 2.5rem;
+  }
+
+  .hw-variant-step {
+    display: flex;
+    align-items: center;
+    padding: 0.4rem 0 0.4rem 0.75rem;
+  }
+
+  .hw-variant-step span {
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    letter-spacing: 0.04em;
+    color: var(--accent);
+    padding-left: 1.5rem;
+    position: relative;
+  }
+
+  .hw-variant-step span::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--border);
+  }
+
+  /* --- Ghost note --- */
+  .hw-ghost-note {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1.25rem;
+  }
+
+  .hw-ghost-note-label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-faint);
+    margin-bottom: 0.5rem;
+  }
+
+  .hw-ghost-note p {
+    font-family: var(--serif-body);
+    font-size: 0.88rem;
+    line-height: 1.55;
+    color: var(--text-muted);
+  }
+
+  /* ===== PROVENANCE TIMELINE (Section 3) ===== */
+  .hw-timeline {
+    max-width: 760px;
+  }
+
+  .hw-timeline-entry {
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: 1.5rem;
+    padding: 1.25rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .hw-timeline-entry:last-child {
+    border-bottom: none;
+  }
+
+  .hw-timeline-marker {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .hw-timeline-id {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--text);
+    letter-spacing: 0.02em;
+  }
+
+  .hw-timeline-date {
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    color: var(--text-faint);
+  }
+
+  .hw-timeline-body h3 {
+    font-family: var(--serif-body);
+    font-size: 1.05rem;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 0.5rem;
+  }
+
+  .hw-timeline-type {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 0.55rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 0.15rem 0.45rem;
+    border-radius: 2px;
+    margin-bottom: 0.5rem;
+  }
+
+  .hw-type-data {
+    color: var(--negative);
+    border: 1px solid var(--negative);
+  }
+
+  .hw-type-methods {
+    color: var(--accent);
+    border: 1px solid var(--accent);
+  }
+
+  .hw-type-architecture {
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+  }
+
+  .hw-type-infra {
+    color: var(--positive);
+    border: 1px solid var(--positive);
+  }
+
+  .hw-timeline-body details {
+    margin-top: 0.25rem;
+  }
+
+  .hw-timeline-body summary {
+    font-family: var(--serif-body);
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    list-style: none;
+    padding-left: 1rem;
+    position: relative;
+  }
+
+  .hw-timeline-body summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .hw-timeline-body summary::before {
+    content: '+';
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    color: var(--text-faint);
+    position: absolute;
+    left: 0;
+    top: 0;
+  }
+
+  .hw-timeline-body details[open] summary::before {
+    content: '\2212';
+  }
+
+  .hw-timeline-body details p {
+    font-family: var(--serif-body);
+    font-size: 0.88rem;
+    line-height: 1.6;
+    color: var(--text-muted);
+    margin-top: 0.75rem;
+    padding-left: 1rem;
+  }
+
+  .hw-timeline-body details code {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--accent);
+  }
+
+  .hw-timeline-coda {
+    margin-top: 1.5rem;
+    max-width: 680px;
+  }
+
+  .hw-timeline-coda p {
+    font-family: var(--serif-body);
+    font-size: 0.95rem;
+    line-height: 1.65;
+    color: var(--text-muted);
+  }
+
+  /* ===== CLOSING ===== */
+  .hw-close > p {
+    font-family: var(--serif-display);
+    font-size: 1.3rem;
+    font-weight: 400;
+    line-height: 1.5;
+    color: var(--text);
+    max-width: 600px;
+  }
+
+  .hw-close-links {
+    display: flex;
+    gap: 2rem;
+    margin-top: 2rem;
+  }
+
+  .hw-close-links a {
+    font-family: var(--serif-body);
+    font-size: 1rem;
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.15rem;
+    transition: border-color 0.2s ease;
+  }
+
+  .hw-close-links a:hover {
+    border-color: var(--accent);
+    text-decoration: none;
+  }
+
   /* ===== MOBILE ===== */
   @media (max-width: 768px) {
     .hw-hero { padding: 4rem 0 2rem; }
@@ -689,5 +1313,30 @@ import PublicLayout from '../layouts/layPublic.astro';
     .hw-downstream-item:last-child { grid-column: auto; }
 
     .hw-connector { padding-left: 13px; }
+
+    .hw-ghost-comparison {
+      grid-template-columns: 1fr;
+      gap: 1rem;
+    }
+
+    .hw-ghost-residual {
+      padding: 0.75rem;
+      min-width: auto;
+    }
+
+    .hw-variant p { padding-left: 0; }
+
+    .hw-timeline-entry {
+      grid-template-columns: 1fr;
+      gap: 0.5rem;
+    }
+
+    .hw-timeline-marker {
+      flex-direction: row;
+      gap: 0.75rem;
+      align-items: baseline;
+    }
+
+    .hw-close-links { flex-direction: column; gap: 1rem; }
   }
 </style>
