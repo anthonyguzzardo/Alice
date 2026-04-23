@@ -118,7 +118,7 @@ Based on the landscape research, these are the people who would use this tomorro
 
 ## Phase 2: Consumer Launch (Months 6 through 12)
 
-**Goal: 1,000 paying users who use Alice daily**
+**Goal: 100 to 300 paying users who use Alice daily**
 
 ### The Product
 
@@ -183,22 +183,23 @@ The narrative should lead with what Alice gives (measurement of how you think, q
 
 ### Upside
 
-- The "anti-app" positioning is deeply resonant right now. People are burned out on engagement-optimized tools. Alice is the opposite. That's a cultural moment, not just a product feature.
-- The black box philosophy creates intense word-of-mouth. People will tell their friends about Alice specifically because it's weird. "There's this app that asks you a question every day and you never see your answer again" is an inherently shareable concept.
-- $9/month x 1,000 users = $108K ARR at Phase 2. Not venture-scale. Doesn't need to be. This is a sustainable instrument, not a growth hack.
-- The longitudinal dataset from 1,000 daily users is scientifically unprecedented. No keystroke dynamics study has ever had this scale and duration.
+- The "anti-app" positioning is resonant right now. People are burned out on engagement-optimized tools. Alice is the opposite. But this audience (the Readwise/old-Roam/Marginalian crowd) is small, loyal, and does not scale on organic alone. The cultural moment is real but more fragile than it looks. It can power a strong early cohort; it cannot power 1,000 users in year one without paid acquisition that may feel off-brand.
+- The black box philosophy creates word-of-mouth among the right people. "There's this app that asks you a question every day and you never see your answer again" is inherently shareable. But shareable is not the same as convertible. Many people will find it interesting to hear about and wrong for them personally.
+- **Realistic year-one target: 100 to 300 paying users.** That is a strong result for a monastic product with no freemium and no engagement hooks. At $9/month, that's $10K to $32K ARR. Not livable, but validation. 1,000 users is a year-two to year-three milestone, contingent on the research credibility from Phase 1 creating inbound demand.
+- Even 200 daily users generating longitudinal keystroke data is scientifically significant. No keystroke dynamics study has this scale and duration in a naturalistic setting.
 
 ### Downside
 
 - Consumer retention for a daily-question app is hard. Most journaling apps have terrible retention. Alice's philosophy (no gamification, no streaks) means you can't use the standard retention tricks. You have to earn it through genuine value.
-- The "never see your responses" design will lose some users who want to re-read their journal. That's fine. They're not the target user. But it means your addressable market is smaller than "everyone who journals."
+- The "never see your responses" design will lose the majority of potential users who want to re-read their journal. The addressable market is smaller than "everyone who journals." The marketing has to find the people for whom the black box is the reason to use Alice, not the thing they tolerate despite using Alice.
+- Scaling past the organic audience requires paid acquisition. Newsletter sponsorships and targeted Reddit/Google ads can work without feeling off-brand, but they cost money that a $10K-$32K ARR product doesn't generate. The gap between "enough users for validation" and "enough users for sustainability" is real and may last 12 to 18 months.
 - Support burden. Consumer users expect things to work perfectly. A Rust signal engine that occasionally returns null because of insufficient data needs graceful handling that doesn't confuse people.
 
 ---
 
-## Phase 3: Clinical Pilot (Months 12 through 24)
+## Phase 3: Clinical Pilot (Months 12 through 36)
 
-**Goal: FDA-pathway validation study for cognitive decline detection**
+**Goal: Exploratory validation data for cognitive decline detection**
 
 ### The Thesis
 
@@ -220,7 +221,7 @@ Alice Clinical. Same instrument, different wrapper:
 
 - **Memory clinics** (academic medical centers that specialize in MCI/dementia). Partners like UCSF Memory and Aging Center, Mayo Clinic ADRC, Mass General.
 - **Digital phenotyping labs** that already have IRB infrastructure for passive monitoring studies. Leow's BiAffect group at UIC is the obvious first partner.
-- **Pharma companies running cognitive decline trials.** This is the dark horse. Drug companies need cognitive endpoints for Alzheimer's trials. Current endpoints (ADAS-Cog, MMSE) are noisy, administered quarterly, and measure product not process. Alice as a continuous endpoint could reduce trial sizes, shorten timelines, and detect smaller effect sizes. Pharma will pay for this.
+- **Pharma companies running cognitive decline trials.** Drug companies need cognitive endpoints for Alzheimer's trials. Current endpoints (ADAS-Cog, MMSE) are noisy, administered quarterly, and measure product not process. Alice's continuous process-level signals could complement them. But getting a novel endpoint into a registration trial is extremely hard. Pharma is risk-averse about endpoints because the FDA has to accept them. The realistic path: enter as an **exploratory secondary endpoint** in one or two trials, prove correlation with established measures (ADAS-Cog, CDR-SB), publish the concordance data, and then push for co-primary or primary status in later trials. That is a 5-to-10-year trajectory from first pharma engagement to primary endpoint status, not a 12-to-24-month outcome. The money in this phase comes from exploratory endpoint contracts, not primary endpoint fees.
 
 ### Regulatory Path
 
@@ -230,8 +231,8 @@ Alice Clinical. Same instrument, different wrapper:
 
 ### Upside
 
-- If Alice can demonstrate earlier detection of cognitive decline than MoCA/MMSE in a published clinical study, the instrument becomes standard of care. Not "alternative." Standard.
-- Pharma partnerships for trial endpoints could generate $1M+ per trial engagement. There are dozens of active Alzheimer's trials.
+- If Alice can demonstrate earlier detection of cognitive decline than MoCA/MMSE in a published clinical study, the instrument enters the conversation for standard of care. That conversation takes years, but being in it at all is the milestone.
+- Exploratory pharma endpoint contracts are smaller than primary endpoint fees ($100K to $300K per engagement, not $1M+), but they generate the concordance data that makes Alice credible for future primary status. The revenue compounds slowly. The credibility compounds fast.
 - The cognitive reserve angle is politically powerful. Aging populations are a policy priority in every developed country. Government grants (NIH, NSF, EU Horizon) become accessible.
 - AI contamination of traditional assessments is going to become a recognized problem in the next 2 to 3 years. Alice is the only instrument designed from the ground up to survive it.
 
@@ -311,30 +312,17 @@ The pitch to CHROs and wellness directors: "You measure physical health (gym mem
 
 ---
 
-## Phase 5: The Platform (Months 24 through 36)
+## What a Platform Outcome Would Look Like (Not a Phase)
 
-**Goal: Alice becomes the standard for process-level cognitive measurement**
+If Phases 1 through 4 succeed, certain things become possible that cannot be planned toward directly:
 
-### What This Means
+- **Alice Signal SDK**: The Rust signal engine as a standalone library for other applications. This is a byproduct of open-sourcing the engine in Phase 0 and other teams actually using it.
+- **Alice API**: Process-level cognitive signals as a service. Only worth building if researchers are already asking for computation without the application.
+- **Normative database**: A federated, anonymized dataset of process-level cognitive signals across populations. This emerges from multi-site research deployments and enterprise data, not from a data-commons initiative.
 
-Alice stops being a product and becomes infrastructure. Other researchers, clinicians, and developers build on it.
+A standard (signal definitions, data formats, normative ranges) emerges from dominance, not from planning. If Alice becomes the instrument that five labs, three pharma trials, and ten enterprises use, the de facto standard is whatever Alice outputs. If it doesn't reach that density, no amount of protocol specification will create adoption.
 
-- **Alice Signal SDK**: The Rust signal engine as a standalone library that anyone can integrate into their own applications. A keystroke dynamics measurement instrument for the ecosystem.
-- **Alice API**: Process-level cognitive signals as a service. Send keystroke data, get signals back. For researchers who want the computation without the application.
-- **Alice Protocol**: A published standard for process-level cognitive measurement. Data formats, signal definitions, normative ranges, reliability metrics. The equivalent of what DICOM is for medical imaging.
-- **Alice Data Commons**: A federated, anonymized dataset of process-level cognitive signals across populations, ages, languages, and conditions. The ImageNet of cognitive keystroke dynamics.
-
-### Upside
-
-- Platform economics. Every application built on Alice signals increases the value of the normative database, which makes Alice signals more reliable, which attracts more applications. Network effects without social features.
-- Standard-setting is a permanent competitive advantage. If Alice Protocol becomes how process-level cognitive measurement is done, every competitor builds on your foundation.
-- The Data Commons is a public good that generates private value. Researchers contribute data; Alice provides the infrastructure and the normative context that makes individual datasets interpretable.
-
-### Downside
-
-- Platform plays require scale that you may not have at month 24. This phase may need to shift later.
-- Standards bodies and protocols are politically complex. Getting buy-in from the research community requires diplomacy and patience.
-- Federated data involves legal complexity across jurisdictions (GDPR, HIPAA, CCPA).
+Do not allocate engineering time to platform infrastructure until external demand makes it obvious. The signal that platform work is warranted: other teams are building adapters to Alice's output format without being asked.
 
 ---
 
@@ -392,16 +380,19 @@ Reach out to cognitive science, psychology, and computer science departments for
 
 ---
 
-## Revenue Projections (Anticipating Success)
+## Revenue Projections
 
-| Phase | Timeline | Revenue Source | ARR |
-|-------|----------|---------------|-----|
-| 0 | Months 0 to 3 | $0 (foundation) | $0 |
-| 1 | Months 3 to 9 | Research support tiers | $30K |
-| 2 | Months 6 to 12 | Consumer subscriptions (1K users) | $108K |
-| 3 | Months 12 to 24 | Clinical pilots + pharma endpoints | $500K to $2M |
-| 4 | Months 18 to 30 | Enterprise (20 customers) | $3.6M |
-| 5 | Months 24 to 36 | Platform/API + all segments | $8M to $12M |
+Realistic numbers for a solo-to-small-team operation building credibility before scale.
+
+| Phase | Timeline | Revenue Source | ARR (conservative) | ARR (strong) |
+|-------|----------|---------------|---------------------|--------------|
+| 0 | Months 0 to 3 | $0 (foundation) | $0 | $0 |
+| 1 | Months 3 to 9 | Research support tiers | $18K | $36K |
+| 2 | Months 6 to 18 | Consumer subscriptions (100 to 300 users) | $10K | $32K |
+| 3 | Months 12 to 36 | Clinical pilots + exploratory pharma endpoints | $150K | $500K |
+| 4 | Months 24 to 36 | Enterprise (5 to 10 customers) | $450K | $1.8M |
+
+Phase 2 consumer revenue alone does not sustain the business. The bridge is research grants (SBIR Phase I at $275K, NIH R01 at $250K to $500K/year) plus clinical pilot contracts. Consumer adoption matters for longitudinal data and cultural credibility, not for cash flow. Sustainability likely arrives when clinical and enterprise revenue overlap, somewhere in year two to three.
 
 ---
 
@@ -423,7 +414,7 @@ Reach out to cognitive science, psychology, and computer science departments for
 
 When to take funding, and from whom. Or whether to take it at all.
 
-**The case for bootstrapping**: Alice's philosophy is incompatible with VC incentives. A VC wants 10x growth. Alice wants depth. A VC wants engagement metrics. Alice has no engagement metrics by design. A VC wants an exit. Alice is an instrument, not an acquisition target. Bootstrapping with consumer revenue ($108K ARR) plus research grants (NIH R01s are $250K to $500K/year, NSF SBIR Phase I is $275K) plus clinical pilot contracts could sustain a small team (3 to 5 people) through Phase 3 without dilution.
+**The case for bootstrapping**: Alice's philosophy is incompatible with VC incentives. A VC wants 10x growth. Alice wants depth. A VC wants engagement metrics. Alice has no engagement metrics by design. A VC wants an exit. Alice is an instrument, not an acquisition target. Consumer revenue alone ($10K to $32K ARR in year one) does not sustain anything. But consumer revenue plus research grants (NIH R01s are $250K to $500K/year, NSF SBIR Phase I is $275K) plus clinical pilot contracts could sustain a small team (3 to 5 people) through Phase 3 without dilution. The grants are the bridge, not the consumer subscriptions.
 
 **The case for funding**: The clinical pathway (Phase 3) requires capital that bootstrapping may not provide. An FDA validation study costs $1M to $5M. Enterprise sales requires a sales team. The right investor is someone who understands measurement instruments, not consumer apps. Think: health tech focused funds (Flare Capital, 7wireVentures, General Catalyst's health practice), or strategic investors (pharma companies with cognitive decline programs, health systems with innovation arms).
 
