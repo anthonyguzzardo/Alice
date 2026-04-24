@@ -2077,7 +2077,7 @@ export interface ReconstructionResidualInput {
   real_text_compression_ratio: number | null;
   avatar_text_compression_ratio: number | null;
   residual_text_compression_ratio: number | null;
-  extended_residuals_json: string | null;
+  extended_residuals_json: Record<string, { real: number | null; avatar: number | null; residual: number | null }> | null;
   dynamical_l2_norm: number | null;
   motor_l2_norm: number | null;
   semantic_l2_norm: number | null;

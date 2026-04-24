@@ -71,8 +71,8 @@ async function main() {
            real_deep_cohesion, avatar_deep_cohesion,
            real_text_compression_ratio, avatar_text_compression_ratio
     FROM tb_reconstruction_residuals
-    WHERE extended_residuals_json IS NULL
-      AND avatar_seed IS NOT NULL
+    WHERE avatar_seed IS NOT NULL
+      AND (extended_residuals_json IS NULL OR jsonb_typeof(extended_residuals_json) != 'object')
     ORDER BY question_id ASC, adversary_variant_id ASC
   ` as Array<Record<string, unknown>>;
 
@@ -234,7 +234,7 @@ async function main() {
     // UPDATE the row
     await sql`
       UPDATE tb_reconstruction_residuals SET
-        extended_residuals_json = ${JSON.stringify(extendedJson)},
+        extended_residuals_json = ${extendedJson},
         dynamical_l2_norm = ${dynNorm},
         motor_l2_norm = ${motNorm},
         semantic_l2_norm = ${semNorm},

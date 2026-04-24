@@ -353,7 +353,7 @@ async function computeForVariant(
     avatar_text_compression_ratio: avatarSem?.textCompressionRatio ?? null,
     residual_text_compression_ratio: semResiduals.compress,
 
-    extended_residuals_json: JSON.stringify(extendedJson),
+    extended_residuals_json: extendedJson,
     dynamical_l2_norm: dynNorm,
     motor_l2_norm: motNorm,
     semantic_l2_norm: semNorm,
