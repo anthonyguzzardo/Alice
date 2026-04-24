@@ -49,7 +49,13 @@ export async function updateProfile(questionId: number): Promise<void> {
     if (sourceRows.length === 0) return;
     if ((sourceRows[0] as { question_source_id: number }).question_source_id === 3) return;
 
-    // ── Gather all journal session data (calibrations excluded) ──
+    // Skip if the triggering session has external input contamination (paste/drop).
+    const contaminationRows = await sql`
+      SELECT paste_contaminated FROM tb_semantic_signals WHERE question_id = ${questionId}
+    `;
+    if (contaminationRows.length > 0 && (contaminationRows[0] as { paste_contaminated: boolean }).paste_contaminated) return;
+
+    // ── Gather all uncontaminated journal session data ──
     const summaries = await sql`
       SELECT ss.question_id,
              ss.total_duration_ms, ss.word_count, ss.total_chars_typed,
@@ -66,6 +72,7 @@ export async function updateProfile(questionId: number): Promise<void> {
       FROM tb_session_summaries ss
       JOIN tb_questions q ON ss.question_id = q.question_id
       WHERE q.question_source_id != 3
+        AND NOT EXISTS (SELECT 1 FROM tb_semantic_signals sem WHERE sem.question_id = ss.question_id AND sem.paste_contaminated = true)
       ORDER BY ss.session_summary_id ASC
     ` as any[];
 
@@ -79,6 +86,7 @@ export async function updateProfile(questionId: number): Promise<void> {
       FROM tb_motor_signals ms
       JOIN tb_questions q ON ms.question_id = q.question_id
       WHERE q.question_source_id != 3
+        AND NOT EXISTS (SELECT 1 FROM tb_semantic_signals sem WHERE sem.question_id = ms.question_id AND sem.paste_contaminated = true)
     ` as any[];
 
     // ── Process signals (pause location, bursts) ──
@@ -88,6 +96,7 @@ export async function updateProfile(questionId: number): Promise<void> {
       FROM tb_process_signals ps
       JOIN tb_questions q ON ps.question_id = q.question_id
       WHERE q.question_source_id != 3
+        AND NOT EXISTS (SELECT 1 FROM tb_semantic_signals sem WHERE sem.question_id = ps.question_id AND sem.paste_contaminated = true)
     ` as any[];
 
     // ── Burst sequences for consolidation ──
@@ -96,6 +105,7 @@ export async function updateProfile(questionId: number): Promise<void> {
       FROM tb_burst_sequences bs
       JOIN tb_questions q ON bs.question_id = q.question_id
       WHERE q.question_source_id != 3
+        AND NOT EXISTS (SELECT 1 FROM tb_semantic_signals sem WHERE sem.question_id = bs.question_id AND sem.paste_contaminated = true)
       ORDER BY bs.question_id, bs.burst_index
     ` as any[];
 
@@ -106,6 +116,7 @@ export async function updateProfile(questionId: number): Promise<void> {
       FROM tb_rburst_sequences rs
       JOIN tb_questions q ON rs.question_id = q.question_id
       WHERE q.question_source_id != 3
+        AND NOT EXISTS (SELECT 1 FROM tb_semantic_signals sem WHERE sem.question_id = rs.question_id AND sem.paste_contaminated = true)
       ORDER BY rs.question_id, rs.burst_index
     ` as any[];
 
@@ -115,6 +126,7 @@ export async function updateProfile(questionId: number): Promise<void> {
       FROM tb_responses r
       JOIN tb_questions q ON r.question_id = q.question_id
       WHERE q.question_source_id != 3
+        AND NOT EXISTS (SELECT 1 FROM tb_semantic_signals sem WHERE sem.question_id = r.question_id AND sem.paste_contaminated = true)
       ORDER BY q.scheduled_for ASC
     ` as any[];
 

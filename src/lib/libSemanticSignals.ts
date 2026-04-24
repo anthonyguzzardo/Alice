@@ -221,11 +221,16 @@ function emotionalValenceArc(text: string): string | null {
   const sentences = splitSentences(text);
   if (sentences.length < 3) return null;
 
-  const third = Math.ceil(sentences.length / 3);
+  // Balanced partition: distribute remainder across first thirds.
+  // n=4 → [2,1,1], n=7 → [3,2,2], n=9 → [3,3,3].
+  const base = Math.floor(sentences.length / 3);
+  const remainder = sentences.length % 3;
+  const s1 = base + (remainder >= 1 ? 1 : 0);
+  const s2 = base + (remainder >= 2 ? 1 : 0);
   const thirds = [
-    sentences.slice(0, third).join(' '),
-    sentences.slice(third, third * 2).join(' '),
-    sentences.slice(third * 2).join(' '),
+    sentences.slice(0, s1).join(' '),
+    sentences.slice(s1, s1 + s2).join(' '),
+    sentences.slice(s1 + s2).join(' '),
   ];
 
   const valences = thirds.map(section => {

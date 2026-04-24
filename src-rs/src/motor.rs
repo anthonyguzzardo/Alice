@@ -453,6 +453,10 @@ fn ex_gaussian_fit(flight_times: &[f64]) -> SignalResult<ExGaussianValues> {
 
     let tau_proportion = tau / data_mean;
 
+    if !mu.is_finite() || !sigma.is_finite() || !tau.is_finite() || !tau_proportion.is_finite() {
+        return Err(SignalError::DegenerateValue("non-finite ex-Gaussian parameter"));
+    }
+
     Ok(ExGaussianValues {
         tau,
         mu,

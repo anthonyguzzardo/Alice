@@ -242,6 +242,12 @@ export async function updateSemanticBaselines(questionId: number): Promise<void>
   const sem = await getSemanticSignals(questionId);
   if (!sem) return;
 
+  // Sessions with external input contamination (paste or drag-and-drop) should
+  // not shift the within-person baseline. The text may not be the person's own
+  // unmediated output, and including it would compromise the baseline's validity
+  // as a self-referencing cognitive measurement.
+  if (sem.paste_contaminated) return;
+
   const signalValues: Record<BaselineSignal, number | null> = {
     idea_density: sem.idea_density ?? null,
     lexical_sophistication: sem.lexical_sophistication ?? null,

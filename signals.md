@@ -6,7 +6,7 @@ Technical specification of every signal Alice captures, how it is captured, and 
 
 - **Timing source:** `performance.now()` (DOMHighResTimestamp, ~5 microsecond resolution). All timing values are fractional milliseconds (e.g., `1523.456789`), not integer milliseconds.
 - **Timing storage:** PostgreSQL `DOUBLE PRECISION` (IEEE 754 float64, 15-17 significant digits). No precision loss from capture through storage.
-- **Signal computation:** Dynamical, motor, and process signals computed by Rust native engine via napi-rs (`src-rs/`). Semantic and cross-session signals remain in TypeScript. Automatic fallback to TypeScript if Rust unavailable.
+- **Signal computation:** Dynamical, motor, and process signals computed by Rust native engine via napi-rs (`src-rs/`). Semantic and cross-session signals remain in TypeScript. No TS fallback; if Rust is unavailable, signals are null for that session. The health endpoint exposes `rustEngine: true/false` to surface this state.
 - **Rust type alignment:** All signal values are `f64` in Rust, `number` in TypeScript, `DOUBLE PRECISION` in PostgreSQL. IEEE 754 at every boundary, no conversion loss.
 
 ---
@@ -450,6 +450,22 @@ Computed from the raw keystroke stream by the Rust native engine (`src-rs/dynami
 - **Unit:** normalized [0, 1]
 - **Why:** Captures temporal structure that mean/std completely miss. High permutation entropy means all ordinal patterns are equally likely, genuinely novel composition with no temporal habits. Low permutation entropy means certain patterns dominate, habitual rhythm, cognitive autopilot. Invariant to nonlinear distortions of the signal (robust to device differences, fatigue, caffeine).
 - **Minimum series:** 50 IKI values
+- **Citation:** Bandt & Pompe 2002
+
+### permutationEntropyRaw
+- **Computation:** Same ordinal pattern distribution as `permutationEntropy`, but returns the raw Shannon entropy in bits without normalizing by log2(order!).
+- **Unit:** bits
+- **Why:** The normalized version maps to [0, 1] for cross-order comparison. The raw version preserves the absolute information content, which matters when comparing sessions with different IKI series lengths or when the normalization constant itself is analytically relevant.
+- **Minimum series:** 50 IKI values
+- **Table:** tb_dynamical_signals
+- **Citation:** Bandt & Pompe 2002
+
+### peSpectrum
+- **Computation:** Permutation entropy computed at orders 3 through 7, returning a 5-element array. Each order captures complexity at a different temporal scale: order 3 sees local triplet patterns, order 7 sees longer-range sequential dependencies across 7 consecutive IKIs.
+- **Unit:** array of 5 normalized values [0, 1] per order
+- **Why:** A single PE value collapses temporal structure across scales. The spectrum separates local complexity from global structure. A session with high PE at order 3 but low PE at order 7 has locally irregular but globally structured timing. This is the difference between deliberation (irregular at small scale, patterned at large scale) and volatility (irregular at all scales).
+- **Minimum series:** order + 10 IKI values per order (most restrictive: order 7 needs 17)
+- **Table:** tb_dynamical_signals (JSONB)
 - **Citation:** Bandt & Pompe 2002
 
 ### dfaAlpha
@@ -945,21 +961,21 @@ Extends the error-correction model from a single phase (error detection, already
 ## Motor Signals: Phase 2 Additions (2026-04-18)
 
 ### exGaussianTau
-- **Capture:** Fit ex-Gaussian distribution to per-session flight time array (outliers above Q3 + 3*IQR removed before fitting). Method of moments: `tau = std * cbrt(skewness / 2)`. Computed in Rust (`src-rs/motor.rs`).
+- **Capture:** Fit ex-Gaussian distribution to per-session flight time array (outliers above Q3 + 3*IQR removed before fitting). MLE via Expectation-Maximization (Lacouture & Cousineau 2008), with Method of Moments as initial estimates. If MLE fails to improve over MoM, falls back honestly to MoM rather than returning bad estimates. Computed in Rust (`src-rs/motor.rs`).
 - **Unit:** fractional milliseconds (microsecond precision)
 - **Why:** The ex-Gaussian decomposes flight time into a Gaussian component (motor execution speed) and an exponential tail (cognitive slowing). Mean flight time conflates both. Tau isolates the cognitive part. BiAffect demonstrated that tau shifts predict mood episodes in bipolar disorder before summary statistics (mean, std) move. This is the single most validated digital phenotyping signal from the keystroke dynamics literature.
 - **Minimum data:** 50+ flight times with positive skewness after outlier removal
 - **Table:** tb_motor_signals
-- **Citation:** Zulueta et al. 2018 (BiAffect); Luce 1986; Heathcote et al. 1991
+- **Citation:** Zulueta et al. 2018 (BiAffect); Luce 1986; Heathcote et al. 1991; Lacouture & Cousineau 2008
 
 ### exGaussianMu
-- **Capture:** `mean(flightTimes) - tau` (after outlier removal)
+- **Capture:** Gaussian mean component from ex-Gaussian MLE/EM fit (after outlier removal)
 - **Unit:** fractional milliseconds (microsecond precision)
 - **Why:** The Gaussian mean: motor execution speed stripped of cognitive slowing. Pure motor baseline.
 - **Table:** tb_motor_signals
 
 ### exGaussianSigma
-- **Capture:** `sqrt(variance(flightTimes) - tau^2)` (after outlier removal)
+- **Capture:** Gaussian standard deviation component from ex-Gaussian MLE/EM fit (after outlier removal)
 - **Unit:** fractional milliseconds (microsecond precision)
 - **Why:** The Gaussian standard deviation: motor noise stripped of cognitive slowing. Motor consistency independent of thinking pauses.
 - **Table:** tb_motor_signals
@@ -977,6 +993,145 @@ Extends the error-correction model from a single phase (error detection, already
 - **Why:** Measures sequential motor coordination. Lateralized hold times (left/right hand) measure spatial asymmetry. This measures temporal coupling: does the duration of one keypress predict the next? In neuroQWERTY research, this covariance degrades before mean hold time shifts in Parkinson's. It is a leading indicator of motor coordination decline.
 - **Table:** tb_motor_signals
 - **Citation:** Giancardo et al. 2016 (neuroQWERTY); nQ Medical clinical validation
+
+### holdFlightRankCorr
+- **Capture:** Spearman rank correlation between aligned hold times and flight times: `spearman(holds[0:n], flights[0:n])`
+- **Unit:** correlation coefficient (-1 to 1)
+- **Minimum data:** 30+ aligned hold/flight pairs
+- **Why:** Measures the monotonic coupling between motor execution (how long a key is held) and cognitive planning (how long until the next key). Positive correlation means longer holds predict longer flights (deliberate, coupled). Negative or zero means the channels are decoupled (automatic production). Also used as the Spearman rho input for the Gaussian copula in the avatar engine's motor synthesis (variant 3+).
+- **Table:** tb_motor_signals
+
+---
+
+## R-Burst Sequences (per-burst detail)
+
+Stored in `tb_rburst_sequences`, one row per R-burst. Derived from the Rust process signal computation alongside the aggregate `r_burst_count`.
+
+### deletedCharCount
+- **Capture:** UTF-16 code units deleted in this R-burst episode
+- **Unit:** characters (UTF-16)
+- **Why:** The size of the revision. A 3-char R-burst is a typo fix. A 40-char R-burst is a clause deletion.
+- **Table:** tb_rburst_sequences
+
+### totalCharCount
+- **Capture:** UTF-16 code units inserted during the burst that ended with deletion
+- **Unit:** characters (UTF-16)
+- **Why:** Total production in the burst before the revision. Combined with deletedCharCount, reveals how much of the burst survived.
+- **Table:** tb_rburst_sequences
+
+### burstDurationMs
+- **Capture:** Time from first to last event in the burst
+- **Unit:** fractional milliseconds
+- **Why:** How long the writer spent on the thought they ultimately revised.
+- **Table:** tb_rburst_sequences
+
+### burstStartOffsetMs
+- **Capture:** Timestamp of the burst's first event, relative to session start
+- **Unit:** fractional milliseconds
+- **Why:** Temporal position in the session. Enables R-burst consolidation analysis (do R-bursts get smaller or larger as the session progresses).
+- **Table:** tb_rburst_sequences
+
+### isLeadingEdge
+- **Capture:** True if the deletion endpoint was at or beyond the end of the text (deletion at the cursor's current position, not navigated back)
+- **Unit:** boolean
+- **Why:** Leading-edge R-bursts are immediate self-correction ("type then fix"). Non-leading-edge R-bursts require navigation, indicating retrospective revision.
+- **Table:** tb_rburst_sequences
+- **Citation:** Deane 2015
+
+---
+
+## Avatar / Ghost Engine
+
+The reconstruction adversary system (`src-rs/avatar.rs`). Generates synthetic keystroke streams from a person's statistical profile. Not a signal in itself but the measurement validation layer: comparing real signals against what a statistical model can reproduce isolates the residual that requires the actual person.
+
+### Adversary Variants
+
+Five variants, each adding one modeling improvement to isolate which dimension carries signal:
+
+| Variant | Text Model | IKI Model | Hold Model | Tests |
+|---------|-----------|-----------|-----------|-------|
+| 1 Baseline | Order-2 Markov | Independent ex-Gaussian | Fixed mean | Minimum viable reconstruction |
+| 2 ConditionalTiming | Order-2 Markov | AR(1) correlated | Fixed mean | Does IKI correlation matter? |
+| 3 CopulaMotor | Order-2 Markov | Independent | Gaussian copula hold/flight | Does motor coupling matter? |
+| 4 PpmText | Variable-order PPM | Independent | Fixed mean | Does text prediction matter? |
+| 5 FullAdversary | Variable-order PPM | AR(1) correlated | Copula hold/flight | Best possible reconstruction |
+
+### Reconstruction Residuals
+
+Stored in `tb_reconstruction_residuals`. For each signal, the residual is `real_value - avatar_value`. Signals where the residual is consistently large across variants are the ones that carry genuine individual signature. Signals where the residual collapses to zero under the full adversary are reproducible from statistical profile alone.
+
+### TimingProfile (avatar input)
+
+The avatar consumes a `TimingProfile` built from the person's historical signals: ex-Gaussian parameters (mu, sigma, tau), digraph latencies, burst structure, deletion rates, revision timing bias, R-burst characteristics, autocorrelation coefficients, hold-flight rank correlation (for copula), and hold time distribution. This profile is the statistical summary of the person's motor-cognitive fingerprint.
+
+---
+
+## Computation Utilities (Rust)
+
+NAPI-exposed functions that support signal infrastructure but are not signal families themselves.
+
+### computeProfileDistance
+- **Computation:** Z-scores each value against provided means/stds, then computes Euclidean distance in the resulting space.
+- **Returns:** z-scores array, distance, dimension count
+- **Why:** Used for convergence scoring and behavioral state engine distance calculations.
+
+### computeBatchCorrelations
+- **Computation:** Lagged cross-correlation between two signal series across configurable window sizes, returning the best correlation and optimal lag for each window.
+- **Returns:** per-window correlation coefficient, lag, and window metadata
+- **Why:** Detects temporal coupling between different signal families (e.g., does PE lead or lag tau across sessions).
+
+### computePerplexity
+- **Computation:** Character trigram model built from corpus text, scored against target text. Laplace-smoothed conditional probabilities.
+- **Returns:** perplexity value, token count, log probability
+- **Why:** Rust-side implementation of the self-perplexity calculation for cross-session signals. Used when the corpus is large enough that TypeScript performance becomes a bottleneck.
+
+---
+
+## Somatic Signals (Potential)
+
+Signals derivable from the existing keystroke stream that measure the body producing the keystrokes, not the mind composing the text. These introduce a second measurement axis (somatic) orthogonal to the existing axis (cognitive/temporal). The somatic axis acts as a control channel: when a cognitive signal changes, the somatic axis disambiguates whether the change is cognitive (somatic stable) or motor (somatic drifting).
+
+None of these require hardware changes. All are computable from the existing keystroke stream.
+
+### Rollover Distribution (negative flight time analysis)
+- **Source:** Flight times where `keydown[n] < keyup[n-1]` (already captured as `negativeFlightTimeCount`)
+- **Computation:** Extract the distribution of negative flight times (not just the count). Compute mean, std, skewness of negative flights. Partition by hand pair (left-left, left-right, right-left, right-right). Track session trajectory (first half vs second half).
+- **Unit:** distribution statistics (ms), per-hand-pair breakdowns
+- **Why:** The magnitude of key overlap is a force proxy. Aggressive, high-energy typing produces deeper rollover (more negative flight times). Deliberate, soft typing produces cleaner releases (flight times near zero or positive). The current system counts rollovers but discards their depth. The distribution of rollover depth is a continuous intensity signal independent of timing.
+- **Literature:** Teh et al. 2013 establish rollover as a biometric feature. Force correlation with rollover depth is supported by the biomechanical coupling between strike velocity and finger lift timing.
+
+### Error Topology (spatial pattern of typing errors)
+- **Source:** Text reconstruction in `process.rs` already captures deletions and replacements
+- **Computation:** Map each error (deleted character vs. replacement character) to physical key positions on QWERTY layout. Classify errors by spatial relationship: adjacent-key (motor precision), same-finger (finger confusion), cross-hand (coordination), non-adjacent (cognitive). Track spatial bias per hand and per finger over time.
+- **Unit:** error counts per spatial category, per-hand/per-finger breakdowns
+- **Why:** Adjacent-key errors are motor precision failures that increase with fatigue. The spatial pattern of where precision degrades (left hand? right pinky?) is a per-finger somatic signal. Error count alone is ambiguous (could be speed-accuracy tradeoff); error topology isolates the motor component.
+- **Literature:** Dhakal et al. 2018 (analysis of 136M keystrokes) found systematic spatial error patterns correlated with typing proficiency and fatigue.
+
+### Thumb Channel (space bar as independent motor stream)
+- **Source:** Hold times and IKIs for space bar events (identifiable by key code in keystroke stream)
+- **Computation:** Separate space bar hold time distribution from all-finger hold time distribution. Compute mean, std, CV for each. Track the ratio (thumb hold CV / finger hold CV) and its drift over sessions.
+- **Unit:** hold time statistics (ms), thumb-to-finger ratios
+- **Why:** The thumb has disproportionate cortical motor representation and is biomechanically independent from the fingers. Its timing distribution is an independent motor stream. If thumb and finger hold times drift at different rates over months, that is a differential motor signal. The space bar is the most frequently pressed key, providing massive N per session.
+- **Literature:** Giancardo et al. 2016 (neuroQWERTY) demonstrated that per-finger motor features differentiate healthy controls from early PD.
+
+### Correction Strategy (hold vs. tap backspace)
+- **Source:** Backspace key events in the keystroke stream
+- **Computation:** Classify each deletion episode as held-backspace (single keydown with auto-repeat, detectable via long hold time or `e.repeat` flag) or tapped-backspace (multiple discrete keydown/keyup cycles within 500ms). Compute the ratio (held episodes / total episodes) and track within-session trajectory.
+- **Unit:** ratio (0-1), episode counts
+- **Why:** Held-backspace is fast, coarse, and overshoots. Tapped-backspace is controlled and precise. The ratio tracks the person's relationship to error in that moment. A shift from tapping to holding within a session may indicate frustration or fatigue. Across sessions, a drift toward holding may indicate reduced motor patience or increased cognitive load during revision.
+
+### Shift Anticipation (motor planning from modifier timing)
+- **Source:** Shift key events paired with the next letter keydown in the keystroke stream
+- **Computation:** Measure the interval from Shift keydown to the next letter keydown. Long anticipation (Shift pressed well before the letter) indicates early motor planning. Short or near-simultaneous press indicates chunked/reflexive execution. Partition by context: sentence-initial (habitual) vs. proper noun (deliberate) vs. single-letter word "I" (high-frequency).
+- **Unit:** fractional milliseconds, context-partitioned distributions
+- **Why:** The Shift-letter interval is a pure motor planning measurement. It captures how far in advance the motor system commits to the capitalization decision. Variation by context reveals whether the planning is habitual or deliberate, and shifts over time may indicate changes in motor planning efficiency.
+
+### Key Geography (distance-weighted motor efficiency)
+- **Source:** Key identities and IKIs from the keystroke stream, mapped to physical QWERTY positions
+- **Computation:** Assign each key a physical coordinate (row, column) on the QWERTY layout. For each consecutive key pair, compute physical distance (Euclidean on the key grid). Regress IKI against physical distance. The slope is the timing cost per unit of reach. Track the slope over sessions.
+- **Unit:** ms per key-unit of distance
+- **Why:** Hands have a home row. Keys further from home require more reach, more forearm rotation, more motor planning. The timing cost per unit of physical distance is a motor efficiency ratio. If that ratio changes over time, fine motor coordination is changing. This is independent of overall typing speed (which may vary with cognitive load) because it measures the distance-dependent component specifically.
+- **Literature:** Dhakal et al. 2018 found systematic latency variation by key position. Feit et al. 2016 modeled finger-travel optimization in skilled typists.
 
 ---
 
@@ -996,7 +1151,7 @@ Extends the error-correction model from a single phase (error detection, already
 | Session metadata | 7 |
 | 7D behavioral state | 8 |
 | 11D semantic state | 12 |
-| Dynamical signals | 11 |
+| Dynamical signals | 13 |
 | Calibration context | 7 dimensions |
 | Device/temporal | 3 |
 | Cursor behavior / writing process (Phase 1) | 17 |
@@ -1004,9 +1159,15 @@ Extends the error-correction model from a single phase (error detection, already
 | Precorrection / postcorrection (Phase 2) | 2 |
 | Revision distance (Phase 2) | 2 |
 | Punctuation key latency (Phase 2) | 2 |
-| Motor signals | 7 |
+| Motor signals | 8 |
 | Motor signals: Phase 2 additions | 5 |
 | Extended semantic signals | 8 |
 | Process signals | 9 |
+| R-burst sequences (per-burst detail) | 5 |
 | Cross-session signals | 10 |
-| **Total** | **~163 distinct signals** |
+| Avatar / ghost engine | 5 variants, 22 profile fields |
+| Reconstruction residuals | per-signal residuals |
+| Computation utilities | 3 |
+| Somatic signals (potential) | 6 |
+| **Total implemented** | **~172 distinct signals** |
+| **Total with potential somatic** | **~178 distinct signals** |

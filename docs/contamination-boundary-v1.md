@@ -59,6 +59,35 @@ attested under v1 based on code history review confirming the same unmediated
 paths were in place from the project's inception. The code paths above have
 not changed since the first session was recorded.
 
+## Known Unaddressed Vectors
+
+The following input vectors are **not blocked or monitored** by v1. They are
+documented here so the attestation is accurate about what it does and does not
+cover. Blocking these is v2-scope engineering work.
+
+1. **IME composition events.** Input Method Editors (used for CJK characters,
+   accented text) fire `compositionstart`/`compositionend` events that bypass
+   normal keydown/input flow. Composed text enters the textarea without
+   per-keystroke tracking. Low risk for English-only single-user use, but the
+   boundary does not assert anything about IME-composed input.
+
+2. **`document.execCommand('insertText')`.** Browser extensions or developer
+   tools can inject text programmatically via the deprecated but still-functional
+   `execCommand` API. This bypasses all event listeners. Not blockable at the
+   event-listener level; would require a MutationObserver or Content Security
+   Policy approach.
+
+3. **OS-level dictation.** macOS dictation (Fn-Fn), Windows Voice Typing, and
+   other OS-level speech-to-text services insert text via the input event
+   without corresponding keystroke events. Not distinguishable from typing at
+   the event-listener level. A heuristic (comparing keystroke count to character
+   count) could flag suspiciously high character-to-keystroke ratios, but this
+   is not implemented.
+
+Sessions where these vectors were used will have `paste_contaminated = false`
+and `drop_count = 0`, producing a false negative on the contamination flag.
+The contamination boundary does not claim to detect these vectors.
+
 ## Audit Date
 
 Initial audit: 2026-04-23
