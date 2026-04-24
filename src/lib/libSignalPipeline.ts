@@ -70,13 +70,14 @@ async function getResponseText(questionId: number): Promise<string | null> {
   return row?.text ?? null;
 }
 
-async function getSessionInfo(questionId: number): Promise<{ totalDurationMs: number; pasteCount: number }> {
-  const rows = await sql`SELECT total_duration_ms, paste_count FROM tb_session_summaries WHERE question_id = ${questionId}`;
-  const row = rows[0] as { total_duration_ms: number | null; paste_count: number | null } | undefined;
+async function getSessionInfo(questionId: number): Promise<{ totalDurationMs: number; pasteCount: number; dropCount: number }> {
+  const rows = await sql`SELECT total_duration_ms, paste_count, drop_count FROM tb_session_summaries WHERE question_id = ${questionId}`;
+  const row = rows[0] as { total_duration_ms: number | null; paste_count: number | null; drop_count: number | null } | undefined;
 
   return {
     totalDurationMs: row?.total_duration_ms ?? 0,
     pasteCount: row?.paste_count ?? 0,
+    dropCount: row?.drop_count ?? 0,
   };
 }
 
@@ -139,8 +140,8 @@ export async function computeAndPersistDerivedSignals(questionId: number): Promi
     try {
       const text = await getResponseText(questionId);
       if (text && text.length >= 20) {
-        const { pasteCount } = await getSessionInfo(questionId);
-        const ss = computeSemanticSignals(text, pasteCount);
+        const { pasteCount, dropCount } = await getSessionInfo(questionId);
+        const ss = computeSemanticSignals(text, pasteCount, dropCount);
         await saveSemanticSignals(questionId, {
           idea_density: ss.ideaDensity,
           lexical_sophistication: ss.lexicalSophistication,

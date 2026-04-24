@@ -14,7 +14,9 @@ Sessions submitted through the following paths are covered by v1:
 1. **Keystroke capture**: Client-side JavaScript captures raw keystrokes in
    `src/pages/index.astro`. Events are accumulated in a local array.
 2. **Text accumulation**: Text is built character-by-character in a textarea.
-   No autocomplete, no spell-check mediation, no AI suggestions.
+   No autocomplete, no spell-check mediation, no AI suggestions. Paste and
+   drag-and-drop are blocked (`preventDefault`); attempts are counted in
+   `paste_count` and `drop_count` on `tb_session_summaries`.
 3. **Submission**: POST to `/api/respond` with `{ questionId, text, sessionSummary }`.
    The `text` field is the raw textarea value, trimmed of leading/trailing whitespace.
 4. **Storage**: `saveResponse(questionId, text, tx)` inserts the trimmed text
@@ -26,7 +28,7 @@ Sessions submitted through the following paths are covered by v1:
 ### Calibration submissions (`src/pages/api/calibrate.ts`)
 
 1. **Keystroke capture**: Same client-side mechanism as journal submissions.
-2. **Text accumulation**: Same textarea, same constraints.
+2. **Text accumulation**: Same textarea, same constraints (paste and drag-and-drop blocked).
 3. **Submission**: POST to `/api/calibrate` with `{ prompt, text, sessionSummary }`.
 4. **Storage**: `saveCalibrationSession(prompt, text, summary)` inserts the
    trimmed text into `tb_responses.text` within a transaction. No transformation.
@@ -61,3 +63,10 @@ not changed since the first session was recorded.
 
 Initial audit: 2026-04-23
 Auditor: System (automated migration with manual code path verification)
+
+v1.1 update: 2026-04-23
+Change: Added drag-and-drop blocking (`dragover` + `drop` event listeners with
+`preventDefault`) on both journal and calibration textareas. Drop attempts are
+counted in `drop_count` on `tb_session_summaries` (migration 016). Pre-v1.1
+sessions did not monitor drag-and-drop; their attestation covers paste blocking
+only.

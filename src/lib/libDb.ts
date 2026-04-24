@@ -195,6 +195,7 @@ export interface SessionSummaryInput {
   confirmationLatencyMs: number | null;
   pasteCount: number | null;
   pasteCharsTotal: number | null;
+  dropCount: number | null;
   readBackCount: number | null;
   leadingEdgeRatio: number | null;
   contextualRevisionCount: number | null;
@@ -253,7 +254,7 @@ export async function saveSessionSummary(s: SessionSummaryInput, tx?: TxSql): Pr
        keystroke_entropy,
        mattr, avg_sentence_length, sentence_length_variance,
        scroll_back_count, question_reread_count,
-       confirmation_latency_ms, paste_count, paste_chars_total,
+       confirmation_latency_ms, paste_count, paste_chars_total, drop_count,
        read_back_count, leading_edge_ratio,
        contextual_revision_count, pre_contextual_revision_count,
        considered_and_kept_count,
@@ -287,7 +288,7 @@ export async function saveSessionSummary(s: SessionSummaryInput, tx?: TxSql): Pr
       ${s.keystrokeEntropy},
       ${s.mattr}, ${s.avgSentenceLength}, ${s.sentenceLengthVariance},
       ${s.scrollBackCount}, ${s.questionRereadCount},
-      ${s.confirmationLatencyMs}, ${s.pasteCount}, ${s.pasteCharsTotal},
+      ${s.confirmationLatencyMs}, ${s.pasteCount}, ${s.pasteCharsTotal}, ${s.dropCount},
       ${s.readBackCount}, ${s.leadingEdgeRatio},
       ${s.contextualRevisionCount}, ${s.preContextualRevisionCount},
       ${s.consideredAndKeptCount},
@@ -607,6 +608,7 @@ const SESSION_SUMMARY_COLS = `
   s.question_reread_count AS "questionRereadCount",
   s.confirmation_latency_ms AS "confirmationLatencyMs",
   s.paste_count AS "pasteCount", s.paste_chars_total AS "pasteCharsTotal",
+  s.drop_count AS "dropCount",
   s.read_back_count AS "readBackCount", s.leading_edge_ratio AS "leadingEdgeRatio",
   s.contextual_revision_count AS "contextualRevisionCount",
   s.pre_contextual_revision_count AS "preContextualRevisionCount",

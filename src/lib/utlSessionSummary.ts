@@ -77,6 +77,7 @@ export function coerceSessionSummary(
     confirmationLatencyMs: (sessionSummary.confirmationLatencyMs as number) ?? null,
     pasteCount: (sessionSummary.pasteCount as number) ?? null,
     pasteCharsTotal: (sessionSummary.pasteCharsTotal as number) ?? null,
+    dropCount: (sessionSummary.dropCount as number) ?? null,
     readBackCount: (sessionSummary.readBackCount as number) ?? null,
     leadingEdgeRatio: (sessionSummary.leadingEdgeRatio as number) ?? null,
     contextualRevisionCount: (sessionSummary.contextualRevisionCount as number) ?? null,

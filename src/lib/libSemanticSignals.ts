@@ -267,10 +267,13 @@ function textCompressionRatio(text: string): number | null {
 export function computeSemanticSignals(
   text: string,
   pasteCount: number = 0,
+  dropCount: number = 0,
 ): SemanticSignals {
   const words = tokenize(text);
   const sentences = splitSentences(text);
-  const contaminated = pasteCount > 0;
+  // paste_contaminated covers all external input vectors: paste and drag-and-drop.
+  // Column name is historical; semantics = "any non-keystroke text entry attempted."
+  const contaminated = pasteCount > 0 || dropCount > 0;
 
   return {
     ideaDensity: ideaDensity(words),

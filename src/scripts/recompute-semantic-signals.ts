@@ -13,13 +13,14 @@ async function main() {
   // Get all journal responses with their text and paste_count
   const rows = await sql`
     SELECT r.question_id, r.text,
-           COALESCE(ss.paste_count, 0)::int AS paste_count
+           COALESCE(ss.paste_count, 0)::int AS paste_count,
+           COALESCE(ss.drop_count, 0)::int AS drop_count
     FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
     LEFT JOIN tb_session_summaries ss ON r.question_id = ss.question_id
     WHERE q.question_source_id != 3
     ORDER BY q.scheduled_for ASC
-  ` as Array<{ question_id: number; text: string; paste_count: number }>;
+  ` as Array<{ question_id: number; text: string; paste_count: number; drop_count: number }>;
 
   console.log(`[recompute-semantic] ${rows.length} journal responses to process`);
 
@@ -30,7 +31,7 @@ async function main() {
       continue;
     }
 
-    const ss = computeSemanticSignals(row.text, row.paste_count);
+    const ss = computeSemanticSignals(row.text, row.paste_count, row.drop_count);
     await saveSemanticSignals(row.question_id, {
       idea_density: ss.ideaDensity,
       lexical_sophistication: ss.lexicalSophistication,

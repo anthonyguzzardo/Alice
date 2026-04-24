@@ -845,9 +845,10 @@
           let consideredAndKeptCount = 0;
           let lastSelectionWasRange = false;
 
-          // Paste detection: construct validity signal
+          // Paste/drop detection: construct validity signal
           let pasteCount = 0;
           let pasteCharsTotal = 0;
+          let dropCount = 0;
 
           // Hand-lateralized hold times (QWERTY mapping, Kim et al. 2024)
           const holdTimesLeft: number[] = [];
@@ -983,6 +984,13 @@
               setTimeout(() => { msg.style.opacity = '0'; }, 100);
               setTimeout(() => { msg.remove(); }, 6000);
             }
+          });
+
+          // Drop blocked: same construct isolation as paste.
+          textarea.addEventListener('dragover', (e: DragEvent) => { e.preventDefault(); });
+          textarea.addEventListener('drop', (e: DragEvent) => {
+            e.preventDefault();
+            dropCount++;
           });
 
           textarea.addEventListener('keydown', (e: KeyboardEvent) => {
@@ -1474,6 +1482,7 @@
               confirmationLatencyMs,
               pasteCount,
               pasteCharsTotal,
+              dropCount,
               readBackCount,
               leadingEdgeRatio,
               contextualRevisionCount,
@@ -1713,6 +1722,7 @@
         let calLastSelectionWasRange = false;
         let calPasteCount = 0;
         let calPasteCharsTotal = 0;
+        let calDropCount = 0;
         const calHoldTimesLeft: number[] = [];
         const calHoldTimesRight: number[] = [];
         let calNegativeFlightTimeCount = 0;
@@ -1794,6 +1804,13 @@
             setTimeout(() => { msg.style.opacity = '0'; }, 100);
             setTimeout(() => { msg.remove(); }, 6000);
           }
+        });
+
+        // Drop blocked: same construct isolation as paste.
+        textarea.addEventListener('dragover', (e: DragEvent) => { e.preventDefault(); });
+        textarea.addEventListener('drop', (e: DragEvent) => {
+          e.preventDefault();
+          calDropCount++;
         });
 
         textarea.addEventListener('keydown', (e: KeyboardEvent) => {
@@ -2179,6 +2196,7 @@
             confirmationLatencyMs: calConfirmationLatencyMs,
             pasteCount: calPasteCount,
             pasteCharsTotal: calPasteCharsTotal,
+            dropCount: calDropCount,
             readBackCount: calReadBackCount,
             leadingEdgeRatio: calLeadingEdgeRatio,
             contextualRevisionCount: calContextualRevisionCount,
