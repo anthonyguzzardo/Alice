@@ -420,7 +420,8 @@ import PublicLayout from '../layouts/layPublic.astro';
           <h3>Signal pipeline boundary failure + extended ghost residuals</h3>
           <details>
             <summary>Wrapper functions silently stripped 38 new signal columns; ghost residuals expanded from 13 to 41 dimensions</summary>
-            <p>Two TypeScript wrapper functions in <code>libSignalsNative.ts</code> explicitly constructed return objects with only the original 14 fields, silently discarding everything the Rust engine produced after the Phase 1-5 expansion. Three edits to one file fixed it. All new signal columns now populate through the live pipeline. Backfill completed: 31 dynamical + 31 motor rows re-inserted with all new columns populated. Additionally, reconstruction residual comparison expanded from 13 to 41 behavioral dimensions stored in <code>extended_residuals_json</code> (JSONB), organized into seven theoretical families. Key finding: MF-DFA spectrum width is the most ghost-resistant dimension by 4x. Calibration guard added to the last unguarded aggregate pipeline function.</p>
+            <p>Two TypeScript wrapper functions in <code>libSignalsNative.ts</code> explicitly constructed return objects with only the original 14 fields, silently discarding everything the Rust engine produced after the Phase 1-5 expansion. Three edits to one file fixed it. All new signal columns now populate through the live pipeline. Backfill completed: 31 dynamical + 31 motor rows re-inserted with all new columns populated. Additionally, reconstruction residual comparison expanded from 13 to 41 behavioral dimensions stored in <code>extended_residuals_json</code> (JSONB), organized into seven theoretical families. Calibration guard added to the last unguarded aggregate pipeline function.</p>
+            <p class="hw-timeline-impact">Expanding residuals to 41 dimensions revealed that ghost reproduction fidelity varies by over 100x across theoretical families. MF-DFA spectrum width is the most ghost-resistant dimension by 4x, because the reconstruction adversary generates from a single stochastic process and cannot reproduce multifractal structure. Ordinal statistics are nearly perfectly reproducible. This decomposition was invisible at 13 dimensions.</p>
           </details>
         </div>
       </div>
@@ -436,6 +437,7 @@ import PublicLayout from '../layouts/layPublic.astro';
           <details>
             <summary>Replaced vendor API with self-hosted archivable weights</summary>
             <p>VoyageAI's <code>voyage-3-lite</code> failed three of four constitutional requirements: not archivable (no SHA-256 identifier), not deterministic across vendor changes, no lifecycle control. Migrated to Qwen3-Embedding-0.6B via self-hosted TEI, CPU-only build for bit-reproducibility. Metal FP32 on Apple Silicon is not bit-reproducible due to batch-dependent reduction patterns. All 10 non-calibration sessions re-embedded; semantic baselines regenerated from scratch.</p>
+            <p class="hw-timeline-impact">The semantic channel now has the same reproducibility guarantee as the behavioral channel. Embeddings computed today can be regenerated from archived weights indefinitely, independent of any vendor. Baselines remain valid against future sessions without methodological drift.</p>
           </details>
         </div>
       </div>
@@ -451,6 +453,7 @@ import PublicLayout from '../layouts/layPublic.astro';
           <details>
             <summary>Stripped unvalidated interpretive labels from signal surfaces</summary>
             <p>Audit identified two classes of failure: interpretive labels presented as instrument readings (e.g., "rigid"/"malleable" for attractor force without validation), and statistical notation without adequate sample-size context (sigma notation without baseline entry counts). Wave 1 removed four sets of unvalidated labels. Wave 2 added honest framing for low-n signals: dots-only for n&lt;5, explicit sample sizes on deviation callouts, minimum run length 4 for trend detection.</p>
+            <p class="hw-timeline-impact">Every readout the instrument now surfaces is either a raw measurement or an honestly-gated statistical claim. The observatory distinguishes between what it knows and what it is still learning, visible in the interface rather than hidden behind premature interpretation.</p>
           </details>
         </div>
       </div>
@@ -466,6 +469,7 @@ import PublicLayout from '../layouts/layPublic.astro';
           <details>
             <summary>Dynamic critical-r gate replaced hardcoded thresholds</summary>
             <p>Coupling correlations displayed as "strong" or "moderate" based on hardcoded thresholds without significance testing. A correlation of r=0.55 from n=10 displayed as "strong" despite p&gt;0.05. Replaced with dynamic <code>max(criticalR(n), 0.3)</code> gate using Cornish-Fisher approximation. Two-state badge system: "established" requires both significance and stability; "provisional" for significant but unvalidated couplings.</p>
+            <p class="hw-timeline-impact">Coupling discoveries now scale honestly with data depth. At n=10, almost nothing qualifies. At n=50, genuine structure emerges. The instrument's confidence grows with the dataset rather than with arbitrary thresholds, which means early data accumulation cannot produce false discoveries that later need to be retracted.</p>
           </details>
         </div>
       </div>
@@ -481,6 +485,7 @@ import PublicLayout from '../layouts/layPublic.astro';
           <details>
             <summary>Residuals now store exact inputs for regeneration</summary>
             <p>Every ghost session stores the PRNG seed, profile snapshot (3.1KB measured), corpus SHA-256 hash, and topic string. Given these inputs, regeneration produces bit-identical dynamical and motor signals. Verified 10/10 on production data. Semantic residuals remain excluded (depend on external embedding model).</p>
+            <p class="hw-timeline-impact">Every residual is now an auditable claim. Any future version of the instrument can verify whether a past ghost comparison would produce the same result, making reconstruction validity a permanent property of the dataset rather than a snapshot assertion.</p>
           </details>
         </div>
       </div>
@@ -496,6 +501,7 @@ import PublicLayout from '../layouts/layPublic.astro';
           <details>
             <summary>Two-clean-build reproducibility check on every PR touching Rust</summary>
             <p>Automated CI workflow builds the signal engine twice from clean state and diffs the output JSON on a fixture session. Any bit-level divergence fails the PR. Golden signal values documented for the 100-keystroke fixture.</p>
+            <p class="hw-timeline-impact">The signal engine cannot silently drift. Any code change that alters a measurement, whether intentionally or through compiler optimization differences, is caught before it enters the codebase. This is the enforcement mechanism that makes the reproducibility guarantee operational rather than aspirational.</p>
           </details>
         </div>
       </div>
@@ -511,6 +517,7 @@ import PublicLayout from '../layouts/layPublic.astro';
           <details>
             <summary>Naive summation sensitive to compiler auto-vectorization; replaced with Neumaier compensated summation</summary>
             <p>Discovered that naive floating-point sums across 17 accumulation sites were sensitive to LLVM auto-vectorization and loop unrolling order. Replaced all with Neumaier compensated summation (error bound O(epsilon) independent of n). Also fixed HashMap iteration nondeterminism in permutation entropy (converted to BTreeMap) and pinned the Rust toolchain to 1.95.0 + LLVM 22.1.2 on aarch64-apple-darwin.</p>
+            <p class="hw-timeline-impact">The same keystroke stream now produces the same signal values on any build, on any machine, indefinitely. This is the numerical foundation that every downstream guarantee depends on: reproducible residuals, stable baselines, and meaningful longitudinal comparisons all require that the measurement itself does not move.</p>
           </details>
         </div>
       </div>
@@ -526,6 +533,7 @@ import PublicLayout from '../layouts/layPublic.astro';
           <details>
             <summary>27/27 sessions affected, transfer entropy values shifted 130%+</summary>
             <p>Hold times and flight times were filtered independently, causing misalignment when rollover typing produced valid holds with invalid flights. 6,589 total misaligned events across all sessions. Transfer entropy values shifted by over 130% mean, with 5 sign flips. Fixed by paired filtering: both hold and flight are kept or dropped together for the same keystroke event. Original data preserved as a snapshot table.</p>
+            <p class="hw-timeline-impact">Transfer entropy now measures what it claims: directional information flow between motor execution (hold) and cognitive planning (flight). Before the fix, the coupling was computed between misaligned series, meaning the causal direction estimates were unreliable. The entire hold-flight analysis framework depends on this alignment being correct.</p>
           </details>
         </div>
       </div>
@@ -1271,6 +1279,16 @@ import PublicLayout from '../layouts/layPublic.astro';
     font-family: var(--mono);
     font-size: 0.75rem;
     color: var(--accent);
+  }
+
+  .hw-timeline-impact {
+    font-family: var(--serif-body) !important;
+    font-size: 0.85rem !important;
+    line-height: 1.55 !important;
+    color: var(--text) !important;
+    margin-top: 0.5rem !important;
+    padding-left: 1rem !important;
+    font-style: italic;
   }
 
   .hw-timeline-coda {

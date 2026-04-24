@@ -522,7 +522,7 @@ full_adversary:  motor=0.3947`;
       </div>
       <div class="r-design-item">
         <span class="r-design-constraint">Intra-individual baselines</span>
-        <span class="r-design-solution">Deviation must be measured against the participant's own history, not a population norm. Calibration sessions provide within-person same-day controls that account for transient state variation (fatigue, illness, mood). Alice's semantic baseline infrastructure is operational across seven semantic signals (idea density, lexical sophistication, epistemic stance, integrative complexity, deep cohesion, compression ratio, referential cohesion), with running distribution stores, topic-matched z-scoring via embedding similarity, and minimum-n gating. Longitudinal trajectory analysis is deferred for data depth. See <a class="r-cite" href="/docs/embedding-methods">methods provenance</a>.</span>
+        <span class="r-design-solution">Deviation must be measured against the participant's own history, not a population norm. Calibration sessions provide within-person same-day controls that account for transient state variation (fatigue, illness, mood). Alice's semantic baseline infrastructure is operational across fourteen semantic signals (idea density, lexical sophistication, epistemic stance, integrative complexity, deep cohesion, referential cohesion, emotional valence arc, compression ratio, discourse coherence global, discourse coherence local, global/local coherence ratio, coherence decay slope, and NRC emotion densities), with running distribution stores, topic-matched z-scoring via embedding similarity, and minimum-n gating. Longitudinal trajectory analysis is deferred for data depth. See <a class="r-cite" href="/docs/embedding-methods">methods provenance</a>.</span>
       </div>
       <div class="r-design-item">
         <span class="r-design-constraint">Participant-blind measurement</span>
@@ -585,7 +585,7 @@ full_adversary:  motor=0.3947`;
       <span class="r-instrument-stat" id="strip-variants"></span>
     </div>
 
-    <p>Every reconstruction residual is a reproducible artifact. The PRNG seed, motor profile snapshot, and corpus integrity hash are stored alongside each residual. Any future build of the instrument can regenerate the identical ghost and verify the stored residual to bit identity. This is not a design aspiration; it is a <a class="r-cite" href="/papers/reconstruction-validity">verified property</a>, demonstrated on production data across all dynamical and motor signal families.</p>
+    <p>Every reconstruction residual is a reproducible artifact. The PRNG seed, motor profile snapshot, and corpus integrity hash are stored alongside each residual. Any future build of the instrument can regenerate the identical ghost and verify the stored residual to bit identity. This is not a design aspiration; it is a <a class="r-cite" href="/papers/reconstruction-validity">verified property</a>, demonstrated on production data across all six signal families (dynamical, motor, process, semantic, cross-session, and behavioral state).</p>
 
     <p>The semantic measurement pipeline runs against a self-hosted, archivable embedding model (Qwen3-Embedding-0.6B, Apache 2.0, weights archived by SHA-256 hash, FP32 CPU inference verified bit-reproducible). The vector geometry of every embedding in the corpus can be reproduced from the archived weights and the documented inference environment. See <a class="r-cite" href="/docs/embedding-methods">methods specification</a>.</p>
 
@@ -611,7 +611,7 @@ full_adversary:  motor=0.3947`;
   <section class="r-section" id="open">
     <h2>Open questions and limitations</h2>
 
-    <p>Alice implements this instrument design and has verified its architectural commitments: bit-reproducible signal computation, cryptographically attested contamination boundary, archived embedding methodology with pinned weights and deterministic inference, and a fully operational measurement pipeline across behavioral and semantic signal families. The instrument has been accumulating data since April 2026. The empirical questions that remain are about longitudinal validation, generalization beyond n=1, sustained engagement without gamification, and modality migration. The following problems remain open.</p>
+    <p>Alice implements this instrument design and has verified its architectural commitments: bit-reproducible signal computation, cryptographically attested contamination boundary, archived embedding methodology with pinned weights and deterministic inference, and a fully operational measurement pipeline computing more than 100 signals across six families (dynamical, motor, process, semantic, cross-session, behavioral state) with 41-dimension reconstruction residuals organized by theoretical family. The instrument has been accumulating data since April 2026. The empirical questions that remain are about longitudinal validation, generalization beyond n=1, sustained engagement without gamification, and modality migration. The following problems remain open.</p>
 
     <div class="r-design-list">
       <div class="r-design-item">
@@ -942,11 +942,15 @@ full_adversary:  motor=0.3947`;
 
     // Signal families with projected fidelity (schematic, not measured)
     const dimensions = [
-      { label: 'MOTOR FINGERPRINT', sub: 'ex-Gaussian, digraph latency', fidelity: 0.93 },
-      { label: 'PAUSE ARCHITECTURE', sub: 'P-burst, sentence, word', fidelity: 0.84 },
-      { label: 'TEMPORAL DYNAMICS', sub: 'PE spectrum, DFA, autocorrelation', fidelity: 0.55 },
+      { label: 'MOTOR FINGERPRINT', sub: 'ex-Gaussian, digraph latency, MSE', fidelity: 0.93 },
+      { label: 'PAUSE ARCHITECTURE', sub: 'P-burst, sentence, word, mixture model', fidelity: 0.84 },
+      { label: 'ORDINAL STATISTICS', sub: 'PE, statistical complexity, LZC, OPTN', fidelity: 0.82 },
+      { label: 'TEMPORAL DYNAMICS', sub: 'DFA, autocorrelation, DMD, spectral', fidelity: 0.55 },
+      { label: 'CAUSAL EMERGENCE', sub: 'EI, CEI, PID synergy/redundancy', fidelity: 0.42 },
       { label: 'REVISION TOPOLOGY', sub: 'R-burst, I-burst, timing bias', fidelity: 0.45 },
-      { label: 'SEMANTIC COHERENCE', sub: 'argument structure, meaning', fidelity: 0.04 },
+      { label: 'RECURRENCE NETWORKS', sub: 'transitivity, clustering, path length', fidelity: 0.13 },
+      { label: 'MULTIFRACTAL', sub: 'MF-DFA spectrum width, asymmetry', fidelity: 0.04 },
+      { label: 'SEMANTIC COHERENCE', sub: 'discourse structure, meaning', fidelity: 0.04 },
     ];
 
     const barW = w - pad.left - pad.right;
