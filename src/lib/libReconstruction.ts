@@ -373,6 +373,14 @@ async function computeForVariant(
 // ─── Main ──────────────────────────────────────────────────────────
 
 export async function computeReconstructionResidual(questionId: number): Promise<void> {
+  // Calibration sessions (question_source_id = 3) are prompted neutral writing.
+  // Ghost comparison is journal-only; calibration reconstruction requires a
+  // parallel calibration engine (see systemDesign/CALIBRATION_ENGINE.md).
+  const sourceRows = await sql`
+    SELECT question_source_id FROM tb_questions WHERE question_id = ${questionId}
+  `;
+  if ((sourceRows[0] as { question_source_id: number }).question_source_id === 3) return;
+
   // Fetch corpus (shared across all variants).
   // Exclude calibration responses (question_source_id = 3): calibrations are
   // prompted neutral writing that would corrupt the Markov/PPM language model.
