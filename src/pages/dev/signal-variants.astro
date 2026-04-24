@@ -401,14 +401,14 @@
           // ── 1. Dependency Tree ──
           root.appendChild(makeSection(
             'Dependency Map',
-            'Which signal families feed which 8D dimensions',
+            'Which signal families feed which 7D dimensions',
             buildDependencyTree(data)
           ));
 
           // ── 2. Leave-One-Out ──
           root.appendChild(makeSection(
             'Leave-One-Out',
-            'Remove one family — how much does the 8D shape change?',
+            'Remove one family — how much does the 7D shape change?',
             buildLeaveOneOut(data)
           ));
 
@@ -540,7 +540,7 @@
           box.className = 'obs-only';
           const label = document.createElement('div');
           label.className = 'obs-only-label';
-          label.textContent = 'Observation-only (feed LLM prompt, not 8D engine)';
+          label.textContent = 'Observation-only (feed LLM prompt, not 7D engine)';
           box.appendChild(label);
           const list = document.createElement('div');
           list.className = 'obs-only-list';

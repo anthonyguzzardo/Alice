@@ -1,0 +1,140 @@
+---
+import PublicLayout from '../../layouts/layPublic.astro';
+import { getDoc } from '../../lib/libDocs.ts';
+
+const { slug } = Astro.params;
+const doc = getDoc(slug!);
+
+if (!doc) {
+  return Astro.redirect('/research');
+}
+---
+
+<PublicLayout title={`Alice -- ${doc.title}`} description={doc.title}>
+
+<article class="doc-page">
+  <div class="doc-body" set:html={doc.html} />
+  <div class="doc-footer">
+    <a href="/research">Back to research</a>
+    <a href="/methodology">Methodology</a>
+  </div>
+</article>
+
+</PublicLayout>
+
+<style is:global>
+  .doc-page {
+    padding-bottom: 4rem;
+  }
+
+  .doc-body {
+    max-width: 720px;
+  }
+
+  .doc-body h1 {
+    font-family: var(--serif-display);
+    font-size: 2rem;
+    font-weight: 400;
+    font-style: italic;
+    margin-bottom: 2rem;
+    padding-top: 4rem;
+  }
+
+  .doc-body h2 {
+    font-family: var(--serif-body);
+    font-size: 1.3rem;
+    font-weight: 500;
+    margin-top: 2.5rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .doc-body h3 {
+    font-family: var(--serif-body);
+    font-size: 1.1rem;
+    font-weight: 500;
+    margin-top: 2rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .doc-body p {
+    font-family: var(--serif-body);
+    font-size: 1rem;
+    line-height: 1.7;
+    color: var(--text);
+    margin-bottom: 1rem;
+  }
+
+  .doc-body ul, .doc-body ol {
+    font-family: var(--serif-body);
+    font-size: 1rem;
+    line-height: 1.7;
+    margin-bottom: 1rem;
+    padding-left: 1.5rem;
+  }
+
+  .doc-body li {
+    margin-bottom: 0.25rem;
+  }
+
+  .doc-body code {
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    color: var(--accent);
+  }
+
+  .doc-body pre {
+    background: var(--bg-input, #ebe7e1);
+    padding: 1rem 1.25rem;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin-bottom: 1rem;
+    font-size: 0.82rem;
+    line-height: 1.5;
+  }
+
+  .doc-body pre code {
+    color: var(--text);
+  }
+
+  .doc-body strong {
+    font-weight: 600;
+  }
+
+  .doc-body table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1.5rem;
+    font-family: var(--serif-body);
+    font-size: 0.95rem;
+  }
+
+  .doc-body th, .doc-body td {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .doc-body th {
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+
+  .doc-footer {
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 1.5rem;
+  }
+
+  .doc-footer a {
+    font-family: var(--serif-body);
+    font-size: 0.95rem;
+    color: var(--text-muted);
+    text-decoration: none;
+  }
+
+  .doc-footer a:hover {
+    color: var(--text);
+  }
+</style>
