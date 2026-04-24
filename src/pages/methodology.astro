@@ -41,9 +41,10 @@ import PublicLayout from '../layouts/layPublic.astro';
   <!-- ===== DYNAMICAL SIGNALS ===== -->
   <section class="mt-section">
     <h2>Dynamical signals</h2>
-    <p>Nonlinear complexity and structure of the keystroke timing series. Treats the inter-keystroke interval (IKI) sequence as output of a complex adaptive system.</p>
+    <p>Nonlinear complexity and structure of the keystroke timing series. Treats the inter-keystroke interval (IKI) sequence as output of a complex adaptive system. Organized into nine theoretical sub-families spanning complexity, scaling, causality, and mode decomposition.</p>
     <p class="mt-engine">Computed in: Rust native engine (dynamical.rs)</p>
 
+    <h3 class="mt-subfamily">Permutation entropy</h3>
     <div class="mt-signal-list">
       <div class="mt-signal">
         <div class="mt-signal-header">
@@ -56,6 +57,45 @@ import PublicLayout from '../layouts/layPublic.astro';
 
       <div class="mt-signal">
         <div class="mt-signal-header">
+          <span class="mt-signal-name">Weighted permutation entropy</span>
+          <span class="mt-badge mt-badge-validated">Validated</span>
+        </div>
+        <p>Amplitude-weighted PE that captures both ordinal pattern frequency and the magnitude of fluctuations. More sensitive to large IKI excursions than standard PE.</p>
+        <span class="mt-cite">Fadlallah et al. 2013</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Statistical complexity</span>
+          <span class="mt-badge mt-badge-validated">Validated</span>
+        </div>
+        <p>Jensen-Shannon complexity: the product of entropy and disequilibrium. Distinguishes structured complexity from randomness. Maximum at the edge between order and disorder.</p>
+        <span class="mt-cite">Rosso et al. 2007</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Forbidden pattern fraction</span>
+          <span class="mt-badge mt-badge-validated">Validated</span>
+        </div>
+        <p>Proportion of ordinal patterns that never occur. Deterministic systems forbid patterns; stochastic systems explore them all. Sensitive to low-dimensional structure in the IKI series.</p>
+        <span class="mt-cite">Amig&oacute; et al. 2007</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Lempel-Ziv complexity</span>
+          <span class="mt-badge mt-badge-validated">Validated</span>
+        </div>
+        <p>Algorithmic complexity of the symbolized IKI series via LZ76 parsing. Measures compressibility of the temporal sequence. Complements PE by capturing non-ordinal structure.</p>
+        <span class="mt-cite">Lempel &amp; Ziv 1976</span>
+      </div>
+    </div>
+
+    <h3 class="mt-subfamily">Detrended fluctuation analysis</h3>
+    <div class="mt-signal-list">
+      <div class="mt-signal">
+        <div class="mt-signal-header">
           <span class="mt-signal-name">DFA alpha</span>
           <span class="mt-badge mt-badge-validated">Validated</span>
         </div>
@@ -65,13 +105,139 @@ import PublicLayout from '../layouts/layPublic.astro';
 
       <div class="mt-signal">
         <div class="mt-signal-header">
-          <span class="mt-signal-name">Recurrence quantification analysis</span>
+          <span class="mt-signal-name">MF-DFA spectrum width</span>
           <span class="mt-badge mt-badge-validated">Validated</span>
         </div>
-        <p>Four metrics from reconstructed phase-space attractor: determinism (repeatable patterns), laminarity (laminar states), trapping time (average diagonal length), recurrence rate (overall self-similarity).</p>
-        <span class="mt-cite">Webber &amp; Zbilut 2005</span>
+        <p>Width of the multifractal singularity spectrum. Measures richness of scaling behavior. Wide spectrum = multiple coexisting temporal dynamics. The most ghost-resistant behavioral dimension by 4x: the reconstruction adversary cannot reproduce multifractal structure from a single stochastic process.</p>
+        <span class="mt-cite">Kantelhardt et al. 2002</span>
       </div>
 
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">MF-DFA asymmetry and peak alpha</span>
+          <span class="mt-badge mt-badge-validated">Validated</span>
+        </div>
+        <p>Asymmetry of the singularity spectrum (left- vs right-skewed multifractal structure) and the Holder exponent at the spectrum peak. Together they characterize whether large or small fluctuations dominate the multifractal signature.</p>
+        <span class="mt-cite">Kantelhardt et al. 2002</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Temporal irreversibility</span>
+          <span class="mt-badge mt-badge-validated">Validated</span>
+        </div>
+        <p>Statistical asymmetry under time reversal. Nonzero irreversibility implies the IKI series is generated by a dissipative, non-equilibrium process rather than a passive noise source.</p>
+        <span class="mt-cite">Lacasa et al. 2012</span>
+      </div>
+    </div>
+
+    <h3 class="mt-subfamily">Spectral analysis</h3>
+    <div class="mt-signal-list">
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">IKI power spectral density</span>
+          <span class="mt-badge mt-badge-adapted">Adapted</span>
+        </div>
+        <p>Five spectral features from Welch PSD of the IKI series: spectral slope (1/f exponent), respiratory-band peak frequency, peak typing frequency, low/high frequency ratio, and fast/slow variance ratio. Spectral slope distinguishes random (flat) from self-organized (steep) timing. The respiratory peak detects physiological entrainment of typing rhythm.</p>
+        <span class="mt-cite">Welch 1967; adapted to keystroke domain</span>
+      </div>
+    </div>
+
+    <h3 class="mt-subfamily">Ordinal pattern transition network</h3>
+    <div class="mt-signal-list">
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">OPTN transition entropy and forbidden transitions</span>
+          <span class="mt-badge mt-badge-adapted">Adapted</span>
+        </div>
+        <p>Entropy of the transition matrix between successive ordinal patterns, and the count of transitions that never occur. Captures temporal dependencies that standard PE discards by treating patterns as independent.</p>
+        <span class="mt-cite">Small 2013</span>
+      </div>
+    </div>
+
+    <h3 class="mt-subfamily">Recurrence quantification</h3>
+    <div class="mt-signal-list">
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">RQA metrics</span>
+          <span class="mt-badge mt-badge-validated">Validated</span>
+        </div>
+        <p>Six metrics from reconstructed phase-space attractor: determinism (repeatable patterns), laminarity (laminar states), trapping time (average diagonal length), recurrence rate (overall self-similarity), recurrence time entropy, and mean recurrence time.</p>
+        <span class="mt-cite">Webber &amp; Zbilut 2005</span>
+      </div>
+    </div>
+
+    <h3 class="mt-subfamily">Recurrence networks</h3>
+    <div class="mt-signal-list">
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Recurrence network topology</span>
+          <span class="mt-badge mt-badge-validated">Validated</span>
+        </div>
+        <p>Graph-theoretic analysis of the recurrence matrix: transitivity (clustering of recurrent states), average path length (separation between attractor regions), clustering coefficient, and assortativity (degree correlation). Reveals geometric structure of the phase-space attractor that RQA diagonal/vertical line statistics miss.</p>
+        <span class="mt-cite">Donner et al. 2010</span>
+      </div>
+    </div>
+
+    <h3 class="mt-subfamily">Causal emergence</h3>
+    <div class="mt-signal-list">
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Effective information and causal emergence index</span>
+          <span class="mt-badge mt-badge-adapted">Adapted</span>
+        </div>
+        <p>Effective information (EI) quantifies determinism and degeneracy of temporal transitions. The causal emergence index (CEI) measures whether coarse-graining the IKI series increases its causal structure. Optimal causal scale identifies the temporal resolution at which the system is most informative about itself.</p>
+        <span class="mt-cite">Hoel 2017</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">PID synergy and redundancy</span>
+          <span class="mt-badge mt-badge-adapted">Adapted</span>
+        </div>
+        <p>Partial information decomposition of hold and flight time contributions to IKI prediction. Synergy = information available only when both channels are observed together. Redundancy = information available from either channel alone. High synergy suggests integrated motor-cognitive control.</p>
+        <span class="mt-cite">Williams &amp; Beer 2010</span>
+      </div>
+    </div>
+
+    <h3 class="mt-subfamily">Criticality</h3>
+    <div class="mt-signal-list">
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Branching ratio and avalanche exponent</span>
+          <span class="mt-badge mt-badge-adapted">Adapted</span>
+        </div>
+        <p>Branching ratio measures propagation of activity (IKI exceedances). Ratio near 1.0 = critical dynamics (self-organized). Avalanche size exponent characterizes the power-law distribution of burst cascades. Together they test whether the keystroke process operates near a critical point.</p>
+        <span class="mt-cite">Beggs &amp; Plenz 2003</span>
+      </div>
+    </div>
+
+    <h3 class="mt-subfamily">Dynamic mode decomposition</h3>
+    <div class="mt-signal-list">
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">DMD modes</span>
+          <span class="mt-badge mt-badge-adapted">Adapted</span>
+        </div>
+        <p>Data-driven decomposition of the IKI series into spatial-temporal modes: dominant oscillatory frequency, decay rate (damping vs growth), active mode count, and modal spectral entropy. Extracts the dominant rhythmic components without assuming stationarity.</p>
+        <span class="mt-cite">Schmid 2010</span>
+      </div>
+    </div>
+
+    <h3 class="mt-subfamily">Pause mixture model</h3>
+    <div class="mt-signal-list">
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Gaussian mixture pause decomposition</span>
+          <span class="mt-badge mt-badge-experimental">Experimental</span>
+        </div>
+        <p>IKI distribution decomposed into Gaussian mixture components via BIC-selected model order. Component count reflects the number of distinct timing regimes. Motor proportion identifies the fast (automatic) component. Cognitive load index measures the relative weight of slow (deliberative) components.</p>
+        <span class="mt-cite">Novel; informed by pause classification literature</span>
+      </div>
+    </div>
+
+    <h3 class="mt-subfamily">Transfer entropy</h3>
+    <div class="mt-signal-list">
       <div class="mt-signal">
         <div class="mt-signal-header">
           <span class="mt-signal-name">Transfer entropy</span>
@@ -160,6 +326,33 @@ import PublicLayout from '../layouts/layPublic.astro';
         </div>
         <p>Correlation between consecutive hold times. Captures finger coordination and motor planning continuity.</p>
         <span class="mt-cite">Kim et al. 2024</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Multiscale entropy (MSE) and complexity index</span>
+          <span class="mt-badge mt-badge-validated">Validated</span>
+        </div>
+        <p>Sample entropy computed at multiple coarse-graining scales. The complexity index (area under the MSE curve) quantifies overall multi-scale regularity. Healthy systems show high complexity across scales; degraded systems lose complexity at coarse scales first.</p>
+        <span class="mt-cite">Costa et al. 2002</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Ex-Gaussian Fisher trace</span>
+          <span class="mt-badge mt-badge-adapted">Adapted</span>
+        </div>
+        <p>Trace of the Fisher information matrix at the MLE/EM parameter estimates. Measures estimation precision: high trace = tight confidence region around (mu, sigma, tau). Low trace = flat likelihood, unreliable parameter estimates. Provides a per-session quality gate for ex-Gaussian parameters.</p>
+        <span class="mt-cite">Fisher information; adapted to ex-Gaussian MLE</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Hold-flight rank correlation</span>
+          <span class="mt-badge mt-badge-adapted">Adapted</span>
+        </div>
+        <p>Spearman rank correlation between hold duration and subsequent flight time. Measures the monotonic coupling between motor execution and transition planning, robust to distributional outliers.</p>
+        <span class="mt-cite">Adapted from motor coupling literature</span>
       </div>
     </div>
   </section>
@@ -278,6 +471,42 @@ import PublicLayout from '../layouts/layPublic.astro';
         <p>Gzip compression ratio as Kolmogorov complexity proxy. High = more information per character. Low = repetitive or formulaic.</p>
         <span class="mt-cite">Cilibrasi &amp; Vitanyi 2005</span>
       </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Discourse coherence (global)</span>
+          <span class="mt-badge mt-badge-adapted">Adapted</span>
+        </div>
+        <p>Average pairwise semantic similarity across all sentence pairs in the response. Measures overall thematic unity: high global coherence = a tightly focused response. Low = scattered or multi-topic.</p>
+        <span class="mt-cite">Foltz et al. 1998 (LSA coherence)</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Discourse coherence (local)</span>
+          <span class="mt-badge mt-badge-adapted">Adapted</span>
+        </div>
+        <p>Average semantic similarity between adjacent sentence pairs. Measures thought-to-thought continuity: high local coherence = smooth transitions. Low = abrupt topic jumps.</p>
+        <span class="mt-cite">Adapted from adjacent-sentence coherence (McNamara et al. 2014)</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Global/local coherence ratio</span>
+          <span class="mt-badge mt-badge-experimental">Experimental</span>
+        </div>
+        <p>Ratio of global to local coherence. High = thematically tight but with some local jumps (structured argument). Low = locally smooth but globally diffuse (stream of consciousness).</p>
+        <span class="mt-cite">Novel</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Coherence decay slope</span>
+          <span class="mt-badge mt-badge-experimental">Experimental</span>
+        </div>
+        <p>Rate at which pairwise semantic similarity decays with sentence distance. Steep decay = ideas are locally clustered. Flat decay = thematic connections span the full response.</p>
+        <span class="mt-cite">Novel</span>
+      </div>
     </div>
   </section>
 
@@ -330,6 +559,33 @@ import PublicLayout from '../layouts/layPublic.astro';
           <span class="mt-badge mt-badge-experimental">Experimental</span>
         </div>
         <p>Exponential decay rate of Jaccard vocabulary similarity across time lags. Fast decay = rapidly diversifying vocabulary. Slow = stable lexicon.</p>
+        <span class="mt-cite">Novel</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Motor self-perplexity</span>
+          <span class="mt-badge mt-badge-experimental">Experimental</span>
+        </div>
+        <p>Character trigram model trained on quantized IKI history, scored against today's motor timing. The motor analogue of textual self-perplexity. Higher = today's typing rhythm is more novel relative to motor history.</p>
+        <span class="mt-cite">Novel</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Text network communities</span>
+          <span class="mt-badge mt-badge-adapted">Adapted</span>
+        </div>
+        <p>Number of distinct communities detected in the word co-occurrence graph via modularity-based clustering. More communities = more distinct conceptual clusters in the response.</p>
+        <span class="mt-cite">Adapted from community detection (Blondel et al. 2008)</span>
+      </div>
+
+      <div class="mt-signal">
+        <div class="mt-signal-header">
+          <span class="mt-signal-name">Bridging ratio</span>
+          <span class="mt-badge mt-badge-experimental">Experimental</span>
+        </div>
+        <p>Proportion of edges in the co-occurrence graph that connect different communities. High bridging = integrative writing that links distinct conceptual clusters. Low = compartmentalized thinking.</p>
         <span class="mt-cite">Novel</span>
       </div>
     </div>
@@ -526,6 +782,21 @@ import PublicLayout from '../layouts/layPublic.astro';
     color: var(--text-faint) !important;
     letter-spacing: 0.04em;
     margin-bottom: 1.5rem !important;
+  }
+
+  .mt-subfamily {
+    font-family: var(--mono) !important;
+    font-size: 0.75rem !important;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted) !important;
+    margin: 2rem 0 0.75rem !important;
+    padding: 0 !important;
+    font-weight: 400 !important;
+  }
+
+  .mt-subfamily + .mt-signal-list {
+    margin-top: 0;
   }
 
   /* --- Validation tiers --- */

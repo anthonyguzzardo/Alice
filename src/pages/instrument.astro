@@ -70,7 +70,14 @@ import PublicLayout from '../layouts/layPublic.astro';
         <div class="i-signals">
           <span>Permutation entropy spectrum (orders 3-7)</span>
           <span>Detrended fluctuation analysis</span>
-          <span>Recurrence quantification</span>
+          <span>MF-DFA (multifractal spectrum)</span>
+          <span>Spectral analysis (PSD slope, LF/HF ratio)</span>
+          <span>Ordinal statistics (statistical complexity, forbidden patterns, LZC)</span>
+          <span>Recurrence quantification (6 metrics)</span>
+          <span>Recurrence networks (transitivity, clustering, assortativity)</span>
+          <span>Causal emergence (EI, CEI, PID)</span>
+          <span>Dynamic mode decomposition</span>
+          <span>Pause mixture model</span>
           <span>Transfer entropy (KSG estimator)</span>
         </div>
       </div>
@@ -80,9 +87,12 @@ import PublicLayout from '../layouts/layPublic.astro';
         <p>The statistical shape of your keystroke timing distribution. How your motor system executes the physical act of typing.</p>
         <div class="i-signals">
           <span>Ex-Gaussian parameters (mu, sigma, tau via MLE)</span>
+          <span>Ex-Gaussian Fisher trace</span>
           <span>Sample entropy</span>
+          <span>Multiscale entropy / complexity index</span>
           <span>Autocorrelation structure</span>
           <span>Compression ratio (Lempel-Ziv)</span>
+          <span>Hold-flight rank correlation</span>
         </div>
       </div>
       <div class="i-family">
@@ -107,6 +117,7 @@ import PublicLayout from '../layouts/layPublic.astro';
           <span>Integrative complexity</span>
           <span>Deep and referential cohesion</span>
           <span>Emotional valence arc</span>
+          <span>Discourse coherence (global, local, ratio, decay)</span>
         </div>
       </div>
       <div class="i-family">
@@ -115,16 +126,19 @@ import PublicLayout from '../layouts/layPublic.astro';
         <p>How your current session relates to your own history. Longitudinal consistency and drift.</p>
         <div class="i-signals">
           <span>Self-perplexity</span>
+          <span>Motor self-perplexity</span>
           <span>Normalized compression distance (4 lags)</span>
           <span>Vocabulary recurrence decay</span>
           <span>Digraph stability</span>
           <span>Text network density</span>
+          <span>Text network communities</span>
+          <span>Bridging ratio</span>
         </div>
       </div>
       <div class="i-family">
         <span class="i-family-label">Behavioral state</span>
         <span class="i-family-engine">TypeScript</span>
-        <p>Eight-dimensional state vector derived from session summaries. Fluency, deliberation, revision, commitment, volatility, thermal, presence, convergence.</p>
+        <p>Seven-dimensional state vector derived from session summaries. Fluency, deliberation, revision, commitment, volatility, thermal, presence. Convergence is a derived composite (Euclidean distance from personal center in 7D space).</p>
         <div class="i-signals">
           <span>PersDyn dynamics (baseline, variability, attractor force)</span>
           <span>Cross-dimension coupling matrix</span>

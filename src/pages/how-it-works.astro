@@ -19,14 +19,14 @@ import PublicLayout from '../layouts/layPublic.astro';
 <article class="how-it-works">
 
   <header class="hw-hero">
-    <h1>A single writing session produces 38 signals across five measurement families. Here is how.</h1>
+    <h1>A single writing session produces more than 100 signals across six measurement families. Here is how.</h1>
     <p class="hw-lead">Three systems work together: a native signal engine measures the temporal and structural shape of your writing, a reconstruction adversary tests which dimensions of that shape are irreducible, and a semantic pipeline captures the linguistic content. This page explains the architecture and the corrections that shaped it.</p>
   </header>
 
   <!-- ===== SECTION 1: SESSION FLOW ===== -->
   <section class="hw-section" id="session-flow">
     <h2>The session flow</h2>
-    <p>Every writing session follows the same path, from keystroke to stored measurement. The synchronous transaction guarantees the session is saved before any derived computation begins. The fire-and-forget pipeline runs five independent signal families; if one fails, the others still complete.</p>
+    <p>Every writing session follows the same path, from keystroke to stored measurement. The synchronous transaction guarantees the session is saved before any derived computation begins. The fire-and-forget pipeline runs six independent signal families; if one fails, the others still complete.</p>
 
     <!-- Flow diagram -->
     <div class="hw-flow">
@@ -105,7 +105,7 @@ import PublicLayout from '../layouts/layPublic.astro';
         </div>
         <div class="hw-stage-content">
           <span class="hw-stage-label">Fire-and-forget pipeline</span>
-          <h3>Five families, computed independently</h3>
+          <h3>Six families, computed independently</h3>
           <p>Each signal family runs in isolation. A failure in one family does not prevent the others from completing. If the Rust engine is unavailable, dynamical, motor, and process signals return null and the session saves without them. The health endpoint surfaces this state.</p>
 
           <div class="hw-families">
@@ -113,14 +113,24 @@ import PublicLayout from '../layouts/layPublic.astro';
               <summary>
                 <span class="hw-family-tag hw-tag-dynamical">Dynamical</span>
                 <span class="hw-family-engine">Rust</span>
-                <span class="hw-family-count">13 signals</span>
+                <span class="hw-family-count">51 signals</span>
               </summary>
               <div class="hw-family-body">
-                <p>Nonlinear dynamics of the IKI series. Treats keystroke timing as output of a complex adaptive system.</p>
+                <p>Nonlinear dynamics of the IKI series. Treats keystroke timing as output of a complex adaptive system. Organized into nine theoretical sub-families spanning complexity, structure, causality, and mode decomposition.</p>
                 <div class="hw-signal-chips">
                   <span>PE spectrum (orders 3-7)</span>
                   <span>DFA alpha</span>
-                  <span>RQA (4 metrics)</span>
+                  <span>MF-DFA (spectrum width, asymmetry, peak alpha)</span>
+                  <span>Temporal irreversibility</span>
+                  <span>Spectral analysis (PSD slope, respiratory peak, peak frequency, LF/HF ratio)</span>
+                  <span>Ordinal statistics (statistical complexity, forbidden patterns, weighted PE, LZC)</span>
+                  <span>OPTN (transition entropy, forbidden transitions)</span>
+                  <span>RQA (determinism, laminarity, trapping time, recurrence rate, recurrence time entropy)</span>
+                  <span>Recurrence networks (transitivity, path length, clustering, assortativity)</span>
+                  <span>Causal emergence (EI, CEI, PID synergy/redundancy)</span>
+                  <span>Criticality (branching ratio, avalanche exponent)</span>
+                  <span>DMD (dominant frequency, decay rate, mode count, spectral entropy)</span>
+                  <span>Pause mixture (component count, motor proportion, cognitive load index)</span>
                   <span>Transfer entropy (KSG)</span>
                   <span>TE dominance</span>
                 </div>
@@ -132,13 +142,15 @@ import PublicLayout from '../layouts/layPublic.astro';
               <summary>
                 <span class="hw-family-tag hw-tag-motor">Motor</span>
                 <span class="hw-family-engine">Rust</span>
-                <span class="hw-family-count">13 signals</span>
+                <span class="hw-family-count">17 signals</span>
               </summary>
               <div class="hw-family-body">
                 <p>Statistical shape of keystroke timing distributions. Motor control, rhythmic consistency, and neuromuscular execution.</p>
                 <div class="hw-signal-chips">
                   <span>Sample entropy</span>
-                  <span>Ex-Gaussian (MLE/EM)</span>
+                  <span>MSE series / complexity index</span>
+                  <span>Ex-Gaussian (mu, sigma, tau, tau proportion via MLE/EM)</span>
+                  <span>Ex-Gaussian Fisher trace</span>
                   <span>Autocorrelation (lags 1-5)</span>
                   <span>Motor jerk</span>
                   <span>Lapse rate</span>
@@ -146,6 +158,7 @@ import PublicLayout from '../layouts/layPublic.astro';
                   <span>Compression ratio</span>
                   <span>Digraph latency</span>
                   <span>Hold-flight coupling</span>
+                  <span>Hold-flight rank correlation</span>
                 </div>
                 <div class="hw-family-dest"><code>tb_motor_signals</code></div>
               </div>
@@ -155,7 +168,7 @@ import PublicLayout from '../layouts/layPublic.astro';
               <summary>
                 <span class="hw-family-tag hw-tag-process">Process</span>
                 <span class="hw-family-engine">Rust</span>
-                <span class="hw-family-count">10 signals</span>
+                <span class="hw-family-count">9 signals</span>
               </summary>
               <div class="hw-family-body">
                 <p>Writing process mechanics. Text reconstruction from the event log to classify pause locations, burst types, revision behavior, and strategy shifts.</p>
@@ -176,10 +189,10 @@ import PublicLayout from '../layouts/layPublic.astro';
               <summary>
                 <span class="hw-family-tag hw-tag-semantic">Semantic</span>
                 <span class="hw-family-engine">TypeScript</span>
-                <span class="hw-family-count">8 signals</span>
+                <span class="hw-family-count">14 signals</span>
               </summary>
               <div class="hw-family-body">
-                <p>Linguistic content analysis via deterministic word-list methods. What you wrote, measured as density metrics.</p>
+                <p>Linguistic content analysis via deterministic word-list methods. What you wrote, measured as density metrics and discourse structure.</p>
                 <div class="hw-signal-chips">
                   <span>Idea density</span>
                   <span>Lexical sophistication</span>
@@ -189,6 +202,10 @@ import PublicLayout from '../layouts/layPublic.astro';
                   <span>Referential cohesion</span>
                   <span>Emotional valence arc</span>
                   <span>Text compression ratio</span>
+                  <span>Discourse coherence (global)</span>
+                  <span>Discourse coherence (local)</span>
+                  <span>Global/local coherence ratio</span>
+                  <span>Coherence decay slope</span>
                 </div>
                 <div class="hw-family-dest"><code>tb_semantic_signals</code></div>
               </div>
@@ -198,16 +215,19 @@ import PublicLayout from '../layouts/layPublic.astro';
               <summary>
                 <span class="hw-family-tag hw-tag-cross">Cross-session</span>
                 <span class="hw-family-engine">TypeScript</span>
-                <span class="hw-family-count">7 signals</span>
+                <span class="hw-family-count">11 signals</span>
               </summary>
               <div class="hw-family-body">
                 <p>Longitudinal consistency metrics. How your current session relates to your own history.</p>
                 <div class="hw-signal-chips">
                   <span>Self-perplexity</span>
+                  <span>Motor self-perplexity</span>
                   <span>NCD (4 lags)</span>
                   <span>Vocab recurrence decay</span>
                   <span>Digraph stability</span>
                   <span>Text network density</span>
+                  <span>Text network communities</span>
+                  <span>Bridging ratio</span>
                 </div>
                 <div class="hw-family-dest"><code>tb_cross_session_signals</code></div>
               </div>
@@ -277,7 +297,7 @@ import PublicLayout from '../layouts/layPublic.astro';
           <div class="hw-ghost-flow-arrow"></div>
           <div class="hw-ghost-flow-item">
             <span class="hw-ghost-flow-tag">Engine</span>
-            <p>Rust signal engine computes 38 measurements</p>
+            <p>Rust signal engine computes more than 100 measurements</p>
           </div>
           <div class="hw-ghost-flow-arrow"></div>
           <div class="hw-ghost-flow-item">
@@ -300,7 +320,7 @@ import PublicLayout from '../layouts/layPublic.astro';
           <div class="hw-ghost-flow-arrow"></div>
           <div class="hw-ghost-flow-item">
             <span class="hw-ghost-flow-tag">Engine</span>
-            <p>Avatar engine generates synthetic keystrokes, then the same Rust signal engine computes 38 measurements</p>
+            <p>Avatar engine generates synthetic keystrokes, then the same Rust signal engine computes more than 100 measurements</p>
           </div>
           <div class="hw-ghost-flow-arrow"></div>
           <div class="hw-ghost-flow-item">
@@ -389,6 +409,21 @@ import PublicLayout from '../layouts/layPublic.astro';
     <p>A measurement instrument earns its rigor through correction, not assertion. This timeline shows the methodological incidents that shaped Alice's signal engine. Each entry documents what was wrong, how it was discovered, and what changed. The full provenance log is maintained in the codebase.</p>
 
     <div class="hw-timeline">
+
+      <div class="hw-timeline-entry">
+        <div class="hw-timeline-marker">
+          <span class="hw-timeline-id">INC-013</span>
+          <span class="hw-timeline-date">2026-04-24</span>
+        </div>
+        <div class="hw-timeline-body">
+          <span class="hw-timeline-type hw-type-architecture">Architecture correction</span>
+          <h3>Signal pipeline boundary failure + extended ghost residuals</h3>
+          <details>
+            <summary>Wrapper functions silently stripped 38 new signal columns; ghost residuals expanded from 13 to 41 dimensions</summary>
+            <p>Two TypeScript wrapper functions in <code>libSignalsNative.ts</code> explicitly constructed return objects with only the original 14 fields, silently discarding everything the Rust engine produced after the Phase 1-5 expansion. Three edits to one file fixed it. All new signal columns now populate through the live pipeline. Backfill completed: 31 dynamical + 31 motor rows re-inserted with all new columns populated. Additionally, reconstruction residual comparison expanded from 13 to 41 behavioral dimensions stored in <code>extended_residuals_json</code> (JSONB), organized into seven theoretical families. Key finding: MF-DFA spectrum width is the most ghost-resistant dimension by 4x. Calibration guard added to the last unguarded aggregate pipeline function.</p>
+          </details>
+        </div>
+      </div>
 
       <div class="hw-timeline-entry">
         <div class="hw-timeline-marker">
@@ -498,7 +533,7 @@ import PublicLayout from '../layouts/layPublic.astro';
     </div>
 
     <div class="hw-timeline-coda">
-      <p>Seven incidents across three days. Each one made the instrument more honest. The full provenance log, including four additional incidents (INC-003, INC-004, INC-007, INC-010) and four deferred design decisions, is maintained in the codebase and available for review.</p>
+      <p>Eight incidents across four days. Each one made the instrument more honest. The full provenance log, including four additional incidents (INC-003, INC-004, INC-007, INC-011) and four deferred design decisions, is maintained in the codebase and available for review.</p>
     </div>
   </section>
 
