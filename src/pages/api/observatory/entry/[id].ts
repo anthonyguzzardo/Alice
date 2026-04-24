@@ -7,7 +7,7 @@
  * Pulls from the live PostgreSQL database.
  */
 import type { APIRoute } from 'astro';
-import sql, { getDynamicalSignals, getMotorSignals } from '../../../../lib/libDb.ts';
+import sql, { getDynamicalSignals, getMotorSignals, getProcessSignals, getCrossSessionSignals, getSemanticSignals } from '../../../../lib/libDb.ts';
 import { logError } from '../../../../lib/utlErrorLog.ts';
 import { computeDynamicalSignals, type KeystrokeEvent } from '../../../../lib/libSignalsNative.ts';
 
@@ -171,10 +171,58 @@ export const GET: APIRoute = async ({ params }) => {
         permutationEntropyRaw: dsRow.permutation_entropy_raw,
         peSpectrum: dsRow.pe_spectrum ? JSON.parse(dsRow.pe_spectrum) : null,
         dfaAlpha: dsRow.dfa_alpha,
+        // MF-DFA (Phase 1)
+        mfdfaSpectrumWidth: dsRow.mfdfa_spectrum_width,
+        mfdfaAsymmetry: dsRow.mfdfa_asymmetry,
+        mfdfaPeakAlpha: dsRow.mfdfa_peak_alpha,
+        // Temporal irreversibility (Phase 1)
+        temporalIrreversibility: dsRow.temporal_irreversibility,
+        // Lomb-Scargle PSD (Phase 1)
+        ikiPsdSpectralSlope: dsRow.iki_psd_spectral_slope,
+        ikiPsdRespiratoryPeakHz: dsRow.iki_psd_respiratory_peak_hz,
+        peakTypingFrequencyHz: dsRow.peak_typing_frequency_hz,
+        ikiPsdLfHfRatio: dsRow.iki_psd_lf_hf_ratio,
+        ikiPsdFastSlowVarianceRatio: dsRow.iki_psd_fast_slow_variance_ratio,
+        // Ordinal (Phase 2)
+        statisticalComplexity: dsRow.statistical_complexity,
+        forbiddenPatternFraction: dsRow.forbidden_pattern_fraction,
+        weightedPe: dsRow.weighted_pe,
+        lempelZivComplexity: dsRow.lempel_ziv_complexity,
+        // OPTN (Phase 2)
+        optnTransitionEntropy: dsRow.optn_transition_entropy,
+        optnForbiddenTransitionCount: dsRow.optn_forbidden_transition_count,
+        // RQA (existing + Phase 2 extensions)
         rqaDeterminism: dsRow.rqa_determinism,
         rqaLaminarity: dsRow.rqa_laminarity,
         rqaTrappingTime: dsRow.rqa_trapping_time,
         rqaRecurrenceRate: dsRow.rqa_recurrence_rate,
+        rqaRecurrenceTimeEntropy: dsRow.rqa_recurrence_time_entropy,
+        rqaMeanRecurrenceTime: dsRow.rqa_mean_recurrence_time,
+        // Recurrence networks (Phase 2)
+        recurrenceTransitivity: dsRow.recurrence_transitivity,
+        recurrenceAvgPathLength: dsRow.recurrence_avg_path_length,
+        recurrenceClustering: dsRow.recurrence_clustering,
+        recurrenceAssortativity: dsRow.recurrence_assortativity,
+        // Causal emergence (Phase 3)
+        effectiveInformation: dsRow.effective_information,
+        causalEmergenceIndex: dsRow.causal_emergence_index,
+        optimalCausalScale: dsRow.optimal_causal_scale,
+        // PID (Phase 3)
+        pidSynergy: dsRow.pid_synergy,
+        pidRedundancy: dsRow.pid_redundancy,
+        // Criticality (Phase 3)
+        branchingRatio: dsRow.branching_ratio,
+        avalancheSizeExponent: dsRow.avalanche_size_exponent,
+        // DMD (Phase 3)
+        dmdDominantFrequency: dsRow.dmd_dominant_frequency,
+        dmdDominantDecayRate: dsRow.dmd_dominant_decay_rate,
+        dmdModeCount: dsRow.dmd_mode_count,
+        dmdSpectralEntropy: dsRow.dmd_spectral_entropy,
+        // Pause mixture (Phase 5)
+        pauseMixtureComponentCount: dsRow.pause_mixture_component_count,
+        pauseMixtureMotorProportion: dsRow.pause_mixture_motor_proportion,
+        pauseMixtureCognitiveLoadIndex: dsRow.pause_mixture_cognitive_load_index,
+        // Transfer entropy (existing)
         teHoldToFlight: dsRow.te_hold_to_flight,
         teFlightToHold: dsRow.te_flight_to_hold,
         teDominance: dsRow.te_dominance,
@@ -190,6 +238,15 @@ export const GET: APIRoute = async ({ params }) => {
 
     // Read persisted motor signals
     const motorSignals = await getMotorSignals(entryState.question_id);
+
+    // Process signals
+    const processSignals = await getProcessSignals(entryState.question_id);
+
+    // Cross-session signals
+    const crossSessionSignals = await getCrossSessionSignals(entryState.question_id);
+
+    // Semantic signals (includes discourse coherence)
+    const semanticSignals = await getSemanticSignals(entryState.question_id);
 
     // Navigation
     const prevRows = await sql`
@@ -215,6 +272,9 @@ export const GET: APIRoute = async ({ params }) => {
       rburstSequence,
       dynamicalSignals,
       motorSignals,
+      processSignals,
+      crossSessionSignals,
+      semanticSignals,
       replay: replayRow ? {
         available: true,
         totalEvents: replayRow.total_events,

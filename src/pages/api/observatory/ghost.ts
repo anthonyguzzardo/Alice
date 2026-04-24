@@ -113,6 +113,7 @@ export const GET: APIRoute = async ({ request }) => {
         r.residual_integrative_complexity AS "resInteg",
         r.residual_deep_cohesion        AS "resCohes",
         r.residual_text_compression_ratio AS "resCompress",
+        r.extended_residuals_json AS "extendedResiduals",
         r.corpus_size            AS "corpusSize",
         r.avatar_word_count      AS "avatarWordCount",
         r.real_word_count        AS "realWordCount",
