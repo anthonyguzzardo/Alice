@@ -551,7 +551,7 @@ full_adversary:  motor=0.3947`;
     <p>A single reconstruction invites a follow-up: maybe the generator is just weak. To close that objection, the instrument runs five adversary variants on every session. Each one adds exactly one statistical improvement to the ghost. If the improvement closes the residual, that component of the gap was statistical, not cognitive. Whatever remains after the strongest ghost is the irreducible floor.</p>
 
     <div class="r-reconstruction-viz-wrap">
-      <canvas id="reconstruction-viz" width="620" height="340" aria-hidden="true"></canvas>
+      <canvas id="reconstruction-viz" width="620" height="520" aria-hidden="true"></canvas>
       <p class="r-caption">Reconstruction fidelity by signal family (schematic). The motor residual dominates across all five adversary variants. Better timing (AR(1) serial dependence, Gaussian copula hold-flight coupling) and better text (variable-order PPM) each close their targeted gaps without collapsing the motor floor. Full results in <a class="r-cite" href="/papers/reconstruction-validity">Guzzardo 2026c</a>.</p>
     </div>
 
@@ -1011,8 +1011,8 @@ full_adversary:  motor=0.3947`;
     }
 
     // Residual bracket on the right side spanning the bottom rows
-    const bracketTop = pad.top + 2 * (barH + gap) + barH * 0.3;
-    const bracketBot = pad.top + 4 * (barH + gap) + barH * 0.7;
+    const bracketTop = pad.top + 4 * (barH + gap) + barH * 0.3;
+    const bracketBot = pad.top + 8 * (barH + gap) + barH * 0.7;
     const bracketX = pad.left + barW + 52;
 
     ctx.strokeStyle = textFaint;
