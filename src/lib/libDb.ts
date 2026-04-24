@@ -1703,6 +1703,15 @@ export interface DynamicalSignalRow {
   permutation_entropy_raw: number | null;
   pe_spectrum: string | null;
   dfa_alpha: number | null;
+  mfdfa_spectrum_width: number | null;
+  mfdfa_asymmetry: number | null;
+  mfdfa_peak_alpha: number | null;
+  temporal_irreversibility: number | null;
+  iki_psd_spectral_slope: number | null;
+  iki_psd_respiratory_peak_hz: number | null;
+  peak_typing_frequency_hz: number | null;
+  iki_psd_lf_hf_ratio: number | null;
+  iki_psd_fast_slow_variance_ratio: number | null;
   rqa_determinism: number | null;
   rqa_laminarity: number | null;
   rqa_trapping_time: number | null;
@@ -1717,11 +1726,19 @@ export async function saveDynamicalSignals(questionId: number, s: Omit<Dynamical
     INSERT INTO tb_dynamical_signals (
        question_id, iki_count, hold_flight_count,
        permutation_entropy, permutation_entropy_raw, pe_spectrum, dfa_alpha,
+       mfdfa_spectrum_width, mfdfa_asymmetry, mfdfa_peak_alpha,
+       temporal_irreversibility,
+       iki_psd_spectral_slope, iki_psd_respiratory_peak_hz, peak_typing_frequency_hz,
+       iki_psd_lf_hf_ratio, iki_psd_fast_slow_variance_ratio,
        rqa_determinism, rqa_laminarity, rqa_trapping_time, rqa_recurrence_rate,
        te_hold_to_flight, te_flight_to_hold, te_dominance
     ) VALUES (
       ${questionId}, ${s.iki_count}, ${s.hold_flight_count},
       ${s.permutation_entropy}, ${s.permutation_entropy_raw}, ${s.pe_spectrum}, ${s.dfa_alpha},
+      ${s.mfdfa_spectrum_width}, ${s.mfdfa_asymmetry}, ${s.mfdfa_peak_alpha},
+      ${s.temporal_irreversibility},
+      ${s.iki_psd_spectral_slope}, ${s.iki_psd_respiratory_peak_hz}, ${s.peak_typing_frequency_hz},
+      ${s.iki_psd_lf_hf_ratio}, ${s.iki_psd_fast_slow_variance_ratio},
       ${s.rqa_determinism}, ${s.rqa_laminarity}, ${s.rqa_trapping_time}, ${s.rqa_recurrence_rate},
       ${s.te_hold_to_flight}, ${s.te_flight_to_hold}, ${s.te_dominance}
     )

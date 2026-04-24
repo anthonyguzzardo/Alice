@@ -22,6 +22,15 @@ pub(crate) struct RqaResult {
     pub(crate) recurrence_rate: f64,
 }
 
+/// MF-DFA result: singularity spectrum characterizing multifractal structure.
+/// Kantelhardt et al. 2002; Bennett et al. 2025 (direct keystroke validation).
+#[derive(Debug)]
+pub(crate) struct MfdfaResult {
+    pub(crate) spectrum_width: f64,
+    pub(crate) asymmetry: f64,
+    pub(crate) peak_alpha: f64,
+}
+
 pub(crate) struct DynamicalResult {
     pub(crate) iki_count: usize,
     pub(crate) hold_flight_count: usize,
@@ -31,6 +40,13 @@ pub(crate) struct DynamicalResult {
     /// Index 0 = order 3, index 4 = order 7. Each value is normalized [0,1].
     pub(crate) pe_spectrum: Option<Vec<f64>>,
     pub(crate) dfa_alpha: Option<f64>,
+    pub(crate) mfdfa: Option<MfdfaResult>,
+    pub(crate) temporal_irreversibility: Option<f64>,
+    pub(crate) iki_psd_spectral_slope: Option<f64>,
+    pub(crate) iki_psd_respiratory_peak_hz: Option<f64>,
+    pub(crate) peak_typing_frequency_hz: Option<f64>,
+    pub(crate) iki_psd_lf_hf_ratio: Option<f64>,
+    pub(crate) iki_psd_fast_slow_variance_ratio: Option<f64>,
     pub(crate) rqa: Option<RqaResult>,
     pub(crate) te_hold_to_flight: Option<f64>,
     pub(crate) te_flight_to_hold: Option<f64>,
@@ -191,6 +207,478 @@ fn dfa_alpha(series: &[f64]) -> SignalResult<f64> {
     let log_x: Vec<f64> = log_sizes.iter().map(|&s| (s as f64).ln()).collect();
     linreg_slope(&log_x, &log_fluctuations)
         .ok_or(SignalError::DegenerateValue("degenerate regression in DFA"))
+}
+
+// ─── MF-DFA (Kantelhardt et al. 2002) ────────────────────────────
+//
+// Generalizes DFA to moment orders q = -5..+5. At each box size,
+// the q-dependent fluctuation function F_q(n) replaces the standard
+// F_2(n). The generalized Hurst exponents h(q) and the singularity
+// spectrum f(alpha) via Legendre transform characterize multifractal
+// structure. Bennett et al. 2025 validated spectrum width on
+// keystroke IKI data as a cognitive fatigue marker.
+
+fn mfdfa(series: &[f64]) -> SignalResult<MfdfaResult> {
+    let n = series.len();
+    if n < 256 {
+        return Err(SignalError::InsufficientData { needed: 256, got: n });
+    }
+
+    let mu = mean(series);
+
+    // Cumulative sum (integration) with Neumaier compensation
+    let mut y = vec![0.0; n];
+    let mut cum = NeumaierAccumulator::new();
+    cum.add(series[0] - mu);
+    y[0] = cum.total();
+    for i in 1..n {
+        cum.add(series[i] - mu);
+        y[i] = cum.total();
+    }
+
+    let min_box = 4usize;
+    let max_box = n / 4;
+    if max_box < min_box {
+        return Err(SignalError::InsufficientData { needed: 16, got: n });
+    }
+
+    // q values: -5 to +5 (skip 0, handled separately)
+    let q_values: Vec<f64> = (-5..=5).map(|q| q as f64).collect();
+
+    // Build log-spaced box sizes (same as DFA)
+    let num_sizes = 15.min(max_box - min_box + 1);
+    let ratio = max_box as f64 / min_box as f64;
+    let mut box_sizes: Vec<usize> = Vec::new();
+    for i in 0..num_sizes {
+        let bs = (min_box as f64 * ratio.powf(i as f64 / (num_sizes - 1).max(1) as f64)).round()
+            as usize;
+        if box_sizes.last() != Some(&bs) {
+            box_sizes.push(bs);
+        }
+    }
+
+    // For each q, compute log(F_q(n)) at each box size, then regress for h(q)
+    let log_n: Vec<f64> = box_sizes.iter().map(|&s| (s as f64).ln()).collect();
+    let mut h_q = Vec::with_capacity(q_values.len());
+
+    for &q in &q_values {
+        let mut log_fq = Vec::with_capacity(box_sizes.len());
+
+        for &box_size in &box_sizes {
+            let num_boxes = n / box_size;
+            if num_boxes < 2 {
+                continue;
+            }
+
+            // Compute per-box variance (F^2), then aggregate with q-moment
+            let mut variances = Vec::with_capacity(num_boxes);
+            for b in 0..num_boxes {
+                let start = b * box_size;
+                let mut sx = NeumaierAccumulator::new();
+                let mut sy = NeumaierAccumulator::new();
+                let mut sxx = NeumaierAccumulator::new();
+                let mut sxy = NeumaierAccumulator::new();
+
+                for j in 0..box_size {
+                    let jf = j as f64;
+                    sx.add(jf);
+                    sy.add(y[start + j]);
+                    sxx.add(jf * jf);
+                    sxy.add(jf * y[start + j]);
+                }
+
+                let (sx, sy, sxx, sxy) = (sx.total(), sy.total(), sxx.total(), sxy.total());
+                let bsf = box_size as f64;
+                #[allow(clippy::suspicious_operation_groupings)]
+                let denom = bsf.mul_add(sxx, -(sx * sx));
+                #[allow(clippy::suspicious_operation_groupings)]
+                let slope = if denom == 0.0 {
+                    0.0
+                } else {
+                    bsf.mul_add(sxy, -(sx * sy)) / denom
+                };
+                let intercept = (sy - slope * sx) / bsf;
+
+                let mut sum_sq = NeumaierAccumulator::new();
+                for j in 0..box_size {
+                    let trend = slope.mul_add(j as f64, intercept);
+                    sum_sq.add((y[start + j] - trend).powi(2));
+                }
+                let var = sum_sq.total() / bsf;
+                if var > 0.0 {
+                    variances.push(var);
+                }
+            }
+
+            if variances.is_empty() {
+                continue;
+            }
+
+            // q-dependent fluctuation: F_q(n) = [mean(F^2^(q/2))]^(1/q)
+            let fq = if q.abs() < 1e-10 {
+                // q=0: geometric mean via exp(mean(ln(F^2)/2))
+                let mut log_sum = NeumaierAccumulator::new();
+                for &v in &variances {
+                    log_sum.add(v.ln());
+                }
+                (log_sum.total() / (2.0 * variances.len() as f64)).exp()
+            } else {
+                let mut moment_sum = NeumaierAccumulator::new();
+                for &v in &variances {
+                    moment_sum.add(v.powf(q / 2.0));
+                }
+                (moment_sum.total() / variances.len() as f64).powf(1.0 / q)
+            };
+
+            if fq > 0.0 && fq.is_finite() {
+                log_fq.push(fq.ln());
+            }
+        }
+
+        if log_fq.len() < 4 {
+            return Err(SignalError::DegenerateValue(
+                "fewer than 4 valid box sizes in MF-DFA for some q",
+            ));
+        }
+
+        // Trim log_n to match log_fq length (some box sizes may have been skipped)
+        let log_n_trimmed: Vec<f64> = log_n[..log_fq.len()].to_vec();
+        match linreg_slope(&log_n_trimmed, &log_fq) {
+            Some(slope) => h_q.push(slope),
+            None => {
+                return Err(SignalError::DegenerateValue("degenerate regression in MF-DFA"));
+            }
+        }
+    }
+
+    if h_q.len() != q_values.len() {
+        return Err(SignalError::DegenerateValue("incomplete h(q) spectrum"));
+    }
+
+    // Legendre transform: alpha(q) = h(q) + q * h'(q), f(alpha) = q * (alpha - h(q)) + 1
+    // Approximate h'(q) via finite differences
+    let mut alphas = Vec::with_capacity(h_q.len());
+    let mut f_alphas = Vec::with_capacity(h_q.len());
+
+    for i in 0..h_q.len() {
+        let dh = if i == 0 {
+            h_q[1] - h_q[0]
+        } else if i == h_q.len() - 1 {
+            h_q[h_q.len() - 1] - h_q[h_q.len() - 2]
+        } else {
+            (h_q[i + 1] - h_q[i - 1]) / 2.0
+        };
+        let dq = 1.0; // q step size is 1
+        let h_prime = dh / dq;
+        let alpha = h_q[i] + q_values[i] * h_prime;
+        let f_alpha = q_values[i] * (alpha - h_q[i]) + 1.0;
+        alphas.push(alpha);
+        f_alphas.push(f_alpha);
+    }
+
+    let alpha_min = alphas.iter().copied().fold(f64::INFINITY, f64::min);
+    let alpha_max = alphas.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let spectrum_width = alpha_max - alpha_min;
+
+    // Peak alpha: alpha at max f(alpha)
+    let peak_idx = f_alphas
+        .iter()
+        .enumerate()
+        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+        .map(|(i, _)| i)
+        .unwrap_or(0);
+    let peak_alpha = alphas[peak_idx];
+
+    // Asymmetry: (peak - min) / (max - min)
+    let asymmetry = if spectrum_width > 1e-10 {
+        (peak_alpha - alpha_min) / spectrum_width
+    } else {
+        0.5 // symmetric by default when width is zero
+    };
+
+    Ok(MfdfaResult {
+        spectrum_width,
+        asymmetry,
+        peak_alpha,
+    })
+}
+
+// ─── Temporal Irreversibility ────────────────────────────────────
+//
+// KL divergence between forward and backward IKI transition
+// probabilities. Measures the thermodynamic arrow of the typing
+// process. De la Fuente et al. 2022; Martinez et al. 2023.
+
+fn temporal_irreversibility(series: &[f64]) -> SignalResult<f64> {
+    let n = series.len();
+    if n < 100 {
+        return Err(SignalError::InsufficientData { needed: 100, got: n });
+    }
+
+    // Bin IKIs into K states via quintiles (5 bins)
+    let k = 5usize;
+    let mut sorted = series.to_vec();
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+    let boundaries: Vec<f64> = (1..k)
+        .map(|i| {
+            let idx = (i * sorted.len()) / k;
+            sorted[idx.min(sorted.len() - 1)]
+        })
+        .collect();
+
+    let bin = |v: f64| -> usize {
+        boundaries
+            .iter()
+            .position(|&b| v < b)
+            .unwrap_or(k - 1)
+    };
+
+    let binned: Vec<usize> = series.iter().map(|&v| bin(v)).collect();
+
+    // Build forward transition counts: P(s_t | s_{t-1})
+    let mut fwd = vec![vec![0u64; k]; k];
+    let mut bwd = vec![vec![0u64; k]; k];
+    for i in 0..binned.len() - 1 {
+        fwd[binned[i]][binned[i + 1]] += 1;
+        bwd[binned[i + 1]][binned[i]] += 1;
+    }
+
+    // Normalize rows to probabilities (Laplace smoothing with alpha=1)
+    let smooth = |counts: &[Vec<u64>]| -> Vec<Vec<f64>> {
+        counts
+            .iter()
+            .map(|row| {
+                let total: u64 = row.iter().sum::<u64>() + k as u64;
+                row.iter()
+                    .map(|&c| (c as f64 + 1.0) / total as f64)
+                    .collect()
+            })
+            .collect()
+    };
+
+    let p_fwd = smooth(&fwd);
+    let p_bwd = smooth(&bwd);
+
+    // KL divergence: D_KL(P_fwd || P_bwd)
+    // Weighted by stationary distribution (row sums of forward counts)
+    let row_totals: Vec<u64> = fwd.iter().map(|r| r.iter().sum()).collect();
+    let grand_total: u64 = row_totals.iter().sum();
+    if grand_total == 0 {
+        return Err(SignalError::DegenerateValue("no transitions in IKI series"));
+    }
+
+    let mut kl = NeumaierAccumulator::new();
+    for i in 0..k {
+        let pi = row_totals[i] as f64 / grand_total as f64;
+        if pi < 1e-15 {
+            continue;
+        }
+        for j in 0..k {
+            let p = p_fwd[i][j];
+            let q = p_bwd[i][j];
+            if p > 1e-15 && q > 1e-15 {
+                kl.add(pi * p * (p / q).ln());
+            }
+        }
+    }
+
+    let result = kl.total();
+    if result.is_finite() && result >= 0.0 {
+        Ok(result)
+    } else {
+        Ok(0.0) // symmetric = zero irreversibility
+    }
+}
+
+// ─── Lomb-Scargle PSD ────────────────────────────────────────────
+//
+// Spectral analysis of the IKI series via Lomb-Scargle periodogram.
+// Required because IKIs are unevenly spaced in time (keystrokes
+// don't occur at regular intervals). Extracts spectral slope,
+// respiratory band peak, peak typing frequency, LF/HF ratio,
+// and fast/slow variance ratio.
+
+#[derive(Debug)]
+pub(crate) struct PsdResult {
+    pub(crate) spectral_slope: f64,
+    pub(crate) respiratory_peak_hz: Option<f64>,
+    pub(crate) peak_typing_frequency_hz: Option<f64>,
+    pub(crate) lf_hf_ratio: Option<f64>,
+    pub(crate) fast_slow_variance_ratio: Option<f64>,
+}
+
+fn lomb_scargle_psd(series: &[f64]) -> SignalResult<PsdResult> {
+    let n = series.len();
+    if n < 200 {
+        return Err(SignalError::InsufficientData { needed: 200, got: n });
+    }
+
+    // Construct timestamps: cumulative sum of IKIs gives the time of each
+    // IKI measurement in milliseconds. Each IKI[i] is measured at time
+    // t[i] = sum(IKI[0..i]) (the midpoint of the interval).
+    let mut times = Vec::with_capacity(n);
+    let mut t = 0.0;
+    for &iki in series {
+        t += iki;
+        times.push(t);
+    }
+
+    // Convert to seconds for frequency in Hz
+    let times_sec: Vec<f64> = times.iter().map(|&t| t / 1000.0).collect();
+    let total_duration_sec = times_sec[n - 1] - times_sec[0];
+    if total_duration_sec < 1.0 {
+        return Err(SignalError::DegenerateValue("session too short for PSD"));
+    }
+
+    // Zero-mean the series
+    let mu = mean(series);
+    let centered: Vec<f64> = series.iter().map(|&v| v - mu).collect();
+
+    // Frequency grid: from 1/total_duration to Nyquist estimate
+    // Nyquist for unevenly sampled: roughly n / (2 * total_duration)
+    let f_min = 1.0 / total_duration_sec;
+    let f_max = (n as f64) / (2.0 * total_duration_sec);
+    let n_freq = 256.min(n);
+    let df = (f_max - f_min) / n_freq as f64;
+
+    let mut freqs = Vec::with_capacity(n_freq);
+    let mut power = Vec::with_capacity(n_freq);
+
+    for i in 0..n_freq {
+        let f = f_min + (i as f64 + 0.5) * df;
+        if f <= 0.0 {
+            continue;
+        }
+        let omega = 2.0 * std::f64::consts::PI * f;
+
+        // Lomb-Scargle: compute tau (phase offset)
+        let mut sin2_sum = NeumaierAccumulator::new();
+        let mut cos2_sum = NeumaierAccumulator::new();
+        for &t in &times_sec {
+            sin2_sum.add((2.0 * omega * t).sin());
+            cos2_sum.add((2.0 * omega * t).cos());
+        }
+        let tau = (sin2_sum.total()).atan2(cos2_sum.total()) / (2.0 * omega);
+
+        // Compute power at this frequency
+        let mut cos_sum = NeumaierAccumulator::new();
+        let mut sin_sum = NeumaierAccumulator::new();
+        let mut cos2 = NeumaierAccumulator::new();
+        let mut sin2 = NeumaierAccumulator::new();
+
+        for j in 0..n {
+            let phase = omega * (times_sec[j] - tau);
+            let c = phase.cos();
+            let s = phase.sin();
+            cos_sum.add(centered[j] * c);
+            sin_sum.add(centered[j] * s);
+            cos2.add(c * c);
+            sin2.add(s * s);
+        }
+
+        let cos2_total = cos2.total();
+        let sin2_total = sin2.total();
+        if cos2_total > 1e-15 && sin2_total > 1e-15 {
+            let p = 0.5
+                * (cos_sum.total().powi(2) / cos2_total
+                    + sin_sum.total().powi(2) / sin2_total);
+            if p.is_finite() && p >= 0.0 {
+                freqs.push(f);
+                power.push(p);
+            }
+        }
+    }
+
+    if freqs.len() < 10 {
+        return Err(SignalError::DegenerateValue(
+            "fewer than 10 valid frequency bins in PSD",
+        ));
+    }
+
+    // Spectral slope: log-log regression of power vs frequency
+    let log_f: Vec<f64> = freqs.iter().map(|&f| f.ln()).collect();
+    let log_p: Vec<f64> = power.iter().map(|&p| (p.max(1e-30)).ln()).collect();
+    let spectral_slope = linreg_slope(&log_f, &log_p)
+        .unwrap_or(0.0);
+
+    // Respiratory band peak: 0.15-0.35 Hz (9-21 breaths/min)
+    let respiratory_peak_hz = {
+        let mut best_power = 0.0f64;
+        let mut best_freq = None;
+        for (i, &f) in freqs.iter().enumerate() {
+            if (0.15..=0.35).contains(&f) && power[i] > best_power {
+                best_power = power[i];
+                best_freq = Some(f);
+            }
+        }
+        // Only report if peak is above noise floor (2x median power)
+        let mut sorted_power = power.clone();
+        sorted_power.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        let median_power = sorted_power[sorted_power.len() / 2];
+        if best_power > 2.0 * median_power {
+            best_freq
+        } else {
+            None
+        }
+    };
+
+    // Peak typing frequency: 2-15 Hz
+    let peak_typing_frequency_hz = {
+        let mut best_power = 0.0f64;
+        let mut best_freq = None;
+        for (i, &f) in freqs.iter().enumerate() {
+            if (2.0..=15.0).contains(&f) && power[i] > best_power {
+                best_power = power[i];
+                best_freq = Some(f);
+            }
+        }
+        best_freq
+    };
+
+    // LF/HF ratio: LF = 0.04-0.15 Hz, HF = 0.15-0.4 Hz
+    let (mut lf_power, mut hf_power) = (NeumaierAccumulator::new(), NeumaierAccumulator::new());
+    for (i, &f) in freqs.iter().enumerate() {
+        if (0.04..0.15).contains(&f) {
+            lf_power.add(power[i]);
+        } else if (0.15..=0.4).contains(&f) {
+            hf_power.add(power[i]);
+        }
+    }
+    let lf_hf_ratio = {
+        let hf = hf_power.total();
+        if hf > 1e-15 {
+            Some(lf_power.total() / hf)
+        } else {
+            None
+        }
+    };
+
+    // Fast/slow variance ratio: >1 Hz (motor arousal) / <0.5 Hz (cognitive)
+    let (mut fast, mut slow) = (NeumaierAccumulator::new(), NeumaierAccumulator::new());
+    for (i, &f) in freqs.iter().enumerate() {
+        if f > 1.0 {
+            fast.add(power[i]);
+        } else if f < 0.5 {
+            slow.add(power[i]);
+        }
+    }
+    let fast_slow_variance_ratio = {
+        let s = slow.total();
+        if s > 1e-15 {
+            Some(fast.total() / s)
+        } else {
+            None
+        }
+    };
+
+    Ok(PsdResult {
+        spectral_slope,
+        respiratory_peak_hz,
+        peak_typing_frequency_hz,
+        lf_hf_ratio,
+        fast_slow_variance_ratio,
+    })
 }
 
 // ─── RQA (Webber & Zbilut 2005) ──────────────────────────────────
@@ -462,6 +950,9 @@ pub(crate) fn compute(stream: &[KeystrokeEvent]) -> DynamicalResult {
     };
 
     let alpha = dfa_alpha(&ikis).ok();
+    let mfdfa_result = mfdfa(&ikis).ok();
+    let irrev = temporal_irreversibility(&ikis).ok();
+    let psd = lomb_scargle_psd(&ikis).ok();
     let rqa_result = rqa(&ikis).ok();
 
     let holds = &hf.holds()[..aligned];
@@ -484,6 +975,13 @@ pub(crate) fn compute(stream: &[KeystrokeEvent]) -> DynamicalResult {
         permutation_entropy_raw: pe.map(|(_, r)| r),
         pe_spectrum,
         dfa_alpha: alpha,
+        mfdfa: mfdfa_result,
+        temporal_irreversibility: irrev,
+        iki_psd_spectral_slope: psd.as_ref().map(|p| p.spectral_slope),
+        iki_psd_respiratory_peak_hz: psd.as_ref().and_then(|p| p.respiratory_peak_hz),
+        peak_typing_frequency_hz: psd.as_ref().and_then(|p| p.peak_typing_frequency_hz),
+        iki_psd_lf_hf_ratio: psd.as_ref().and_then(|p| p.lf_hf_ratio),
+        iki_psd_fast_slow_variance_ratio: psd.as_ref().and_then(|p| p.fast_slow_variance_ratio),
         rqa: rqa_result,
         te_hold_to_flight: te_hf,
         te_flight_to_hold: te_fh,
@@ -700,6 +1198,162 @@ mod tests {
         assert!(
             (te_full - te_tail).abs() < 1e-10,
             "TE with cap should equal TE of tail alone: full={te_full}, tail={te_tail}"
+        );
+    }
+
+    // ─── MF-DFA tests ────────────────────────────────────────────
+
+    #[test]
+    fn mfdfa_insufficient_data() {
+        let short = vec![1.0; 100];
+        assert!(matches!(
+            mfdfa(&short),
+            Err(SignalError::InsufficientData { .. })
+        ));
+    }
+
+    #[test]
+    fn mfdfa_spectrum_width_nonnegative() {
+        // Sinusoidal series: structured, should produce non-trivial spectrum
+        let data: Vec<f64> = (0..300)
+            .map(|i| ((i as f64) * 0.1).sin() * 50.0 + 100.0)
+            .collect();
+        let result = mfdfa(&data).unwrap();
+        assert!(
+            result.spectrum_width >= 0.0,
+            "MF-DFA spectrum width should be >= 0, got {}",
+            result.spectrum_width
+        );
+    }
+
+    #[test]
+    fn mfdfa_asymmetry_bounded() {
+        let data: Vec<f64> = (0..300)
+            .map(|i| ((i as f64) * 0.1).sin() * 50.0 + 100.0)
+            .collect();
+        let result = mfdfa(&data).unwrap();
+        assert!(
+            (0.0..=1.0).contains(&result.asymmetry),
+            "MF-DFA asymmetry should be in [0,1], got {}",
+            result.asymmetry
+        );
+    }
+
+    #[test]
+    fn mfdfa_peak_alpha_finite() {
+        let data: Vec<f64> = (0..300)
+            .map(|i| ((i as f64) * 0.1).sin() * 50.0 + 100.0)
+            .collect();
+        let result = mfdfa(&data).unwrap();
+        assert!(
+            result.peak_alpha.is_finite(),
+            "MF-DFA peak alpha should be finite, got {}",
+            result.peak_alpha
+        );
+    }
+
+    // ─── Temporal irreversibility tests ──────────────────────────
+
+    #[test]
+    fn irrev_insufficient_data() {
+        let short = vec![1.0; 50];
+        assert!(matches!(
+            temporal_irreversibility(&short),
+            Err(SignalError::InsufficientData { .. })
+        ));
+    }
+
+    #[test]
+    fn irrev_symmetric_near_zero() {
+        // Perfectly symmetric random series (palindrome): irreversibility should be ~0
+        let half: Vec<f64> = (0..100).map(|i| ((i as f64) * 0.3).sin() * 50.0 + 100.0).collect();
+        let mut palindrome = half.clone();
+        let mut rev = half;
+        rev.reverse();
+        palindrome.extend(rev);
+        let irr = temporal_irreversibility(&palindrome).unwrap();
+        assert!(
+            irr < 0.3,
+            "Irreversibility of palindrome should be near 0, got {irr}"
+        );
+    }
+
+    #[test]
+    fn irrev_nonnegative() {
+        let data: Vec<f64> = (0..200)
+            .map(|i| ((i as f64) * 0.2).sin() * 50.0 + 100.0)
+            .collect();
+        let irr = temporal_irreversibility(&data).unwrap();
+        assert!(irr >= 0.0, "Irreversibility should be >= 0, got {irr}");
+    }
+
+    // ─── Lomb-Scargle PSD tests ─────────────────────────────────
+
+    #[test]
+    fn psd_insufficient_data() {
+        let short = vec![100.0; 50];
+        assert!(matches!(
+            lomb_scargle_psd(&short),
+            Err(SignalError::InsufficientData { .. })
+        ));
+    }
+
+    #[test]
+    fn psd_spectral_slope_finite() {
+        let data: Vec<f64> = (0..300)
+            .map(|i| ((i as f64) * 0.2).sin() * 50.0 + 150.0)
+            .collect();
+        let result = lomb_scargle_psd(&data).unwrap();
+        assert!(
+            result.spectral_slope.is_finite(),
+            "PSD spectral slope should be finite, got {}",
+            result.spectral_slope
+        );
+    }
+
+    #[test]
+    fn psd_sinusoid_detects_peak() {
+        // Strong sinusoidal modulation at ~5 Hz (every ~200ms IKI with 50ms oscillation)
+        // Typing at ~5 keystrokes/sec with rhythmic modulation
+        let data: Vec<f64> = (0..500)
+            .map(|i| 200.0 + 30.0 * ((i as f64) * 0.5).sin())
+            .collect();
+        let result = lomb_scargle_psd(&data).unwrap();
+        // Should detect a peak typing frequency in the 2-15 Hz band
+        assert!(
+            result.peak_typing_frequency_hz.is_some(),
+            "PSD should detect peak typing frequency for sinusoidal IKI"
+        );
+    }
+
+    // ─── compute() integration tests ────────────────────────────
+
+    #[test]
+    fn compute_includes_new_signals() {
+        // Verify the compute function populates new signal fields for sufficient data
+        let stream: Vec<KeystrokeEvent> = (0..400)
+            .map(|i| {
+                let d = 1000.0 + i as f64 * 200.0 + ((i as f64) * 0.3).sin() * 30.0;
+                KeystrokeEvent {
+                    character: String::from("a"),
+                    key_down_ms: d,
+                    key_up_ms: d + 80.0 + ((i as f64) * 0.2).sin() * 10.0,
+                }
+            })
+            .collect();
+        let result = compute(&stream);
+        // MF-DFA needs 256+ IKIs; with 400 keystrokes we get ~399 IKIs
+        assert!(
+            result.mfdfa.is_some(),
+            "MF-DFA should be computed for 400-keystroke stream"
+        );
+        assert!(
+            result.temporal_irreversibility.is_some(),
+            "Temporal irreversibility should be computed for 400-keystroke stream"
+        );
+        assert!(
+            result.iki_psd_spectral_slope.is_some(),
+            "PSD spectral slope should be computed for 400-keystroke stream"
         );
     }
 }

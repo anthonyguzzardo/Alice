@@ -102,6 +102,25 @@ const DELTA_DIMENSIONS = [
 
 type DeltaDimension = typeof DELTA_DIMENSIONS[number];
 
+// Ergodicity classification (Mangalam et al. 2022, J. Royal Society Interface).
+// IKI-derived means are non-ergodic: their time averages diverge from ensemble
+// averages for multiplicative processes. Ratios, densities, and counts are not
+// affected by this specific non-ergodicity concern.
+// Weight: 1.0 = safe for longitudinal trend inference, 0.5 = valid per-session
+// but unreliable as trend estimator.
+const ERGODICITY_WEIGHT: Record<DeltaDimension, number> = {
+  deltaFirstPerson: 1.0,          // density (ratio-based)
+  deltaCognitive: 1.0,            // density (ratio-based)
+  deltaHedging: 1.0,              // density (ratio-based)
+  deltaCharsPerMinute: 0.5,       // IKI-derived mean
+  deltaCommitment: 1.0,           // ratio
+  deltaLargeDeletionCount: 1.0,   // count
+  deltaInterKeyIntervalMean: 0.5, // IKI mean (directly non-ergodic)
+  deltaAvgPBurstLength: 1.0,      // burst-level aggregate (count-based)
+  deltaHoldTimeMean: 0.5,         // motor timing mean (non-ergodic)
+  deltaFlightTimeMean: 0.5,       // motor timing mean (non-ergodic)
+};
+
 /** Maps delta dimension -> metadata for formatting */
 const DIMENSION_META: Record<DeltaDimension, {
   calField: keyof SessionSummaryInput;
@@ -270,7 +289,8 @@ export function computeDeltaMagnitude(
     if (std < 1e-10) continue; // no variance
 
     const z = (current - mean) / std;
-    sumSqZ += z * z;
+    const w = ERGODICITY_WEIGHT[dim];
+    sumSqZ += w * z * z;
     validDims++;
   }
 
@@ -345,6 +365,10 @@ export function formatCompactDelta(deltas: SessionDeltaRow[]): string {
   if (deltas.length >= MIN_HISTORY_FOR_TREND) {
     const trends: string[] = [];
     for (const dim of DELTA_DIMENSIONS) {
+      // Only report trends for ergodicity-safe dimensions (weight 1.0).
+      // Non-ergodic dimensions (IKI/hold/flight means) produce unreliable
+      // trend lines for N=1 longitudinal tracking.
+      if (ERGODICITY_WEIGHT[dim] < 1.0) continue;
       const trend = getTrend(deltas, dim);
       if (trend && trend !== 'stable') {
         const meta = DIMENSION_META[dim];

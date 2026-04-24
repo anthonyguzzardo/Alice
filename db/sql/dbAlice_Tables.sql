@@ -724,6 +724,15 @@ CREATE TABLE IF NOT EXISTS tb_dynamical_signals (
   ,permutation_entropy_raw      DOUBLE PRECISION
   ,pe_spectrum                  JSONB
   ,dfa_alpha                    DOUBLE PRECISION
+  ,mfdfa_spectrum_width         DOUBLE PRECISION
+  ,mfdfa_asymmetry              DOUBLE PRECISION
+  ,mfdfa_peak_alpha             DOUBLE PRECISION
+  ,temporal_irreversibility     DOUBLE PRECISION
+  ,iki_psd_spectral_slope       DOUBLE PRECISION
+  ,iki_psd_respiratory_peak_hz  DOUBLE PRECISION
+  ,peak_typing_frequency_hz     DOUBLE PRECISION
+  ,iki_psd_lf_hf_ratio          DOUBLE PRECISION
+  ,iki_psd_fast_slow_variance_ratio DOUBLE PRECISION
   ,rqa_determinism              DOUBLE PRECISION
   ,rqa_laminarity               DOUBLE PRECISION
   ,rqa_trapping_time            DOUBLE PRECISION

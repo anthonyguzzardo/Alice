@@ -45,6 +45,27 @@ const DRIFT_DIMENSIONS: Array<keyof CalibrationHistoryRow> = [
   'avg_flight_time_mean',
 ];
 
+// Ergodicity classification (Mangalam et al. 2022, J. Royal Society Interface).
+// IKI-derived means are non-ergodic: their time averages diverge from ensemble
+// averages for multiplicative processes. Ratios, counts, and durations derived
+// from event counts are not affected by this specific concern.
+// Weight: 1.0 = safe for longitudinal drift inference, 0.5 = valid per-snapshot
+// but unreliable as trend estimator.
+const DRIFT_ERGODICITY_WEIGHT: Record<string, number> = {
+  avg_first_keystroke_ms: 1.0,     // single event latency, not IKI mean
+  avg_commitment_ratio: 1.0,       // ratio
+  avg_duration_ms: 1.0,            // wall-clock duration
+  avg_pause_count: 1.0,            // count
+  avg_deletion_count: 1.0,         // count
+  avg_chars_per_minute: 0.5,       // IKI-derived rate
+  avg_p_burst_length: 1.0,         // burst-level aggregate
+  avg_small_deletion_count: 1.0,   // count
+  avg_large_deletion_count: 1.0,   // count
+  avg_iki_mean: 0.5,               // IKI mean (directly non-ergodic)
+  avg_hold_time_mean: 0.5,         // motor timing mean (non-ergodic)
+  avg_flight_time_mean: 0.5,       // motor timing mean (non-ergodic)
+};
+
 interface BaselineRowInput {
   avg_first_keystroke_ms: number | null;
   avg_commitment_ratio: number | null;
@@ -162,7 +183,8 @@ async function computeDriftMagnitude(
     if (dispersion == null || dispersion < 1e-10) continue;
 
     const z = (cur - prev) / dispersion;
-    sumSq += z * z;
+    const w = DRIFT_ERGODICITY_WEIGHT[dim] ?? 1.0;
+    sumSq += w * z * z;
     dimsWithDispersion++;
   }
 
