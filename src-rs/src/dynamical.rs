@@ -425,6 +425,10 @@ fn transfer_entropy(source: &[f64], target: &[f64], lag: usize) -> SignalResult<
     let mf = m as f64;
     let te = digamma(KSG_K as f64) - sum_psi_nxz.total() / mf - sum_psi_nyz.total() / mf + sum_psi_nz.total() / mf;
 
+    if !te.is_finite() {
+        return Err(SignalError::DegenerateValue("non-finite transfer entropy"));
+    }
+
     Ok(te.max(0.0))
 }
 
