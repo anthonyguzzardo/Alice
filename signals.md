@@ -468,6 +468,50 @@ All dimensions are z-scored against personal history. Kept orthogonal to the beh
 
 ---
 
+## Cognitive Microstate Decomposition (Potential, not implementing -- Phase 2)
+
+Data-driven segmentation of the within-session multivariate stream (IKI, hold time, flight time) into discrete cognitive states via Hidden Semi-Markov Model. Unlike the 7D and 11D engines (which compute one state vector per session from hand-composed dimensions), this produces a state SEQUENCE per session: which cognitive modes the writer occupied, for how long, and in what order. This is a third state engine, complementing the behavioral and semantic engines with data-driven cognitive episode detection.
+
+**STATUS: NOT IMPLEMENTING.** ~500 lines for HSMM fitting with EM, Viterbi decoding, and state extraction. Model selection sensitivity (BIC-selected k may vary session-to-session unless fixed). State labels ("flow," "deliberation," "revision") are construct claims requiring external validation (INC-009 principle). Deferred to Phase 2 when the current signal inventory is validated and the implementation effort can be justified by accumulated data depth. The payoff is a new signal family (discrete cognitive narrative, transition grammar), not a single signal.
+
+### microstateCount
+- **Source:** Multivariate keystroke stream (IKI, hold time, flight time), fitted with Hidden Semi-Markov Model (HSMM)
+- **Computation:** Fit HSMM to the session's multivariate stream. Number of states selected by BIC. Typical range: 2-5 states. State assignment via Viterbi decoding.
+- **Unit:** count
+- **Minimum data:** 100+ keystrokes
+- **Why:** How many qualitatively distinct cognitive modes the session contained. A session with 2 states is binary (e.g., production/pause). A session with 4 is cognitively heterogeneous. If the typical session has 4 states and it drops to 2 over months, state vocabulary is shrinking.
+- **Table:** tb_microstate_signals (new)
+- **Literature:** Berchet et al. 2023 (Behavioral Research Methods, PMC10292930, HSMM segmentation validated on eye-movement behavioral data); Monaco & Tappert 2018 (Pattern Recognition, POHMM on keystroke dynamics); Michel & Koenig 2018 (EEG microstate methodology).
+
+### microstateTransitionEntropy
+- **Source:** State transition matrix from HSMM Viterbi-decoded sequence
+- **Computation:** Shannon entropy of the row-normalized state transition matrix.
+- **Unit:** bits
+- **Minimum data:** 100+ keystrokes
+- **Why:** How unpredictable the transitions between cognitive states are. High entropy = flexible, varied sequencing. Low entropy = stereotyped sequencing. Transition entropy declining over months means the grammar of cognitive states is simplifying.
+- **Table:** tb_microstate_signals
+- **Literature:** Krylova et al. 2024 (PLOS Computational Biology, microstate transition cost correlated with cognitive demands).
+
+### microstateDominance
+- **Source:** State occupancy proportions from HSMM Viterbi-decoded sequence
+- **Computation:** Maximum state occupancy proportion (time in dominant state / total session time).
+- **Unit:** ratio (0-1)
+- **Minimum data:** 100+ keystrokes
+- **Why:** How much the session was dominated by a single mode. Dominance near 1.0 = monolithic session (all one state). Dominance near 0.3 = balanced multi-state session. Increasing dominance over months = cognitive dynamics collapsing into a single mode.
+- **Table:** tb_microstate_signals
+- **Literature:** Michel & Koenig 2018.
+
+### microstateDurationProfile
+- **Source:** State durations from HSMM Viterbi-decoded sequence
+- **Computation:** Mean duration per state (JSONB array, one entry per discovered state, ordered by mean IKI of state emission distribution).
+- **Unit:** milliseconds per state
+- **Minimum data:** 100+ keystrokes
+- **Why:** How long the writer sustains each cognitive mode before transitioning. Short durations across all states = rapid switching (attentional fragmentation). Long duration in one state = deep absorption or perseveration.
+- **Table:** tb_microstate_signals
+- **Literature:** Berchet et al. 2023.
+
+---
+
 ## Dynamical Signals
 
 Computed from the raw keystroke stream by the Rust native engine (`src-rs/dynamical.rs`). These treat the IKI series as the output of a complex adaptive system rather than a bag of statistics. Full computation on a 500-keystroke stream: ~0.6ms.
@@ -1395,6 +1439,63 @@ The existing RQA computes determinism, laminarity, trapping time, and recurrence
 - **Why:** Directly reports the temporal resolution at which the motor-cognitive system operates most deterministically. Tracked longitudinally, migration of the optimal scale toward coarser resolution is a leading indicator of fine-grained cognitive-motor degradation.
 - **Literature:** Hoel et al. 2013 (PNAS).
 
+### Dynamic Mode Decomposition (Koopman spectral analysis, implementing)
+
+DMD decomposes the IKI dynamical system into a superposition of modes, each with a characteristic frequency AND a growth/decay rate. DFA produces one scaling exponent. MF-DFA produces a spectrum of scaling exponents across moment orders. DMD produces the eigenvalues of the dynamical operator itself: modes, frequencies, and stability classification.
+
+### dmdDominantFrequency
+- **Source:** IKI series from the keystroke stream
+- **Computation:** Construct Hankel matrix from IKI series (embedding dimension d=10, delay tau=1). Compute truncated SVD (rank r=5). Build the DMD operator A_tilde = U' * X' * V * Sigma^{-1}. Eigendecompose A_tilde. The dominant frequency is Im(log(lambda_1)) / (2*pi*dt) for the eigenvalue with largest amplitude.
+- **Unit:** Hz (cycles per keystroke-interval)
+- **Minimum data:** 100+ IKI values
+- **Why:** The frequency at which the motor-cognitive system's strongest dynamical mode operates. Different from peakTypingFrequencyHz (PSD peak frequency, assumes stationarity, no stability info) because DMD identifies which frequencies are dynamically dominant, not just which have the most power. PSD and DMD dominant frequency should agree; disagreement reveals that the loudest oscillation is not the dynamically dominant one.
+- **Literature:** Brunton et al. 2022 (SIAM Review, comprehensive DMD reference); applied to PD EEG dynamics (Frontiers in Human Neuroscience 2025). Zero keystroke applications.
+
+### dmdDominantDecayRate
+- **Source:** Same eigenvalue decomposition as dmdDominantFrequency
+- **Computation:** Re(log(lambda_1)) for the dominant eigenvalue. Negative = damped (stable oscillation). Zero = neutral. Positive = growing (unstable oscillation).
+- **Unit:** per-keystroke-interval (decay rate)
+- **Minimum data:** 100+ IKI values
+- **Why:** Is the dominant motor-cognitive oscillation stable or unstable? A mode shifting from negative (damped) to positive (growing) over months is a dynamical precursor: the system is losing stability at that frequency. No other signal tracks per-mode stability. DFA gives average scaling. PE gives ordinal complexity. PSD gives power per frequency. None say "this specific oscillation is becoming unstable."
+- **Literature:** Brunton et al. 2022.
+
+### dmdModeCount
+- **Source:** DMD eigenvalue spectrum
+- **Computation:** Number of eigenvalues with amplitude above noise floor (defined as 2x median amplitude across all eigenvalues).
+- **Unit:** count
+- **Minimum data:** 100+ IKI values
+- **Why:** How many independent dynamical modes the session contains. Many modes = rich, multi-process dynamics. Few modes = simple, single-process dynamics. Mode count shrinking over months = the motor-cognitive system is losing dynamical degrees of freedom.
+- **Literature:** Brunton et al. 2022.
+
+### dmdSpectralEntropy
+- **Source:** DMD eigenvalue amplitudes
+- **Computation:** Shannon entropy of the normalized amplitude distribution across eigenvalues.
+- **Unit:** bits
+- **Minimum data:** 100+ IKI values
+- **Why:** Whether dynamical energy is concentrated in one mode or distributed across many. Low spectral entropy = one mode dominates (rigid, monolithic dynamics). High spectral entropy = many modes contribute equally (flexible, multi-scale dynamics). Different from peSpectrum (ordinal patterns across scales) and from ikiPsdSpectralSlope (frequency-domain power distribution). DMD spectral entropy is the distribution of dynamical MODE energy, not signal frequency energy.
+- **Literature:** Brunton et al. 2022.
+
+### Criticality Estimation (branching ratio, implementing)
+
+DFA alpha in the range 0.7-0.9 is CONSISTENT with near-critical dynamics (1/f noise), but DFA does not directly test criticality. 1/f scaling can arise from non-critical mechanisms (e.g., superposition of relaxation processes). The branching ratio is the direct test.
+
+### branchingRatio
+- **Source:** IKI series from the keystroke stream
+- **Computation:** Define excursions as IKI values exceeding mean + 1*std. Identify contiguous runs of excursions (avalanches). For each avalanche at time t, count the number of excursion-keystrokes in the immediately following temporal window (window = mean avalanche duration). The branching ratio sigma = mean(descendants / ancestors) across all avalanches in the session.
+- **Unit:** ratio (dimensionless)
+- **Minimum data:** 100+ IKI values (sufficient avalanches for stable estimate)
+- **Methodological note:** Threshold fixed at mean + 1*std by parameter commitment (conventional in neurocritical literature). Results differ at other thresholds; the commitment is documented.
+- **Why:** sigma = 1.0 is critical: the system is at the phase boundary where it maximizes dynamic range, information transmission, and sensitivity to input. sigma < 1.0 is subcritical: excitations are dampened, the system is rigid and unresponsive. sigma > 1.0 is supercritical: excitations amplify, the system is unstable. DFA alpha encodes this implicitly (0.5 = subcritical white noise, 1.5 = supercritical brown noise), but the branching ratio is the DIRECT measure of the operating regime. If sigma drifts from 1.0 toward 0.7 over months, the motor-cognitive system is losing its critical balance. This is a STATE classification (sub/super/critical), not a continuous feature.
+- **Literature:** Beggs & Plenz 2003 (neuronal avalanches); Shew & Plenz 2013 (functional benefits of criticality); Palva et al. 2013 (PNAS, neural avalanche exponents predict behavioral scaling laws). 325+ papers in 2025 Neuron review. Zero prior keystroke applications.
+
+### avalancheSizeExponent
+- **Source:** Avalanche size distribution from branching ratio computation
+- **Computation:** Fit power-law P(s) ~ s^{-tau} to the avalanche size distribution via maximum likelihood (Clauset et al. 2009). Report exponent tau and Kolmogorov-Smirnov goodness-of-fit p-value.
+- **Unit:** exponent (dimensionless), p-value
+- **Minimum data:** 50+ avalanches (may require 200+ IKIs)
+- **Why:** At criticality, avalanche sizes follow a power law with a characteristic exponent. Departure from the power law (low p-value) or exponent drift confirms the regime classification from branchingRatio. Two independent criticality tests from the same data.
+- **Literature:** Clauset, Shalizi & Newman 2009 (power-law fitting methodology).
+
 ### Pause Duration Mixture Decomposition (data-driven process separation)
 
 ### pauseMixtureDecomposition
@@ -1474,6 +1575,15 @@ Cross-session signals that track motor system trajectory over time. These comple
 - **Minimum data:** 2 consecutive-day sessions with 5+ overlapping high-frequency digraphs each
 - **Why:** Measures sleep-dependent motor memory consolidation, the only signal in the system capturing a physiological process that occurs when the user is not at the keyboard. During sleep, the striatum replays recently practiced motor sequences during sleep spindles, stabilizing and sometimes enhancing them. Degraded consolidation is an early marker of hippocampal and striatal dysfunction. Motor consolidation degrades early in MCI and Alzheimer's (before explicit memory consolidation does), making it a leading indicator from a system (procedural memory) separate from what most cognitive tests measure (declarative memory).
 - **Literature:** Bonstrup et al. 2019, 2020 (Current Biology, rapid micro-learning gains during rest); Walker et al. 2003 (Neuron, practice with sleep makes perfect); motor consolidation validated as degraded in MCI, early AD, PD, and depression.
+
+### motorSelfPerplexity (implementing)
+- **Source:** IKI series from current session + IKI corpus from all prior sessions
+- **Computation:** Build an autoregressive model on the person's historical IKI sequences. Discretize IKIs into K=8 bins. Build order-3 transition probabilities from all prior sessions (Laplace-smoothed). Score today's IKI bin sequence against the model. Output: perplexity (exponential of cross-entropy). Parallels text selfPerplexity computation (which uses character trigrams) with the same gating (5+ prior sessions required).
+- **Unit:** perplexity (higher = more novel motor patterns)
+- **Minimum data:** 5+ prior sessions (same gate as text selfPerplexity)
+- **Table:** tb_cross_session_signals
+- **Why:** The motor twin of selfPerplexity. selfPerplexity asks "is my language becoming more predictable against my own baseline?" motorSelfPerplexity asks "are my timing PATTERNS becoming more predictable against my own motor baseline?" These are orthogonal measurements. You can type linguistically novel text with stereotyped motor timing (high text perplexity, low motor perplexity) or linguistically predictable text with novel motor patterns (the reverse). The two-dimensional self-perplexity space (text x motor) separates cognitive change from motor change. If both decrease together, both systems are losing variability. If they diverge, the change is localizable. Text self-perplexity is already the "direct mathematical operationalization of the Option C thesis." Motor self-perplexity completes it for the motor axis.
+- **Literature:** Adans-Dester et al. 2024 (PMC11105137, self-supervised pretraining on typing data for PD detection, validated cross-dataset n=85); the per-person longitudinal autoregressive framing is novel.
 
 ---
 
@@ -1652,40 +1762,6 @@ Implementation requires minimum 7 days of sessions with sufficient hourly divers
 
 ---
 
-## Cognitive Microstate Signals (Potential, RANK 5, not implementing -- Phase 2)
-
-**STATUS: NOT IMPLEMENTING.** ~500+ lines for HSMM fitting with EM, Viterbi decoding, state extraction, and transition matrix computation. Model selection sensitivity (BIC-selected k may vary session-to-session, making transition matrices incomparable unless k is fixed). State labels ("flow," "deliberation," "revision") are construct claims requiring validation. Clinical validation is from different domains (EEG microstates, keystroke biometrics, not keystroke cognitive monitoring). The payoff is a new signal family (discrete cognitive narrative, transition grammar), not a single signal. Deferred to Phase 2 when the current signal inventory is validated and the implementation effort can be justified by accumulated data depth.
-
-### microstateCount
-- **Source:** Windowed IKI stream, fitted with Hidden Semi-Markov Model (HSMM)
-- **Computation:** Fit HSMM with k=5 canonical states to the windowed IKI stream (window = 10-20 keystrokes). State assignment via Viterbi decoding.
-- **Unit:** count (fixed at k=5 by parameter commitment)
-- **Why:** The number of discrete cognitive modes the model identifies. Fixed k avoids model selection instability across sessions at the cost of imposing structure.
-- **Literature:** Monaco & Tappert 2018 (Pattern Recognition, POHMM on keystroke dynamics); Michel & Koenig 2018 (EEG microstate methodology).
-
-### transitionMatrix
-- **Source:** Viterbi-decoded state sequence from HSMM
-- **Computation:** k x k matrix of transition probabilities between states. Row i, column j = P(state j follows state i).
-- **Unit:** probability (0-1) per cell, stored as JSONB
-- **Why:** Two sessions with identical PE, DFA, SampEn, and every other scalar signal can have completely different state transition structures. "Flow -> deliberation -> flow" is different from "deliberation -> revision -> hesitation -> flow" even if aggregate statistics are identical. The transition matrix captures sequential cognitive structure that no scalar signal can represent.
-- **Literature:** Krylova et al. 2024 (PLOS Computational Biology, microstate transition cost correlated with cognitive demands).
-
-### transitionEntropy
-- **Source:** State sequence from HSMM
-- **Computation:** Shannon entropy of the transition sequence / max possible entropy for k states.
-- **Unit:** normalized [0, 1]
-- **Why:** How predictable is the sequence of cognitive modes? Low = stereotyped (same mode sequence every session). High = varied (different cognitive narratives).
-- **Literature:** Michel & Koenig 2018.
-
-### stateDurations / stateCoverage
-- **Source:** State sequence from HSMM
-- **Computation:** Mean duration (keystrokes) per state; proportion of session spent in each state. Both stored as k-element JSONB arrays.
-- **Unit:** keystrokes (durations), ratio (coverage)
-- **Why:** Dominance and duration of each cognitive mode. A session dominated by one state (80% coverage) is qualitatively different from a balanced session (20% each). Duration changes track cognitive mode stability.
-- **Literature:** Krylova et al. 2024.
-
----
-
 ## Signal Count
 
 Counted at the database column level (ground truth). Arrays count as 1 column. Derived state dimensions (7D, 11D) are not double-counted against their source columns.
@@ -1733,7 +1809,7 @@ Counted at the database column level (ground truth). Arrays count as 1 column. D
 
 ### Dynamical signal extensions (potential, not yet implemented)
 
-~22 columns across 7 sub-families: MF-DFA (spectrum width, asymmetry, peak alpha), symbolic dynamics (statistical complexity, forbidden pattern fraction, weighted PE, Lempel-Ziv complexity), ordinal pattern transition networks (transition entropy, clustering, path length, modularity, forbidden transition count), recurrence networks (transitivity, avg path length, clustering coefficient, assortativity), partial information decomposition (synergy, redundancy, unique-hold, unique-flight, synergy/redundancy ratio), Fisher information (ex-Gaussian FI trace), pause mixture decomposition (component count, motor proportion, cognitive load index). Allan variance excluded (redundant with MF-DFA + spectral slope).
+~32 columns across 10 sub-families: MF-DFA (spectrum width, asymmetry, peak alpha), symbolic dynamics (statistical complexity, forbidden pattern fraction, weighted PE, Lempel-Ziv complexity), ordinal pattern transition networks (transition entropy, forbidden transition count, clustering, path length), recurrence networks (transitivity, avg path length, clustering coefficient, assortativity), partial information decomposition (synergy, redundancy), Fisher information (ex-Gaussian FI trace), causal emergence (effective information, emergence index, optimal scale), DMD/Koopman (dominant frequency, dominant decay rate, mode count, spectral entropy), criticality (branching ratio, avalanche size exponent), pause mixture decomposition (component count, motor proportion, cognitive load index). Allan variance excluded (redundant with MF-DFA + spectral slope).
 
 ### Frequency-domain signals (potential, not yet implemented)
 
@@ -1741,7 +1817,7 @@ Counted at the database column level (ground truth). Arrays count as 1 column. D
 
 ### Cross-session motor signals (potential, not yet implemented)
 
-~4 columns: Wasserstein distance for hold times, Wasserstein distance for flight times, distribution shape change rate (slope), motor consolidation index.
+~5 columns: Wasserstein distance for hold times, Wasserstein distance for flight times, distribution shape change rate (slope), motor consolidation index, motor self-perplexity.
 
 ### Cognitive-linguistic signal extensions (potential, mixed implementation status)
 
@@ -1755,9 +1831,9 @@ Counted at the database column level (ground truth). Arrays count as 1 column. D
 
 5 columns from cosinor model on hourly IKI medians: circadianAmplitude, circadianAcrophase, circadianMESOR, intradailyVariability, interdailyStability. TypeScript cross-session computation. Requires 7+ days of sessions at varied hours.
 
-### Cognitive microstate signals (potential, not implementing, Phase 2)
+### Cognitive microstate decomposition (potential, not implementing, Phase 2)
 
-~8 columns from HSMM segmentation: microstateCount, transitionMatrix (JSONB), transitionEntropy, stateDurations (JSONB), stateCoverage (JSONB). New table tb_microstate_signals. ~500 lines Rust. Deferred to Phase 2.
+4 columns from HSMM segmentation: microstateCount, microstateTransitionEntropy, microstateDominance, microstateDurationProfile (JSONB). New table tb_microstate_signals. ~500 lines Rust. Positioned between 11D Semantic State Engine and Dynamical Signals as a third state engine. Deferred to Phase 2.
 
 ### Ergodicity validity framework
 
@@ -1773,7 +1849,7 @@ The "~163" historically referenced in the codebase approximated column count + e
 | Expanded dimensions (arrays expanded, digraph ~30) | ~165 |
 | With derived state dimensions | ~191 |
 | With potential somatic signals | ~203 |
-| With all potential extensions (somatic + dynamical + frequency + cross-session motor) | ~234 |
-| With cognitive-linguistic extensions (implementing subset) | ~241 |
-| With topological + circadian + recurrence time + MSE + causal emergence | ~258 |
-| With cognitive microstate signals (Phase 2) | ~266 |
+| With all potential extensions (somatic + dynamical + frequency + cross-session motor) | ~244 |
+| With cognitive-linguistic extensions (implementing subset) | ~251 |
+| With topological + circadian + recurrence time + MSE + causal emergence + DMD + criticality + motor perplexity | ~275 |
+| With cognitive microstate decomposition (Phase 2) | ~279 |
