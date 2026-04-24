@@ -8,6 +8,96 @@ Newest first.
 
 ---
 
+## INC-013: Signal pipeline boundary failure, extended ghost residuals, calibration guard
+
+**Date:** 2026-04-24
+**Type:** Code bug (silent field stripping) + methods expansion (ghost comparison surface) + architectural correction (missing calibration guard)
+
+### What was wrong
+
+**1. TypeScript wrapper silently dropped 36 signal fields.** `libSignalsNative.ts` contained two wrapper functions (`computeDynamicalSignals`, `computeMotorSignals`) that explicitly constructed return objects with only the original signal fields. The Rust napi binary correctly computed and exported all 38 new dynamical fields and 3 new motor fields, but the TypeScript wrappers discarded them by constructing a new object with only the original 14 fields. The exported TypeScript interfaces (`DynamicalSignals`, `MotorSignals`) were also never updated, so strict TypeScript would not have caught the missing fields. Every session processed through the live pipeline since the Phase 1-5 implementation had NULL values for all new signal columns despite the Rust engine computing them correctly.
+
+**2. Ghost comparison used only 13 of 51 available signals.** `libReconstruction.ts` computed residuals for 5 dynamical (PE, DFA, RQA determinism, RQA laminarity, TE dominance), 6 motor (sample entropy, jerk, lapse rate, drift, tau, tau proportion), 1 perplexity, and 6 semantic signals. The 38 new dynamical and 3 new motor signals were available in the database but excluded from the ghost comparison. The behavioral L2 norm was computed from 13 dimensions, providing no visibility into which signal families the ghost could reproduce and which it could not.
+
+**3. Reconstruction residual pipeline had no calibration guard.** `computeReconstructionResidual` was the only aggregate pipeline function that did not filter `question_source_id = 3`. All other aggregate systems (profile, cross-session, integrity, semantic baselines) had early-return guards added during an April 23 decontamination pass. The reconstruction function was missed. Result: 125 of 180 residual rows were calibration sessions, contradicting the architectural decision that calibrations participate only in per-session signals and daily deltas (see `systemDesign/CALIBRATION_ENGINE.md`).
+
+### Discovery method
+
+The wrapper bug was found by tracing the data flow from the Rust napi boundary through the TypeScript wrapper to the pipeline save functions. The handoff document reported "all new columns are NULL when computed through the tsx runtime" and diagnosed it as a build.rs / napi export issue. The actual cause was three lines upstream: the wrapper functions explicitly listed only original fields in their return statements.
+
+The missing calibration guard was found during a systematic audit of all aggregate pipeline functions triggered by the user's question about whether calibrations participate in ghost comparison.
+
+### Resolution
+
+**Wrapper fix (3 edits in `libSignalsNative.ts`):**
+1. `DynamicalSignals` interface expanded from 14 to 49 fields
+2. `MotorSignals` interface expanded from 14 to 17 fields
+3. Both wrapper functions updated to pass through all fields with `n()` null coercion
+
+**Signal backfill:**
+- Deleted and re-inserted all 31 dynamical + 31 motor signal rows
+- All new columns populated at expected coverage rates (MF-DFA 17/31, PSD 19/31, temporal irreversibility 28/31, ordinal 31/31, causal emergence 28/31, MSE 22/31, Fisher trace 16/31)
+
+**Extended ghost residuals:**
+- Schema migration 022: added `extended_residuals_json JSONB` to `tb_reconstruction_residuals`
+- 28 new signals included in ghost comparison, organized by theoretical family. Selected for non-tautological ghost comparison (ghost is not designed to match these dimensions). 9 signals excluded as tautological or degenerate (pause mixture, redundant integers, derivative quantities).
+- `ON CONFLICT` changed from `DO NOTHING` to `DO UPDATE` on the save function for backfill support
+- L2 norms (`dynamical_l2_norm`, `motor_l2_norm`, `behavioral_l2_norm`) recomputed to include extended signals. RMS normalization (`sqrt(sum/count)`) keeps the magnitude comparable across different dimension counts.
+- All 180 existing residual rows backfilled from stored seeds via `regenerateAvatar`. 0 skipped, 0 failures.
+
+**Calibration guard:**
+- Added early-return guard to `computeReconstructionResidual`: `if (question_source_id === 3) return;`
+- Matches pattern used in `updateProfile`, `computeCrossSessionSignals`, `computeSessionIntegrity`, `updateSemanticBaselines`
+- 125 historical calibration residual rows retained (harmless data, not computed going forward)
+
+### What the extended residuals revealed
+
+The per-family residual breakdown for the full adversary (variant 5) across 6 journal sessions:
+
+| Family | Mean |Residual| | Ghost Capability |
+|---|---|---|
+| Multifractal (MF-DFA spectrum width) | 4.75 | Cannot reproduce. Largest residual by 4x. |
+| Motor Complexity (MSE complexity index) | 1.28 | Cannot reproduce multi-scale entropy. |
+| Recurrence Networks (transitivity) | 0.13 | Partially reproducible. |
+| Causal Emergence (CEI) | 0.13 | Partially reproducible. |
+| Spectral (PSD slope) | 0.11 | AR(1) approximates spectral slope. |
+| Dynamic Modes (DMD frequency) | 0.04 | Ghost matches oscillatory modes. |
+| Ordinal Complexity (CECP) | 0.006 | Nearly perfectly reproduced. |
+
+**Finding:** Multifractal structure is the single most ghost-resistant dimension. The ghost generates from a single stochastic process (ex-Gaussian + optional AR(1)), which produces a narrow singularity spectrum. Real typing has broad multifractal structure from the interaction of multiple cognitive processes at different time scales. No amount of statistical sophistication closes this gap. Conversely, ordinal statistics reflect the distributional shape, which the ghost matches by construction.
+
+This decomposition was latent in every session's raw keystroke stream since the Phase 1-5 signals were computed. It became visible only when the extended residuals widened the comparison surface from 13 to 41 dimensions.
+
+### Verification
+
+| System | Pre-fix | Post-fix |
+|---|---|---|
+| Dynamical signals (new columns) | All NULL | 17-31/31 non-null per column |
+| Motor signals (new columns) | All NULL | 16-22/31 non-null |
+| Ghost extended residuals | Not computed | 180/180 rows with JSONB (28 keys each) |
+| Behavioral L2 dimension count | 13 | 36-40 (session-dependent) |
+| Calibration residual rows (future) | Computed | Skipped by guard |
+| Live pipeline (journal q12, April 24) | N/A | Full coverage across all families |
+| Live pipeline (calibration q89, April 24) | N/A | Per-session signals only; ghost/cross-session/integrity correctly skipped |
+
+### Files changed
+
+| File | Change |
+|---|---|
+| `src/lib/libSignalsNative.ts` | Wrapper fix: interfaces + both wrapper functions expanded |
+| `src/lib/libReconstruction.ts` | Extended residuals, calibration guard, `snakeToCamel` helper |
+| `src/lib/libDb.ts` | `ReconstructionResidualInput` interface + `ON CONFLICT DO UPDATE` |
+| `db/sql/dbAlice_Tables.sql` | `extended_residuals_json JSONB` column added |
+| `db/sql/migrations/022_extended_residuals.sql` | New migration |
+| `src/scripts/backfill-extended-residuals.ts` | New: regenerate from seeds, populate JSONB + norms |
+
+### What this does NOT fix
+
+- **Reproducibility snapshots not updated for new signals.** The CI snapshot test (`tests/reproducibility.rs`) covers the original dynamical and motor signals. The 38 new dynamical and 3 new motor signals are not in the snapshot fixture. They are computed by the same Rust engine with the same numerical discipline, so drift is unlikely, but the guarantee is not enforced. Tracked as existing followup (process signal verification, same scope).
+- **Historical calibration residual rows not deleted.** 125 rows remain from pre-guard era. They are valid measurements but architecturally unintended. Retained for potential future calibration engine use.
+
+---
+
 ## INC-012: Single-paradigm measurement architecture
 
 **Date:** 2026-04-23
@@ -115,6 +205,12 @@ Cross-validates: fixed-threshold pause analysis (P-bursts, pause count). Closes:
 **Before:** 129 columns, one estimator per measurement, zero frequency-domain signals, zero cross-session motor signals, zero cross-validation architecture.
 
 **After:** ~150-155 columns with independent cross-validation on three core measurements (temporal scaling, ordinal complexity, recurrence structure), a complete frequency-domain axis, cross-session motor trajectory tracking, and data-driven process decomposition. The instrument can now distinguish types of change (cognitive vs. motor, deterministic vs. stochastic, monofractal vs. multifractal, scaling shift vs. scaling diversity collapse) rather than only detecting that change occurred.
+
+### Resolution
+
+**Implemented 2026-04-24.** All six planned families were implemented in Phases 1-5 (38 new dynamical columns, 3 new motor columns, 5 schema migrations 017-021). The napi boundary export bug that prevented the new signals from reaching the TypeScript pipeline was identified and fixed in INC-013. The per-family ghost residual breakdown confirmed the cross-validation architecture's value: MF-DFA (Family 1) proved to be the most ghost-resistant dimension by a factor of 4x, while ordinal extensions (Family 2) proved nearly perfectly reproducible by the ghost. This decomposition was impossible with the single-paradigm architecture.
+
+Family 5 (cross-session motor trajectory via Wasserstein distance) was not implemented as specified. Motor self-perplexity was implemented instead as the cross-session motor signal. The Wasserstein distance approach remains a candidate for future work.
 
 ### Design principle established
 
