@@ -169,6 +169,7 @@ import '../../styles/styObservatory.css';
         <nav>
           <a href="/observatory">overview</a>
           <a href="/observatory/trajectory">trajectory</a>
+          <a href="/observatory/scales">scales</a>
           <a href="/observatory/coupling">coupling</a>
           <a href="/observatory/ghost" class="active">ghost</a>
           <a href="/">→ alice</a>
@@ -992,14 +993,14 @@ import '../../styles/styObservatory.css';
 
         // ── Per-signal residual table ────────────────────────────────
         const signalDefs = [
-          { family: 'Dynamical', signals: [
+          { family: 'Dynamical (original)', signals: [
             { key: 'resPE', label: 'Permutation entropy' },
             { key: 'resDFA', label: 'DFA alpha' },
             { key: 'resRQADet', label: 'RQA determinism' },
             { key: 'resRQALam', label: 'RQA laminarity' },
             { key: 'resTEDom', label: 'TE dominance' },
           ]},
-          { family: 'Motor', signals: [
+          { family: 'Motor (original)', signals: [
             { key: 'resSampEn', label: 'Sample entropy' },
             { key: 'resJerk', label: 'Motor jerk' },
             { key: 'resLapse', label: 'Lapse rate' },
@@ -1017,6 +1018,25 @@ import '../../styles/styObservatory.css';
           ]},
         ];
 
+        // Extended residual families (from JSONB)
+        const extFamilies = [
+          { family: 'Scaling & Fractality', keys: ['mfdfa_spectrum_width', 'mfdfa_asymmetry', 'temporal_irreversibility'] },
+          { family: 'Spectral', keys: ['iki_psd_spectral_slope', 'iki_psd_respiratory_peak_hz', 'iki_psd_lf_hf_ratio'] },
+          { family: 'Ordinal Complexity', keys: ['statistical_complexity', 'forbidden_pattern_fraction', 'weighted_pe', 'lempel_ziv_complexity', 'optn_transition_entropy'] },
+          { family: 'Recurrence Networks', keys: ['recurrence_transitivity', 'recurrence_avg_path_length', 'recurrence_clustering', 'recurrence_assortativity', 'rqa_recurrence_time_entropy', 'rqa_mean_recurrence_time'] },
+          { family: 'Causal Architecture', keys: ['effective_information', 'causal_emergence_index', 'pid_synergy', 'pid_redundancy', 'branching_ratio', 'avalanche_size_exponent'] },
+          { family: 'Dynamic Modes', keys: ['dmd_dominant_frequency', 'dmd_dominant_decay_rate', 'dmd_spectral_entropy'] },
+          { family: 'Motor Complexity', keys: ['complexity_index', 'ex_gaussian_fisher_trace'] },
+        ];
+
+        function fmtRes(v) {
+          if (v == null || !Number.isFinite(v)) return '—';
+          return (v >= 0 ? '+' : '') + Number(v).toFixed(4);
+        }
+        function resCls(v) {
+          return (v != null && Number.isFinite(v)) ? (v >= 0 ? 'sign-pos' : 'sign-neg') : '';
+        }
+
         html += `
           <div class="section-label">Per-signal residuals · latest session breakdown</div>
           <section class="panel">
@@ -1027,18 +1047,35 @@ import '../../styles/styObservatory.css';
               </tr></thead>
               <tbody>
         `;
+        // Original fixed-column residuals
         for (const fam of signalDefs) {
           html += `<tr class="family-header"><td colspan="2">${fam.family}</td></tr>`;
           for (const sig of fam.signals) {
             const v = latest[sig.key];
-            const display = (v == null || !Number.isFinite(v)) ? '—' : (v >= 0 ? '+' : '') + Number(v).toFixed(4);
-            const cls = (v != null && Number.isFinite(v)) ? (v >= 0 ? 'sign-pos' : 'sign-neg') : '';
             html += `<tr>
               <td class="signal-name">${sig.label}</td>
-              <td class="residual-val num ${cls}">${display}</td>
+              <td class="residual-val num ${resCls(v)}">${fmtRes(v)}</td>
             </tr>`;
           }
         }
+
+        // Extended residuals from JSONB
+        const ext = latest.extendedResiduals;
+        if (ext && typeof ext === 'object') {
+          for (const fam of extFamilies) {
+            html += `<tr class="family-header"><td colspan="2">${fam.family}</td></tr>`;
+            for (const k of fam.keys) {
+              const entry = ext[k];
+              const v = entry?.residual ?? null;
+              const label = k.replace(/_/g, ' ');
+              html += `<tr>
+                <td class="signal-name">${label}</td>
+                <td class="residual-val num ${resCls(v)}">${fmtRes(v)}</td>
+              </tr>`;
+            }
+          }
+        }
+
         html += '</tbody></table></section>';
 
         document.getElementById('ghost-content').innerHTML = html;

@@ -80,6 +80,43 @@ export const GET: APIRoute = async () => {
     const phase2ByQuestion = new Map<number, any>();
     for (const p of phase2Rows) phase2ByQuestion.set(p.question_id, p);
 
+    // Process signals keyed by question_id
+    const processRows = await sql`
+      SELECT
+         question_id
+        ,pause_within_word, pause_between_word, pause_between_sentence
+        ,abandoned_thought_count, r_burst_count, i_burst_count
+        ,vocab_expansion_rate, phase_transition_point, strategy_shift_count
+      FROM tb_process_signals
+    ` as any[];
+    const processByQuestion = new Map<number, any>();
+    for (const p of processRows) processByQuestion.set(p.question_id, p);
+
+    // Cross-session signals keyed by question_id
+    const crossSessionRows = await sql`
+      SELECT
+         question_id
+        ,self_perplexity, motor_self_perplexity
+        ,ncd_lag_1, ncd_lag_3, ncd_lag_7, ncd_lag_30
+        ,vocab_recurrence_decay, digraph_stability
+        ,text_network_density, text_network_communities, bridging_ratio
+      FROM tb_cross_session_signals
+    ` as any[];
+    const crossSessionByQuestion = new Map<number, any>();
+    for (const c of crossSessionRows) crossSessionByQuestion.set(c.question_id, c);
+
+    // Discourse coherence from semantic signals keyed by question_id
+    const discourseRows = await sql`
+      SELECT
+         question_id
+        ,discourse_global_coherence, discourse_local_coherence
+        ,discourse_global_local_ratio, discourse_coherence_decay_slope
+      FROM tb_semantic_signals
+      WHERE discourse_global_coherence IS NOT NULL
+    ` as any[];
+    const discourseByQuestion = new Map<number, any>();
+    for (const d of discourseRows) discourseByQuestion.set(d.question_id, d);
+
     // Replay availability: which question_ids have an event log
     const replayRows = await sql`SELECT DISTINCT question_id FROM tb_session_events` as Array<{ question_id: number }>;
     const replayAvailable = new Set(replayRows.map(r => r.question_id));
@@ -90,6 +127,9 @@ export const GET: APIRoute = async () => {
       metadata: metaByQuestion.get(s.question_id) ?? null,
       motor: motorByQuestion.get(s.question_id) ?? null,
       phase2: phase2ByQuestion.get(s.question_id) ?? null,
+      process: processByQuestion.get(s.question_id) ?? null,
+      crossSession: crossSessionByQuestion.get(s.question_id) ?? null,
+      discourse: discourseByQuestion.get(s.question_id) ?? null,
       replayAvailable: replayAvailable.has(s.question_id),
     }));
 

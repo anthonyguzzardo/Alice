@@ -53,6 +53,7 @@ const responseId = parseInt(id ?? '', 10);
         <nav>
           <a href="/observatory">overview</a>
           <a href="/observatory/trajectory">trajectory</a>
+          <a href="/observatory/scales">scales</a>
           <a href="/observatory/coupling">coupling</a>
           <a href="/observatory/ghost">ghost</a>
           <a href="/">→ alice</a>
@@ -170,7 +171,7 @@ const responseId = parseInt(id ?? '', 10);
           document.getElementById('entry-content').innerHTML = `<div class="empty">${data.error}</div>`;
           return;
         }
-        const { entryState, semanticState, sessionSummary, metadata, dynamicalSignals, motorSignals, replay, navigation } = data;
+        const { entryState, semanticState, sessionSummary, metadata, dynamicalSignals, motorSignals, processSignals, crossSessionSignals, semanticSignals, replay, navigation } = data;
 
         const navRow = `
           <div class="nav-row">
@@ -258,21 +259,79 @@ const responseId = parseInt(id ?? '', 10);
           if (a < 1.1) return 'pink-brown';
           return 'brown noise';
         }
+        function sig(v, d=3, u='') { return v != null ? Number(v).toFixed(d) + u : '—'; }
+        function pct(v) { return v != null ? (v * 100).toFixed(1) + '%' : '—'; }
+        function familyHeader(title) { return `<div style="grid-column:1/-1;margin-top:12px;"><div class="k" style="font-size:10px;letter-spacing:0.2em;color:var(--text-faint);">${title}</div></div>`; }
+
         const dynamicalPanel = ds ? `
           <section class="panel">
             <h2>Dynamical signals · nonlinear keystroke analysis</h2>
             <div class="stat-grid">
-              <div><div class="k">permutation entropy</div><div class="v">${ds.permutationEntropy != null ? ds.permutationEntropy.toFixed(3) + ' <span style="color:var(--text-faint);font-size:0.85em;">(0–1)</span>' : '—'}</div></div>
-              <div><div class="k">DFA alpha</div><div class="v">${ds.dfaAlpha != null ? ds.dfaAlpha.toFixed(3) + ' · ' + dfaRegime(ds.dfaAlpha) : '—'}</div></div>
-              <div><div class="k">RQA determinism</div><div class="v">${ds.rqaDeterminism != null ? (ds.rqaDeterminism * 100).toFixed(1) + '%' : '—'}</div></div>
-              <div><div class="k">RQA laminarity</div><div class="v">${ds.rqaLaminarity != null ? (ds.rqaLaminarity * 100).toFixed(1) + '%' : '—'}</div></div>
-              <div><div class="k">RQA trapping time</div><div class="v">${ds.rqaTrappingTime != null ? ds.rqaTrappingTime.toFixed(1) : '—'}</div></div>
-              <div><div class="k">RQA recurrence rate</div><div class="v">${ds.rqaRecurrenceRate != null ? (ds.rqaRecurrenceRate * 100).toFixed(1) + '%' : '—'}</div></div>
-              <div><div class="k">TE hold→flight</div><div class="v">${ds.teHoldToFlight != null ? ds.teHoldToFlight.toFixed(4) + ' bits' : '—'}</div></div>
-              <div><div class="k">TE flight→hold</div><div class="v">${ds.teFlightToHold != null ? ds.teFlightToHold.toFixed(4) + ' bits' : '—'}</div></div>
+              ${familyHeader('SCALING & FRACTALITY')}
+              <div><div class="k">permutation entropy</div><div class="v">${sig(ds.permutationEntropy)}</div></div>
+              <div><div class="k">DFA alpha</div><div class="v">${ds.dfaAlpha != null ? sig(ds.dfaAlpha) + ' · ' + dfaRegime(ds.dfaAlpha) : '—'}</div></div>
+              <div><div class="k">MF-DFA spectrum width</div><div class="v">${sig(ds.mfdfaSpectrumWidth)}</div></div>
+              <div><div class="k">MF-DFA asymmetry</div><div class="v">${sig(ds.mfdfaAsymmetry)}</div></div>
+              <div><div class="k">MF-DFA peak alpha</div><div class="v">${sig(ds.mfdfaPeakAlpha)}</div></div>
+              <div><div class="k">temporal irreversibility</div><div class="v">${sig(ds.temporalIrreversibility, 4)}</div></div>
+
+              ${familyHeader('SPECTRAL DECOMPOSITION')}
+              <div><div class="k">PSD spectral slope</div><div class="v">${sig(ds.ikiPsdSpectralSlope)}</div></div>
+              <div><div class="k">respiratory peak</div><div class="v">${ds.ikiPsdRespiratoryPeakHz != null ? sig(ds.ikiPsdRespiratoryPeakHz) + ' Hz' : '—'}</div></div>
+              <div><div class="k">typing frequency</div><div class="v">${ds.peakTypingFrequencyHz != null ? sig(ds.peakTypingFrequencyHz) + ' Hz' : '—'}</div></div>
+              <div><div class="k">LF/HF ratio</div><div class="v">${sig(ds.ikiPsdLfHfRatio)}</div></div>
+              <div><div class="k">fast/slow variance</div><div class="v">${sig(ds.ikiPsdFastSlowVarianceRatio)}</div></div>
+
+              ${familyHeader('ORDINAL PATTERN COMPLEXITY')}
+              <div><div class="k">statistical complexity</div><div class="v">${sig(ds.statisticalComplexity, 4)}</div></div>
+              <div><div class="k">forbidden patterns</div><div class="v">${pct(ds.forbiddenPatternFraction)}</div></div>
+              <div><div class="k">weighted PE</div><div class="v">${sig(ds.weightedPe)}</div></div>
+              <div><div class="k">Lempel-Ziv complexity</div><div class="v">${sig(ds.lempelZivComplexity)}</div></div>
+
+              ${familyHeader('TRANSITION NETWORKS')}
+              <div><div class="k">OPTN transition entropy</div><div class="v">${sig(ds.optnTransitionEntropy)} bits</div></div>
+              <div><div class="k">OPTN forbidden transitions</div><div class="v">${ds.optnForbiddenTransitionCount ?? '—'}</div></div>
+
+              ${familyHeader('RECURRENCE STRUCTURE')}
+              <div><div class="k">RQA determinism</div><div class="v">${pct(ds.rqaDeterminism)}</div></div>
+              <div><div class="k">RQA laminarity</div><div class="v">${pct(ds.rqaLaminarity)}</div></div>
+              <div><div class="k">RQA trapping time</div><div class="v">${sig(ds.rqaTrappingTime, 1)}</div></div>
+              <div><div class="k">RQA recurrence rate</div><div class="v">${pct(ds.rqaRecurrenceRate)}</div></div>
+              <div><div class="k">recurrence time entropy</div><div class="v">${sig(ds.rqaRecurrenceTimeEntropy)} bits</div></div>
+              <div><div class="k">mean recurrence time</div><div class="v">${sig(ds.rqaMeanRecurrenceTime, 1)}</div></div>
+              <div><div class="k">network transitivity</div><div class="v">${sig(ds.recurrenceTransitivity)}</div></div>
+              <div><div class="k">network avg path length</div><div class="v">${sig(ds.recurrenceAvgPathLength, 1)}</div></div>
+              <div><div class="k">network clustering</div><div class="v">${sig(ds.recurrenceClustering)}</div></div>
+              <div><div class="k">network assortativity</div><div class="v">${sig(ds.recurrenceAssortativity)}</div></div>
+
+              ${familyHeader('CAUSAL ARCHITECTURE')}
+              <div><div class="k">effective information</div><div class="v">${sig(ds.effectiveInformation)} bits</div></div>
+              <div><div class="k">causal emergence index</div><div class="v">${sig(ds.causalEmergenceIndex)}</div></div>
+              <div><div class="k">optimal causal scale</div><div class="v">${ds.optimalCausalScale ?? '—'}</div></div>
+              <div><div class="k">PID synergy</div><div class="v">${sig(ds.pidSynergy, 4)} bits</div></div>
+              <div><div class="k">PID redundancy</div><div class="v">${sig(ds.pidRedundancy, 4)} bits</div></div>
+              <div><div class="k">branching ratio</div><div class="v">${sig(ds.branchingRatio)}</div></div>
+              <div><div class="k">avalanche exponent</div><div class="v">${sig(ds.avalancheSizeExponent)}</div></div>
+
+              ${familyHeader('DYNAMIC MODES')}
+              <div><div class="k">DMD dominant frequency</div><div class="v">${ds.dmdDominantFrequency != null ? sig(ds.dmdDominantFrequency, 4) + ' Hz' : '—'}</div></div>
+              <div><div class="k">DMD decay rate</div><div class="v">${sig(ds.dmdDominantDecayRate, 4)}</div></div>
+              <div><div class="k">DMD mode count</div><div class="v">${ds.dmdModeCount ?? '—'}</div></div>
+              <div><div class="k">DMD spectral entropy</div><div class="v">${sig(ds.dmdSpectralEntropy)}</div></div>
+
+              ${familyHeader('PAUSE MIXTURE')}
+              <div><div class="k">mixture components</div><div class="v">${ds.pauseMixtureComponentCount ?? '—'}</div></div>
+              <div><div class="k">motor proportion</div><div class="v">${pct(ds.pauseMixtureMotorProportion)}</div></div>
+              <div><div class="k">cognitive load index</div><div class="v">${sig(ds.pauseMixtureCognitiveLoadIndex)}</div></div>
+
+              ${familyHeader('TRANSFER ENTROPY')}
+              <div><div class="k">TE hold→flight</div><div class="v">${sig(ds.teHoldToFlight, 4)} bits</div></div>
+              <div><div class="k">TE flight→hold</div><div class="v">${sig(ds.teFlightToHold, 4)} bits</div></div>
               <div><div class="k">TE dominance</div><div class="v">${ds.teDominance != null ? (ds.teDominance > 1 ? 'motor→cog ' + ds.teDominance.toFixed(2) + 'x' : 'cog→motor ' + (1/ds.teDominance).toFixed(2) + 'x') : '—'}</div></div>
-              <div><div class="k">IKI series length</div><div class="v">${ds.ikiCount != null ? ds.ikiCount : '—'}</div></div>
-              <div><div class="k">hold/flight pairs</div><div class="v">${ds.holdFlightCount != null ? ds.holdFlightCount : '—'}</div></div>
+
+              ${familyHeader('SERIES METADATA')}
+              <div><div class="k">IKI series length</div><div class="v">${ds.ikiCount ?? '—'}</div></div>
+              <div><div class="k">hold/flight pairs</div><div class="v">${ds.holdFlightCount ?? '—'}</div></div>
             </div>
           </section>
         ` : '';
@@ -282,16 +341,25 @@ const responseId = parseInt(id ?? '', 10);
           <section class="panel">
             <h2>Motor signals · ex-Gaussian decomposition + motor coordination</h2>
             <div class="stat-grid">
-              <div><div class="k">ex-Gaussian tau</div><div class="v">${ms.ex_gaussian_tau != null ? ms.ex_gaussian_tau.toFixed(1) + 'ms' : '—'}</div></div>
-              <div><div class="k">ex-Gaussian mu</div><div class="v">${ms.ex_gaussian_mu != null ? ms.ex_gaussian_mu.toFixed(1) + 'ms' : '—'}</div></div>
-              <div><div class="k">ex-Gaussian sigma</div><div class="v">${ms.ex_gaussian_sigma != null ? ms.ex_gaussian_sigma.toFixed(1) + 'ms' : '—'}</div></div>
-              <div><div class="k">tau proportion</div><div class="v">${ms.tau_proportion != null ? (ms.tau_proportion * 100).toFixed(1) + '%' : '—'}</div></div>
-              <div><div class="k">adjacent hold-time cov</div><div class="v">${ms.adjacent_hold_time_cov != null ? ms.adjacent_hold_time_cov.toFixed(3) : '—'}</div></div>
-              <div><div class="k">sample entropy</div><div class="v">${ms.sample_entropy != null ? ms.sample_entropy.toFixed(3) : '—'}</div></div>
-              <div><div class="k">motor jerk</div><div class="v">${ms.motor_jerk != null ? ms.motor_jerk.toFixed(1) : '—'}</div></div>
-              <div><div class="k">lapse rate</div><div class="v">${ms.lapse_rate != null ? ms.lapse_rate.toFixed(2) + '/min' : '—'}</div></div>
+              ${familyHeader('EX-GAUSSIAN DECOMPOSITION')}
+              <div><div class="k">ex-Gaussian tau</div><div class="v">${sig(ms.ex_gaussian_tau, 1, 'ms')}</div></div>
+              <div><div class="k">ex-Gaussian mu</div><div class="v">${sig(ms.ex_gaussian_mu, 1, 'ms')}</div></div>
+              <div><div class="k">ex-Gaussian sigma</div><div class="v">${sig(ms.ex_gaussian_sigma, 1, 'ms')}</div></div>
+              <div><div class="k">tau proportion</div><div class="v">${pct(ms.tau_proportion)}</div></div>
+              <div><div class="k">Fisher information trace</div><div class="v">${sig(ms.ex_gaussian_fisher_trace, 4)}</div></div>
+
+              ${familyHeader('MULTISCALE ENTROPY')}
+              <div><div class="k">complexity index</div><div class="v">${sig(ms.complexity_index)}</div></div>
+              <div><div class="k">MSE series</div><div class="v">${ms.mse_series ? (typeof ms.mse_series === 'string' ? JSON.parse(ms.mse_series) : ms.mse_series).map(v => v != null ? v.toFixed(2) : '—').join(' → ') : '—'}</div></div>
+              <div><div class="k">sample entropy</div><div class="v">${sig(ms.sample_entropy)}</div></div>
+
+              ${familyHeader('MOTOR DYNAMICS')}
+              <div><div class="k">motor jerk</div><div class="v">${sig(ms.motor_jerk, 1)}</div></div>
+              <div><div class="k">lapse rate</div><div class="v">${ms.lapse_rate != null ? sig(ms.lapse_rate, 2, '/min') : '—'}</div></div>
               <div><div class="k">tempo drift</div><div class="v">${ms.tempo_drift != null ? (ms.tempo_drift > 0 ? '+' : '') + ms.tempo_drift.toFixed(1) + ' ms/q' : '—'}</div></div>
-              <div><div class="k">compression ratio</div><div class="v">${ms.iki_compression_ratio != null ? ms.iki_compression_ratio.toFixed(3) : '—'}</div></div>
+              <div><div class="k">compression ratio</div><div class="v">${sig(ms.iki_compression_ratio)}</div></div>
+              <div><div class="k">adjacent hold-time cov</div><div class="v">${sig(ms.adjacent_hold_time_cov)}</div></div>
+              <div><div class="k">hold-flight rank corr</div><div class="v">${sig(ms.hold_flight_rank_corr)}</div></div>
             </div>
           </section>
         ` : '';
@@ -348,8 +416,59 @@ const responseId = parseInt(id ?? '', 10);
           </section>
         ` : '';
 
+        const ps = processSignals;
+        const processPanel = ps ? `
+          <section class="panel">
+            <h2>Process signals · writing process shape</h2>
+            <div class="stat-grid">
+              <div><div class="k">pauses within word</div><div class="v">${ps.pause_within_word ?? '—'}</div></div>
+              <div><div class="k">pauses between words</div><div class="v">${ps.pause_between_word ?? '—'}</div></div>
+              <div><div class="k">pauses between sentences</div><div class="v">${ps.pause_between_sentence ?? '—'}</div></div>
+              <div><div class="k">abandoned thoughts</div><div class="v">${ps.abandoned_thought_count ?? '—'}</div></div>
+              <div><div class="k">R-burst count</div><div class="v">${ps.r_burst_count ?? '—'}</div></div>
+              <div><div class="k">I-burst count</div><div class="v">${ps.i_burst_count ?? '—'}</div></div>
+              <div><div class="k">vocab expansion rate</div><div class="v">${sig(ps.vocab_expansion_rate)}</div></div>
+              <div><div class="k">phase transition point</div><div class="v">${ps.phase_transition_point != null ? pct(ps.phase_transition_point) : '—'}</div></div>
+              <div><div class="k">strategy shifts</div><div class="v">${ps.strategy_shift_count ?? '—'}</div></div>
+            </div>
+          </section>
+        ` : '';
+
+        const css = crossSessionSignals;
+        const crossSessionPanel = css ? `
+          <section class="panel">
+            <h2>Cross-session signals · session-to-history relationship</h2>
+            <div class="stat-grid">
+              <div><div class="k">self-perplexity</div><div class="v">${sig(css.self_perplexity, 2)}</div></div>
+              <div><div class="k">motor self-perplexity</div><div class="v">${sig(css.motor_self_perplexity, 2)}</div></div>
+              <div><div class="k">NCD lag-1</div><div class="v">${sig(css.ncd_lag_1)}</div></div>
+              <div><div class="k">NCD lag-3</div><div class="v">${sig(css.ncd_lag_3)}</div></div>
+              <div><div class="k">NCD lag-7</div><div class="v">${sig(css.ncd_lag_7)}</div></div>
+              <div><div class="k">NCD lag-30</div><div class="v">${sig(css.ncd_lag_30)}</div></div>
+              <div><div class="k">vocab recurrence decay</div><div class="v">${sig(css.vocab_recurrence_decay, 4)}</div></div>
+              <div><div class="k">digraph stability</div><div class="v">${sig(css.digraph_stability)}</div></div>
+              <div><div class="k">text network density</div><div class="v">${sig(css.text_network_density, 4)}</div></div>
+              <div><div class="k">text network communities</div><div class="v">${css.text_network_communities ?? '—'}</div></div>
+              <div><div class="k">bridging ratio</div><div class="v">${sig(css.bridging_ratio)}</div></div>
+            </div>
+          </section>
+        ` : '';
+
+        const sem = semanticSignals;
+        const discoursePanel = sem && sem.discourse_global_coherence != null ? `
+          <section class="panel">
+            <h2>Discourse coherence · text structural coherence</h2>
+            <div class="stat-grid">
+              <div><div class="k">global coherence</div><div class="v">${sig(sem.discourse_global_coherence)}</div></div>
+              <div><div class="k">local coherence</div><div class="v">${sig(sem.discourse_local_coherence)}</div></div>
+              <div><div class="k">global/local ratio</div><div class="v">${sig(sem.discourse_global_local_ratio)}</div></div>
+              <div><div class="k">coherence decay slope</div><div class="v">${sig(sem.discourse_coherence_decay_slope, 4)}</div></div>
+            </div>
+          </section>
+        ` : '';
+
         document.getElementById('entry-content').innerHTML =
-          questionBox + navRow + radars + metadataPanel + dynamicalPanel + motorPanel + phase2Panel + summaryPanel;
+          questionBox + navRow + radars + metadataPanel + dynamicalPanel + motorPanel + processPanel + crossSessionPanel + discoursePanel + phase2Panel + summaryPanel;
 
         // Draw radars after DOM is in place
         const behCanvas = document.getElementById('radar-beh');

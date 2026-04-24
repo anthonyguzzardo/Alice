@@ -101,6 +101,7 @@ import '../../styles/styObservatory.css';
         <nav>
           <a href="/observatory">overview</a>
           <a href="/observatory/trajectory" class="active">trajectory</a>
+          <a href="/observatory/scales">scales</a>
           <a href="/observatory/coupling">coupling</a>
           <a href="/observatory/ghost">ghost</a>
           <a href="/">→ alice</a>
@@ -156,6 +157,32 @@ import '../../styles/styObservatory.css';
         { key: 'deletion_execution_speed_mean', label: 'Deletion exec speed', color: 'var(--warn)', unit: 'ms' },
         { key: 'postcorrection_latency_mean', label: 'Postcorrection latency', color: 'var(--warn)', unit: 'ms' },
         { key: 'punctuation_letter_ratio', label: 'Punct/letter ratio', color: 'var(--semantic)', unit: 'x' },
+      ];
+
+      const CROSS_SESSION_DIMS = [
+        { key: 'self_perplexity', label: 'Self-perplexity', color: 'var(--accent)', unit: '' },
+        { key: 'motor_self_perplexity', label: 'Motor self-perplexity', color: 'var(--accent)', unit: '' },
+        { key: 'ncd_lag_1', label: 'NCD lag-1', color: 'var(--semantic)', unit: '' },
+        { key: 'digraph_stability', label: 'Digraph stability', color: 'var(--semantic)', unit: '' },
+        { key: 'text_network_density', label: 'Text network density', color: 'var(--semantic)', unit: '' },
+        { key: 'vocab_recurrence_decay', label: 'Vocab recurrence decay', color: 'var(--warn)', unit: '' },
+        { key: 'bridging_ratio', label: 'Bridging ratio', color: 'var(--accent)', unit: '' },
+      ];
+
+      const DISCOURSE_DIMS = [
+        { key: 'discourse_global_coherence', label: 'Global coherence', color: 'var(--semantic)', unit: '' },
+        { key: 'discourse_local_coherence', label: 'Local coherence', color: 'var(--semantic)', unit: '' },
+        { key: 'discourse_global_local_ratio', label: 'Global/local ratio', color: 'var(--semantic)', unit: '' },
+        { key: 'discourse_coherence_decay_slope', label: 'Coherence decay slope', color: 'var(--warn)', unit: '' },
+      ];
+
+      const PROCESS_DIMS = [
+        { key: 'pause_within_word', label: 'Pauses within word', color: 'var(--accent)', unit: '' },
+        { key: 'pause_between_word', label: 'Pauses between words', color: 'var(--accent)', unit: '' },
+        { key: 'pause_between_sentence', label: 'Pauses between sentences', color: 'var(--accent)', unit: '' },
+        { key: 'abandoned_thought_count', label: 'Abandoned thoughts', color: 'var(--negative)', unit: '' },
+        { key: 'vocab_expansion_rate', label: 'Vocab expansion rate', color: 'var(--semantic)', unit: '' },
+        { key: 'phase_transition_point', label: 'Phase transition point', color: 'var(--warn)', unit: '' },
       ];
 
       function fmtZ(v) {
@@ -427,6 +454,39 @@ import '../../styles/styObservatory.css';
           );
         }
 
+        // Cross-session signals trajectory
+        const hasCrossSession = states.some(s => s.crossSession != null);
+        if (hasCrossSession) {
+          html += renderRawSection(
+            'Cross-session · session-to-history relationship',
+            CROSS_SESSION_DIMS,
+            states,
+            (s, key) => s.crossSession?.[key] ?? null
+          );
+        }
+
+        // Discourse coherence trajectory
+        const hasDiscourse = states.some(s => s.discourse != null);
+        if (hasDiscourse) {
+          html += renderRawSection(
+            'Discourse coherence · text structural coherence',
+            DISCOURSE_DIMS,
+            states,
+            (s, key) => s.discourse?.[key] ?? null
+          );
+        }
+
+        // Process signals trajectory
+        const hasProcess = states.some(s => s.process != null);
+        if (hasProcess) {
+          html += renderRawSection(
+            'Process structure · writing process shape',
+            PROCESS_DIMS,
+            states,
+            (s, key) => s.process?.[key] ?? null
+          );
+        }
+
         document.getElementById('trajectory-content').innerHTML = html;
 
         // Draw all charts
@@ -451,6 +511,21 @@ import '../../styles/styObservatory.css';
         if (hasPhase2) {
           for (const dim of PHASE2_DIMS) {
             allValues[dim.key] = { values: states.map(s => s.phase2?.[dim.key] ?? null), color: dim.color };
+          }
+        }
+        if (hasCrossSession) {
+          for (const dim of CROSS_SESSION_DIMS) {
+            allValues[dim.key] = { values: states.map(s => s.crossSession?.[dim.key] ?? null), color: dim.color };
+          }
+        }
+        if (hasDiscourse) {
+          for (const dim of DISCOURSE_DIMS) {
+            allValues[dim.key] = { values: states.map(s => s.discourse?.[dim.key] ?? null), color: dim.color };
+          }
+        }
+        if (hasProcess) {
+          for (const dim of PROCESS_DIMS) {
+            allValues[dim.key] = { values: states.map(s => s.process?.[dim.key] ?? null), color: dim.color };
           }
         }
 
