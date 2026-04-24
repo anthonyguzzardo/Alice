@@ -394,6 +394,9 @@ export function computeMotorSignals(
     return {
       parseError: result.parseError ?? null,
       sampleEntropy: n(result.sampleEntropy),
+      mseSeries: na(result.mseSeries),
+      complexityIndex: n(result.complexityIndex),
+      exGaussianFisherTrace: n(result.exGaussianFisherTrace),
       ikiAutocorrelation: na(result.ikiAutocorrelation),
       motorJerk: n(result.motorJerk),
       lapseRate: n(result.lapseRate),
