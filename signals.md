@@ -1211,9 +1211,9 @@ The existing DFA implementation computes a single alpha exponent, assuming monof
 - **Why:** Anchors the spectrum to a dominant Holder exponent, which characterizes the session's prevailing temporal structure independent of the spectrum's width or shape. Backward compatible: h(2) from MF-DFA equals the standard DFA alpha.
 - **Literature:** Kantelhardt et al. 2002.
 
-### Symbolic Dynamics Extensions (beyond Permutation Entropy)
+### Symbolic Dynamics and Ordinal Extensions (beyond Permutation Entropy)
 
-The existing PE implementation computes normalized Shannon entropy of ordinal patterns. These extensions extract additional information from the same ordinal pattern distribution at near-zero computational cost. They answer a question no existing signal can: is the session's IKI sequence deterministic (structured attractor) or stochastic (random noise)?
+The existing PE implementation computes normalized Shannon entropy of ordinal patterns. It captures the vocabulary (which patterns exist, how often) but discards the grammar (which pattern follows which) and the rate of novelty generation (how fast new patterns appear). These extensions extract additional information from the same ordinal pattern distribution and extraction pass at near-zero computational cost.
 
 ### statisticalComplexity
 - **Source:** Ordinal pattern distribution (already computed by existing PE)
@@ -1238,6 +1238,24 @@ The existing PE implementation computes normalized Shannon entropy of ordinal pa
 - **Minimum data:** 50 IKI values (same as existing PE)
 - **Why:** More robust to noise and more sensitive to "spiky" features like sudden long pauses. Standard PE treats a session with one 3-second pause and 499 fast keystrokes the same as a session with uniformly moderate timing. Weighted PE gives the 3-second pause proportionally more influence on the entropy estimate, making it a better measure of cognitive disruption events embedded in otherwise fluent typing.
 - **Literature:** Fadlallah et al. 2013 (Physical Review E; demonstrated better noise robustness and sensitivity to spiky features in EEG data).
+
+### lempelZivComplexity
+- **Source:** Ordinal symbol sequence (already computed by existing PE extraction pass)
+- **Computation:** Lempel-Ziv complexity on the ordinal-symbolized IKI series (PLZC variant, Bai et al. 2015). Scan the symbol sequence left to right, counting the number of distinct substrings (novel patterns) encountered. Normalize by the theoretical maximum for the sequence length and alphabet size: C_norm = C(n) / (n / log_k(n)), where k is the alphabet size (d! for ordinal patterns of order d).
+- **Unit:** normalized [0, 1]
+- **Minimum data:** 50 IKI values (same as existing PE)
+- **Why:** PE asks "how uniformly distributed are the ordinal patterns?" LZC asks "how fast are NEW patterns appearing?" These are categorically different measurements. A session can have maximal PE (all patterns equally likely) but minimal LZC (patterns repeat in a predictable meta-sequence). That is uniform vocabulary with stereotyped grammar. Conversely, high LZC with moderate PE means novel pattern combinations even from a non-uniform distribution. The Perturbational Complexity Index (PCI) uses LZC to discriminate conscious from unconscious brain states in clinical neuroscience. The IKI analog: high LZC = generative, novel motor-cognitive planning. Low LZC = stereotyped, repetitive cognitive patterns. The PLZC variant operates on the same ordinal symbols already computed for PE, making it near-zero marginal cost.
+- **Literature:** Lempel & Ziv 1976 (original algorithm); Bai et al. 2015 (PLZC: permutation Lempel-Ziv complexity on ordinal symbols); Casali et al. 2013 (PCI for consciousness detection, clinical validation of LZC on neural data).
+
+### Ordinal Pattern Transition Network (grammar of typing dynamics)
+
+### optnTransitionEntropy
+- **Source:** Ordinal pattern sequence (already computed by existing PE extraction pass)
+- **Computation:** During the same ordinal pattern extraction loop, record which pattern follows which in a transition matrix T[i][j] = count of pattern j following pattern i. Normalize rows to transition probabilities. Compute the Shannon entropy of the transition probability distribution (mean row entropy). Additional network measures from the transition matrix treated as a weighted directed graph: clustering coefficient, mean path length, modularity, and forbidden transition count (zero-count cells in T where both patterns individually appear but the transition never occurs).
+- **Unit:** bits (transition entropy), ratio (clustering, modularity), count (forbidden transitions)
+- **Minimum data:** 100+ IKI values (sufficient transitions per pattern pair at order 3; 50+ at order 3 minimum)
+- **Why:** PE captures the vocabulary of ordinal patterns (marginal distribution). OPTNs capture the grammar (sequential dependencies). Two sessions with identical PE spectra can have completely different transition networks. Forbidden transitions (pattern A never follows pattern B, despite both patterns appearing individually) are especially diagnostic: they reveal hard constraints in the motor-cognitive system that marginal statistics cannot detect. If forbidden transitions dissolve over months, the cognitive system is losing its sequential structure, not just its distributional structure. This completes the ordinal analysis that PE starts.
+- **Literature:** McCullough et al. 2015 (ordinal pattern transition networks); Zhang & Zhou 2017 (multivariate extension); Bandt & Zanin 2022 (20-year PE review, confirms transition probabilities capture structure PE misses).
 
 ### Recurrence Network Analysis (extensions of existing RQA)
 
@@ -1274,6 +1292,32 @@ The existing RQA computes determinism, laminarity, trapping time, and recurrence
 - **Minimum data:** 30 IKI values
 - **Why:** Whether extreme-timing states cluster together temporally. Positive assortativity means the most recurrent IKI values (timing states visited most often) are adjacent to each other in the sequence, indicating temporal concentration of habitual rhythms. Negative assortativity means habitual states are separated by unusual states, indicating alternation between familiar and novel cognitive patterns. RQA's global recurrence rate averages over this structure.
 - **Literature:** Donner et al. 2011; Zou et al. 2019.
+
+### Partial Information Decomposition (motor-cognitive integration index)
+
+### pidSynergy / pidRedundancy
+- **Source:** Hold time, flight time, and IKI series (same binned tercile discretization as existing transfer entropy)
+- **Computation:** Decompose the mutual information that (hold_time_t, flight_time_t) jointly provide about IKI_{t+1} into four atoms using the Williams-Beer I_min framework: Redundancy (both channels carry overlapping information), Synergy (information only available when both are observed together), Unique-hold (motor execution alone), Unique-flight (cognitive planning alone). The synergy/redundancy ratio is the primary output. Uses the same tercile binning already established for transfer entropy computation.
+- **Unit:** bits (information atoms), ratio (synergy/redundancy)
+- **Minimum data:** 30+ hold/flight/IKI triplets (same as existing transfer entropy)
+- **Why:** Transfer entropy (already in the system) measures one-way directed information flow: does hold predict flight, or vice versa? PID asks a fundamentally different question: when you observe BOTH motor channels together, do they tell you MORE than the sum of their parts (synergy) or LESS (redundancy)? High synergy = tightly integrated sensorimotor system, the channels are encoding something that neither carries alone. High redundancy = decoupled channels carrying overlapping information. The synergy/redundancy ratio is a motor-cognitive integration index with no equivalent in the current inventory. TE and PID are orthogonal questions about the same two variables: TE measures directional flow, PID measures the nature of the joint information.
+- **Methodological note:** The Williams-Beer I_min measure is the original PID proposal. Alternative definitions exist (Bertschinger et al. 2014, Griffith & Koch 2014) that produce different absolute values. For within-person longitudinal tracking, consistency matters more than absolute accuracy. I_min is sufficient and well-defined for discrete variables. This is the signal most sensitive to methodological choices in the entire inventory; document the PID definition used.
+- **Literature:** Williams & Beer 2010 (PID foundational paper); bioRxiv 2023 (PID applied to motor systems, large-scale muscle activation); Bertschinger et al. 2014 (alternative PID definitions).
+
+### Fisher Information of Ex-Gaussian (meta-measurement: session informativeness)
+
+### exGaussianFisherTrace
+- **Source:** Ex-Gaussian parameters (mu, sigma, tau) already fitted by existing motor signal pipeline
+- **Computation:** Compute the 3x3 Fisher information matrix of the ex-Gaussian distribution at the fitted parameter values (mu, sigma, tau). The FI matrix elements are computed from the second derivatives of the log-likelihood, either in closed form or numerically from the log-likelihood Hessian (which the EM algorithm already approximates). The trace of the FI matrix is the primary output: total distributional sensitivity of the session. Computed per session as a derived column on motor signals.
+- **Unit:** dimensionless (trace of FI matrix)
+- **Minimum data:** Same as ex-Gaussian fit (50+ flight times with positive skewness)
+- **Why:** This is a signal about signals. It measures how much the session's flight time distribution changes per unit of underlying state parameter shift. High FI = the session is highly informative (small cognitive changes produce large distributional changes in the typing). Low FI = the session is uninformative (the distribution is in a flat region of parameter space where changes barely register). Over a longitudinal record, this identifies which sessions carry the most measurement weight. It is the only signal in the system that operates at the meta-measurement level. Karunanithi et al. 2008 validated Fisher information for detecting ecological regime shifts; applied here, a sustained drop in FI trace would indicate the measurement apparatus itself (the person's motor-cognitive system as expressed through typing) is becoming less sensitive to its own state changes.
+- **Literature:** Fisher 1925 (foundational); Karunanithi et al. 2008 (FI for regime shift detection); Amari 2016 (information geometry).
+
+### Allan Variance
+
+**STATUS: NOT IMPLEMENTING.** Allan variance characterizes oscillator stability by computing variance at increasing averaging timescales, with the log-log slope identifying noise type (white, flicker, random walk). The biological oscillator framing is compelling and the metrology provenance is strong (gold standard since 1966, zero prior keystroke applications). However, Allan variance and the IKI power spectral density (already planned) are related by an integral transform. Each noise type has a characteristic Allan variance slope AND a characteristic spectral density slope. The per-timescale noise classification and transition points available from Allan variance are equally available from a piecewise-linear fit on the log-log PSD. With both MF-DFA (multi-scale scaling diversity) and IKI PSD spectral slope (noise type characterization) going into the implementation, Allan variance is mathematically redundant. This was previously considered and excluded in `riffing/SIGNAL_EXPANSION.md` with the note "redundant w/ MF-DFA." The metrology vocabulary (oscillator stability, noise type classification) carries strategic value for actuarial and clinical engineering audiences. If needed for those contexts, Allan variance can be derived from the PSD without a separate computation.
+- **Literature:** Allan 1966 (original); IEEE Std 1139-2008 (oscillator stability characterization standard).
 
 ### Pause Duration Mixture Decomposition (data-driven process separation)
 
@@ -1478,7 +1522,7 @@ Counted at the database column level (ground truth). Arrays count as 1 column. D
 
 ### Dynamical signal extensions (potential, not yet implemented)
 
-~13 columns across 4 sub-families: MF-DFA (spectrum width, asymmetry, peak alpha), symbolic dynamics (statistical complexity, forbidden pattern fraction, weighted PE), recurrence networks (transitivity, avg path length, clustering coefficient, assortativity), pause mixture decomposition (component count, motor proportion, cognitive load index).
+~22 columns across 7 sub-families: MF-DFA (spectrum width, asymmetry, peak alpha), symbolic dynamics (statistical complexity, forbidden pattern fraction, weighted PE, Lempel-Ziv complexity), ordinal pattern transition networks (transition entropy, clustering, path length, modularity, forbidden transition count), recurrence networks (transitivity, avg path length, clustering coefficient, assortativity), partial information decomposition (synergy, redundancy, unique-hold, unique-flight, synergy/redundancy ratio), Fisher information (ex-Gaussian FI trace), pause mixture decomposition (component count, motor proportion, cognitive load index). Allan variance excluded (redundant with MF-DFA + spectral slope).
 
 ### Frequency-domain signals (potential, not yet implemented)
 
@@ -1502,5 +1546,5 @@ The "~163" historically referenced in the codebase approximated column count + e
 | Expanded dimensions (arrays expanded, digraph ~30) | ~165 |
 | With derived state dimensions | ~191 |
 | With potential somatic signals | ~203 |
-| With all potential extensions (somatic + dynamical + frequency + cross-session motor) | ~225 |
-| With cognitive-linguistic extensions (implementing subset) | ~232 |
+| With all potential extensions (somatic + dynamical + frequency + cross-session motor) | ~234 |
+| With cognitive-linguistic extensions (implementing subset) | ~241 |
