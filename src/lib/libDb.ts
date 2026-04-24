@@ -1728,6 +1728,17 @@ export interface DynamicalSignalRow {
   recurrence_avg_path_length: number | null;
   recurrence_clustering: number | null;
   recurrence_assortativity: number | null;
+  effective_information: number | null;
+  causal_emergence_index: number | null;
+  optimal_causal_scale: number | null;
+  pid_synergy: number | null;
+  pid_redundancy: number | null;
+  branching_ratio: number | null;
+  avalanche_size_exponent: number | null;
+  dmd_dominant_frequency: number | null;
+  dmd_dominant_decay_rate: number | null;
+  dmd_mode_count: number | null;
+  dmd_spectral_entropy: number | null;
   te_hold_to_flight: number | null;
   te_flight_to_hold: number | null;
   te_dominance: number | null;
@@ -1747,6 +1758,10 @@ export async function saveDynamicalSignals(questionId: number, s: Omit<Dynamical
        rqa_determinism, rqa_laminarity, rqa_trapping_time, rqa_recurrence_rate,
        rqa_recurrence_time_entropy, rqa_mean_recurrence_time,
        recurrence_transitivity, recurrence_avg_path_length, recurrence_clustering, recurrence_assortativity,
+       effective_information, causal_emergence_index, optimal_causal_scale,
+       pid_synergy, pid_redundancy,
+       branching_ratio, avalanche_size_exponent,
+       dmd_dominant_frequency, dmd_dominant_decay_rate, dmd_mode_count, dmd_spectral_entropy,
        te_hold_to_flight, te_flight_to_hold, te_dominance
     ) VALUES (
       ${questionId}, ${s.iki_count}, ${s.hold_flight_count},
@@ -1760,6 +1775,10 @@ export async function saveDynamicalSignals(questionId: number, s: Omit<Dynamical
       ${s.rqa_determinism}, ${s.rqa_laminarity}, ${s.rqa_trapping_time}, ${s.rqa_recurrence_rate},
       ${s.rqa_recurrence_time_entropy}, ${s.rqa_mean_recurrence_time},
       ${s.recurrence_transitivity}, ${s.recurrence_avg_path_length}, ${s.recurrence_clustering}, ${s.recurrence_assortativity},
+      ${s.effective_information}, ${s.causal_emergence_index}, ${s.optimal_causal_scale},
+      ${s.pid_synergy}, ${s.pid_redundancy},
+      ${s.branching_ratio}, ${s.avalanche_size_exponent},
+      ${s.dmd_dominant_frequency}, ${s.dmd_dominant_decay_rate}, ${s.dmd_mode_count}, ${s.dmd_spectral_entropy},
       ${s.te_hold_to_flight}, ${s.te_flight_to_hold}, ${s.te_dominance}
     )
     ON CONFLICT (question_id) DO NOTHING
@@ -1787,6 +1806,9 @@ export interface MotorSignalRow {
   motor_signal_id: number;
   question_id: number;
   sample_entropy: number | null;
+  mse_series: string | null;
+  complexity_index: number | null;
+  ex_gaussian_fisher_trace: number | null;
   iki_autocorrelation_json: string | null;
   motor_jerk: number | null;
   lapse_rate: number | null;
@@ -1805,13 +1827,15 @@ export interface MotorSignalRow {
 export async function saveMotorSignals(questionId: number, s: Omit<MotorSignalRow, 'motor_signal_id' | 'question_id'>): Promise<number> {
   const [row] = await sql`
     INSERT INTO tb_motor_signals (
-       question_id, sample_entropy, iki_autocorrelation_json,
+       question_id, sample_entropy, mse_series, complexity_index, ex_gaussian_fisher_trace,
+       iki_autocorrelation_json,
        motor_jerk, lapse_rate, tempo_drift,
        iki_compression_ratio, digraph_latency_json,
        ex_gaussian_tau, ex_gaussian_mu, ex_gaussian_sigma,
        tau_proportion, adjacent_hold_time_cov, hold_flight_rank_corr
     ) VALUES (
-      ${questionId}, ${s.sample_entropy}, ${s.iki_autocorrelation_json},
+      ${questionId}, ${s.sample_entropy}, ${s.mse_series}, ${s.complexity_index}, ${s.ex_gaussian_fisher_trace},
+      ${s.iki_autocorrelation_json},
       ${s.motor_jerk}, ${s.lapse_rate}, ${s.tempo_drift},
       ${s.iki_compression_ratio}, ${s.digraph_latency_json},
       ${s.ex_gaussian_tau}, ${s.ex_gaussian_mu}, ${s.ex_gaussian_sigma},

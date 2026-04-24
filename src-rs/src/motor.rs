@@ -24,6 +24,9 @@ pub(crate) struct ExGaussianValues {
 
 pub(crate) struct MotorResult {
     pub(crate) sample_entropy: Option<f64>,
+    pub(crate) mse_series: Option<Vec<f64>>,
+    pub(crate) complexity_index: Option<f64>,
+    pub(crate) ex_gaussian_fisher_trace: Option<f64>,
     pub(crate) iki_autocorrelation: Option<Vec<f64>>,
     pub(crate) motor_jerk: Option<f64>,
     pub(crate) lapse_rate: Option<f64>,
@@ -585,19 +588,136 @@ fn hold_flight_rank_correlation(stream: &[KeystrokeEvent]) -> SignalResult<f64> 
 
 // ─── Public API ───────────────────────────────────────────────────
 
+// ─── Multiscale Entropy (Costa, Goldberger & Peng 2002) ──────────
+//
+// Coarse-grain the IKI series at scales 1-5, compute SampEn at each.
+// The Complexity Index (sum across scales) discriminates healthy
+// from pathological dynamics where single-scale SampEn fails.
+
+fn multiscale_entropy(series: &[f64], max_scale: usize) -> Option<(Vec<f64>, f64)> {
+    let mut mse = Vec::with_capacity(max_scale);
+
+    for scale in 1..=max_scale {
+        // Coarse-grain: average consecutive groups of `scale` values
+        let coarsened: Vec<f64> = series
+            .chunks(scale)
+            .filter(|c| c.len() == scale)
+            .map(|c| c.iter().sum::<f64>() / scale as f64)
+            .collect();
+
+        // Need minimum 30 points for SampEn
+        if coarsened.len() < 30 {
+            return None;
+        }
+
+        match sample_entropy(&coarsened, 2, 0.2) {
+            Ok(se) => mse.push(se),
+            Err(_) => return None, // If any scale fails, return None for the whole MSE
+        }
+    }
+
+    let ci: f64 = mse.iter().sum();
+    Some((mse, ci))
+}
+
+// ─── Fisher Information of Ex-Gaussian (meta-measurement) ────────
+//
+// Trace of the 3x3 Fisher information matrix at the fitted
+// ex-Gaussian parameters (mu, sigma, tau). Measures how informative
+// this session's flight time distribution is: high FI = small
+// cognitive changes produce large distributional changes.
+// Karunanithi et al. 2008 (regime shift detection).
+
+fn ex_gaussian_fisher_trace(exg: &ExGaussianValues, flights: &[f64]) -> Option<f64> {
+    let mu = exg.mu;
+    let sigma = exg.sigma;
+    let tau = exg.tau;
+
+    // FI matrix diagonal elements (numerical approximation via score variance)
+    // For a sample of n observations from ex-Gaussian(mu, sigma, tau):
+    // FI_ii = (1/n) * sum of (d log f / d theta_i)^2
+    // We approximate via finite differences on the log-pdf.
+
+    if sigma < 1e-10 || tau < 1e-10 {
+        return None;
+    }
+
+    let n = flights.len();
+    if n < 50 {
+        return None;
+    }
+
+    let eps_mu = sigma * 0.001;
+    let eps_sigma = sigma * 0.001;
+    let eps_tau = tau * 0.001;
+
+    // Ex-Gaussian log-pdf: log(1/tau) + (mu - x)/tau + sigma^2/(2*tau^2) + log(erfc(z/sqrt(2)))
+    // where z = (mu - x)/sigma + sigma/tau
+    let log_pdf = |x: f64, m: f64, s: f64, t: f64| -> f64 {
+        let z = (m - x) / s + s / t;
+        let exponent = (m - x) / t + s * s / (2.0 * t * t);
+        let exponent = exponent.clamp(-700.0, 700.0); // clamp for numerical safety
+        let erfc_val = crate::stats::erfc(z / std::f64::consts::SQRT_2);
+        if erfc_val <= 0.0 {
+            return f64::NEG_INFINITY;
+        }
+        (-t.ln()) + exponent + erfc_val.ln()
+    };
+
+    let mut fi_mu = NeumaierAccumulator::new();
+    let mut fi_sigma = NeumaierAccumulator::new();
+    let mut fi_tau = NeumaierAccumulator::new();
+
+    for &x in flights.iter().take(500) {
+        // Numerical derivative d(log f)/d mu
+        let dlp_mu = (log_pdf(x, mu + eps_mu, sigma, tau) - log_pdf(x, mu - eps_mu, sigma, tau))
+            / (2.0 * eps_mu);
+        let dlp_sigma = (log_pdf(x, mu, sigma + eps_sigma, tau) - log_pdf(x, mu, sigma - eps_sigma, tau))
+            / (2.0 * eps_sigma);
+        let dlp_tau = (log_pdf(x, mu, sigma, tau + eps_tau) - log_pdf(x, mu, sigma, tau - eps_tau))
+            / (2.0 * eps_tau);
+
+        if dlp_mu.is_finite() {
+            fi_mu.add(dlp_mu * dlp_mu);
+        }
+        if dlp_sigma.is_finite() {
+            fi_sigma.add(dlp_sigma * dlp_sigma);
+        }
+        if dlp_tau.is_finite() {
+            fi_tau.add(dlp_tau * dlp_tau);
+        }
+    }
+
+    let count = flights.len().min(500) as f64;
+    let trace = fi_mu.total() / count + fi_sigma.total() / count + fi_tau.total() / count;
+
+    if trace.is_finite() && trace > 0.0 {
+        Some(trace)
+    } else {
+        None
+    }
+}
+
 pub(crate) fn compute(stream: &[KeystrokeEvent], total_duration_ms: f64) -> MotorResult {
     let ikis = IkiSeries::from_stream(stream);
     let flights = FlightTimes::from_stream(stream);
 
+    let mse = multiscale_entropy(&ikis, 5);
+    let exg = ex_gaussian_fit(&flights).ok();
+    let fisher = exg.as_ref().and_then(|e| ex_gaussian_fisher_trace(e, &flights));
+
     MotorResult {
         sample_entropy: sample_entropy(&ikis, 2, 0.2).ok(),
+        mse_series: mse.as_ref().map(|(s, _)| s.clone()),
+        complexity_index: mse.map(|(_, ci)| ci),
+        ex_gaussian_fisher_trace: fisher,
         iki_autocorrelation: iki_autocorrelation(&ikis, 5).ok(),
         motor_jerk: motor_jerk(&ikis).ok(),
         lapse_rate: lapse_rate(&ikis, total_duration_ms).ok(),
         tempo_drift: tempo_drift(&ikis).ok(),
         iki_compression_ratio: iki_compression_ratio(&ikis).ok(),
         digraph_latency_profile: digraph_latency_profile(stream),
-        ex_gaussian: ex_gaussian_fit(&flights).ok(),
+        ex_gaussian: exg,
         adjacent_hold_time_cov: adjacent_hold_time_cov(stream).ok(),
         hold_flight_rank_corr: hold_flight_rank_correlation(stream).ok(),
     }
