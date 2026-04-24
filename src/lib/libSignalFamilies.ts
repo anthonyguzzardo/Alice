@@ -1,7 +1,7 @@
 /**
  * Signal Family Taxonomy & Ablation Engine
  *
- * Groups ~163 individual signals into meaningful families, maps their
+ * Groups ~165 individual signals (129 database columns, ~165 expanded dimensions) into meaningful families, maps their
  * downstream dependencies into the 8D state engine, and computes
  * ablation results: what happens when you remove one family, two families,
  * or run with only one family.

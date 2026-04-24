@@ -1165,37 +1165,56 @@ None of these require hardware changes. All are computable from the existing key
 
 ## Signal Count
 
-| Category | Count | Notes |
+Counted at the database column level (ground truth). Arrays count as 1 column. Derived state dimensions (7D, 11D) are not double-counted against their source columns.
+
+### Base measurements (database columns)
+
+| Table | Columns | Notes |
 |---|---|---|
-| Raw production | 9 | |
-| Pause and engagement | 4 | |
-| Deletion decomposition | 9 | |
-| P-bursts | 3 | |
-| Keystroke dynamics | 7 | holdTime and flightTime each split mean/std |
-| Revision chains | 2 | |
-| Re-engagement | 2 | |
-| Raw streams | 2 | keystrokeStream, eventLog |
-| Linguistic densities | 12 | 6 NRC + cognitive + hedging + firstPerson + mattr + avgSentLen + sentLenVar |
-| Session metadata | 7 | |
-| 7D behavioral state | 8 | derived z-scored dimensions |
-| 11D semantic state | 11 | derived z-scored dimensions |
-| Dynamical signals | 13 | PE + PEraw + PEspectrum + DFA + 4 RQA + 3 TE |
-| Calibration context | 7 | categorical dimensions |
-| Device/temporal | 3 | |
-| Cursor behavior / writing process (Phase 1) | 18 | holdTime L/R mean/std = 4 |
-| Mouse/cursor trajectory (Phase 2) | 5 | |
-| Precorrection / postcorrection (Phase 2) | 2 | |
-| Revision distance (Phase 2) | 2 | |
-| Punctuation key latency (Phase 2) | 2 | |
-| Motor signals | 7 | |
-| Motor signals: Phase 2 additions | 6 | +holdFlightRankCorr |
-| Extended semantic signals | 8 | |
-| Process signals | 9 | pauseLocation = 3, rBurst/iBurst = 2 |
-| R-burst sequences (per-burst detail) | 5 | per-burst, not per-session |
-| Cross-session signals | 10 | ncdLag = 4 |
-| Avatar / ghost engine | 5 variants | 22 profile fields, not counted as signals |
-| Reconstruction residuals | per-signal | not counted separately |
-| Computation utilities | 3 | infrastructure, not signals |
-| Somatic signals (potential) | 10 | not yet implemented |
-| **Total implemented** | **171** | heading count + multi-signal expansion + table dimensions |
-| **Total with potential somatic** | **181** | |
+| tb_session_summaries | 76 | All raw production, pause, deletion, P-burst, keystroke dynamics, revision, re-engagement, linguistic densities, session metadata, Phase 1 cursor/writing, Phase 2 mouse/correction/revision/punctuation |
+| tb_dynamical_signals | 13 | 11 scalar + pe_spectrum (JSONB) + iki_count/hold_flight_count metadata |
+| tb_motor_signals | 13 | 11 scalar + iki_autocorrelation (JSONB) + digraph_latency (JSONB) |
+| tb_semantic_signals | 8 | TS-computed linguistic analysis |
+| tb_process_signals | 9 | Rust-computed text reconstruction signals |
+| tb_cross_session_signals | 10 | TS-computed longitudinal signals |
+| **Column total** | **129** | arrays counted as 1 |
+
+### Expanded dimensions (if counting array elements)
+
+| Array | Elements | Expanded total |
+|---|---|---|
+| pe_spectrum | 5 (orders 3-7) | +4 |
+| iki_autocorrelation | 5 (lags 1-5) | +4 |
+| digraph_latency | ~10-30 (top bigrams) | +~9-29 |
+| **Dimension total** | | **~146-162** |
+
+### Derived state dimensions (computed from base, not double-counted)
+
+| Table | Dimensions | Source |
+|---|---|---|
+| tb_entry_states | 8 | 7D behavioral + volatility + convergence, from session summary fields |
+| tb_semantic_states | 11 | 11D semantic, from linguistic density fields |
+| tb_calibration_context | 7 | Categorical tags from calibration free-writes |
+
+### Additional structures
+
+| Structure | Fields | Notes |
+|---|---|---|
+| tb_rburst_sequences | 5 per burst | Per-burst detail, not per-session |
+| Avatar / ghost engine | 5 variants, 22 profile fields | Reconstruction adversary, not counted as signals |
+| Reconstruction residuals | per-signal | Stored in tb_reconstruction_residuals |
+
+### Somatic signals (potential, not yet implemented)
+
+10 signals derivable from existing keystroke stream: rollover distribution, error topology, thumb channel, correction strategy, shift anticipation, key geography, bilateral rhythm coherence, post-pause motor signature, deletion kinematics, digraph asymmetry.
+
+### Summary
+
+The "~163" historically referenced in the codebase approximated column count + expanded arrays + digraph estimate. The precise count depends on methodology:
+
+| Methodology | Count |
+|---|---|
+| Database columns (arrays as 1) | 129 |
+| Expanded dimensions (arrays expanded, digraph ~30) | ~165 |
+| With derived state dimensions | ~191 |
+| With potential somatic signals | ~201 |

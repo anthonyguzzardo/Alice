@@ -16,7 +16,7 @@ The system measures, the system retrieves, the system juxtaposes. The system doe
 
 **Text-only narrative interpretation is commoditizable.** Anything a frontier model can say after reading the same chat transcript will be reproduced by every future frontier model. Investing the system's depth there means rebuilding it on every model release.
 
-**The behavioral signal substrate is the moat.** ~163 deterministic signals across keystroke dynamics (P-bursts, hold/flight time, entropy, transfer entropy, DFA, RQA), motor signals (laterality, jerk, lapse rate, digraph profiles), cursor behavior (leading edge ratio, contextual revision, paste blocking), revision topology, calibration deltas, parallel behavioral and semantic dynamics, extended semantic signals (idea density, integrative complexity, cohesion), process signals (abandoned thoughts, R/I-burst decomposition, phase transitions), cross-session signals (self-perplexity, NCD, text network analysis), and per-session metadata (deletion-density curves, burst-trajectory shapes, inter-burst rhythm, hour typicality) — these survive arbitrarily capable future models because the substrate is the writer's body, not their text. A future GPT-N reading the transcript cannot see what the keystroke pipeline measured.
+**The behavioral signal substrate is the moat.** ~165 deterministic signals (129 database columns, expanding arrays to ~165 dimensions) across keystroke dynamics (P-bursts, hold/flight time, entropy, transfer entropy, DFA, RQA), motor signals (laterality, jerk, lapse rate, digraph profiles), cursor behavior (leading edge ratio, contextual revision, paste blocking), revision topology, calibration deltas, parallel behavioral and semantic dynamics, extended semantic signals (idea density, integrative complexity, cohesion), process signals (abandoned thoughts, R/I-burst decomposition, phase transitions), cross-session signals (self-perplexity, NCD, text network analysis), and per-session metadata (deletion-density curves, burst-trajectory shapes, inter-burst rhythm, hour typicality) — these survive arbitrarily capable future models because the substrate is the writer's body, not their text. A future GPT-N reading the transcript cannot see what the keystroke pipeline measured.
 
 So Alice does few things. Capture signals. Compute deterministic dynamics on parallel orthogonal spaces. Generate tomorrow's question from a bounded context. Render a designer-facing Observatory. Let the writer interpret their own behavior by watching it back, not by reading the system's opinion of it.
 
@@ -152,7 +152,7 @@ What you submitted. Stored as-is. Never surfaced back.
 
 The system silently captures raw input events throughout the session — keystrokes, deletions, pauses, tab-aways, resumptions. On submission these are crunched into a session summary: a single row of derived behavioral metrics plus context metadata. Per-burst sequence data is captured in `tb_burst_sequences` for within-session pattern detection (Baaijen & Galbraith 2012). A per-keystroke event log (text snapshots over time) is captured in `tb_session_events` to enable read-only playback.
 
-The session summary populates ~163 deterministic signals across multiple categories:
+The session summary populates ~165 deterministic signals (129 database columns, expanding arrays to ~165 dimensions) across multiple categories:
 
 - **Raw production** — first-keystroke latency, active typing speed, commitment ratio, confirmation latency (Monaro et al. 2018).
 - **Pause and engagement** — pause counts/duration, tab-away behavior.
@@ -410,7 +410,7 @@ There are no cron jobs, no scheduled tasks, no server dependencies. The system i
 - **Session metadata** — `src/lib/session-metadata.ts`. Computes the slice-3 follow-up signals (hour typicality, deletion curve, burst shape, inter-burst rhythm, burst-deletion proximity). Called synchronously from `respond.ts`.
 - **Calibration drift** — `src/lib/calibration-drift.ts`. Snapshots baselines on every calibration submit; computes drift magnitude as z-norm L2 distance against per-dimension journal-session dispersion.
 - **Signal formatting** — `src/lib/signals.ts`. Research-backed verbalization of behavioral data + dynamics for question-generation prompts. Informed by Netflix "From Logs to Language" (2026), anchoring bias research, "Lost in the Middle" (TACL 2024).
-- **Signal registry** -- `src/lib/signal-registry.ts`. Canonical vocabulary of ~163 deterministic signals. Serves as documentation of what the substrate captures.
+- **Signal registry** -- `src/lib/signal-registry.ts`. Canonical vocabulary of ~165 deterministic signals (129 database columns, expanding arrays to ~165 dimensions). Serves as documentation of what the substrate captures.
 - **Question generation** — `src/lib/generate.ts`. Phase-2-only; assembles bounded context and produces tomorrow's question.
 - **Linguistic density pipeline** — `src/lib/linguistic.ts`. Server-side computation of NRC + LIWC densities on every submission.
 - **Per-burst sequence capture** — client-side P-burst tracking, persisted to `tb_burst_sequences`.
