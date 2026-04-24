@@ -19,8 +19,21 @@ import '../../styles/styObservatory.css';
     <title>Observatory · Alice</title>
     <script is:inline>
       (function () {
-        var t = localStorage.getItem('alice-theme') || 'light';
+        var saved = localStorage.getItem('alice-theme');
+        var t = saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
         document.documentElement.setAttribute('data-theme', t);
+        document.addEventListener('DOMContentLoaded', function () {
+          var btn = document.getElementById('obs-theme-toggle');
+          if (!btn) return;
+          btn.textContent = t === 'dark' ? '\u2600' : '\u263E';
+          btn.addEventListener('click', function () {
+            var cur = document.documentElement.getAttribute('data-theme');
+            var next = cur === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', next);
+            localStorage.setItem('alice-theme', next);
+            btn.textContent = next === 'dark' ? '\u2600' : '\u263E';
+          });
+        });
       })();
     </script>
     <style is:global>
@@ -37,6 +50,7 @@ import '../../styles/styObservatory.css';
           <a href="/observatory/coupling">coupling</a>
           <a href="/observatory/ghost">ghost</a>
           <a href="/">→ alice</a>
+          <button class="obs-theme-toggle" id="obs-theme-toggle" aria-label="Toggle theme"></button>
         </nav>
       </header>
 

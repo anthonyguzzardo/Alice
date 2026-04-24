@@ -21,8 +21,21 @@ const qId = parseInt(questionId ?? '', 10);
     <title>Replay · session {qId}</title>
     <script is:inline>
       (function () {
-        var t = localStorage.getItem('alice-theme') || 'light';
+        var saved = localStorage.getItem('alice-theme');
+        var t = saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
         document.documentElement.setAttribute('data-theme', t);
+        document.addEventListener('DOMContentLoaded', function () {
+          var btn = document.getElementById('obs-theme-toggle');
+          if (!btn) return;
+          btn.textContent = t === 'dark' ? '\u2600' : '\u263E';
+          btn.addEventListener('click', function () {
+            var cur = document.documentElement.getAttribute('data-theme');
+            var next = cur === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', next);
+            localStorage.setItem('alice-theme', next);
+            btn.textContent = next === 'dark' ? '\u2600' : '\u263E';
+          });
+        });
       })();
     </script>
     <style is:global>
@@ -33,6 +46,7 @@ const qId = parseInt(questionId ?? '', 10);
     <div class="frame replay-frame">
       <div class="nav-row" id="back-nav">
         <a href="/observatory">← back to observatory</a>
+        <button class="obs-theme-toggle" id="obs-theme-toggle" aria-label="Toggle theme"></button>
       </div>
       <p class="replay-label">Replay</p>
       <div class="replay-question" id="question">loading…</div>
