@@ -8,6 +8,122 @@ Newest first.
 
 ---
 
+## INC-012: Single-paradigm measurement architecture
+
+**Date:** 2026-04-23
+**Type:** Methods correction (measurement paradigm gap, not a code bug)
+
+### What was wrong
+
+The signal engine has 129 database columns computed by a Rust native engine and TypeScript pipeline. Every signal is technically correct within its own paradigm. The paradigm itself is incomplete.
+
+Every probe of temporal structure, complexity, or recurrence uses exactly one mathematical approach. There are no independent estimators cross-checking each other, no frequency-domain analysis of any kind, and no cross-session motor trajectory tracking. Specifically:
+
+**1. No frequency-domain analysis.** The IKI series is a time series. Spectral analysis of time series is fundamental. The system computes DFA (time-domain scaling), PE (ordinal patterns), RQA (recurrence structure), and sample entropy (temporal regularity) but never computes a power spectral density. The entire frequency domain is invisible: oscillation frequencies, spectral slope, respiratory coupling, autonomic analogs, noise color. This is equivalent to measuring a signal with an oscilloscope and never switching to the spectrum analyzer.
+
+**2. No multifractal analysis.** DFA computes a single scaling exponent (alpha), assuming monofractal scaling (one power law governs all moment orders). Multifractal DFA (Kantelhardt et al. 2002) generalizes this to a spectrum of scaling exponents that reveals whether scaling diversity is adaptive or rigid. The generalization has been available for 24 years. Bennett, Roudaut & Metatla (2025, Int. J. Human-Computer Studies) directly validated MF-DFA spectrum width on keystroke IKI data as a fatigue marker. The existing DFA code extends to MF-DFA with approximately 40 lines. This was not an unknown technique. It was an established generalization of a technique already implemented, with direct keystroke validation, that was not followed through.
+
+**3. No ordinal dynamics beyond Shannon entropy.** The PE implementation computes Shannon entropy of ordinal patterns (Bandt & Pompe 2002). The standard literature extensions are the complexity-entropy causality plane (Rosso et al. 2007) and forbidden pattern analysis (Amigo et al. 2008). These answer a question PE alone cannot: is the IKI sequence deterministic or stochastic? Both can have identical PE values. The extensions build on the same ordinal pattern distribution already computed by PE and add negligible computational cost. If you know Bandt-Pompe (2002), Rosso (2007) and Amigo (2008) are the immediate next papers. They were not followed.
+
+**4. No graph analysis of the recurrence matrix.** RQA extracts sequential line statistics (diagonal lines for determinism, vertical lines for laminarity) from the recurrence matrix. Recurrence network analysis (Donner et al. 2010, 2011) reinterprets the same matrix as a graph adjacency matrix and computes graph-theoretic properties (transitivity, path length, clustering, assortativity). The recurrence matrix is already computed. The graph analysis adds 2-10ms of computation on data that already exists in memory. The RQA implementation stopped at line statistics and left the graph structure of the same matrix unexamined.
+
+**5. No cross-session motor trajectory tracking.** The cross-session signal family tracks semantic and linguistic drift (NCD, self-perplexity, vocab recurrence decay, text network density). Motor distribution shape drift is not tracked at all. This means the system can detect when language is changing but cannot detect when the motor system's timing distribution is changing shape (developing heavier tails, becoming bimodal, losing symmetry). Lam et al. (2024, Scientific Reports) showed that motor distribution shape change (Wasserstein distance) accelerates months before mean speed declines in ALS. The system has no analog of this measurement.
+
+**6. No independent estimators for any measurement.** DFA alpha is the only temporal scaling probe. PE is the only ordinal complexity probe. RQA determinism is the only recurrence structure probe. If any single estimator is wrong or misleading for a particular session, nothing catches it. A measurement instrument that produces one number per dimension and offers no cross-validation of that number is making a stronger claim than it should about each individual measurement.
+
+### Why this was missed
+
+The signal engine was built by following citations forward from the keystroke dynamics literature: Bandt-Pompe -> PE, Peng -> DFA, Webber-Zbilut -> RQA, Schreiber -> TE. Each addition was justified by its own paper and its own measurement target. The result was a thorough inventory of time-domain nonlinear dynamics tools, each operating independently.
+
+What was not done was to ask the complementary question: for each measurement, what independent approach would cross-validate it? That question would have immediately surfaced spectral slope (independent check on DFA), CECP (disambiguation layer for PE), recurrence networks (geometric complement to RQA's sequential analysis), and MF-DFA (generalization test of DFA's monofractal assumption). The paradigm boundary was invisible from inside the paradigm because each signal appeared complete on its own terms.
+
+The frequency domain blind spot is the least defensible. Spectral analysis is not an exotic technique. It is the first thing a signal processing engineer would compute on any time series. Its absence reflects the fact that the signal engine was designed by a cognitive science framing (what do keystroke dynamics papers compute?) rather than a signal processing framing (what are the standard analysis axes for any time series?).
+
+### What we aim to achieve today
+
+Implementation of six signal families that close the paradigm gap. All extend existing infrastructure. Target: complete Rust implementation with tests, database schema, and pipeline integration in a single session.
+
+**Family 1: MF-DFA (extends `dynamical.rs`, existing DFA infrastructure)**
+
+| Signal | Computation | Lines est. |
+|--------|-------------|-----------|
+| `mfdfa_spectrum_width` | Generalize DFA over q = -5 to +5, Legendre transform, max(alpha) - min(alpha) | ~40 on DFA |
+| `mfdfa_asymmetry` | (alpha_peak - alpha_min) / (alpha_max - alpha_min) | included |
+| `mfdfa_peak_alpha` | alpha at max f(alpha); h(2) = standard DFA alpha for backward compatibility | included |
+
+Cross-validates: DFA alpha (is the monofractal assumption valid?). Closes: multifractal gap.
+
+**Family 2: Symbolic dynamics extensions (extends `dynamical.rs`, existing PE infrastructure)**
+
+| Signal | Computation | Lines est. |
+|--------|-------------|-----------|
+| `statistical_complexity` | Jensen-Shannon divergence of ordinal pattern distribution vs uniform | ~25 on PE |
+| `forbidden_pattern_fraction` | absent_patterns / d! at orders 3-5 | ~10 on PE |
+| `weighted_pe` | Variance-weighted ordinal pattern entropy | ~15 on PE |
+
+Cross-validates: PE (is the complexity deterministic or stochastic?). Closes: ordinal dynamics gap.
+
+**Family 3: Recurrence network analysis (extends `dynamical.rs`, existing RQA infrastructure)**
+
+| Signal | Computation | Lines est. |
+|--------|-------------|-----------|
+| `recurrence_transitivity` | Triangle ratio on recurrence matrix as graph | ~40 on RQA |
+| `recurrence_avg_path_length` | BFS mean shortest path on largest connected component | ~30 on RQA |
+| `recurrence_clustering` | Mean local clustering coefficient | included |
+| `recurrence_assortativity` | Degree-degree correlation | ~20 |
+
+Cross-validates: DFA alpha (transitivity approximates fractal dimension independently). Closes: recurrence graph gap.
+
+**Family 4: IKI power spectral density (new in `dynamical.rs` or new module)**
+
+| Signal | Computation | Lines est. |
+|--------|-------------|-----------|
+| `iki_psd_respiratory_peak_hz` | Lomb-Scargle periodogram, peak in 0.15-0.35 Hz band | ~80 (Lomb-Scargle core) |
+| `peak_typing_frequency_hz` | Peak in 2-15 Hz band of keystroke onset PSD | ~20 on PSD |
+| `iki_psd_lf_hf_ratio` | Integrated power ratio 0.04-0.15 Hz / 0.15-0.4 Hz | ~10 on PSD |
+| `iki_psd_spectral_slope` | log-log regression of PSD | ~10 on PSD |
+| `iki_psd_fast_slow_variance_ratio` | Integrated power >1 Hz / <0.5 Hz | ~5 on PSD |
+
+Cross-validates: DFA alpha (spectral slope provides independent scaling estimate). Closes: frequency domain gap.
+
+**Family 5: Cross-session motor trajectory (TypeScript, `libCrossSessionSignals.ts`)**
+
+| Signal | Computation | Lines est. |
+|--------|-------------|-----------|
+| `wasserstein_hold_time` | KDE + earth mover's distance between consecutive session hold time distributions | ~60 |
+| `wasserstein_flight_time` | Same for flight time distributions | included |
+| `motor_consolidation_index` | Cross-day digraph improvement ratio for high-frequency digraphs | ~50 |
+
+Cross-validates: NCD (semantic drift) with motor distribution drift. Closes: cross-session motor gap.
+
+**Family 6: Pause mixture decomposition (Rust, `dynamical.rs` or `motor.rs`)**
+
+| Signal | Computation | Lines est. |
+|--------|-------------|-----------|
+| `pause_mixture_component_count` | BIC-selected K for lognormal mixture EM | ~80 |
+| `pause_mixture_motor_proportion` | Mixing proportion of fastest component | included |
+| `pause_mixture_cognitive_load_index` | pi_reflective / pi_motor | included |
+
+Cross-validates: fixed-threshold pause analysis (P-bursts, pause count). Closes: data-driven process boundary gap.
+
+### Estimated total
+
+~20-25 new database columns. ~400-500 lines of Rust. ~110 lines of TypeScript. Schema migration for `tb_dynamical_signals` (Families 1-4), `tb_cross_session_signals` (Family 5), and either `tb_motor_signals` or `tb_dynamical_signals` (Family 6).
+
+### What this fixes
+
+**Before:** 129 columns, one estimator per measurement, zero frequency-domain signals, zero cross-session motor signals, zero cross-validation architecture.
+
+**After:** ~150-155 columns with independent cross-validation on three core measurements (temporal scaling, ordinal complexity, recurrence structure), a complete frequency-domain axis, cross-session motor trajectory tracking, and data-driven process decomposition. The instrument can now distinguish types of change (cognitive vs. motor, deterministic vs. stochastic, monofractal vs. multifractal, scaling shift vs. scaling diversity collapse) rather than only detecting that change occurred.
+
+### Design principle established
+
+A measurement instrument does not become more trustworthy by adding more signals in the same paradigm. It becomes more trustworthy when independent mathematical approaches to the same underlying quantity agree. Cross-validation architecture (multiple estimators, multiple domains, multiple scales) is not a luxury. It is the minimum standard for a measurement that claims to track cognitive trajectory over years.
+
+When implementing a signal from the literature, follow the citation chain to its standard extensions. If you implement Bandt-Pompe, check Rosso and Amigo. If you implement DFA, check Kantelhardt. If you build a recurrence matrix, check Donner. If you have a time series and no power spectrum, stop and ask why.
+
+---
+
 ## INC-011: Daily delta trigger failure and calibration pairing corrections
 
 **Date:** 2026-04-23
