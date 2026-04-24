@@ -1357,6 +1357,80 @@ Cross-session signals that track motor system trajectory over time. These comple
 
 ---
 
+## Cognitive-Linguistic Signal Extensions (Potential)
+
+Signals that bridge the motor-timing and linguistic-structural axes. The existing signal inventory treats the IKI stream as pure motor output and the final text as a separate surface-level linguistic product. These extensions model the interaction between what is being typed and how it is being typed.
+
+### Temporal Irreversibility (thermodynamic arrow of keystroke dynamics)
+
+### temporalIrreversibility
+- **Source:** IKI series from the keystroke stream
+- **Computation:** Bin IKI values into K discrete states (e.g., terciles or quintiles). Compute the forward transition matrix P_fwd(s_t | s_{t-1}) and the backward transition matrix P_bwd(s_{t-1} | s_t) from the binned series. Compute KL divergence: D_KL(P_fwd || P_bwd) = sum over all (i,j) of P_fwd(i,j) * log(P_fwd(i,j) / P_bwd(i,j)). Laplace smoothing on zero-count transitions to avoid log(0).
+- **Unit:** bits (KL divergence)
+- **Minimum data:** 100+ IKI values (sufficient transitions per bin)
+- **Why:** Every existing dynamical signal (PE, DFA, SampEn, RQA) is symmetric under time reversal. Run the IKI series backward and you get the same PE, the same DFA alpha, the same sample entropy. But cognition has a thermodynamic arrow: engaged thinking is an out-of-equilibrium process that produces entropy. High irreversibility means the cognitive system is operating far from equilibrium (active, engaged, complex processing with asymmetric transitions: fast-to-slow is more common than slow-to-fast, or vice versa). Low irreversibility means near equilibrium (disengaged, automatic, or degraded). A flat session with high PE (symmetric disorder) shows low irreversibility. A session with the same PE but asymmetric transitions shows high irreversibility. PE cannot see this distinction. Over months, declining irreversibility would indicate the cognitive system is losing its out-of-equilibrium character, becoming more thermodynamically passive.
+- **Literature:** De la Fuente et al. 2022 (Cerebral Cortex, temporal irreversibility of neural dynamics distinguishes conscious wakefulness from deep sleep and anesthesia); Martinez et al. 2023 (J. Neuroscience, irreversibility reduced in Alzheimer's). Validation is on neural dynamics (EEG), not keystroke dynamics. The thermodynamic argument transfers but has not been validated on motor timing data.
+
+### Lexical Surprisal Decomposition (IKI = motor + linguistic)
+
+**STATUS: NOT IMPLEMENTING.** The full version requires running an LLM over session text to compute per-word contextual surprisal. This introduces an external model dependency into the measurement pipeline, breaking the bit-reproducibility guarantee (INC-002, INC-005, INC-006) and the single-source-of-truth principle for measurements. The decomposition would be only as stable as the LLM producing the surprisal values, which is exactly the provenance problem INC-010 fixed for embeddings. Conceptually top-5 in the entire signal inventory; architecturally incompatible with the instrument's self-contained measurement philosophy. A word-frequency-only version (static lookup table, e.g., SUBTLEX-US log frequency) would preserve determinism but captures only the lexical frequency effect, not contextual prediction. Deferred until the architectural tension can be resolved.
+
+### wordFrequencyIkiResidual (narrow deterministic version)
+- **Source:** IKI series + final text + static word frequency table (SUBTLEX-US or equivalent)
+- **Computation:** Align word boundaries to keystroke positions via text reconstruction. For each word-initial IKI, look up log word frequency from a frozen corpus frequency table. Regress word-initial IKI against log frequency. The regression slope is the lexical access cost per log-frequency unit. The residuals (actual IKI minus frequency-predicted IKI) are motor fluency stripped of lexical difficulty. Aggregate: mean residual (pure motor baseline), residual variance (motor consistency), and slope (lexical access sensitivity).
+- **Unit:** ms (residuals), ms per log-frequency-unit (slope)
+- **Minimum data:** 30+ word-initial IKIs with frequency lookup hits
+- **Why:** Every IKI in the system conflates motor cost (moving fingers) and cognitive cost (deciding what to type). Pinet, Scaltritti & Alario (2016) proved word frequency affects first-keystroke latency (~36ms effect). The word-frequency regression strips the lexical component, leaving a purer motor signal. This is weaker than full contextual surprisal (which captures "how surprising is THIS word in THIS context") but uses a frozen lookup table with no model dependency. The slope (ms per log-frequency-unit) is itself a signal: increasing slope over months means lexical access is becoming more effortful.
+- **Literature:** Pinet, Scaltritti & Alario 2016 (Psychonomic Bulletin & Review, word frequency affects first-keystroke latency); Wilcox et al. 2023 (TACL, ~3ms/bit surprisal-latency relationship across 11 languages, validates the broader principle but requires LLM for full implementation).
+
+### Syntactic Dependency Distance
+
+**STATUS: NOT IMPLEMENTING.** Requires a dependency parser (spaCy or Stanza), which are Python libraries. The current stack is TypeScript + Rust. Adding Python to the signal pipeline is an infrastructure decision, not a signal implementation decision. Additionally, Alice sessions are typically 50-200 words (3-10 sentences). MDD estimates on 3-sentence texts have very high variance. The clinical validation (Zhang et al. 2024, Lancashire & Hirst 2009) used substantially longer texts (novels, extended narratives). Clinically among the strongest NLP biomarkers for cognitive decline, but not implementable without a stack change and not reliable at Alice's session lengths. A lightweight approximation (mean clause length, subordination index via regex) could approximate MDD without Python (Oya 2011, r > 0.85 correlation), but would be a rough proxy. Deferred.
+
+### meanDependencyDistance (documented for future reference)
+- **Source:** Final submitted text, parsed via dependency parser
+- **Computation:** For each sentence, build the dependency parse tree. For each dependency arc, compute the linear distance (word positions) between head and dependent. Mean dependency distance = mean arc length across all arcs in the response. Additional signals: max tree depth, proportion clausal vs. phrasal constructions, embedding depth distribution.
+- **Unit:** word positions (MDD), depth levels (tree depth), ratio (clausal/phrasal)
+- **Minimum data:** 5+ sentences for stable MDD estimates
+- **Why:** Every linguistic measure in the system is surface-level (word counts, densities, sentence lengths, lexicon matches). None require a parse tree. Syntactic complexity is not sentence length. "I went to the store" and "The person who I told you about went to the store that I mentioned" have different dependency distances that sentence length approximates but cannot measure. AD patients produce shorter MDD and shift from hierarchical to linear constructions. The Iris Murdoch case study showed syntactic complexity declining in her novels years before clinical diagnosis. MDD occupies the syntactic-structural axis, orthogonal to lexical sophistication (MATTR, idea density) and semantic coherence (Coh-Metrix signals). High lexical sophistication with simple syntax is "smart but rigid." Low lexical sophistication with complex syntax is "simple words in elaborate structures." The combination creates a 2D space neither axis provides alone.
+- **Literature:** Zhang et al. 2024 (Humanities and Social Sciences Communications, AD patients shorter MDD, shift from hierarchical to linear); Lancashire & Hirst 2009 (Iris Murdoch case study, syntactic complexity decline years before diagnosis); Liu 2008 (dependency distance as syntactic complexity measure).
+
+### Ecological Stop-Signal Reaction Time (inhibition latency)
+
+**STATUS: NOT IMPLEMENTING as a separate signal.** The core measurement already exists as `errorDetectionLatencyMean` in `tb_session_summaries` (mean interval from last non-delete keystroke to backspace press). The proposal adds distribution shape, within-session trajectory, and the Logan point-of-no-return framework (~200ms threshold distinguishing genuine inhibition from post-hoc cleanup). These are analytical extensions of an existing measurement, not a new measurement. The distribution shape and trajectory can be derived from the existing keystroke stream and deletion episode data in `process.rs` if needed, but the marginal information gain over the existing mean does not justify a new signal family. Documented here for the inhibition-theoretic framing, which is valuable context for interpreting the existing `errorDetectionLatencyMean`.
+
+### ecologicalSsrt (documented for interpretive context)
+- **Source:** Keystroke stream, deletion episode boundaries (already identified in `process.rs`)
+- **Computation:** For each deletion episode, extract onset latency: time from last non-delete keystroke to first delete keystroke. Compute distribution shape (mean, std, skewness), within-session trajectory (first half vs. second half), and proportion of episodes with onset latency < 200ms (below the Logan point of no return, indicating inhibition occurred before the motor sequence completed, i.e., genuine stopping rather than post-hoc correction).
+- **Unit:** ms (latency), ratio (sub-200ms proportion)
+- **Minimum data:** 10+ deletion episodes per session
+- **Why:** SSRT is the most widely used clinical measure of inhibitory control (Logan 1982). The deletion onset latency in natural typing is an ecologically valid SSRT computed passively and longitudinally. Jana et al. (Frontiers in Computational Neuroscience, 2020) validated that typing provides both hard lower and soft upper SSRT bounds. The sub-200ms proportion distinguishes genuine inhibition from cleanup. Executive function has three components: updating (captured by burst structure), shifting (captured by strategy shift count), and inhibition (partially captured by `errorDetectionLatencyMean` but without distribution analysis or the inhibition threshold framework).
+- **Literature:** Logan 1982 (SSRT foundational); Logan, PMC4417067 (point of no return); Jana et al. 2020 (Frontiers in Computational Neuroscience, typing as SSRT source).
+
+### Phonological Loading Index (inner speech from keystroke timing)
+
+**STATUS: NOT IMPLEMENTING.** The effect is real and replicated (Wilkinson & Van Selst 2013) but the effect size is ~15-30ms at syllable boundaries, on top of IKI variance ranging 50-2000ms+ from all other sources. Alice sessions are 50-200 words. Many words appear once. Per-session signal-to-noise ratio is too poor for individual measurement. Over 100+ sessions the aggregate might reveal something, but the same phonological loading effect would be captured more reliably by the word-frequency IKI residual (which subsumes syllable boundary effects as part of lexical access cost). Conceptually elegant but practically marginal at Alice's session lengths.
+
+### phonologicalLoadingIndex (documented for future reference)
+- **Source:** IKI series + final text + syllable dictionary (CMU Pronouncing Dictionary or rule-based hyphenation)
+- **Computation:** For each polysyllabic word in the produced text, identify syllable boundaries and map to keystroke positions. Compute mean IKI at syllable boundaries vs. mean IKI within syllables. The ratio (boundary-IKI / within-syllable-IKI) is the phonological loading index.
+- **Unit:** ratio (>1.0 indicates syllable boundary inflation)
+- **Minimum data:** 20+ polysyllabic words with sufficient within-word keystrokes
+- **Why:** IKIs at syllable boundaries are significantly longer than within-syllable IKIs, even for pseudowords (Wilkinson & Van Selst 2013, Writing Systems Research). This holds for deaf typists, meaning it is orthographic-phonological, not articulatory. The effect reveals inner speech interfering with motor execution. A person whose phonological loading ratio increases over months may be experiencing increased reliance on phonological mediation during writing, a known compensatory mechanism when lexical access degrades. This would be the only signal bridging motor timing and sub-lexical linguistic structure.
+- **Literature:** Wilkinson & Van Selst 2013 (Writing Systems Research, syllable boundary IKI inflation, replicated, holds for deaf typists).
+
+### Discourse-Level Global Coherence
+
+### discourseGlobalCoherence
+- **Source:** Final submitted text, sentence-level embeddings via Qwen3-Embedding-0.6B (existing TEI infrastructure)
+- **Computation:** Split the response into sentences. Embed each sentence. Compute cosine similarity of each sentence to the first sentence (global coherence: is the response maintaining its thematic thread?). Compute cosine similarity of each sentence to the immediately preceding sentence (local coherence: are adjacent ideas connected?). Output: mean global coherence, mean local coherence, global/local ratio, and global coherence decay slope (does thematic consistency erode through the response?). Minimum sentence gate: 5+ sentences required; shorter responses return null.
+- **Unit:** cosine similarity (0-1), ratio (global/local), slope (decay)
+- **Minimum data:** 5+ sentences per response
+- **Why:** The system can detect vocabulary shrinking (lexical sophistication), language becoming more predictable (self-perplexity), and text networks thinning (text network density). It cannot detect that responses are becoming incoherent at the discourse level while remaining locally fluent. That is the clinical pattern: local coherence stays intact while global coherence collapses. Referential cohesion and text network density measure sentence-to-sentence connectivity and word co-occurrence structure. Discourse coherence is a higher-order construct about maintaining thematic intent across the full response. Asgari et al. (EMNLP, 2023) showed global coherence declined in MCI patients over 6 months while local coherence did not, and neither MoCA nor ADAS-Cog detected change over the same period.
+- **Literature:** Asgari et al. 2023 (EMNLP, global coherence more sensitive than clinical instruments for MCI); Reagan et al. 2016 (emotional arc methodology, related structural analysis).
+
+---
+
 ## Signal Count
 
 Counted at the database column level (ground truth). Arrays count as 1 column. Derived state dimensions (7D, 11D) are not double-counted against their source columns.
@@ -1414,6 +1488,10 @@ Counted at the database column level (ground truth). Arrays count as 1 column. D
 
 ~4 columns: Wasserstein distance for hold times, Wasserstein distance for flight times, distribution shape change rate (slope), motor consolidation index.
 
+### Cognitive-linguistic signal extensions (potential, mixed implementation status)
+
+6 signals documented. 2 implementing (temporal irreversibility, discourse global coherence). 1 implementing in narrow form (word frequency IKI residual, static lookup only). 3 not implementing (full lexical surprisal decomposition, syntactic dependency distance, phonological loading index). 1 existing signal reframed (ecological SSRT maps to existing `errorDetectionLatencyMean`). ~5-7 new columns from the implementing set.
+
 ### Summary
 
 The "~163" historically referenced in the codebase approximated column count + expanded arrays + digraph estimate. The precise count depends on methodology:
@@ -1425,3 +1503,4 @@ The "~163" historically referenced in the codebase approximated column count + e
 | With derived state dimensions | ~191 |
 | With potential somatic signals | ~203 |
 | With all potential extensions (somatic + dynamical + frequency + cross-session motor) | ~225 |
+| With cognitive-linguistic extensions (implementing subset) | ~232 |
