@@ -1165,37 +1165,37 @@ None of these require hardware changes. All are computable from the existing key
 
 ## Signal Count
 
-| Category | Count |
-|---|---|
-| Raw production | 9 |
-| Pause and engagement | 4 |
-| Deletion decomposition | 9 |
-| P-bursts | 3 |
-| Keystroke dynamics | 7 |
-| Revision chains | 2 |
-| Re-engagement | 2 |
-| Raw streams | 2 |
-| Linguistic densities | 10 |
-| Session metadata | 7 |
-| 7D behavioral state | 8 |
-| 11D semantic state | 12 |
-| Dynamical signals | 13 |
-| Calibration context | 7 dimensions |
-| Device/temporal | 3 |
-| Cursor behavior / writing process (Phase 1) | 17 |
-| Mouse/cursor trajectory (Phase 2) | 5 |
-| Precorrection / postcorrection (Phase 2) | 2 |
-| Revision distance (Phase 2) | 2 |
-| Punctuation key latency (Phase 2) | 2 |
-| Motor signals | 8 |
-| Motor signals: Phase 2 additions | 5 |
-| Extended semantic signals | 8 |
-| Process signals | 9 |
-| R-burst sequences (per-burst detail) | 5 |
-| Cross-session signals | 10 |
-| Avatar / ghost engine | 5 variants, 22 profile fields |
-| Reconstruction residuals | per-signal residuals |
-| Computation utilities | 3 |
-| Somatic signals (potential) | 10 |
-| **Total implemented** | **~172 distinct signals** |
-| **Total with potential somatic** | **~182 distinct signals** |
+| Category | Count | Notes |
+|---|---|---|
+| Raw production | 9 | |
+| Pause and engagement | 4 | |
+| Deletion decomposition | 9 | |
+| P-bursts | 3 | |
+| Keystroke dynamics | 7 | holdTime and flightTime each split mean/std |
+| Revision chains | 2 | |
+| Re-engagement | 2 | |
+| Raw streams | 2 | keystrokeStream, eventLog |
+| Linguistic densities | 12 | 6 NRC + cognitive + hedging + firstPerson + mattr + avgSentLen + sentLenVar |
+| Session metadata | 7 | |
+| 7D behavioral state | 8 | derived z-scored dimensions |
+| 11D semantic state | 11 | derived z-scored dimensions |
+| Dynamical signals | 13 | PE + PEraw + PEspectrum + DFA + 4 RQA + 3 TE |
+| Calibration context | 7 | categorical dimensions |
+| Device/temporal | 3 | |
+| Cursor behavior / writing process (Phase 1) | 18 | holdTime L/R mean/std = 4 |
+| Mouse/cursor trajectory (Phase 2) | 5 | |
+| Precorrection / postcorrection (Phase 2) | 2 | |
+| Revision distance (Phase 2) | 2 | |
+| Punctuation key latency (Phase 2) | 2 | |
+| Motor signals | 7 | |
+| Motor signals: Phase 2 additions | 6 | +holdFlightRankCorr |
+| Extended semantic signals | 8 | |
+| Process signals | 9 | pauseLocation = 3, rBurst/iBurst = 2 |
+| R-burst sequences (per-burst detail) | 5 | per-burst, not per-session |
+| Cross-session signals | 10 | ncdLag = 4 |
+| Avatar / ghost engine | 5 variants | 22 profile fields, not counted as signals |
+| Reconstruction residuals | per-signal | not counted separately |
+| Computation utilities | 3 | infrastructure, not signals |
+| Somatic signals (potential) | 10 | not yet implemented |
+| **Total implemented** | **171** | heading count + multi-signal expansion + table dimensions |
+| **Total with potential somatic** | **181** | |
