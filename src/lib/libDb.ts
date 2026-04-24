@@ -1712,10 +1712,22 @@ export interface DynamicalSignalRow {
   peak_typing_frequency_hz: number | null;
   iki_psd_lf_hf_ratio: number | null;
   iki_psd_fast_slow_variance_ratio: number | null;
+  statistical_complexity: number | null;
+  forbidden_pattern_fraction: number | null;
+  weighted_pe: number | null;
+  lempel_ziv_complexity: number | null;
+  optn_transition_entropy: number | null;
+  optn_forbidden_transition_count: number | null;
   rqa_determinism: number | null;
   rqa_laminarity: number | null;
   rqa_trapping_time: number | null;
   rqa_recurrence_rate: number | null;
+  rqa_recurrence_time_entropy: number | null;
+  rqa_mean_recurrence_time: number | null;
+  recurrence_transitivity: number | null;
+  recurrence_avg_path_length: number | null;
+  recurrence_clustering: number | null;
+  recurrence_assortativity: number | null;
   te_hold_to_flight: number | null;
   te_flight_to_hold: number | null;
   te_dominance: number | null;
@@ -1730,7 +1742,11 @@ export async function saveDynamicalSignals(questionId: number, s: Omit<Dynamical
        temporal_irreversibility,
        iki_psd_spectral_slope, iki_psd_respiratory_peak_hz, peak_typing_frequency_hz,
        iki_psd_lf_hf_ratio, iki_psd_fast_slow_variance_ratio,
+       statistical_complexity, forbidden_pattern_fraction, weighted_pe, lempel_ziv_complexity,
+       optn_transition_entropy, optn_forbidden_transition_count,
        rqa_determinism, rqa_laminarity, rqa_trapping_time, rqa_recurrence_rate,
+       rqa_recurrence_time_entropy, rqa_mean_recurrence_time,
+       recurrence_transitivity, recurrence_avg_path_length, recurrence_clustering, recurrence_assortativity,
        te_hold_to_flight, te_flight_to_hold, te_dominance
     ) VALUES (
       ${questionId}, ${s.iki_count}, ${s.hold_flight_count},
@@ -1739,7 +1755,11 @@ export async function saveDynamicalSignals(questionId: number, s: Omit<Dynamical
       ${s.temporal_irreversibility},
       ${s.iki_psd_spectral_slope}, ${s.iki_psd_respiratory_peak_hz}, ${s.peak_typing_frequency_hz},
       ${s.iki_psd_lf_hf_ratio}, ${s.iki_psd_fast_slow_variance_ratio},
+      ${s.statistical_complexity}, ${s.forbidden_pattern_fraction}, ${s.weighted_pe}, ${s.lempel_ziv_complexity},
+      ${s.optn_transition_entropy}, ${s.optn_forbidden_transition_count},
       ${s.rqa_determinism}, ${s.rqa_laminarity}, ${s.rqa_trapping_time}, ${s.rqa_recurrence_rate},
+      ${s.rqa_recurrence_time_entropy}, ${s.rqa_mean_recurrence_time},
+      ${s.recurrence_transitivity}, ${s.recurrence_avg_path_length}, ${s.recurrence_clustering}, ${s.recurrence_assortativity},
       ${s.te_hold_to_flight}, ${s.te_flight_to_hold}, ${s.te_dominance}
     )
     ON CONFLICT (question_id) DO NOTHING

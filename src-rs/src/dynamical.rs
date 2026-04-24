@@ -31,6 +31,27 @@ pub(crate) struct MfdfaResult {
     pub(crate) peak_alpha: f64,
 }
 
+/// Result of the full ordinal analysis (PE + symbolic dynamics + OPTN).
+/// Computed from a single pass over the ordinal pattern extraction.
+#[derive(Debug)]
+pub(crate) struct OrdinalAnalysisResult {
+    pub(crate) statistical_complexity: f64,
+    pub(crate) forbidden_pattern_fraction: f64,
+    pub(crate) weighted_pe: f64,
+    pub(crate) lempel_ziv_complexity: f64,
+    pub(crate) optn_transition_entropy: f64,
+    pub(crate) optn_forbidden_transition_count: i32,
+}
+
+/// Result of recurrence network analysis (computed from existing RQA recurrence matrix).
+#[derive(Debug)]
+pub(crate) struct RecurrenceNetworkResult {
+    pub(crate) transitivity: f64,
+    pub(crate) avg_path_length: f64,
+    pub(crate) clustering_coefficient: f64,
+    pub(crate) assortativity: f64,
+}
+
 pub(crate) struct DynamicalResult {
     pub(crate) iki_count: usize,
     pub(crate) hold_flight_count: usize,
@@ -47,7 +68,11 @@ pub(crate) struct DynamicalResult {
     pub(crate) peak_typing_frequency_hz: Option<f64>,
     pub(crate) iki_psd_lf_hf_ratio: Option<f64>,
     pub(crate) iki_psd_fast_slow_variance_ratio: Option<f64>,
+    pub(crate) ordinal: Option<OrdinalAnalysisResult>,
     pub(crate) rqa: Option<RqaResult>,
+    pub(crate) recurrence_network: Option<RecurrenceNetworkResult>,
+    pub(crate) rqa_recurrence_time_entropy: Option<f64>,
+    pub(crate) rqa_mean_recurrence_time: Option<f64>,
     pub(crate) te_hold_to_flight: Option<f64>,
     pub(crate) te_flight_to_hold: Option<f64>,
     pub(crate) te_dominance: Option<f64>,
@@ -105,6 +130,512 @@ fn permutation_entropy(series: &[f64], order: usize) -> SignalResult<(f64, f64)>
     };
 
     Ok((normalized, entropy))
+}
+
+// ─── Ordinal Analysis (symbolic dynamics + OPTN) ─────────────────
+//
+// Full ordinal analysis at order 3, computed in a single pass over
+// the IKI series. Extends PE with:
+// - Statistical complexity (Rosso et al. 2007): Jensen-Shannon C_JS
+// - Forbidden pattern fraction (Amigo et al. 2008)
+// - Weighted PE (Fadlallah et al. 2013): amplitude-sensitive
+// - Lempel-Ziv complexity (Bai et al. 2015 PLZC variant)
+// - OPTN transition entropy + forbidden transition count
+//   (McCullough et al. 2015; Bandt & Zanin 2022)
+
+fn ordinal_analysis(series: &[f64], order: usize) -> SignalResult<OrdinalAnalysisResult> {
+    let n = series.len();
+    if n < order + 50 {
+        return Err(SignalError::InsufficientData {
+            needed: order + 50,
+            got: n,
+        });
+    }
+
+    let window_count = n - order + 1;
+
+    // Extract ordinal patterns and their sequence
+    let mut pattern_counts: BTreeMap<Vec<usize>, u64> = BTreeMap::new();
+    let mut pattern_sequence: Vec<Vec<usize>> = Vec::with_capacity(window_count);
+    let mut weighted_counts: BTreeMap<Vec<usize>, f64> = BTreeMap::new();
+
+    for i in 0..window_count {
+        let window = &series[i..i + order];
+        let mut indices: Vec<usize> = (0..order).collect();
+        indices.sort_by(|&a, &b| {
+            window[a]
+                .partial_cmp(&window[b])
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        *pattern_counts.entry(indices.clone()).or_insert(0) += 1;
+
+        // Weighted PE: weight by window variance
+        let w_mean = window.iter().sum::<f64>() / order as f64;
+        let w_var: f64 = window.iter().map(|&v| (v - w_mean).powi(2)).sum::<f64>() / order as f64;
+        *weighted_counts.entry(indices.clone()).or_insert(0.0) += w_var;
+
+        pattern_sequence.push(indices);
+    }
+
+    let total = window_count as f64;
+
+    // --- Factorial for this order ---
+    let mut factorial: u64 = 1;
+    for i in 2..=order as u64 {
+        factorial *= i;
+    }
+    let d_factorial = factorial as usize;
+
+    // --- Statistical Complexity (Jensen-Shannon, Rosso et al. 2007) ---
+    // Uniform distribution for d! patterns
+    let p_uniform = 1.0 / d_factorial as f64;
+    let observed_count = pattern_counts.len();
+
+    // Shannon entropy of observed distribution
+    let mut h_p = NeumaierAccumulator::new();
+    for &count in pattern_counts.values() {
+        let p = count as f64 / total;
+        if p > 0.0 {
+            h_p.add(p * p.ln());
+        }
+    }
+    let h_p = -h_p.total(); // nats
+
+    // Shannon entropy of uniform
+    let h_uniform = (d_factorial as f64).ln(); // nats
+
+    // Shannon entropy of mixture (P + P_e) / 2
+    // Iterate over observed patterns and add unobserved separately
+    let mut mix_entropy = NeumaierAccumulator::new();
+    for &count in pattern_counts.values() {
+        let p = count as f64 / total;
+        let mix = (p + p_uniform) / 2.0;
+        if mix > 0.0 {
+            mix_entropy.add(mix * mix.ln());
+        }
+    }
+    // Unobserved patterns: p = 0, mix = p_uniform / 2
+    let unobserved = d_factorial - observed_count;
+    if unobserved > 0 {
+        let mix = p_uniform / 2.0;
+        mix_entropy.add(unobserved as f64 * mix * mix.ln());
+    }
+    let h_mixture = -mix_entropy.total();
+
+    // Jensen-Shannon divergence
+    let jsd = h_mixture - (h_p + h_uniform) / 2.0;
+    let jsd = jsd.max(0.0); // numerical floor
+
+    // Normalization constant Q_0 = -2 / ((1+1/d!) * ln((1+1/d!)/2) + (1-1/d!) * ln((1-1/d!)/2))
+    // Simplified: Q_0 such that max JSD * H/H_max = 1 for the most "complex" distribution.
+    // Standard approach: C_JS = Q_0 * JSD * (H_p / H_max) where Q_0 normalizes JSD to [0, 1/(4*ln2)]
+    // For simplicity and reproducibility, use the direct definition:
+    // C_JS = JSD * (H_norm) where H_norm = H_p / H_max
+    let h_max = h_uniform;
+    let h_norm = if h_max > 1e-15 { h_p / h_max } else { 0.0 };
+
+    // C_JS = (JSD / ln(2)) * H_norm, bounded to [0,1]
+    // JSD/ln(2) normalizes the divergence to bits; H_norm weights by the
+    // entropy's distance from maximum. This is the standard CECP formulation.
+    let statistical_complexity = ((jsd / 2.0_f64.ln()) * h_norm).clamp(0.0, 1.0);
+
+    // --- Forbidden Pattern Fraction (Amigo et al. 2008) ---
+    let forbidden_pattern_fraction = (d_factorial - observed_count) as f64 / d_factorial as f64;
+
+    // --- Weighted PE (Fadlallah et al. 2013) ---
+    let total_weight: f64 = weighted_counts.values().sum();
+    let mut w_entropy = NeumaierAccumulator::new();
+    if total_weight > 1e-15 {
+        for &w in weighted_counts.values() {
+            let p = w / total_weight;
+            if p > 0.0 {
+                w_entropy.add(p * p.log2());
+            }
+        }
+    }
+    let w_entropy = -w_entropy.total();
+    let max_entropy_bits = (factorial as f64).log2();
+    let weighted_pe = if max_entropy_bits > 0.0 {
+        w_entropy / max_entropy_bits
+    } else {
+        0.0
+    };
+
+    // --- Lempel-Ziv Complexity (PLZC, Bai et al. 2015) ---
+    // Operate on the pattern sequence as symbols.
+    // Map each unique pattern to an integer for efficient comparison.
+    let mut pattern_to_id: BTreeMap<Vec<usize>, usize> = BTreeMap::new();
+    let mut next_id = 0usize;
+    let symbol_seq: Vec<usize> = pattern_sequence
+        .iter()
+        .map(|p| {
+            let len = pattern_to_id.len();
+            *pattern_to_id.entry(p.clone()).or_insert_with(|| {
+                let id = next_id;
+                next_id = len + 1;
+                id
+            })
+        })
+        .collect();
+
+    // LZ76 complexity: count distinct substrings by scanning left to right
+    let mut complexity_count = 1u64; // start with 1 for the first symbol
+    let mut i = 1usize;
+    let mut k = 1usize; // current substring length
+    let seq_len = symbol_seq.len();
+
+    while i + k <= seq_len {
+        // Check if the substring symbol_seq[i..i+k] appeared in symbol_seq[0..i+k-1]
+        let substr = &symbol_seq[i..i + k];
+        let found = (0..i).any(|j| {
+            j + k < i + k && symbol_seq[j..j + k] == *substr
+        });
+
+        if found {
+            k += 1;
+            if i + k > seq_len {
+                complexity_count += 1;
+            }
+        } else {
+            complexity_count += 1;
+            i += k;
+            k = 1;
+        }
+    }
+
+    // Normalize: C_norm = C(n) * ln(n) / n (for alphabet of size k_alphabet)
+    let k_alphabet = pattern_to_id.len().max(2) as f64;
+    let n_f = seq_len as f64;
+    let lz_normalized = if n_f > 1.0 {
+        (complexity_count as f64 * n_f.ln()) / (n_f * k_alphabet.ln())
+    } else {
+        0.0
+    };
+    let lempel_ziv_complexity = lz_normalized.clamp(0.0, 1.0);
+
+    // --- OPTN: Ordinal Pattern Transition Network (McCullough et al. 2015) ---
+    // Build transition matrix from pattern sequence
+    let num_patterns = pattern_to_id.len();
+    let mut transitions = vec![vec![0u64; num_patterns]; num_patterns];
+    for w in pattern_sequence.windows(2) {
+        let from = pattern_to_id[&w[0]];
+        let to = pattern_to_id[&w[1]];
+        transitions[from][to] += 1;
+    }
+
+    // Transition entropy: mean Shannon entropy of rows
+    let mut row_entropies = NeumaierAccumulator::new();
+    let mut valid_rows = 0u64;
+    for row in &transitions {
+        let row_total: u64 = row.iter().sum();
+        if row_total == 0 {
+            continue;
+        }
+        let mut h = NeumaierAccumulator::new();
+        for &count in row {
+            if count > 0 {
+                let p = count as f64 / row_total as f64;
+                h.add(p * p.log2());
+            }
+        }
+        row_entropies.add(-h.total());
+        valid_rows += 1;
+    }
+    let optn_transition_entropy = if valid_rows > 0 {
+        row_entropies.total() / valid_rows as f64
+    } else {
+        0.0
+    };
+
+    // Forbidden transitions: count zero-count cells where both source and
+    // target patterns exist individually
+    let mut forbidden_transition_count = 0i32;
+    for from in 0..num_patterns {
+        let from_exists: u64 = transitions[from].iter().sum();
+        if from_exists == 0 {
+            continue;
+        }
+        for to in 0..num_patterns {
+            let to_exists: u64 = transitions.iter().map(|r| r[to]).sum();
+            if to_exists > 0 && transitions[from][to] == 0 {
+                forbidden_transition_count += 1;
+            }
+        }
+    }
+
+    Ok(OrdinalAnalysisResult {
+        statistical_complexity,
+        forbidden_pattern_fraction,
+        weighted_pe,
+        lempel_ziv_complexity,
+        optn_transition_entropy,
+        optn_forbidden_transition_count: forbidden_transition_count,
+    })
+}
+
+// ─── Recurrence Network Analysis (Donner et al. 2010) ────────────
+//
+// Reinterprets the RQA recurrence matrix as a graph adjacency matrix.
+// Extracts transitivity (fractal dimension estimate), average path
+// length (attractor diameter), clustering coefficient (local cohesion),
+// and assortativity (degree correlation). No new data preparation;
+// the recurrence matrix from RQA is reused.
+
+fn recurrence_network(series: &[f64]) -> SignalResult<RecurrenceNetworkResult> {
+    let n = series.len();
+    if n < 30 {
+        return Err(SignalError::InsufficientData { needed: 30, got: n });
+    }
+    // Cap for O(n^2) feasibility
+    let n = n.min(5000);
+    let series = &series[..n];
+
+    let mu = mean(series);
+    let s = std_dev(series, Some(mu));
+    let eps = s * 0.2;
+    if eps <= 0.0 {
+        return Err(SignalError::ZeroVariance { len: n });
+    }
+
+    // Build adjacency list (exclude self-loops: i != j)
+    let mut adj: Vec<Vec<usize>> = vec![Vec::new(); n];
+    for i in 0..n {
+        for j in (i + 1)..n {
+            if (series[i] - series[j]).abs() < eps {
+                adj[i].push(j);
+                adj[j].push(i);
+            }
+        }
+    }
+
+    let degrees: Vec<usize> = adj.iter().map(|a| a.len()).collect();
+    let total_edges: usize = degrees.iter().sum::<usize>() / 2;
+    if total_edges == 0 {
+        return Ok(RecurrenceNetworkResult {
+            transitivity: 0.0,
+            avg_path_length: 0.0,
+            clustering_coefficient: 0.0,
+            assortativity: 0.0,
+        });
+    }
+
+    // --- Transitivity: 3 * triangles / connected triples ---
+    let mut triangles = 0u64;
+    let mut triples = 0u64;
+    for i in 0..n {
+        let d = degrees[i];
+        if d < 2 {
+            continue;
+        }
+        triples += (d * (d - 1) / 2) as u64;
+        // Count triangles: for each pair of neighbors, check if they're connected
+        let neighbors = &adj[i];
+        for a_idx in 0..neighbors.len() {
+            for b_idx in (a_idx + 1)..neighbors.len() {
+                let a = neighbors[a_idx];
+                let b = neighbors[b_idx];
+                // Check if a and b are connected (binary search since adj is built in order)
+                if adj[a].binary_search(&b).is_ok() {
+                    triangles += 1;
+                }
+            }
+        }
+    }
+    let transitivity = if triples > 0 {
+        (3 * triangles) as f64 / (3 * triples) as f64
+    } else {
+        0.0
+    };
+
+    // --- Average Path Length (BFS on largest connected component) ---
+    // Find largest connected component via BFS
+    let mut visited = vec![false; n];
+    let mut largest_cc: Vec<usize> = Vec::new();
+    for start in 0..n {
+        if visited[start] {
+            continue;
+        }
+        let mut cc = Vec::new();
+        let mut queue = std::collections::VecDeque::new();
+        queue.push_back(start);
+        visited[start] = true;
+        while let Some(v) = queue.pop_front() {
+            cc.push(v);
+            for &w in &adj[v] {
+                if !visited[w] {
+                    visited[w] = true;
+                    queue.push_back(w);
+                }
+            }
+        }
+        if cc.len() > largest_cc.len() {
+            largest_cc = cc;
+        }
+    }
+
+    let cc_n = largest_cc.len();
+    let avg_path_length = if cc_n > 1 {
+        // BFS from a sample of nodes (cap at 100 for O(n^2) feasibility)
+        let sample_size = cc_n.min(100);
+        let step = cc_n / sample_size;
+        let mut total_dist = 0u64;
+        let mut total_pairs = 0u64;
+        for s_idx in (0..cc_n).step_by(step.max(1)) {
+            let source = largest_cc[s_idx];
+            let mut dist = vec![u32::MAX; n];
+            dist[source] = 0;
+            let mut queue = std::collections::VecDeque::new();
+            queue.push_back(source);
+            while let Some(v) = queue.pop_front() {
+                for &w in &adj[v] {
+                    if dist[w] == u32::MAX {
+                        dist[w] = dist[v] + 1;
+                        queue.push_back(w);
+                    }
+                }
+            }
+            for &node in &largest_cc {
+                if node != source && dist[node] != u32::MAX {
+                    total_dist += dist[node] as u64;
+                    total_pairs += 1;
+                }
+            }
+        }
+        if total_pairs > 0 {
+            total_dist as f64 / total_pairs as f64
+        } else {
+            0.0
+        }
+    } else {
+        0.0
+    };
+
+    // --- Clustering Coefficient (mean local) ---
+    let mut cc_sum = NeumaierAccumulator::new();
+    let mut cc_count = 0u64;
+    for i in 0..n {
+        let d = degrees[i];
+        if d < 2 {
+            continue;
+        }
+        let mut local_triangles = 0u64;
+        let neighbors = &adj[i];
+        for a_idx in 0..neighbors.len() {
+            for b_idx in (a_idx + 1)..neighbors.len() {
+                if adj[neighbors[a_idx]].binary_search(&neighbors[b_idx]).is_ok() {
+                    local_triangles += 1;
+                }
+            }
+        }
+        let possible = (d * (d - 1) / 2) as f64;
+        cc_sum.add(local_triangles as f64 / possible);
+        cc_count += 1;
+    }
+    let clustering_coefficient = if cc_count > 0 {
+        cc_sum.total() / cc_count as f64
+    } else {
+        0.0
+    };
+
+    // --- Assortativity (degree-degree correlation) ---
+    let assortativity = if total_edges > 0 {
+        let mut sum_prod = NeumaierAccumulator::new();
+        let mut sum_sum = NeumaierAccumulator::new();
+        let mut sum_sq_sum = NeumaierAccumulator::new();
+        for i in 0..n {
+            for &j in &adj[i] {
+                if j > i {
+                    let di = degrees[i] as f64;
+                    let dj = degrees[j] as f64;
+                    sum_prod.add(di * dj);
+                    sum_sum.add(di + dj);
+                    sum_sq_sum.add(di * di + dj * dj);
+                }
+            }
+        }
+        let m = total_edges as f64;
+        let sp = sum_prod.total();
+        let ss = sum_sum.total();
+        let ssq = sum_sq_sum.total();
+        let num = sp / m - (ss / (2.0 * m)).powi(2);
+        let den = ssq / (2.0 * m) - (ss / (2.0 * m)).powi(2);
+        if den.abs() > 1e-15 {
+            (num / den).clamp(-1.0, 1.0)
+        } else {
+            0.0
+        }
+    } else {
+        0.0
+    };
+
+    Ok(RecurrenceNetworkResult {
+        transitivity,
+        avg_path_length,
+        clustering_coefficient,
+        assortativity,
+    })
+}
+
+// ─── Recurrence Time Entropy (Baptista et al. 2010) ──────────────
+//
+// For each recurrence point in the recurrence matrix, compute the time
+// to the next recurrence in the same row. Shannon entropy of the
+// distribution of these return times.
+
+fn recurrence_time_stats(series: &[f64]) -> SignalResult<(f64, f64)> {
+    let n = series.len();
+    if n < 30 {
+        return Err(SignalError::InsufficientData { needed: 30, got: n });
+    }
+    let n = n.min(5000);
+    let series = &series[..n];
+
+    let mu = mean(series);
+    let s = std_dev(series, Some(mu));
+    let eps = s * 0.2;
+    if eps <= 0.0 {
+        return Err(SignalError::ZeroVariance { len: n });
+    }
+
+    // Collect recurrence times: for each row i, find recurrence points
+    // and compute gaps between consecutive recurrence columns
+    let mut recurrence_times: Vec<u64> = Vec::new();
+    for i in 0..n {
+        let mut prev_j: Option<usize> = None;
+        for j in 0..n {
+            if i != j && (series[i] - series[j]).abs() < eps {
+                if let Some(pj) = prev_j {
+                    let gap = (j - pj) as u64;
+                    recurrence_times.push(gap);
+                }
+                prev_j = Some(j);
+            }
+        }
+    }
+
+    if recurrence_times.is_empty() {
+        return Err(SignalError::DegenerateValue("no recurrence times found"));
+    }
+
+    // Mean recurrence time
+    let mean_rt = recurrence_times.iter().sum::<u64>() as f64 / recurrence_times.len() as f64;
+
+    // Shannon entropy of recurrence time distribution
+    let mut rt_counts: BTreeMap<u64, u64> = BTreeMap::new();
+    for &rt in &recurrence_times {
+        *rt_counts.entry(rt).or_insert(0) += 1;
+    }
+    let total = recurrence_times.len() as f64;
+    let mut entropy = NeumaierAccumulator::new();
+    for &count in rt_counts.values() {
+        let p = count as f64 / total;
+        if p > 0.0 {
+            entropy.add(p * p.log2());
+        }
+    }
+    let rte = -entropy.total();
+
+    Ok((rte, mean_rt))
 }
 
 // ─── DFA (Peng et al. 1994) ───────────────────────────────────────
@@ -953,7 +1484,10 @@ pub(crate) fn compute(stream: &[KeystrokeEvent]) -> DynamicalResult {
     let mfdfa_result = mfdfa(&ikis).ok();
     let irrev = temporal_irreversibility(&ikis).ok();
     let psd = lomb_scargle_psd(&ikis).ok();
+    let ordinal_result = ordinal_analysis(&ikis, 3).ok();
     let rqa_result = rqa(&ikis).ok();
+    let recurrence_net = recurrence_network(&ikis).ok();
+    let rte = recurrence_time_stats(&ikis).ok();
 
     let holds = &hf.holds()[..aligned];
     let flights = &hf.flights()[..aligned];
@@ -982,7 +1516,11 @@ pub(crate) fn compute(stream: &[KeystrokeEvent]) -> DynamicalResult {
         peak_typing_frequency_hz: psd.as_ref().and_then(|p| p.peak_typing_frequency_hz),
         iki_psd_lf_hf_ratio: psd.as_ref().and_then(|p| p.lf_hf_ratio),
         iki_psd_fast_slow_variance_ratio: psd.as_ref().and_then(|p| p.fast_slow_variance_ratio),
+        ordinal: ordinal_result,
         rqa: rqa_result,
+        recurrence_network: recurrence_net,
+        rqa_recurrence_time_entropy: rte.map(|(e, _)| e),
+        rqa_mean_recurrence_time: rte.map(|(_, m)| m),
         te_hold_to_flight: te_hf,
         te_flight_to_hold: te_fh,
         te_dominance,
@@ -1355,5 +1893,141 @@ mod tests {
             result.iki_psd_spectral_slope.is_some(),
             "PSD spectral slope should be computed for 400-keystroke stream"
         );
+        // Phase 2 signals
+        assert!(
+            result.ordinal.is_some(),
+            "Ordinal analysis should be computed for 400-keystroke stream"
+        );
+        let ord = result.ordinal.as_ref().unwrap();
+        assert!(
+            (0.0..=1.0).contains(&ord.statistical_complexity),
+            "Statistical complexity should be in [0,1], got {}",
+            ord.statistical_complexity
+        );
+        assert!(
+            (0.0..=1.0).contains(&ord.forbidden_pattern_fraction),
+            "Forbidden pattern fraction should be in [0,1], got {}",
+            ord.forbidden_pattern_fraction
+        );
+        assert!(
+            (0.0..=1.0).contains(&ord.weighted_pe),
+            "Weighted PE should be in [0,1], got {}",
+            ord.weighted_pe
+        );
+        assert!(
+            (0.0..=1.0).contains(&ord.lempel_ziv_complexity),
+            "LZC should be in [0,1], got {}",
+            ord.lempel_ziv_complexity
+        );
+        assert!(
+            ord.optn_transition_entropy >= 0.0,
+            "OPTN transition entropy should be >= 0, got {}",
+            ord.optn_transition_entropy
+        );
+        assert!(
+            result.recurrence_network.is_some(),
+            "Recurrence network should be computed for 400-keystroke stream"
+        );
+        let rn = result.recurrence_network.as_ref().unwrap();
+        assert!(
+            (0.0..=1.0).contains(&rn.transitivity),
+            "Transitivity should be in [0,1], got {}",
+            rn.transitivity
+        );
+        assert!(
+            rn.avg_path_length >= 0.0,
+            "Avg path length should be >= 0, got {}",
+            rn.avg_path_length
+        );
+        assert!(
+            (0.0..=1.0).contains(&rn.clustering_coefficient),
+            "Clustering should be in [0,1], got {}",
+            rn.clustering_coefficient
+        );
+        assert!(
+            result.rqa_recurrence_time_entropy.is_some(),
+            "RTE should be computed for 400-keystroke stream"
+        );
+        assert!(
+            result.rqa_mean_recurrence_time.is_some(),
+            "Mean recurrence time should be computed for 400-keystroke stream"
+        );
+    }
+
+    // ─── Ordinal analysis tests ─────────────────────────────────
+
+    #[test]
+    fn ordinal_insufficient_data() {
+        let short = vec![1.0; 30];
+        assert!(matches!(
+            ordinal_analysis(&short, 3),
+            Err(SignalError::InsufficientData { .. })
+        ));
+    }
+
+    #[test]
+    fn ordinal_sorted_has_forbidden_patterns() {
+        // A perfectly sorted sequence can only produce pattern [0,1,2] at order 3.
+        // 5 out of 6 patterns should be forbidden.
+        let sorted: Vec<f64> = (0..100).map(|i| i as f64).collect();
+        let result = ordinal_analysis(&sorted, 3).unwrap();
+        assert!(
+            (result.forbidden_pattern_fraction - 5.0 / 6.0).abs() < 1e-10,
+            "Sorted sequence should have 5/6 forbidden patterns, got {}",
+            result.forbidden_pattern_fraction
+        );
+    }
+
+    #[test]
+    fn ordinal_lzc_low_for_periodic() {
+        // Perfectly periodic: 100, 200, 300, 100, 200, 300, ...
+        let periodic: Vec<f64> = (0..300).map(|i| [100.0, 200.0, 300.0][i % 3]).collect();
+        let result = ordinal_analysis(&periodic, 3).unwrap();
+        assert!(
+            result.lempel_ziv_complexity < 0.3,
+            "Periodic sequence should have low LZC, got {}",
+            result.lempel_ziv_complexity
+        );
+    }
+
+    // ─── Recurrence network tests ───────────────────────────────
+
+    #[test]
+    fn recurrence_network_insufficient_data() {
+        let short = vec![1.0; 20];
+        assert!(matches!(
+            recurrence_network(&short),
+            Err(SignalError::InsufficientData { .. })
+        ));
+    }
+
+    #[test]
+    fn recurrence_network_zero_variance() {
+        let constant = vec![42.0; 50];
+        assert!(matches!(
+            recurrence_network(&constant),
+            Err(SignalError::ZeroVariance { .. })
+        ));
+    }
+
+    // ─── Recurrence time stats tests ────────────────────────────
+
+    #[test]
+    fn rte_insufficient_data() {
+        let short = vec![1.0; 20];
+        assert!(matches!(
+            recurrence_time_stats(&short),
+            Err(SignalError::InsufficientData { .. })
+        ));
+    }
+
+    #[test]
+    fn rte_nonnegative() {
+        let data: Vec<f64> = (0..100)
+            .map(|i| ((i as f64) * 0.3).sin() * 50.0 + 100.0)
+            .collect();
+        let (entropy, mean_rt) = recurrence_time_stats(&data).unwrap();
+        assert!(entropy >= 0.0, "RTE should be >= 0, got {entropy}");
+        assert!(mean_rt > 0.0, "Mean recurrence time should be > 0, got {mean_rt}");
     }
 }

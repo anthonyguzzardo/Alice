@@ -733,12 +733,24 @@ CREATE TABLE IF NOT EXISTS tb_dynamical_signals (
   ,peak_typing_frequency_hz     DOUBLE PRECISION
   ,iki_psd_lf_hf_ratio          DOUBLE PRECISION
   ,iki_psd_fast_slow_variance_ratio DOUBLE PRECISION
+  ,statistical_complexity       DOUBLE PRECISION
+  ,forbidden_pattern_fraction   DOUBLE PRECISION
+  ,weighted_pe                  DOUBLE PRECISION
+  ,lempel_ziv_complexity        DOUBLE PRECISION
+  ,optn_transition_entropy      DOUBLE PRECISION
+  ,optn_forbidden_transition_count INT
   ,rqa_determinism              DOUBLE PRECISION
   ,rqa_laminarity               DOUBLE PRECISION
   ,rqa_trapping_time            DOUBLE PRECISION
   ,rqa_recurrence_rate          DOUBLE PRECISION
   ,te_hold_to_flight            DOUBLE PRECISION
   ,te_flight_to_hold            DOUBLE PRECISION
+  ,rqa_recurrence_time_entropy  DOUBLE PRECISION
+  ,rqa_mean_recurrence_time     DOUBLE PRECISION
+  ,recurrence_transitivity      DOUBLE PRECISION
+  ,recurrence_avg_path_length   DOUBLE PRECISION
+  ,recurrence_clustering        DOUBLE PRECISION
+  ,recurrence_assortativity     DOUBLE PRECISION
   ,te_dominance                 DOUBLE PRECISION
   ,dttm_created_utc             TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
   ,created_by                   TEXT NOT NULL DEFAULT 'system'
