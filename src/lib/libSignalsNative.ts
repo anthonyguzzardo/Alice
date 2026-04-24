@@ -19,6 +19,7 @@ export interface KeystrokeEvent {
 }
 
 export interface DynamicalSignals {
+  parseError: string | null;
   ikiCount: number;
   holdFlightCount: number;
   permutationEntropy: number | null;
@@ -35,6 +36,7 @@ export interface DynamicalSignals {
 }
 
 export interface MotorSignals {
+  parseError: string | null;
   sampleEntropy: number | null;
   ikiAutocorrelation: number[] | null;
   motorJerk: number | null;
@@ -104,6 +106,7 @@ function na(v: number[] | null | undefined): number[] | null {
 
 interface NativeModule {
   computeDynamicalSignals(streamJson: string): {
+    parseError?: string;
     ikiCount: number;
     holdFlightCount: number;
     permutationEntropy: number | null;
@@ -119,6 +122,7 @@ interface NativeModule {
     teDominance: number | null;
   };
   computeMotorSignals(streamJson: string, totalDurationMs: number): {
+    parseError?: string;
     sampleEntropy: number | null;
     ikiAutocorrelation: number[] | null;
     motorJerk: number | null;
@@ -236,7 +240,11 @@ export function computeDynamicalSignals(stream: KeystrokeEvent[]): DynamicalSign
     const t0 = performance.now();
     const result = native.computeDynamicalSignals(JSON.stringify(stream));
     console.log(`[signals] rust dynamical: ${(performance.now() - t0).toFixed(1)}ms (${stream.length} keystrokes)`);
+    if (result.parseError) {
+      logError('signalsNative.dynamical.parseError', result.parseError, { eventCount: stream.length });
+    }
     return {
+      parseError: result.parseError ?? null,
       ikiCount: result.ikiCount ?? 0,
       holdFlightCount: result.holdFlightCount ?? 0,
       permutationEntropy: n(result.permutationEntropy),
@@ -269,7 +277,11 @@ export function computeMotorSignals(
     const t0 = performance.now();
     const result = native.computeMotorSignals(JSON.stringify(stream), totalDurationMs);
     console.log(`[signals] rust motor: ${(performance.now() - t0).toFixed(1)}ms`);
+    if (result.parseError) {
+      logError('signalsNative.motor.parseError', result.parseError, { eventCount: stream.length });
+    }
     return {
+      parseError: result.parseError ?? null,
       sampleEntropy: n(result.sampleEntropy),
       ikiAutocorrelation: na(result.ikiAutocorrelation),
       motorJerk: n(result.motorJerk),
