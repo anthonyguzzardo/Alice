@@ -11,6 +11,33 @@ Technical specification of every signal Alice captures, how it is captured, and 
 
 ---
 
+## Ergodicity and Longitudinal Validity
+
+**RANK 1. This is not a signal. It is a validity framework that sits above every signal section in this document.**
+
+Mangalam et al. (2022, J. Royal Society Interface) proved that for non-ergodic multiplicative processes, fractal and multifractal descriptors produce valid longitudinal trajectories (their time averages converge to their ensemble averages), while standard statistics do not (their time averages diverge from their ensemble averages). IKI dynamics are almost certainly non-ergodic and multiplicative. This splits every signal in this document into two tiers for longitudinal inference:
+
+| Ergodicity-safe (trust longitudinally) | Ergodicity-unsafe (valid per-session, unreliable as trend) |
+|---|---|
+| dfaAlpha | interKeyIntervalMean / interKeyIntervalStd |
+| permutationEntropy / peSpectrum | holdTimeMean / holdTimeStd |
+| rqaDeterminism / rqaLaminarity / rqaTrappingTime | holdTimeCV |
+| sampleEntropy | flightTimeMean / flightTimeStd |
+| ikiCompressionRatio | exGaussianMu / exGaussianSigma |
+| mfdfaSpectrumWidth / mfdfaAsymmetry (planned) | charsPerMinute |
+| All PE-derived extensions (planned) | activeTypingMs |
+| temporalIrreversibility (planned) | totalCharsTyped / finalCharCount |
+
+**What this changes:** The prediction system, calibration drift detection, and daily delta should weight the left column over the right column for any longitudinal inference. The right column is still valid for within-session measurement and cross-session comparison via z-scoring, but its raw trajectory is not a trustworthy trend estimator for an N=1 non-stationary process.
+
+**What this does not change:** Per-session signal computation. Every signal is still computed the same way. The reclassification affects downstream interpretation (weighting in drift detection, calibration, prediction), not upstream measurement.
+
+**Why this is rank 1:** A measurement instrument whose trend signals are mathematically unreliable for the exact use case it's built for (longitudinal N=1 tracking) has a foundational problem. This fixes it without writing a line of code.
+
+**Citation:** Mangalam et al. 2022 (J. Royal Society Interface, "Ergodic descriptors of non-ergodic stochastic processes").
+
+---
+
 ## Raw Production
 
 ### firstKeystrokeMs
@@ -503,6 +530,20 @@ Computed from the raw keystroke stream by the Rust native engine (`src-rs/dynami
 - **Minimum series:** 30 IKI values
 - **Citation:** Webber & Zbilut 2005
 
+### rqaRecurrenceTimeEntropy (RANK 7, implementing)
+- **Computation:** For each recurrence point R(i,j)=1 in the existing recurrence matrix, compute the time to the next recurrence in the same row: T(i) = min{k > j : R(i,k)=1} - j. Collect all recurrence times across all rows. Compute Shannon entropy of the recurrence time distribution.
+- **Unit:** bits
+- **Minimum series:** 30 IKI values (same as existing RQA)
+- **Why:** RQA determinism measures diagonal line structure (local predictability). RQA laminarity measures vertical line structure (state trapping). Recurrence Time Entropy measures the distribution of return times to previously visited states (global attractor topology). A session with high determinism but skewed recurrence times is in a different dynamical regime than one with high determinism and uniform recurrence times. DET and LAM are identical for both. RTE distinguishes them. Cheapest new signal in the inventory: ~20 lines added to existing RQA computation, reuses the recurrence matrix already constructed.
+- **Citation:** Baptista et al. 2010 (mean recurrence time connects to Kolmogorov-Sinai entropy).
+
+### rqaMeanRecurrenceTime (RANK 7, implementing)
+- **Computation:** Mean of the recurrence time distribution computed for rqaRecurrenceTimeEntropy.
+- **Unit:** time steps (dimensionless)
+- **Minimum series:** 30 IKI values
+- **Why:** The mean return time to previously visited cognitive states. Provides an independent chaos estimate that does not require Lyapunov exponents. Short mean recurrence time = the system rapidly revisits familiar states (tight attractor). Long mean recurrence time = extended excursions before returning (expansive dynamics or weak attractor).
+- **Citation:** Baptista et al. 2010.
+
 ### teHoldToFlight (transfer entropy: motor to cognitive)
 - **Computation:** Binned transfer entropy estimation. Discretizes hold times and flight times into 3 levels (terciles), computes conditional mutual information: how much does knowing the previous hold time reduce uncertainty about the next flight time, beyond what the previous flight time already tells you.
 - **Unit:** bits
@@ -673,6 +714,14 @@ Extracted from calibration (free-write) responses via Claude Sonnet. These are c
 - **Why:** Temporal regularity of keystroke rhythm. Distinct from Shannon entropy (distribution shape) and permutation entropy (ordinal patterns). Lower = more rigid cognitive control. Higher = more erratic motor-cognitive coupling. Correlated r=0.59 with executive function in BiAffect research.
 - **Table:** tb_motor_signals
 - **Citation:** Richman & Moorman 2000; Ajilore et al. 2025
+
+### mseSeries / complexityIndex (RANK 4, implementing)
+- **Capture:** Coarse-grain the IKI series at scales 1 through 5 (scale 1 = original series, scale 2 = pairwise averages, scale 3 = triple averages, etc.). Compute SampEn (m=2, r=0.2*std) at each scale using the existing `sample_entropy()` function. Output: `mseSeries` (JSONB array of 5 SampEn values, one per scale) and `complexityIndex` (scalar sum of all SampEn values across scales).
+- **Unit:** nats (per-scale SampEn), nats (complexity index sum)
+- **Minimum data:** 50+ IKI values (produces scale-5 series of length 10, minimum for SampEn)
+- **Why:** A healthy motor-cognitive system shows high entropy at ALL scales: complex at fine grain (micro-timing variability) and complex at coarse grain (higher-order temporal structure). A degraded system preserves fine-scale entropy (noise) but loses coarse-scale entropy (structure). Single-scale SampEn conflates the two. Two sessions with identical SampEn at scale 1 can have completely different complexity at scale 5: one is structured, the other is periodic. The Complexity Index (sum across scales) is the cardiac gold standard for this discrimination. Costa et al. (2002, Physical Review Letters) showed MSE discriminates healthy from pathological cardiac dynamics where single-scale entropy fails. ~30 lines wrapping existing `sample_entropy()` in a coarse-graining loop.
+- **Table:** tb_motor_signals
+- **Citation:** Costa, Goldberger & Peng 2002 (Physical Review Letters, multiscale entropy); Costa et al. 2005 (multiscale entropy analysis of biological signals).
 
 ### ikiAutocorrelation
 - **Capture:** Pearson correlation of IKI[t] vs IKI[t+lag] for lags 1-5
@@ -1319,6 +1368,33 @@ The existing RQA computes determinism, laminarity, trapping time, and recurrence
 **STATUS: NOT IMPLEMENTING.** Allan variance characterizes oscillator stability by computing variance at increasing averaging timescales, with the log-log slope identifying noise type (white, flicker, random walk). The biological oscillator framing is compelling and the metrology provenance is strong (gold standard since 1966, zero prior keystroke applications). However, Allan variance and the IKI power spectral density (already planned) are related by an integral transform. Each noise type has a characteristic Allan variance slope AND a characteristic spectral density slope. The per-timescale noise classification and transition points available from Allan variance are equally available from a piecewise-linear fit on the log-log PSD. With both MF-DFA (multi-scale scaling diversity) and IKI PSD spectral slope (noise type characterization) going into the implementation, Allan variance is mathematically redundant. This was previously considered and excluded in `riffing/SIGNAL_EXPANSION.md` with the note "redundant w/ MF-DFA." The metrology vocabulary (oscillator stability, noise type classification) carries strategic value for actuarial and clinical engineering audiences. If needed for those contexts, Allan variance can be derived from the PSD without a separate computation.
 - **Literature:** Allan 1966 (original); IEEE Std 1139-2008 (oscillator stability characterization standard).
 
+### Causal Emergence (Effective Information across coarse-graining scales, RANK 2, implementing)
+
+### effectiveInformation
+- **Source:** IKI series from the keystroke stream
+- **Computation:** Discretize IKIs into k=8 equally-spaced bins. Build the k x k transition probability matrix (TPM). Compute Effective Information: EI = log2(k) - (1/k) * sum of Shannon entropies of each row of the TPM. EI measures how much the current state constrains the next state, i.e., the causal power of the dynamics at this resolution.
+- **Unit:** bits
+- **Minimum data:** 100+ IKI values (sufficient transitions per bin at k=8)
+- **Why:** Every other dynamical signal measures a property of the IKI series at a fixed resolution. EI measures how causally structured the dynamics are at a specific temporal resolution. High EI = deterministic transitions (knowing the current state strongly constrains the next). Low EI = noisy transitions (current state weakly constrains the next).
+- **Methodological note:** The EI value depends on the number of bins k. k=8 is fixed by parameter commitment (same design decision as tercile binning for transfer entropy). Results at k=8 vs k=12 differ; the commitment is documented, not hidden.
+- **Literature:** Hoel et al. 2013 (PNAS, causal emergence); Klein et al. 2022 (einet package for reference validation).
+
+### causalEmergenceIndex
+- **Source:** EI computed at multiple coarse-graining scales (k=8, k=4, k=2)
+- **Computation:** Coarse-grain the k=8 TPM by merging adjacent bin pairs (8->4->2). Recompute EI at each macro scale. Causal Emergence Index = max(EI_macro) - EI_micro. Positive = the system exhibits causal emergence (coarser description captures more causal structure). Zero or negative = no emergence (fine-grained description is most informative).
+- **Unit:** bits
+- **Minimum data:** 100+ IKI values
+- **Why:** If EI increases when you coarse-grain, the motor-cognitive system's causal structure lives at a macro scale, not the keystroke-by-keystroke level. A person whose causal emergence migrates from fine scale (k=8) to coarse scale (k=2) over months is losing fine-grained motor-cognitive resolution while preserving gross structure. That is early motor-cognitive decline from the SCALE dimension, which no other signal in the inventory touches. MF-DFA measures scaling diversity across fluctuation magnitudes. MSE measures complexity across temporal scales. Causal emergence measures causal power across resolution scales. These are three different "scale" questions.
+- **Literature:** Hoel et al. 2013 (PNAS).
+
+### optimalCausalScale
+- **Source:** EI computed at multiple coarse-graining scales
+- **Computation:** The bin count (k=8, 4, or 2) at which EI is maximized.
+- **Unit:** count (bin resolution)
+- **Minimum data:** 100+ IKI values
+- **Why:** Directly reports the temporal resolution at which the motor-cognitive system operates most deterministically. Tracked longitudinally, migration of the optimal scale toward coarser resolution is a leading indicator of fine-grained cognitive-motor degradation.
+- **Literature:** Hoel et al. 2013 (PNAS).
+
 ### Pause Duration Mixture Decomposition (data-driven process separation)
 
 ### pauseMixtureDecomposition
@@ -1475,6 +1551,141 @@ Signals that bridge the motor-timing and linguistic-structural axes. The existin
 
 ---
 
+## Topological Signals (Potential, RANK 3, implementing -- deferred to separate session)
+
+Persistent homology applied to Takens delay-embedded IKI time series. This is algebraic topology, not dynamical systems theory. It detects the shape of the cognitive attractor (loops, voids, connected components) that no existing signal family can see. PE measures ordinal pattern distributions. DFA measures scaling exponents. RQA measures recurrence density and line structure. SampEn measures regularity. Recurrence networks measure graph topology. None of these detect loops in phase space. H1 persistence is the topological invariant that captures cyclic cognitive dynamics.
+
+Implementation deferred because: ~200-300 lines of Rust for Vietoris-Rips complex + persistence computation, no production-quality Rust Rips library exists, and the effort does not stack efficiently alongside the other signals being built in the current session. The topological dimension is genuinely novel and the computation is feasible (~10-50ms at n=300 in R^5). Implementing in a dedicated session after the current batch is validated.
+
+### h0PersistenceEntropy
+- **Source:** IKI series, Takens delay-embedded into R^d (d=5, delay tau chosen by first minimum of mutual information)
+- **Computation:** Build the Vietoris-Rips simplicial complex on the embedded point cloud. Compute persistent homology in dimension 0 (connected components). Extract persistence entropy: Shannon entropy of the normalized persistence bar lengths in the H0 persistence diagram.
+- **Unit:** bits
+- **Minimum data:** 50+ IKI values (produces ~45 embedded points in R^5)
+- **Why:** H0 captures the connected component structure of the attractor. High persistence entropy = many components of similar lifespan (fragmented attractor). Low persistence entropy = one dominant component (compact attractor). This overlaps partially with recurrence-based measures but is computed from topology, not metric proximity.
+- **Literature:** Perea & Harer 2015 (sliding windows and persistence); Ravishanker et al. 2021 (persistent homology for time series, WIREs Computational Statistics).
+
+### h1TotalPersistence
+- **Source:** H1 persistence diagram from Vietoris-Rips computation
+- **Computation:** Sum of all bar lengths (death - birth) in the H1 persistence diagram. Bars represent loops in the attractor; longer bars represent more persistent (topologically significant) loops.
+- **Unit:** dimensionless (sum of persistence intervals)
+- **Minimum data:** 100+ IKI values (~95 embedded points, minimum for meaningful H1)
+- **Why:** H1 features (loops) detect cyclic cognitive structure. A person whose IKI dynamics form stable loops in phase space has structured, recurrent cognitive patterns. If H1 total persistence declines over months, the cognitive attractor is losing its cyclic structure. The dynamics are becoming topologically simpler. This is geometric degradation of the cognitive state space, detectable before any scalar signal (PE, DFA, SampEn) moves, because topology is more robust than metric properties.
+- **Literature:** Wang et al. 2025 (Frontiers Human Neuroscience, H1 features more discriminative than H0 for behavior prediction in 1000-subject fMRI); Ichinomiya 2025 (Scientific Reports, persistent homology on recurrence plots classified EMG motor signals of comparable length).
+
+### h1MaxPersistence
+- **Source:** H1 persistence diagram
+- **Computation:** Maximum bar length in H1. The longest-lived loop in the cognitive attractor.
+- **Unit:** dimensionless
+- **Minimum data:** 100+ IKI values
+- **Why:** The single most topologically significant cyclic structure. If the dominant loop dissolves (max persistence drops toward noise floor), the strongest recurrent cognitive pattern is weakening.
+- **Literature:** Wang et al. 2025; Ichinomiya 2025.
+
+### h1Count
+- **Source:** H1 persistence diagram
+- **Computation:** Number of H1 bars with persistence above a noise threshold (e.g., > 2 * median H0 persistence, which calibrates against the scale of connected-component noise).
+- **Unit:** count
+- **Minimum data:** 100+ IKI values
+- **Why:** Number of distinct cyclic structures in the cognitive attractor above noise. Many loops = rich cyclic dynamics. Few or zero = topologically simple, no recurrent cyclic patterns.
+- **Literature:** Perea & Harer 2015.
+
+### persistenceLandscapeNorm
+- **Source:** H1 persistence diagram, converted to persistence landscape
+- **Computation:** L2 norm of the first persistence landscape function. The persistence landscape is a stable, vector-space-compatible summary of the persistence diagram that enables statistical analysis (mean landscapes, landscape distances between sessions).
+- **Unit:** dimensionless
+- **Minimum data:** 100+ IKI values
+- **Why:** Persistence diagrams are not in a vector space (they are multisets of intervals), making direct statistical comparison between sessions difficult. The persistence landscape converts diagrams to functions that can be averaged, differenced, and compared via standard norms. The L2 norm of the landscape is a single scalar summarizing total topological complexity.
+- **Literature:** Bubenik 2015 (persistence landscapes, foundational).
+
+---
+
+## Circadian Rhythm Signals (Potential, RANK 6, implementing -- data-gated)
+
+Cross-day biological rhythm signals derived from typing timestamps accumulated over 7-14+ days. Every other signal in the system measures cognitive or motor output during or between sessions. Circadian signals measure the body's clock. This is a fundamentally different measurement axis: physiology, not behavior.
+
+Implementation requires minimum 7 days of sessions with sufficient hourly diversity (sessions at varied times of day). Returns null until data requirement is met. TypeScript cross-session computation, not Rust.
+
+### circadianAmplitude
+- **Source:** Hourly IKI medians aggregated across 7-14+ days of sessions (journal + calibration)
+- **Computation:** Fit a cosinor model to hourly IKI medians: y(t) = MESOR + A*cos(2*pi*t/24 + phi). Amplitude A is the strength of the circadian modulation of motor performance. Computed over a rolling 14-day window.
+- **Unit:** ms (IKI amplitude of circadian modulation)
+- **Minimum data:** 7+ days of sessions with at least 4 hours of time-of-day spread
+- **Why:** Circadian amplitude dampening is one of the earliest physiological markers of neurodegeneration. It is also associated with depression, cognitive decline, and immune dysregulation. A person whose circadian amplitude declines over months is losing the rhythmic modulation of their motor-cognitive system.
+- **Table:** tb_cross_session_signals
+- **Literature:** Goldszmidt et al. 2025 (npj Digital Medicine, BiAffect team, inferred circadian rhythms from passive typing data, predicted Oura Ring sleep duration); Wu et al. 2025 (PLOS Digital Health, cosinor amplitude 0.10 for typing speed, peak at 11:49 AM, validated on 45,000 typing episodes from 350+ physicians).
+
+### circadianAcrophase
+- **Source:** Cosinor model fit (same computation as circadianAmplitude)
+- **Computation:** Phase angle phi from the cosinor fit, converted to peak performance hour (0-24).
+- **Unit:** hour (0-24)
+- **Minimum data:** Same as circadianAmplitude
+- **Why:** Peak performance time reflects chronotype. Phase drift (acrophase shifting earlier or later over months) is associated with circadian disruption, seasonal changes, or neurodegenerative progression. A progressive phase advance in an evening chronotype may indicate circadian dysfunction.
+- **Table:** tb_cross_session_signals
+- **Literature:** Goldszmidt et al. 2025; Wu et al. 2025.
+
+### circadianMESOR
+- **Source:** Cosinor model fit
+- **Computation:** MESOR (Midline Estimating Statistic of Rhythm) from the cosinor fit. The rhythm-adjusted mean IKI, which is a better estimate of central tendency than the raw mean because it accounts for the time-of-day at which each session was recorded.
+- **Unit:** ms
+- **Minimum data:** Same as circadianAmplitude
+- **Why:** Raw IKI mean is confounded by time-of-day. MESOR strips the circadian component, giving a purer baseline. Changes in MESOR over months reflect genuine motor slowing independent of when sessions were recorded.
+- **Table:** tb_cross_session_signals
+- **Literature:** Refinetti et al. 2007 (cosinor methodology).
+
+### intradailyVariability
+- **Source:** Hourly IKI medians (same aggregation as cosinor)
+- **Computation:** IV = (n * sum of squared successive differences between hourly bins) / ((n-1) * total variance). Measures within-day rhythm fragmentation. High IV = fragmented rhythm (frequent switching between fast and slow performance). Low IV = smooth circadian arc.
+- **Unit:** dimensionless (0 = perfect sinusoid, 2 = maximum fragmentation)
+- **Minimum data:** 7+ days of sessions
+- **Why:** A smooth circadian curve with the same amplitude as a fragmented one produces the same cosinor amplitude. IV captures the fragmentation that the cosinor model smooths over. Fragmented circadian rhythms are associated with cognitive impairment in the actigraphy literature.
+- **Table:** tb_cross_session_signals
+- **Literature:** Witting et al. 1990 (IV/IS for circadian rhythm analysis); Van Someren et al. 1999.
+
+### interdailyStability
+- **Source:** Hourly IKI medians
+- **Computation:** IS = (n * variance of hourly means) / ((n-1) * total variance). Measures day-to-day pattern consistency. High IS = the same circadian pattern repeats each day. Low IS = each day looks different.
+- **Unit:** dimensionless (0 = no day-to-day pattern, 1 = identical pattern each day)
+- **Minimum data:** 7+ days of sessions
+- **Why:** A person whose daily typing rhythm is inconsistent (low IS) may have disrupted circadian entrainment. Declining IS over months suggests the circadian pacemaker is losing its ability to maintain a stable daily pattern.
+- **Table:** tb_cross_session_signals
+- **Literature:** Witting et al. 1990; Van Someren et al. 1999.
+
+---
+
+## Cognitive Microstate Signals (Potential, RANK 5, not implementing -- Phase 2)
+
+**STATUS: NOT IMPLEMENTING.** ~500+ lines for HSMM fitting with EM, Viterbi decoding, state extraction, and transition matrix computation. Model selection sensitivity (BIC-selected k may vary session-to-session, making transition matrices incomparable unless k is fixed). State labels ("flow," "deliberation," "revision") are construct claims requiring validation. Clinical validation is from different domains (EEG microstates, keystroke biometrics, not keystroke cognitive monitoring). The payoff is a new signal family (discrete cognitive narrative, transition grammar), not a single signal. Deferred to Phase 2 when the current signal inventory is validated and the implementation effort can be justified by accumulated data depth.
+
+### microstateCount
+- **Source:** Windowed IKI stream, fitted with Hidden Semi-Markov Model (HSMM)
+- **Computation:** Fit HSMM with k=5 canonical states to the windowed IKI stream (window = 10-20 keystrokes). State assignment via Viterbi decoding.
+- **Unit:** count (fixed at k=5 by parameter commitment)
+- **Why:** The number of discrete cognitive modes the model identifies. Fixed k avoids model selection instability across sessions at the cost of imposing structure.
+- **Literature:** Monaco & Tappert 2018 (Pattern Recognition, POHMM on keystroke dynamics); Michel & Koenig 2018 (EEG microstate methodology).
+
+### transitionMatrix
+- **Source:** Viterbi-decoded state sequence from HSMM
+- **Computation:** k x k matrix of transition probabilities between states. Row i, column j = P(state j follows state i).
+- **Unit:** probability (0-1) per cell, stored as JSONB
+- **Why:** Two sessions with identical PE, DFA, SampEn, and every other scalar signal can have completely different state transition structures. "Flow -> deliberation -> flow" is different from "deliberation -> revision -> hesitation -> flow" even if aggregate statistics are identical. The transition matrix captures sequential cognitive structure that no scalar signal can represent.
+- **Literature:** Krylova et al. 2024 (PLOS Computational Biology, microstate transition cost correlated with cognitive demands).
+
+### transitionEntropy
+- **Source:** State sequence from HSMM
+- **Computation:** Shannon entropy of the transition sequence / max possible entropy for k states.
+- **Unit:** normalized [0, 1]
+- **Why:** How predictable is the sequence of cognitive modes? Low = stereotyped (same mode sequence every session). High = varied (different cognitive narratives).
+- **Literature:** Michel & Koenig 2018.
+
+### stateDurations / stateCoverage
+- **Source:** State sequence from HSMM
+- **Computation:** Mean duration (keystrokes) per state; proportion of session spent in each state. Both stored as k-element JSONB arrays.
+- **Unit:** keystrokes (durations), ratio (coverage)
+- **Why:** Dominance and duration of each cognitive mode. A session dominated by one state (80% coverage) is qualitatively different from a balanced session (20% each). Duration changes track cognitive mode stability.
+- **Literature:** Krylova et al. 2024.
+
+---
+
 ## Signal Count
 
 Counted at the database column level (ground truth). Arrays count as 1 column. Derived state dimensions (7D, 11D) are not double-counted against their source columns.
@@ -1536,6 +1747,22 @@ Counted at the database column level (ground truth). Arrays count as 1 column. D
 
 6 signals documented. 2 implementing (temporal irreversibility, discourse global coherence). 1 implementing in narrow form (word frequency IKI residual, static lookup only). 3 not implementing (full lexical surprisal decomposition, syntactic dependency distance, phonological loading index). 1 existing signal reframed (ecological SSRT maps to existing `errorDetectionLatencyMean`). ~5-7 new columns from the implementing set.
 
+### Topological signals (potential, implementing deferred)
+
+5 columns from persistent homology of Takens delay-embedded IKI series: h0PersistenceEntropy, h1TotalPersistence, h1MaxPersistence, h1Count, persistenceLandscapeNorm. New table tb_topological_signals. ~200-300 lines Rust. Deferred to dedicated session.
+
+### Circadian rhythm signals (potential, implementing, data-gated)
+
+5 columns from cosinor model on hourly IKI medians: circadianAmplitude, circadianAcrophase, circadianMESOR, intradailyVariability, interdailyStability. TypeScript cross-session computation. Requires 7+ days of sessions at varied hours.
+
+### Cognitive microstate signals (potential, not implementing, Phase 2)
+
+~8 columns from HSMM segmentation: microstateCount, transitionMatrix (JSONB), transitionEntropy, stateDurations (JSONB), stateCoverage (JSONB). New table tb_microstate_signals. ~500 lines Rust. Deferred to Phase 2.
+
+### Ergodicity validity framework
+
+Not a signal family. Reclassifies all existing and planned signals into ergodicity-safe (valid for longitudinal N=1 trajectory tracking) and ergodicity-unsafe (valid per-session, unreliable as trend estimators). Zero columns. Affects downstream weighting in drift detection, calibration, and prediction. See section at top of document.
+
 ### Summary
 
 The "~163" historically referenced in the codebase approximated column count + expanded arrays + digraph estimate. The precise count depends on methodology:
@@ -1548,3 +1775,5 @@ The "~163" historically referenced in the codebase approximated column count + e
 | With potential somatic signals | ~203 |
 | With all potential extensions (somatic + dynamical + frequency + cross-session motor) | ~234 |
 | With cognitive-linguistic extensions (implementing subset) | ~241 |
+| With topological + circadian + recurrence time + MSE + causal emergence | ~258 |
+| With cognitive microstate signals (Phase 2) | ~266 |
