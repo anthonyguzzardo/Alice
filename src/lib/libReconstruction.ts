@@ -87,6 +87,10 @@ function spectrumDelta(
   }
 }
 
+function snakeToCamel(s: string): string {
+  return s.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
+}
+
 function isFiniteNum(v: number | null): v is number {
   return v != null && Number.isFinite(v);
 }
@@ -150,7 +154,7 @@ async function computeForVariant(
     avatarDyn?.peSpectrum,
   );
 
-  // Per-signal residuals
+  // Per-signal residuals (original fixed-column signals)
   const dynResiduals = {
     pe: delta(realDyn?.permutation_entropy, avatarDyn?.permutationEntropy),
     dfa: delta(realDyn?.dfa_alpha, avatarDyn?.dfaAlpha),
@@ -177,16 +181,70 @@ async function computeForVariant(
     compress: delta(realSem?.text_compression_ratio, avatarSem?.textCompressionRatio),
   };
 
-  // Aggregate norms -- partitioned into behavioral (paper-reported) and semantic (stored)
-  const dynNorm = l2(Object.values(dynResiduals));
-  const motNorm = l2(Object.values(motResiduals));
+  // Extended residuals (Phase 1-5 signals, stored in JSONB)
+  // Excluded: pause_mixture_* (ghost pauses are deterministic, not a mixture),
+  // mfdfa_peak_alpha, iki_psd_fast_slow_variance_ratio, peak_typing_frequency_hz,
+  // optimal_causal_scale, dmd_mode_count, optn_forbidden_transition_count
+  // (redundant/integer/tautological -- see design plan for rationale).
+  const extDynResiduals: Record<string, number | null> = {
+    mfdfa_spectrum_width: delta(realDyn?.mfdfa_spectrum_width, avatarDyn?.mfdfaSpectrumWidth),
+    mfdfa_asymmetry: delta(realDyn?.mfdfa_asymmetry, avatarDyn?.mfdfaAsymmetry),
+    temporal_irreversibility: delta(realDyn?.temporal_irreversibility, avatarDyn?.temporalIrreversibility),
+    iki_psd_spectral_slope: delta(realDyn?.iki_psd_spectral_slope, avatarDyn?.ikiPsdSpectralSlope),
+    iki_psd_respiratory_peak_hz: delta(realDyn?.iki_psd_respiratory_peak_hz, avatarDyn?.ikiPsdRespiratoryPeakHz),
+    iki_psd_lf_hf_ratio: delta(realDyn?.iki_psd_lf_hf_ratio, avatarDyn?.ikiPsdLfHfRatio),
+    statistical_complexity: delta(realDyn?.statistical_complexity, avatarDyn?.statisticalComplexity),
+    forbidden_pattern_fraction: delta(realDyn?.forbidden_pattern_fraction, avatarDyn?.forbiddenPatternFraction),
+    weighted_pe: delta(realDyn?.weighted_pe, avatarDyn?.weightedPe),
+    lempel_ziv_complexity: delta(realDyn?.lempel_ziv_complexity, avatarDyn?.lempelZivComplexity),
+    optn_transition_entropy: delta(realDyn?.optn_transition_entropy, avatarDyn?.optnTransitionEntropy),
+    recurrence_transitivity: delta(realDyn?.recurrence_transitivity, avatarDyn?.recurrenceTransitivity),
+    recurrence_avg_path_length: delta(realDyn?.recurrence_avg_path_length, avatarDyn?.recurrenceAvgPathLength),
+    recurrence_clustering: delta(realDyn?.recurrence_clustering, avatarDyn?.recurrenceClustering),
+    recurrence_assortativity: delta(realDyn?.recurrence_assortativity, avatarDyn?.recurrenceAssortativity),
+    rqa_recurrence_time_entropy: delta(realDyn?.rqa_recurrence_time_entropy, avatarDyn?.rqaRecurrenceTimeEntropy),
+    rqa_mean_recurrence_time: delta(realDyn?.rqa_mean_recurrence_time, avatarDyn?.rqaMeanRecurrenceTime),
+    effective_information: delta(realDyn?.effective_information, avatarDyn?.effectiveInformation),
+    causal_emergence_index: delta(realDyn?.causal_emergence_index, avatarDyn?.causalEmergenceIndex),
+    pid_synergy: delta(realDyn?.pid_synergy, avatarDyn?.pidSynergy),
+    pid_redundancy: delta(realDyn?.pid_redundancy, avatarDyn?.pidRedundancy),
+    branching_ratio: delta(realDyn?.branching_ratio, avatarDyn?.branchingRatio),
+    avalanche_size_exponent: delta(realDyn?.avalanche_size_exponent, avatarDyn?.avalancheSizeExponent),
+    dmd_dominant_frequency: delta(realDyn?.dmd_dominant_frequency, avatarDyn?.dmdDominantFrequency),
+    dmd_dominant_decay_rate: delta(realDyn?.dmd_dominant_decay_rate, avatarDyn?.dmdDominantDecayRate),
+    dmd_spectral_entropy: delta(realDyn?.dmd_spectral_entropy, avatarDyn?.dmdSpectralEntropy),
+  };
+
+  const extMotResiduals: Record<string, number | null> = {
+    complexity_index: delta(realMot?.complexity_index, avatarMot?.complexityIndex),
+    ex_gaussian_fisher_trace: delta(realMot?.ex_gaussian_fisher_trace, avatarMot?.exGaussianFisherTrace),
+  };
+
+  // Build JSONB payload: { signalName: { real, avatar, residual } }
+  const extendedJson: Record<string, { real: number | null; avatar: number | null; residual: number | null }> = {};
+  for (const [k, res] of Object.entries(extDynResiduals)) {
+    const realVal = (realDyn as Record<string, unknown> | null)?.[k] as number | null ?? null;
+    const avatarVal = (avatarDyn as Record<string, unknown> | null)?.[snakeToCamel(k)] as number | null ?? null;
+    extendedJson[k] = { real: realVal, avatar: avatarVal, residual: res };
+  }
+  for (const [k, res] of Object.entries(extMotResiduals)) {
+    const realVal = (realMot as Record<string, unknown> | null)?.[k] as number | null ?? null;
+    const avatarVal = (avatarMot as Record<string, unknown> | null)?.[snakeToCamel(k)] as number | null ?? null;
+    extendedJson[k] = { real: realVal, avatar: avatarVal, residual: res };
+  }
+
+  // Aggregate norms -- include both original and extended signals
+  const allDynResidualValues = [...Object.values(dynResiduals), ...Object.values(extDynResiduals)];
+  const allMotResidualValues = [...Object.values(motResiduals), ...Object.values(extMotResiduals)];
+  const dynNorm = l2(allDynResidualValues);
+  const motNorm = l2(allMotResidualValues);
   const semNorm = l2(Object.values(semResiduals));
   const perplexityResidual = delta(realPerp?.perplexity ?? null, avatarPerp?.perplexity ?? null);
 
   // Behavioral: dynamical + motor + perplexity (ghost-validated, paper-reported)
   const behavioralResiduals = [
-    ...Object.values(dynResiduals),
-    ...Object.values(motResiduals),
+    ...allDynResidualValues,
+    ...allMotResidualValues,
     perplexityResidual,
   ];
   const behavioralNorm = l2(behavioralResiduals);
@@ -295,6 +353,7 @@ async function computeForVariant(
     avatar_text_compression_ratio: avatarSem?.textCompressionRatio ?? null,
     residual_text_compression_ratio: semResiduals.compress,
 
+    extended_residuals_json: JSON.stringify(extendedJson),
     dynamical_l2_norm: dynNorm,
     motor_l2_norm: motNorm,
     semantic_l2_norm: semNorm,
@@ -543,6 +602,39 @@ export async function verifyResidual(
   // Perplexity (computed from corpus + avatar text, deterministic)
   const regenPerp = computePerplexity(corpusJson, avatar.text);
   compare('perplexity', 'perplexity', stored.avatar_perplexity, regenPerp?.perplexity);
+
+  // Extended signals (from JSONB)
+  const extJson = row.extended_residuals_json as Record<string, { real: number | null; avatar: number | null; residual: number | null }> | null;
+  if (extJson) {
+    // Dynamical extended signals
+    const dynExtKeys = [
+      'mfdfa_spectrum_width', 'mfdfa_asymmetry', 'temporal_irreversibility',
+      'iki_psd_spectral_slope', 'iki_psd_respiratory_peak_hz', 'iki_psd_lf_hf_ratio',
+      'statistical_complexity', 'forbidden_pattern_fraction', 'weighted_pe',
+      'lempel_ziv_complexity', 'optn_transition_entropy',
+      'recurrence_transitivity', 'recurrence_avg_path_length',
+      'recurrence_clustering', 'recurrence_assortativity',
+      'rqa_recurrence_time_entropy', 'rqa_mean_recurrence_time',
+      'effective_information', 'causal_emergence_index',
+      'pid_synergy', 'pid_redundancy',
+      'branching_ratio', 'avalanche_size_exponent',
+      'dmd_dominant_frequency', 'dmd_dominant_decay_rate', 'dmd_spectral_entropy',
+    ];
+    for (const k of dynExtKeys) {
+      const entry = extJson[k];
+      if (!entry) continue;
+      const camelKey = snakeToCamel(k) as keyof DynamicalSignals;
+      compare(k, 'dynamical', entry.avatar, regenDyn?.[camelKey] as number | null ?? null);
+    }
+    // Motor extended signals
+    const motExtKeys = ['complexity_index', 'ex_gaussian_fisher_trace'];
+    for (const k of motExtKeys) {
+      const entry = extJson[k];
+      if (!entry) continue;
+      const camelKey = snakeToCamel(k) as keyof MotorSignals;
+      compare(k, 'motor', entry.avatar, regenMot?.[camelKey] as number | null ?? null);
+    }
+  }
 
   // Semantic signals are NOT recomputed here. They depend on external APIs
   // (Claude, Voyage) that may have changed. Per design: semantic residuals

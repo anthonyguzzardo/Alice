@@ -1132,6 +1132,13 @@ CREATE TABLE IF NOT EXISTS tb_reconstruction_residuals (
   ,avatar_text_compression_ratio DOUBLE PRECISION
   ,residual_text_compression_ratio DOUBLE PRECISION
 
+  -- ── Extended residuals (Phase 1-5 signals, JSONB) ────────────────────
+  -- Per-signal { real, avatar, residual } triples for 28 new signals:
+  -- 26 dynamical (mfdfa, psd, ordinal, recurrence network, causal, pid, dmd)
+  -- 2 motor (mse complexity_index, fisher_trace)
+  -- Included in the L2 norms below.
+  ,extended_residuals_json      JSONB
+
   -- ── Aggregate norms ─────────────────────────────────────────────────
   ,dynamical_l2_norm            DOUBLE PRECISION
   ,motor_l2_norm                DOUBLE PRECISION

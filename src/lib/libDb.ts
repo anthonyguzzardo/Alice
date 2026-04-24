@@ -2077,6 +2077,7 @@ export interface ReconstructionResidualInput {
   real_text_compression_ratio: number | null;
   avatar_text_compression_ratio: number | null;
   residual_text_compression_ratio: number | null;
+  extended_residuals_json: string | null;
   dynamical_l2_norm: number | null;
   motor_l2_norm: number | null;
   semantic_l2_norm: number | null;
@@ -2118,6 +2119,7 @@ export async function saveReconstructionResidual(
       ,real_integrative_complexity, avatar_integrative_complexity, residual_integrative_complexity
       ,real_deep_cohesion, avatar_deep_cohesion, residual_deep_cohesion
       ,real_text_compression_ratio, avatar_text_compression_ratio, residual_text_compression_ratio
+      ,extended_residuals_json
       ,dynamical_l2_norm, motor_l2_norm, semantic_l2_norm, total_l2_norm
       ,residual_count
       ,behavioral_l2_norm, behavioral_residual_count
@@ -2148,11 +2150,19 @@ export async function saveReconstructionResidual(
       ,${s.real_integrative_complexity}, ${s.avatar_integrative_complexity}, ${s.residual_integrative_complexity}
       ,${s.real_deep_cohesion}, ${s.avatar_deep_cohesion}, ${s.residual_deep_cohesion}
       ,${s.real_text_compression_ratio}, ${s.avatar_text_compression_ratio}, ${s.residual_text_compression_ratio}
+      ,${s.extended_residuals_json}
       ,${s.dynamical_l2_norm}, ${s.motor_l2_norm}, ${s.semantic_l2_norm}, ${s.total_l2_norm}
       ,${s.residual_count}
       ,${s.behavioral_l2_norm}, ${s.behavioral_residual_count}
     )
-    ON CONFLICT (question_id, adversary_variant_id) DO NOTHING
+    ON CONFLICT (question_id, adversary_variant_id) DO UPDATE SET
+       extended_residuals_json = EXCLUDED.extended_residuals_json
+      ,dynamical_l2_norm = EXCLUDED.dynamical_l2_norm
+      ,motor_l2_norm = EXCLUDED.motor_l2_norm
+      ,total_l2_norm = EXCLUDED.total_l2_norm
+      ,residual_count = EXCLUDED.residual_count
+      ,behavioral_l2_norm = EXCLUDED.behavioral_l2_norm
+      ,behavioral_residual_count = EXCLUDED.behavioral_residual_count
     RETURNING reconstruction_residual_id
   `;
   return (row as { reconstruction_residual_id: number })?.reconstruction_residual_id ?? 0;
