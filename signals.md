@@ -1161,6 +1161,200 @@ None of these require hardware changes. All are computable from the existing key
 - **Why:** The same two fingers produce different latencies depending on direction (AB vs BA). This directional asymmetry isolates motor planning from finger identity, key distance, and overall speed (all of which cancel in the ratio). If specific finger-pair asymmetry ratios drift over time, directional motor planning is changing asymmetrically. Best computed as a rolling cross-session measure due to sparsity of some BA pairs within a single session.
 - **Literature:** Gentner 1983 (digraph frequency and latency in skilled typing); Salthouse 1984 (directional effects in keystroke latency).
 
+### Tremor Frequency Estimation (involuntary oscillation detection)
+- **Source:** Flight time series from the keystroke stream
+- **Computation:** Swept-frequency sinusoidal interpolation across 0.5-12 Hz range. For each candidate frequency, compute interpolation variance ratio (tremor amplitude). Apply phase angle filtering: require at least 3 of 4 adjacent detection frequencies to have phase angles within 50 degrees of the candidate. Detection thresholds: frequency must appear in at least 4 of 8+ keystroke sequence replications, mean amplitude >= 0.15, strength >= 4.2. Output: tremor frequency (Hz), amplitude, and strength score.
+- **Unit:** Hz (frequency), dimensionless (amplitude and strength)
+- **Minimum data:** 8+ keystroke sequences of sufficient length for frequency detection
+- **Why:** Physiological tremor (8-12 Hz), essential tremor (5-8 Hz), and parkinsonian tremor (4-6 Hz) superimpose on voluntary finger movements during typing. No current signal performs frequency-domain decomposition to isolate involuntary oscillatory components from voluntary motor timing. A person can have high IKI variability from cognitive pauses with zero tremor. The longitudinal trajectory is the signal: progressive frequency decrease toward pathological ranges combined with increasing amplitude and detection rate across sessions.
+- **Literature:** Adams 2018 (bioRxiv 385286, sensitivity 67%, specificity 80% for PD tremor detection on n=76; also discriminated PD tremor from essential tremor). Dataset published at Mendeley Data (500+ subjects).
+
+### Per-Finger Hold-Time Drift (finger-specific motor fatigue topology)
+- **Source:** Hold times partitioned by canonical QWERTY finger assignment from the keystroke stream
+- **Computation:** Map each key to its canonical finger group (4 fingers x 2 hands, thumbs excluded). Compute linear trend of hold times per finger group across the session. Output: 8-element vector of trend slopes (ms per session-fraction), plus scalar summary (max slope minus min slope across finger groups). Finger groups: left pinky (q/a/z), left ring (w/s/x), left middle (e/d/c), left index (r/t/f/g/v/b), right index (y/u/h/j/n/m), right middle (i/k/,), right ring (o/l/.), right pinky (p/;/'/[/]).
+- **Unit:** ms per session-fraction (slopes), ms (divergence scalar)
+- **Minimum data:** 30 keystrokes per finger group per session half
+- **Why:** EMG research shows extensor muscles fatigue faster than flexors during typing (72-84% fatigue after 1-4 hours vs. less in FDS), and the pinky and ring finger fatigue first. The 8-element drift vector gives a motor topology of fatigue within a single session. All existing motor signals operate at the hand level (left/right) or global level. Per-finger decomposition is a different anatomical resolution. Over months, if the session-start pinky hold time drifts while the index remains stable, that is a finger-specific motor change distinct from overall slowing or cognitive load.
+- **Literature:** PMC9798874 (FDS muscle potentiation after 6h keyboard use); PMC3256245 (keystroke duration decreased 5% after finger exercises, extensor muscles fatigue faster than flexors); Giancardo et al. 2016 (per-finger motor features differentiate healthy controls from early PD).
+
+---
+
+## Dynamical Signal Extensions (Potential)
+
+Extensions to the existing dynamical signal family in `src-rs/dynamical.rs`. These build on existing infrastructure (DFA box-fitting, PE ordinal pattern extraction, RQA recurrence matrix computation) with minimal new code. All are computable from the existing IKI and hold/flight time series. None are yet implemented.
+
+### MF-DFA (Multifractal Generalization of DFA)
+
+The existing DFA implementation computes a single alpha exponent, assuming monofractal scaling (the same power law governs all moment orders). MF-DFA generalizes this by computing fluctuation functions for a range of moment orders q, producing a singularity spectrum f(alpha) that reveals whether the typing dynamics have adaptive multifractal structure or rigid monofractal scaling. Direct keystroke IKI validation: Bennett, Roudaut & Metatla (2025, Int. J. Human-Computer Studies) demonstrated that MF-DFA spectrum width correlates with cognitive fatigue more strongly than any standard keystroke metric.
+
+### mfdfaSpectrumWidth
+- **Source:** IKI series (same input as existing DFA)
+- **Computation:** Extend existing DFA over moment orders q = -5 to +5 (11 values). For each q, compute generalized fluctuation function F_q(n) = [mean(F^2(n, v))^(q/2)]^(1/q) across box sizes n. Fit log(F_q) vs log(n) for each q to get generalized Hurst exponent h(q). Apply Legendre transform: alpha(q) = h(q) + q*h'(q), f(alpha) = q*(alpha - h(q)) + 1. Spectrum width = max(alpha) - min(alpha).
+- **Unit:** dimensionless
+- **Minimum data:** 256+ IKI values
+- **Why:** Wide spectrum = multifractal, meaning small and large fluctuations follow different scaling laws. This is adaptive cognitive variability: the person can shift between automatic production and deliberate thinking. Narrow spectrum = monofractal, meaning the system is locked into one mode. Spectrum width narrowing over months that does not recover after rest periods is among the earliest indicators of eroding cognitive flexibility. The existing DFA alpha can remain in the healthy range while the spectrum collapses, because alpha captures average scaling while the spectrum captures scaling diversity.
+- **Literature:** Kantelhardt et al. 2002 (original MF-DFA); Ihlen & Vereijken 2010 (spectrum width correlates with adaptive motor flexibility); Bennett, Roudaut & Metatla 2025 (direct keystroke IKI validation for fatigue).
+
+### mfdfaAsymmetry
+- **Source:** Singularity spectrum f(alpha) from MF-DFA computation
+- **Computation:** `(alpha_peak - alpha_min) / (alpha_max - alpha_min)` where alpha_peak is the alpha value at maximum f(alpha).
+- **Unit:** ratio (0-1)
+- **Minimum data:** 256+ IKI values
+- **Why:** Left-skewed (asymmetry < 0.5) = large fluctuations (deep pauses) dominate the scaling structure. Right-skewed (asymmetry > 0.5) = small fluctuations (micro-timing variations) dominate. Two sessions with identical spectrum width but different asymmetry are in different cognitive states: one is dominated by occasional deep processing episodes, the other by pervasive fine-grained timing variability.
+- **Literature:** Kantelhardt et al. 2002; Ihlen 2012 (Frontiers in Physiology tutorial).
+
+### mfdfaPeakAlpha
+- **Source:** Singularity spectrum f(alpha) from MF-DFA computation
+- **Computation:** The alpha value at maximum f(alpha). The dominant scaling behavior.
+- **Unit:** dimensionless
+- **Minimum data:** 256+ IKI values
+- **Why:** Anchors the spectrum to a dominant Holder exponent, which characterizes the session's prevailing temporal structure independent of the spectrum's width or shape. Backward compatible: h(2) from MF-DFA equals the standard DFA alpha.
+- **Literature:** Kantelhardt et al. 2002.
+
+### Symbolic Dynamics Extensions (beyond Permutation Entropy)
+
+The existing PE implementation computes normalized Shannon entropy of ordinal patterns. These extensions extract additional information from the same ordinal pattern distribution at near-zero computational cost. They answer a question no existing signal can: is the session's IKI sequence deterministic (structured attractor) or stochastic (random noise)?
+
+### statisticalComplexity
+- **Source:** Ordinal pattern distribution (already computed by existing PE)
+- **Computation:** Jensen-Shannon statistical complexity C_JS. Compute the Jensen-Shannon divergence between the observed ordinal pattern distribution P and the uniform distribution P_e: JSD(P, P_e) = H((P + P_e)/2) - (H(P) + H(P_e))/2. Normalize by the maximum possible JSD for that alphabet size. C_JS = Q_0 * JSD * H[P] / H_max, where Q_0 is a normalization constant.
+- **Unit:** dimensionless [0, 1]
+- **Minimum data:** 50 IKI values (same as existing PE)
+- **Why:** PE alone cannot distinguish a stochastic process from a chaotic deterministic one, because both can produce PE near 1.0. The complexity-entropy causality plane plots (H, C_JS) in a 2D space where stochastic processes cluster in the low-C_JS region and deterministic processes cluster in the high-C_JS region. A session with PE = 0.87 and C_JS = 0.38 is deterministic (structured cognitive exploration). A session with PE = 0.88 and C_JS = 0.12 is stochastic (noise). PE sees these as identical. Over a year, the trajectory in the (H, C_JS) plane tracks whether cognitive dynamics are becoming more random or more structured, independent of complexity level.
+- **Literature:** Rosso et al. 2007 (complexity-entropy causality plane, foundational paper).
+
+### forbiddenPatternFraction
+- **Source:** Ordinal pattern distribution (already computed by existing PE)
+- **Computation:** At order d, there are d! possible ordinal patterns. Count the number of patterns with zero occurrences in the session. Fraction = absent_count / d!. Reliable at orders 3-5 with 500 keystrokes (order 3: 6 patterns, order 5: 120 patterns).
+- **Unit:** ratio [0, 1]
+- **Minimum data:** 50+ IKI values at order 3; 130+ at order 5
+- **Why:** In a deterministic system, certain ordinal patterns are topologically forbidden by the attractor geometry. They literally cannot occur. Random noise produces all patterns. The forbidden fraction is a direct test of determinism in the keystroke rhythm. A fraction trending toward zero over months means the cognitive constraints that made certain timing sequences impossible are dissolving. The system is losing its structure, not just its speed or regularity.
+- **Literature:** Amigo et al. 2008 (forbidden ordinal patterns and determinism); Zanin et al. 2012 (forbidden patterns in time series analysis).
+
+### weightedPermutationEntropy
+- **Source:** IKI series and ordinal pattern extraction (extends existing PE)
+- **Computation:** Standard PE ignores amplitude: a pattern (2,1,3) from values [100, 99, 101] is treated identically to one from [100, 10, 500]. Weighted PE assigns each pattern occurrence a weight proportional to the variance of the values in its embedding window, so high-amplitude fluctuations (deep pauses) contribute more to the entropy than low-amplitude ones (micro-timing jitter). The weighted distribution is then normalized and Shannon entropy computed.
+- **Unit:** normalized [0, 1]
+- **Minimum data:** 50 IKI values (same as existing PE)
+- **Why:** More robust to noise and more sensitive to "spiky" features like sudden long pauses. Standard PE treats a session with one 3-second pause and 499 fast keystrokes the same as a session with uniformly moderate timing. Weighted PE gives the 3-second pause proportionally more influence on the entropy estimate, making it a better measure of cognitive disruption events embedded in otherwise fluent typing.
+- **Literature:** Fadlallah et al. 2013 (Physical Review E; demonstrated better noise robustness and sensitivity to spiky features in EEG data).
+
+### Recurrence Network Analysis (extensions of existing RQA)
+
+The existing RQA computes determinism, laminarity, trapping time, and recurrence rate from the recurrence matrix. Recurrence network analysis reinterprets the same matrix as a complex network adjacency matrix and computes graph-theoretic properties. No new data preparation is needed; the recurrence matrix computed in `dynamical.rs` is reused directly.
+
+### recurrenceTransitivity
+- **Source:** Recurrence matrix (already computed by existing RQA)
+- **Computation:** Treat the recurrence matrix as an adjacency matrix of an unweighted, undirected graph. Compute global transitivity: ratio of triangles to connected triples.
+- **Unit:** ratio [0, 1]
+- **Minimum data:** 30 IKI values (same as existing RQA)
+- **Why:** Transitivity approximates the fractal dimension of the cognitive attractor, providing an independent dimension estimate that does not require the box-fitting procedure of DFA. When DFA alpha and recurrence transitivity diverge, the scaling structure is not simple and warrants investigation. RQA determinism measures "how much of the trajectory follows predictable paths." Transitivity measures "what shape is the space those paths live in."
+- **Literature:** Donner et al. 2010, 2011 (recurrence networks, transitivity maps to attractor dimension); Zou et al. 2019 (Physics Reports, comprehensive review).
+
+### recurrenceAvgPathLength
+- **Source:** Recurrence matrix (already computed by existing RQA)
+- **Computation:** Mean shortest path length in the recurrence network (BFS from each node). Computed only on the largest connected component if the network is disconnected.
+- **Unit:** mean path length (dimensionless)
+- **Minimum data:** 30 IKI values
+- **Why:** Measures the geometric diameter of the cognitive attractor in phase space. Short path length means the system revisits everything quickly (tight cognitive loop, rumination). Long path length means the system traverses widely before returning (exploration or disorientation). In a depressive episode, path length would be expected to shrink as the cognitive state space contracts.
+- **Literature:** Donner et al. 2010; Marwan et al. 2009 (complex network analysis of recurrences).
+
+### recurrenceClusteringCoefficient
+- **Source:** Recurrence matrix (already computed by existing RQA)
+- **Computation:** Mean local clustering coefficient across all nodes in the recurrence network. For each node, compute the proportion of its neighbors that are also neighbors of each other.
+- **Unit:** ratio [0, 1]
+- **Minimum data:** 30 IKI values
+- **Why:** Captures local cohesion of the attractor. High clustering means the system's recurrent states form tight local neighborhoods (stable attractor regions). Low clustering means the recurrent states are dispersed (diffuse, wandering dynamics). Complements transitivity (which is global) with local structure information.
+- **Literature:** Donner et al. 2010.
+
+### recurrenceAssortativity
+- **Source:** Recurrence matrix (already computed by existing RQA)
+- **Computation:** Pearson correlation between degrees of connected node pairs in the recurrence network. Positive assortativity means high-degree nodes connect to other high-degree nodes.
+- **Unit:** correlation coefficient (-1 to 1)
+- **Minimum data:** 30 IKI values
+- **Why:** Whether extreme-timing states cluster together temporally. Positive assortativity means the most recurrent IKI values (timing states visited most often) are adjacent to each other in the sequence, indicating temporal concentration of habitual rhythms. Negative assortativity means habitual states are separated by unusual states, indicating alternation between familiar and novel cognitive patterns. RQA's global recurrence rate averages over this structure.
+- **Literature:** Donner et al. 2011; Zou et al. 2019.
+
+### Pause Duration Mixture Decomposition (data-driven process separation)
+
+### pauseMixtureDecomposition
+- **Source:** All inter-keystroke intervals within a session
+- **Computation:** Fit a mixture of K lognormal distributions to the IKI series using Expectation-Maximization, selecting K by BIC (typically K=2-3). Extract per-component: means (mu_1, mu_2, ...) representing characteristic timescales, mixing proportions (pi_1, pi_2, ...) representing time spent in each process, and standard deviations representing process precision. The cognitive load index = pi_reflective / pi_motor (ratio of reflective to automatic mixing proportions).
+- **Unit:** ms (component means), ratio (proportions and cognitive load index), count (component count)
+- **Minimum data:** 100+ IKIs for 2-component fit; 200+ for 3-component fit
+- **Why:** All current pause analysis uses fixed thresholds (2s for P-bursts, 30s for pause count). These thresholds are universal, not personal. The mixture model discovers data-driven boundaries between qualitatively different cognitive processes: motor execution, lexical retrieval, and reflective planning. These boundaries are person-specific and session-specific. Two sessions with identical mean IKI can have radically different mixture structures (one dominated by many short motor pauses, the other by fewer but longer cognitive pauses). The mixing proportion ratio directly quantifies how much deliberation occurs relative to fluent execution.
+- **Literature:** Baaijen et al. 2021 (Frontiers in Psychology, validated on ~1000 essays, sensitive to writing task complexity); Medimorec & Risko 2022 (Reading and Writing, theoretically informed pause duration measures).
+
+---
+
+## Frequency-Domain Signals (Potential)
+
+The existing signal pipeline operates entirely in the time domain (IKI statistics, DFA), the ordinal domain (PE), or the distributional domain (ex-Gaussian). No signal performs spectral analysis of the keystroke time series. The frequency domain is a structural blind spot. A single Lomb-Scargle periodogram of the IKI series opens this axis, producing multiple new signals from one computation. Lomb-Scargle is required rather than Welch because IKIs are unevenly spaced in time (keystrokes do not occur at regular intervals).
+
+None of these require hardware changes. All are computable from the existing keystroke stream.
+
+### ikiPsdRespiratoryPeakHz
+- **Source:** IKI series from the keystroke stream
+- **Computation:** Lomb-Scargle periodogram of the IKI time series (treating each IKI value as occurring at its midpoint timestamp). Identify spectral peak in the 0.15-0.35 Hz band (corresponding to 9-21 breaths per minute). Output: peak frequency (Hz), peak power, and peak-to-noise-floor ratio in this band. The noise floor is the median power across all frequencies.
+- **Unit:** Hz (frequency), dimensionless (power and ratio)
+- **Minimum data:** 200+ keystrokes spanning 2+ minutes of continuous typing (to capture 4-6 respiratory cycles)
+- **Why:** Respiratory cycles modulate motor timing involuntarily. Voluntary actions synchronize preferentially with exhalation phases. Breathing rate entrains to repetitive motor tasks when they are close in frequency. Respiratory phase modulates cortical oscillatory activity across 2-150 Hz. The respiratory band peak in the IKI spectrum is a direct physiological signal that no time-domain statistic captures. Changes in respiratory coupling strength over months may reflect autonomic changes, anxiety (shallow breathing decouples from motor tasks), or respiratory pathology.
+- **Literature:** Shibata et al. 2026 (Psychophysiology, respiratory-motor coupling in voluntary actions); Haas et al. (entrainment of respiration to repetitive tapping); Zelano et al. (PMC5226946, breathing as fundamental rhythm of brain function).
+
+### peakTypingFrequencyHz
+- **Source:** Keystroke onset timestamps from the keystroke stream
+- **Computation:** Compute power spectral density of the binary keystroke onset signal (a point process at each keydown timestamp) using Lomb-Scargle with appropriate windowing. The peak frequency in the 2-15 Hz range is the peak typing frequency (PTF).
+- **Unit:** Hz
+- **Minimum data:** 200+ keystrokes
+- **Why:** The PTF is an individual's characteristic motor oscillation frequency, reflecting the tuning of their cortico-basal ganglia-thalamic motor loop. Duprez et al. (2021) validated against simultaneous EEG recordings: PTF correlates with individual peak neural oscillation frequency. PTF is idiosyncratic (differs between individuals) but stable within an individual, making it a motor trait marker. A progressive drift in PTF over months is a frequency-domain signal of basal ganglia oscillator change that no time-domain statistic (mean IKI, DFA alpha, hold time CV) can detect. The cortico-basal ganglia loop is the primary target in PD and Huntington's.
+- **Literature:** Duprez et al. 2021 (Journal of Cognitive Neuroscience, EEG-validated on n=30 healthy participants).
+
+### ikiPsdLfHfRatio
+- **Source:** IKI power spectral density (from Lomb-Scargle computation)
+- **Computation:** Ratio of integrated spectral power in the low-frequency band (0.04-0.15 Hz) to the high-frequency band (0.15-0.4 Hz). Follows the frequency-band framework established for cardiac HRV analysis.
+- **Unit:** ratio (dimensionless)
+- **Minimum data:** 200+ keystrokes spanning 2+ minutes
+- **Why:** The motor analog of the cardiac sympathetic/parasympathetic balance, computed from keystrokes instead of heartbeats. LF power reflects slow attention cycles (~0.1 Hz). HF power reflects respiratory-band motor modulation. On days of scattered attention, LF dominates. On days of focused flow, HF is proportionally stronger. Speculative in the keystroke domain but grounded in the established HRV frequency-band framework.
+- **Literature:** ESC/NASPE Task Force 1996 (HRV frequency-band standards); PMC7381285 (Mayer wave, sympathetically mediated 0.1 Hz oscillations).
+
+### ikiPsdSpectralSlope
+- **Source:** IKI power spectral density (from Lomb-Scargle computation)
+- **Computation:** Linear regression of log(power) vs log(frequency) across the full frequency range. The slope characterizes the noise color of the IKI series: slope near 0 = white noise (no temporal structure), slope near -1 = pink (1/f) noise (healthy long-range correlations), slope near -2 = brown noise (over-correlated drift).
+- **Unit:** dimensionless (exponent)
+- **Minimum data:** 200+ keystrokes
+- **Why:** Provides an independent characterization of long-range temporal structure that complements DFA alpha. DFA works in the time domain via detrended box-fitting; spectral slope works in the frequency domain via power-law regression. Agreement between DFA alpha and spectral slope confirms the scaling is genuine. Disagreement indicates the scaling structure is more complex (e.g., crossover between regimes) and warrants investigation.
+- **Literature:** Rangarajan & Ding 2000 (relationship between DFA exponent and spectral slope); Pilgram & Kaplan 1998.
+
+### ikiPsdFastSlowVarianceRatio
+- **Source:** IKI power spectral density (from Lomb-Scargle computation)
+- **Computation:** Ratio of integrated spectral power above 1 Hz (fast motor variability) to integrated power below 0.5 Hz (slow cognitive variability).
+- **Unit:** ratio (dimensionless)
+- **Minimum data:** 200+ keystrokes spanning 2+ minutes
+- **Why:** Decomposes IKI variability into timescale-specific components corresponding to different physiological processes. The fast component reflects arousal-level motor activation (~220ms timescale). The slow component reflects valence-related cognitive processing and attention cycles (~420ms+ timescale). Ex-Gaussian tau captures fast vs. slow in a distributional sense (exponential tail vs. Gaussian core), but that is a static decomposition. This is a temporal decomposition at specific frequency cutoffs, isolating the dynamic contribution of arousal-level processes from deliberation-level processes within the same session.
+- **Literature:** Epp et al. 2011 (arousal effects on keystroke duration at fast timescale); Hofmann et al. 2009 (spreading activation timescales for arousal vs. valence).
+
+---
+
+## Cross-Session Motor Signals (Potential)
+
+Cross-session signals that track motor system trajectory over time. These complement the existing cross-session family (which tracks semantic and linguistic drift) with motor distribution tracking. Both require prior session data. Neither requires hardware changes.
+
+### distributionShapeChangeRate
+- **Source:** Hold time and flight time distributions from consecutive sessions
+- **Computation:** For each session, compute kernel density estimation (KDE) of hold times and flight times with fixed bandwidth. Represent each session as a binned probability vector. Compute the Wasserstein distance (earth mover's distance) between consecutive sessions' probability vectors. Two per-session values: `wassersteinHoldTime` and `wassersteinFlightTime`. The distribution shape change rate is the linear trend slope of Wasserstein distances over a rolling window (e.g., 30 sessions).
+- **Unit:** Wasserstein distance (ms per session pair), slope (ms per session for trend)
+- **Minimum data:** 2+ consecutive sessions for distance; 10+ for meaningful slope
+- **Why:** The motor analog of self-perplexity. Self-perplexity asks "is my language becoming more predictable?" Wasserstein distance asks "is the shape of my motor timing distribution changing?" The shape can change (developing heavier tails, becoming bimodal, losing symmetry) while the mean and standard deviation remain stable. Lam et al. (2024) showed this pattern in ALS: the Wasserstein distance accelerates months before mean speed declines. The shape degrades first, because the tails change before the center does.
+- **Literature:** Lam et al. 2024 (Scientific Reports, ALS n=93, longitudinal 3/6/9 months, distinguished ALS from controls even with mild dysfunction); Lam et al. 2021 (Multiple Sclerosis Journal, MS n=102, ICC 0.760-0.965 reliability).
+
+### motorConsolidationIndex
+- **Source:** Digraph latencies from consecutive-day sessions
+- **Computation:** Track high-frequency digraphs (e.g., "th", "er", "in", "he", "an") across sessions on consecutive days. For each qualifying digraph (minimum 5 occurrences per session), compute improvement ratio: `(IKI_end_dayN - IKI_start_dayN+1) / IKI_end_dayN`. Positive = offline improvement (motor skill improved during sleep without practice). Negative = offline decay. Aggregate across qualifying digraphs for a session-level consolidation score.
+- **Unit:** ratio (positive = overnight improvement, negative = overnight decay)
+- **Minimum data:** 2 consecutive-day sessions with 5+ overlapping high-frequency digraphs each
+- **Why:** Measures sleep-dependent motor memory consolidation, the only signal in the system capturing a physiological process that occurs when the user is not at the keyboard. During sleep, the striatum replays recently practiced motor sequences during sleep spindles, stabilizing and sometimes enhancing them. Degraded consolidation is an early marker of hippocampal and striatal dysfunction. Motor consolidation degrades early in MCI and Alzheimer's (before explicit memory consolidation does), making it a leading indicator from a system (procedural memory) separate from what most cognitive tests measure (declarative memory).
+- **Literature:** Bonstrup et al. 2019, 2020 (Current Biology, rapid micro-learning gains during rest); Walker et al. 2003 (Neuron, practice with sleep makes perfect); motor consolidation validated as degraded in MCI, early AD, PD, and depression.
+
 ---
 
 ## Signal Count
@@ -1206,7 +1400,19 @@ Counted at the database column level (ground truth). Arrays count as 1 column. D
 
 ### Somatic signals (potential, not yet implemented)
 
-10 signals derivable from existing keystroke stream: rollover distribution, error topology, thumb channel, correction strategy, shift anticipation, key geography, bilateral rhythm coherence, post-pause motor signature, deletion kinematics, digraph asymmetry.
+12 signals derivable from existing keystroke stream: rollover distribution, error topology, thumb channel, correction strategy, shift anticipation, key geography, bilateral rhythm coherence, post-pause motor signature, deletion kinematics, digraph asymmetry, tremor frequency estimation, per-finger hold-time drift.
+
+### Dynamical signal extensions (potential, not yet implemented)
+
+~13 columns across 4 sub-families: MF-DFA (spectrum width, asymmetry, peak alpha), symbolic dynamics (statistical complexity, forbidden pattern fraction, weighted PE), recurrence networks (transitivity, avg path length, clustering coefficient, assortativity), pause mixture decomposition (component count, motor proportion, cognitive load index).
+
+### Frequency-domain signals (potential, not yet implemented)
+
+~5 columns from a single Lomb-Scargle periodogram: respiratory band peak Hz, peak typing frequency Hz, LF/HF ratio, spectral slope, fast/slow variance ratio.
+
+### Cross-session motor signals (potential, not yet implemented)
+
+~4 columns: Wasserstein distance for hold times, Wasserstein distance for flight times, distribution shape change rate (slope), motor consolidation index.
 
 ### Summary
 
@@ -1217,4 +1423,5 @@ The "~163" historically referenced in the codebase approximated column count + e
 | Database columns (arrays as 1) | 129 |
 | Expanded dimensions (arrays expanded, digraph ~30) | ~165 |
 | With derived state dimensions | ~191 |
-| With potential somatic signals | ~201 |
+| With potential somatic signals | ~203 |
+| With all potential extensions (somatic + dynamical + frequency + cross-session motor) | ~225 |
