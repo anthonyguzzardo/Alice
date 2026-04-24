@@ -324,21 +324,9 @@ The reconstruction validity framework produces a dimensional validity profile. A
 - **Semantic signals:** Low and closing (L2 = 0.134 for PPM vs 0.159 for Markov). Better text generation closes the semantic gap. Content structure is statistically compressible.
 - **Perplexity:** Real always lower than ghost. The person is more coherent than their statistical profile predicts.
 
-The signal expansion from 13 to 40 behavioral dimensions (documented in METHODS_PROVENANCE.md INC-012) enables a per-family decomposition of the residual surface. The full adversary (variant 5) now produces a dimensional breakdown that reveals which theoretical families resist reconstruction and which do not:
+The signal expansion from 13 to 41 behavioral dimensions (documented in METHODS_PROVENANCE.md INC-012, INC-013) enables a per-family decomposition of the residual surface. The full adversary (variant 5) produces a dimensional breakdown across 13 theoretical families with a 100x range in ghost reproduction fidelity. Among scale-comparable signals, MF-DFA spectrum width produces the largest residual (mean 5.019, std 1.894, n=7), while ordinal statistics cluster near zero (family mean 0.012). The full decomposition, including per-signal detail, variant ladder analysis, and the structural argument for why multifractal structure resists reconstruction, is reported in Guzzardo (2026h, "Dimensional Decomposition of Reconstruction Residuals").
 
-| Family | Mean |Residual| | Ghost Capability |
-|--------|-----|-----|
-| Multifractal (MF-DFA) | 4.75 | Cannot reproduce. Largest residual by 4x. |
-| Motor Complexity (MSE) | 1.28 | Cannot reproduce multi-scale entropy. |
-| Recurrence Networks | 0.13 | Partially reproducible. |
-| Causal Emergence | 0.13 | Partially reproducible. |
-| Spectral (PSD) | 0.11 | AR(1) approximates spectral slope. |
-| Dynamic Modes (DMD) | 0.04 | Ghost matches oscillatory modes. |
-| Ordinal Complexity | 0.006 | Nearly perfectly reproduced. |
-
-This breakdown answers a question the aggregate L2 could not: multifractal structure is the single most ghost-resistant signal family. The ghost generates from a single stochastic process (ex-Gaussian with optional AR(1) conditioning), which produces a narrow singularity spectrum. Real typing produces broad multifractal structure from the interaction of multiple cognitive processes operating at different time scales. No amount of statistical sophistication in the ghost's timing synthesis closes this gap. Conversely, ordinal pattern statistics (CECP, forbidden patterns, LZ complexity) are nearly perfectly reproducible: they reflect the shape of the IKI distribution, which the ghost matches by construction.
-
-The multi-adversary system transforms the motor residual from a single falsification into a surface. The surface's shape maps the boundary between statistics and cognition at higher resolution than any single ghost can. The per-family decomposition further refines that surface into a dimensional map: multifractal structure and multi-scale entropy mark where the instrument measures the mind; ordinal statistics mark where it measures the distribution. The motor floor is not an artifact of a weak generator. It is the measurement.
+The decomposition answers a question the aggregate L2 could not: the residual is not uniform across measurement dimensions. Multifractal structure resists because a single stochastic process cannot produce broad singularity spectra. Ordinal statistics are reproduced because they depend on distributional properties the ghost matches by construction. The multi-adversary system transforms the motor residual from a single falsification into a surface, and the per-family decomposition maps that surface into a dimensional hierarchy of what the instrument captures.
 
 ---
 
