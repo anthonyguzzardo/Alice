@@ -45,7 +45,7 @@ This separation is not post-hoc. It follows from the unit structure of the signa
 
 The full adversary (variant 5) produces the following per-family mean absolute residuals among bounded signals. Families are groups of signals sharing a mathematical framework. Per-family residual is the mean of per-signal mean absolute residuals within the family, averaged across sessions.
 
-| Family | Signals | Mean |Res| | Std | n |
+| Family | Signals | Mean Residual | Std | n |
 |---|---|---|---|---|
 | Multifractal (MF-DFA) | 2 | 2.742 | 0.945 | 7 |
 | Motor Complexity (MSE + Fisher) | 2 | 1.029 | 0.846 | 7 |
@@ -87,7 +87,7 @@ Ordinal statistics spike under variant 2 (0.048 vs 0.011 baseline) because AR(1)
 
 The original motor distribution signals and transfer entropy are reported here for completeness. These are not compared against the bounded families.
 
-| Family | Signals | Mean |Res| | Std | n |
+| Family | Signals | Mean Residual | Std | n |
 |---|---|---|---|---|
 | Motor Distribution | 6 | 56.718 | 22.617 | 7 |
 | Transfer Entropy | 1 | 2.998 | 2.640 | 6 |
