@@ -30,7 +30,7 @@ import {
   computeProcessSignals,
 } from './libSignalsNative.ts';
 import type { KeystrokeEvent } from './libSignalsNative.ts';
-import { computeSemanticSignals } from './libSemanticSignals.ts';
+import { computeSemanticSignals, computeDiscourseCoherence } from './libSemanticSignals.ts';
 import { computeCrossSessionSignals } from './libCrossSessionSignals.ts';
 import { updateProfile } from './libProfile.ts';
 import { computeReconstructionResidual } from './libReconstruction.ts';
@@ -132,6 +132,9 @@ export async function computeAndPersistDerivedSignals(questionId: number): Promi
         dmd_dominant_decay_rate: ds.dmdDominantDecayRate ?? null,
         dmd_mode_count: ds.dmdModeCount ?? null,
         dmd_spectral_entropy: ds.dmdSpectralEntropy ?? null,
+        pause_mixture_component_count: ds.pauseMixtureComponentCount ?? null,
+        pause_mixture_motor_proportion: ds.pauseMixtureMotorProportion ?? null,
+        pause_mixture_cognitive_load_index: ds.pauseMixtureCognitiveLoadIndex ?? null,
         te_hold_to_flight: ds.teHoldToFlight,
         te_flight_to_hold: ds.teFlightToHold,
         te_dominance: ds.teDominance,
@@ -177,6 +180,7 @@ export async function computeAndPersistDerivedSignals(questionId: number): Promi
       if (text && text.length >= 20) {
         const { pasteCount, dropCount } = await getSessionInfo(questionId);
         const ss = computeSemanticSignals(text, pasteCount, dropCount);
+        const dc = await computeDiscourseCoherence(text);
         await saveSemanticSignals(questionId, {
           idea_density: ss.ideaDensity,
           lexical_sophistication: ss.lexicalSophistication,
@@ -186,6 +190,10 @@ export async function computeAndPersistDerivedSignals(questionId: number): Promi
           referential_cohesion: ss.referentialCohesion,
           emotional_valence_arc: ss.emotionalValenceArc,
           text_compression_ratio: ss.textCompressionRatio,
+          discourse_global_coherence: dc.globalCoherence,
+          discourse_local_coherence: dc.localCoherence,
+          discourse_global_local_ratio: dc.globalLocalRatio,
+          discourse_coherence_decay_slope: dc.coherenceDecaySlope,
           lexicon_version: ss.lexiconVersion,
           paste_contaminated: ss.pasteContaminated,
         });
@@ -241,6 +249,7 @@ export async function computeAndPersistDerivedSignals(questionId: number): Promi
         if (cs) {
           await saveCrossSessionSignals(questionId, {
             self_perplexity: cs.selfPerplexity,
+            motor_self_perplexity: cs.motorSelfPerplexity,
             ncd_lag_1: cs.ncdLag1,
             ncd_lag_3: cs.ncdLag3,
             ncd_lag_7: cs.ncdLag7,

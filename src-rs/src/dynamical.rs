@@ -84,6 +84,9 @@ pub(crate) struct DynamicalResult {
     pub(crate) dmd_dominant_decay_rate: Option<f64>,
     pub(crate) dmd_mode_count: Option<i32>,
     pub(crate) dmd_spectral_entropy: Option<f64>,
+    pub(crate) pause_mixture_component_count: Option<i32>,
+    pub(crate) pause_mixture_motor_proportion: Option<f64>,
+    pub(crate) pause_mixture_cognitive_load_index: Option<f64>,
     pub(crate) te_hold_to_flight: Option<f64>,
     pub(crate) te_flight_to_hold: Option<f64>,
     pub(crate) te_dominance: Option<f64>,
@@ -1909,6 +1912,120 @@ fn dmd_analysis(series: &[f64]) -> SignalResult<(f64, f64, i32, f64)> {
     ))
 }
 
+// ─── Pause Mixture Decomposition (Baaijen et al. 2021) ───────────
+//
+// Fit a mixture of K lognormal distributions to the IKI series via EM.
+// Select K by BIC (typically 2-3 components). Extracts motor proportion
+// (fastest component) and cognitive load index (reflective / motor).
+// Data-driven process separation replacing fixed thresholds.
+
+fn pause_mixture(series: &[f64]) -> SignalResult<(i32, f64, f64)> {
+    let n = series.len();
+    if n < 100 {
+        return Err(SignalError::InsufficientData { needed: 100, got: n });
+    }
+
+    // Work in log-space: lognormal mixture becomes Gaussian mixture
+    let log_ikis: Vec<f64> = series.iter()
+        .filter(|&&v| v > 0.0)
+        .map(|&v| v.ln())
+        .collect();
+    let n_log = log_ikis.len();
+    if n_log < 100 {
+        return Err(SignalError::InsufficientData { needed: 100, got: n_log });
+    }
+
+    // Fit Gaussian mixture in log-space with K=2 (simplest viable model)
+    // EM algorithm: 2 components
+
+    // Initialize: split at median
+    let mut sorted = log_ikis.clone();
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let median = sorted[n_log / 2];
+
+    let below: Vec<f64> = log_ikis.iter().filter(|&&v| v <= median).copied().collect();
+    let above: Vec<f64> = log_ikis.iter().filter(|&&v| v > median).copied().collect();
+
+    let mut mu = [
+        mean(&below),
+        mean(&above),
+    ];
+    let mut sigma = [
+        std_dev(&below, Some(mu[0])).max(0.1),
+        std_dev(&above, Some(mu[1])).max(0.1),
+    ];
+    let mut pi = [below.len() as f64 / n_log as f64, above.len() as f64 / n_log as f64];
+
+    // EM iterations
+    let max_iter = 50;
+    let mut responsibilities = vec![[0.0f64; 2]; n_log];
+
+    for _ in 0..max_iter {
+        // E-step: compute responsibilities
+        for i in 0..n_log {
+            let x = log_ikis[i];
+            let mut r = [0.0f64; 2];
+            for k in 0..2 {
+                let z = (x - mu[k]) / sigma[k];
+                // Gaussian pdf (unnormalized, in log): -0.5*z^2 - ln(sigma)
+                let log_pdf = -0.5 * z * z - sigma[k].ln();
+                r[k] = pi[k] * log_pdf.exp();
+            }
+            let total = r[0] + r[1];
+            if total > 1e-300 {
+                responsibilities[i] = [r[0] / total, r[1] / total];
+            } else {
+                responsibilities[i] = [0.5, 0.5];
+            }
+        }
+
+        // M-step: update parameters
+        let mut new_mu = [0.0f64; 2];
+        let mut new_sigma = [0.0f64; 2];
+        let mut new_pi = [0.0f64; 2];
+
+        for k in 0..2 {
+            let mut nk = NeumaierAccumulator::new();
+            let mut sum_x = NeumaierAccumulator::new();
+            for i in 0..n_log {
+                nk.add(responsibilities[i][k]);
+                sum_x.add(responsibilities[i][k] * log_ikis[i]);
+            }
+            let nk_val = nk.total();
+            if nk_val < 1e-10 {
+                continue;
+            }
+            new_mu[k] = sum_x.total() / nk_val;
+
+            let mut sum_var = NeumaierAccumulator::new();
+            for i in 0..n_log {
+                let diff = log_ikis[i] - new_mu[k];
+                sum_var.add(responsibilities[i][k] * diff * diff);
+            }
+            new_sigma[k] = (sum_var.total() / nk_val).sqrt().max(0.01);
+            new_pi[k] = nk_val / n_log as f64;
+        }
+
+        mu = new_mu;
+        sigma = new_sigma;
+        pi = new_pi;
+    }
+
+    // Identify the "motor" component (faster, lower mean in log-space = smaller IKI)
+    let motor_idx = if mu[0] < mu[1] { 0 } else { 1 };
+    let motor_proportion = pi[motor_idx];
+
+    // Cognitive load index: reflective / motor proportion
+    let reflective_proportion = pi[1 - motor_idx];
+    let cognitive_load_index = if motor_proportion > 1e-10 {
+        reflective_proportion / motor_proportion
+    } else {
+        0.0
+    };
+
+    Ok((2, motor_proportion, cognitive_load_index))
+}
+
 pub(crate) fn compute(stream: &[KeystrokeEvent]) -> DynamicalResult {
     let ikis = IkiSeries::from_stream(stream);
     let hf = HoldFlight::from_stream(stream);
@@ -1947,6 +2064,7 @@ pub(crate) fn compute(stream: &[KeystrokeEvent]) -> DynamicalResult {
     let rte = recurrence_time_stats(&ikis).ok();
     let br = branching_ratio_and_avalanche(&ikis).ok();
     let dmd = dmd_analysis(&ikis).ok();
+    let pm = pause_mixture(&ikis).ok();
 
     let holds = &hf.holds()[..aligned];
     let flights = &hf.flights()[..aligned];
@@ -1992,6 +2110,9 @@ pub(crate) fn compute(stream: &[KeystrokeEvent]) -> DynamicalResult {
         dmd_dominant_decay_rate: dmd.map(|(_, d, _, _)| d),
         dmd_mode_count: dmd.map(|(_, _, c, _)| c),
         dmd_spectral_entropy: dmd.map(|(_, _, _, e)| e),
+        pause_mixture_component_count: pm.map(|(k, _, _)| k),
+        pause_mixture_motor_proportion: pm.map(|(_, m, _)| m),
+        pause_mixture_cognitive_load_index: pm.map(|(_, _, c)| c),
         te_hold_to_flight: te_hf,
         te_flight_to_hold: te_fh,
         te_dominance,

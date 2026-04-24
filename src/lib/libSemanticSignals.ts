@@ -267,6 +267,90 @@ function textCompressionRatio(text: string): number | null {
   return compressed.length / raw.length;
 }
 
+// ─── Discourse Global Coherence (Asgari et al. 2023) ────────────────
+//
+// Sentence-level embeddings via existing TEI infrastructure. Global
+// coherence = mean cosine similarity of each sentence to the first.
+// Local coherence = mean cosine similarity to preceding sentence.
+// Global/local ratio and decay slope capture discourse structure.
+// Minimum 5 sentences.
+
+export interface DiscourseCoherence {
+  globalCoherence: number | null;
+  localCoherence: number | null;
+  globalLocalRatio: number | null;
+  coherenceDecaySlope: number | null;
+}
+
+export async function computeDiscourseCoherence(text: string): Promise<DiscourseCoherence> {
+  const none: DiscourseCoherence = {
+    globalCoherence: null,
+    localCoherence: null,
+    globalLocalRatio: null,
+    coherenceDecaySlope: null,
+  };
+
+  const sentences = splitSentences(text).filter(s => s.trim().length > 10);
+  if (sentences.length < 5) return none;
+
+  // Dynamic import to avoid circular dependency
+  const { generateEmbeddings } = await import('./libEmbeddings.ts');
+  const embeddings = await generateEmbeddings(sentences);
+
+  // Filter out failed embeddings
+  const valid: Array<{ idx: number; vec: number[] }> = [];
+  for (let i = 0; i < embeddings.length; i++) {
+    if (embeddings[i]) valid.push({ idx: i, vec: embeddings[i]! });
+  }
+  if (valid.length < 5) return none;
+
+  const cosine = (a: number[], b: number[]): number => {
+    let dot = 0, na = 0, nb = 0;
+    for (let i = 0; i < a.length; i++) {
+      dot += a[i] * b[i];
+      na += a[i] * a[i];
+      nb += b[i] * b[i];
+    }
+    const denom = Math.sqrt(na) * Math.sqrt(nb);
+    return denom > 1e-15 ? dot / denom : 0;
+  };
+
+  // Global coherence: cosine of each sentence to the first
+  const firstVec = valid[0].vec;
+  const globalSims: number[] = [];
+  for (let i = 1; i < valid.length; i++) {
+    globalSims.push(cosine(valid[i].vec, firstVec));
+  }
+  const globalCoherence = globalSims.reduce((s, v) => s + v, 0) / globalSims.length;
+
+  // Local coherence: cosine of each sentence to the previous
+  const localSims: number[] = [];
+  for (let i = 1; i < valid.length; i++) {
+    localSims.push(cosine(valid[i].vec, valid[i - 1].vec));
+  }
+  const localCoherence = localSims.reduce((s, v) => s + v, 0) / localSims.length;
+
+  // Global/local ratio
+  const globalLocalRatio = localCoherence > 1e-10 ? globalCoherence / localCoherence : null;
+
+  // Coherence decay slope: linear regression of global similarity against position
+  let coherenceDecaySlope: number | null = null;
+  if (globalSims.length >= 3) {
+    const n = globalSims.length;
+    let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
+    for (let i = 0; i < n; i++) {
+      sumX += i;
+      sumY += globalSims[i];
+      sumXY += i * globalSims[i];
+      sumXX += i * i;
+    }
+    const denom = n * sumXX - sumX * sumX;
+    coherenceDecaySlope = denom > 1e-10 ? (n * sumXY - sumX * sumY) / denom : null;
+  }
+
+  return { globalCoherence, localCoherence, globalLocalRatio, coherenceDecaySlope };
+}
+
 // ─── Public API ─────────────────────────────────────────────────────
 
 export function computeSemanticSignals(

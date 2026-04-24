@@ -799,6 +799,10 @@ CREATE TABLE IF NOT EXISTS tb_semantic_signals (
   ,referential_cohesion         DOUBLE PRECISION
   ,emotional_valence_arc        TEXT
   ,text_compression_ratio       DOUBLE PRECISION
+  ,discourse_global_coherence   DOUBLE PRECISION
+  ,discourse_local_coherence    DOUBLE PRECISION
+  ,discourse_global_local_ratio DOUBLE PRECISION
+  ,discourse_coherence_decay_slope DOUBLE PRECISION
   ,lexicon_version              SMALLINT NOT NULL DEFAULT 1
   ,paste_contaminated           BOOLEAN NOT NULL DEFAULT FALSE
   ,dttm_created_utc             TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -837,6 +841,7 @@ CREATE TABLE IF NOT EXISTS tb_cross_session_signals (
    cross_session_signal_id      INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
   ,question_id                  INT NOT NULL UNIQUE
   ,self_perplexity              DOUBLE PRECISION
+  ,motor_self_perplexity        DOUBLE PRECISION
   ,ncd_lag_1                    DOUBLE PRECISION
   ,ncd_lag_3                    DOUBLE PRECISION
   ,ncd_lag_7                    DOUBLE PRECISION

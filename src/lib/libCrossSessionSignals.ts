@@ -22,6 +22,7 @@ import { STOPWORDS } from './utlWordLists.ts';
 
 export interface CrossSessionSignals {
   selfPerplexity: number | null;
+  motorSelfPerplexity: number | null;
   ncdLag1: number | null;
   ncdLag3: number | null;
   ncdLag7: number | null;
@@ -122,6 +123,120 @@ function selfPerplexity(currentText: string, priorTexts: string[]): number | nul
 
   if (n === 0) return null;
   return Math.pow(2, -logProb / n); // perplexity
+}
+
+// ─── Motor Self-Perplexity (IKI trigram model) ──────────────────────
+//
+// Motor twin of selfPerplexity. Bins IKIs into K=8 states, builds an
+// order-3 n-gram model from all prior sessions' IKI sequences, scores
+// the current session's IKI sequence against it. Higher = more novel
+// motor timing patterns relative to personal motor baseline.
+//
+// Adans-Dester et al. 2024 (self-supervised typing pretraining for PD).
+// Per-person longitudinal autoregressive framing is novel.
+
+async function motorSelfPerplexity(questionId: number): Promise<number | null> {
+  // Get IKI sequences from prior non-calibration sessions
+  const priorRows = await sql`
+    SELECT se.keystroke_stream_json
+    FROM tb_session_events se
+    JOIN tb_questions q ON se.question_id = q.question_id
+    WHERE q.question_source_id != 3
+      AND se.question_id < ${questionId}
+      AND se.keystroke_stream_json IS NOT NULL
+    ORDER BY se.question_id DESC
+    LIMIT 50
+  ` as Array<{ keystroke_stream_json: unknown }>;
+
+  if (priorRows.length < 5) return null; // need corpus
+
+  // Get current session IKIs
+  const currentRows = await sql`
+    SELECT se.keystroke_stream_json
+    FROM tb_session_events se
+    WHERE se.question_id = ${questionId}
+      AND se.keystroke_stream_json IS NOT NULL
+  ` as Array<{ keystroke_stream_json: unknown }>;
+
+  if (currentRows.length === 0) return null;
+
+  // Extract IKI sequences from keystroke streams
+  const extractIkis = (streamJson: unknown): number[] => {
+    const stream = (typeof streamJson === 'string' ? JSON.parse(streamJson) : streamJson) as
+      Array<{ d: number }>;
+    if (!Array.isArray(stream) || stream.length < 2) return [];
+    const ikis: number[] = [];
+    for (let i = 1; i < stream.length; i++) {
+      const iki = stream[i].d - stream[i - 1].d;
+      if (iki > 0 && iki < 5000) ikis.push(iki);
+    }
+    return ikis;
+  };
+
+  // Bin IKIs into K=8 states via octile boundaries from prior data
+  const allPriorIkis: number[] = [];
+  const priorIkiSequences: number[][] = [];
+  for (const row of priorRows) {
+    const ikis = extractIkis(row.keystroke_stream_json);
+    if (ikis.length > 0) {
+      allPriorIkis.push(...ikis);
+      priorIkiSequences.push(ikis);
+    }
+  }
+  if (allPriorIkis.length < 100) return null;
+
+  // Compute octile boundaries (K=8 bins)
+  const K = 8;
+  const sorted = [...allPriorIkis].sort((a, b) => a - b);
+  const boundaries: number[] = [];
+  for (let i = 1; i < K; i++) {
+    boundaries.push(sorted[Math.floor((i * sorted.length) / K)]);
+  }
+
+  const bin = (v: number): number => {
+    for (let i = 0; i < boundaries.length; i++) {
+      if (v < boundaries[i]) return i;
+    }
+    return K - 1;
+  };
+
+  // Build order-3 IKI n-gram model from prior sessions
+  const counts = new Map<string, Map<number, number>>();
+  const contextCounts = new Map<string, number>();
+
+  for (const ikis of priorIkiSequences) {
+    const binned = ikis.map(bin);
+    for (let i = 0; i < binned.length - 2; i++) {
+      const context = `${binned[i]},${binned[i + 1]}`;
+      const next = binned[i + 2];
+      if (!counts.has(context)) counts.set(context, new Map());
+      const nextMap = counts.get(context)!;
+      nextMap.set(next, (nextMap.get(next) ?? 0) + 1);
+      contextCounts.set(context, (contextCounts.get(context) ?? 0) + 1);
+    }
+  }
+
+  // Score current session
+  const currentIkis = extractIkis(currentRows[0].keystroke_stream_json);
+  if (currentIkis.length < 10) return null;
+
+  const currentBinned = currentIkis.map(bin);
+  let logProb = 0;
+  let n = 0;
+  const smoothing = 0.01;
+
+  for (let i = 0; i < currentBinned.length - 2; i++) {
+    const context = `${currentBinned[i]},${currentBinned[i + 1]}`;
+    const next = currentBinned[i + 2];
+    const contextTotal = contextCounts.get(context) ?? 0;
+    const nextCount = counts.get(context)?.get(next) ?? 0;
+    const prob = (nextCount + smoothing) / (contextTotal + smoothing * K);
+    logProb += Math.log2(prob);
+    n++;
+  }
+
+  if (n === 0) return null;
+  return Math.pow(2, -logProb / n);
 }
 
 // ─── Normalized Compression Distance (Cilibrasi & Vitanyi 2005) ─────
@@ -356,6 +471,7 @@ export async function computeCrossSessionSignals(
 
   return {
     selfPerplexity: selfPerplexity(currentText, priorTextStrings),
+    motorSelfPerplexity: await motorSelfPerplexity(questionId),
     ncdLag1: ncdAtLag(currentText, priorTexts, 1),
     ncdLag3: ncdAtLag(currentText, priorTexts, 3),
     ncdLag7: ncdAtLag(currentText, priorTexts, 7),

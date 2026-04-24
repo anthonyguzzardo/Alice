@@ -1739,6 +1739,9 @@ export interface DynamicalSignalRow {
   dmd_dominant_decay_rate: number | null;
   dmd_mode_count: number | null;
   dmd_spectral_entropy: number | null;
+  pause_mixture_component_count: number | null;
+  pause_mixture_motor_proportion: number | null;
+  pause_mixture_cognitive_load_index: number | null;
   te_hold_to_flight: number | null;
   te_flight_to_hold: number | null;
   te_dominance: number | null;
@@ -1762,6 +1765,7 @@ export async function saveDynamicalSignals(questionId: number, s: Omit<Dynamical
        pid_synergy, pid_redundancy,
        branching_ratio, avalanche_size_exponent,
        dmd_dominant_frequency, dmd_dominant_decay_rate, dmd_mode_count, dmd_spectral_entropy,
+       pause_mixture_component_count, pause_mixture_motor_proportion, pause_mixture_cognitive_load_index,
        te_hold_to_flight, te_flight_to_hold, te_dominance
     ) VALUES (
       ${questionId}, ${s.iki_count}, ${s.hold_flight_count},
@@ -1779,6 +1783,7 @@ export async function saveDynamicalSignals(questionId: number, s: Omit<Dynamical
       ${s.pid_synergy}, ${s.pid_redundancy},
       ${s.branching_ratio}, ${s.avalanche_size_exponent},
       ${s.dmd_dominant_frequency}, ${s.dmd_dominant_decay_rate}, ${s.dmd_mode_count}, ${s.dmd_spectral_entropy},
+      ${s.pause_mixture_component_count}, ${s.pause_mixture_motor_proportion}, ${s.pause_mixture_cognitive_load_index},
       ${s.te_hold_to_flight}, ${s.te_flight_to_hold}, ${s.te_dominance}
     )
     ON CONFLICT (question_id) DO NOTHING
@@ -1874,6 +1879,10 @@ export interface SemanticSignalRow {
   referential_cohesion: number | null;
   emotional_valence_arc: string | null;
   text_compression_ratio: number | null;
+  discourse_global_coherence: number | null;
+  discourse_local_coherence: number | null;
+  discourse_global_local_ratio: number | null;
+  discourse_coherence_decay_slope: number | null;
   lexicon_version: number;
   paste_contaminated: boolean;
 }
@@ -1883,11 +1892,17 @@ export async function saveSemanticSignals(questionId: number, s: Omit<SemanticSi
     INSERT INTO tb_semantic_signals (
        question_id, idea_density, lexical_sophistication, epistemic_stance,
        integrative_complexity, deep_cohesion, referential_cohesion,
-       emotional_valence_arc, text_compression_ratio, lexicon_version, paste_contaminated
+       emotional_valence_arc, text_compression_ratio,
+       discourse_global_coherence, discourse_local_coherence,
+       discourse_global_local_ratio, discourse_coherence_decay_slope,
+       lexicon_version, paste_contaminated
     ) VALUES (
       ${questionId}, ${s.idea_density}, ${s.lexical_sophistication}, ${s.epistemic_stance},
       ${s.integrative_complexity}, ${s.deep_cohesion}, ${s.referential_cohesion},
-      ${s.emotional_valence_arc}, ${s.text_compression_ratio}, ${s.lexicon_version}, ${s.paste_contaminated}
+      ${s.emotional_valence_arc}, ${s.text_compression_ratio},
+      ${s.discourse_global_coherence}, ${s.discourse_local_coherence},
+      ${s.discourse_global_local_ratio}, ${s.discourse_coherence_decay_slope},
+      ${s.lexicon_version}, ${s.paste_contaminated}
     )
     ON CONFLICT (question_id) DO NOTHING
     RETURNING semantic_signal_id
@@ -1948,6 +1963,7 @@ export interface CrossSessionSignalRow {
   cross_session_signal_id: number;
   question_id: number;
   self_perplexity: number | null;
+  motor_self_perplexity: number | null;
   ncd_lag_1: number | null;
   ncd_lag_3: number | null;
   ncd_lag_7: number | null;
@@ -1962,11 +1978,13 @@ export interface CrossSessionSignalRow {
 export async function saveCrossSessionSignals(questionId: number, s: Omit<CrossSessionSignalRow, 'cross_session_signal_id' | 'question_id'>): Promise<number> {
   const [row] = await sql`
     INSERT INTO tb_cross_session_signals (
-       question_id, self_perplexity, ncd_lag_1, ncd_lag_3, ncd_lag_7, ncd_lag_30,
+       question_id, self_perplexity, motor_self_perplexity,
+       ncd_lag_1, ncd_lag_3, ncd_lag_7, ncd_lag_30,
        vocab_recurrence_decay, digraph_stability,
        text_network_density, text_network_communities, bridging_ratio
     ) VALUES (
-      ${questionId}, ${s.self_perplexity}, ${s.ncd_lag_1}, ${s.ncd_lag_3}, ${s.ncd_lag_7}, ${s.ncd_lag_30},
+      ${questionId}, ${s.self_perplexity}, ${s.motor_self_perplexity},
+      ${s.ncd_lag_1}, ${s.ncd_lag_3}, ${s.ncd_lag_7}, ${s.ncd_lag_30},
       ${s.vocab_recurrence_decay}, ${s.digraph_stability},
       ${s.text_network_density}, ${s.text_network_communities}, ${s.bridging_ratio}
     )
