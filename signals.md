@@ -24,9 +24,9 @@ Mangalam et al. (2022, J. Royal Society Interface) proved that for non-ergodic m
 | rqaDeterminism / rqaLaminarity / rqaTrappingTime | holdTimeCV |
 | sampleEntropy | flightTimeMean / flightTimeStd |
 | ikiCompressionRatio | exGaussianMu / exGaussianSigma |
-| mfdfaSpectrumWidth / mfdfaAsymmetry (planned) | charsPerMinute |
-| All PE-derived extensions (planned) | activeTypingMs |
-| temporalIrreversibility (planned) | totalCharsTyped / finalCharCount |
+| mfdfaSpectrumWidth / mfdfaAsymmetry | charsPerMinute |
+| All PE-derived extensions (statisticalComplexity, forbiddenPatternFraction, weightedPE, LZC) | activeTypingMs |
+| temporalIrreversibility | totalCharsTyped / finalCharCount |
 
 **What this changes:** The prediction system, calibration drift detection, and daily delta should weight the left column over the right column for any longitudinal inference. The right column is still valid for within-session measurement and cross-session comparison via z-scoring, but its raw trajectory is not a trustworthy trend estimator for an N=1 non-stationary process.
 
@@ -574,14 +574,14 @@ Computed from the raw keystroke stream by the Rust native engine (`src-rs/dynami
 - **Minimum series:** 30 IKI values
 - **Citation:** Webber & Zbilut 2005
 
-### rqaRecurrenceTimeEntropy (RANK 7, implementing)
+### rqaRecurrenceTimeEntropy
 - **Computation:** For each recurrence point R(i,j)=1 in the existing recurrence matrix, compute the time to the next recurrence in the same row: T(i) = min{k > j : R(i,k)=1} - j. Collect all recurrence times across all rows. Compute Shannon entropy of the recurrence time distribution.
 - **Unit:** bits
 - **Minimum series:** 30 IKI values (same as existing RQA)
 - **Why:** RQA determinism measures diagonal line structure (local predictability). RQA laminarity measures vertical line structure (state trapping). Recurrence Time Entropy measures the distribution of return times to previously visited states (global attractor topology). A session with high determinism but skewed recurrence times is in a different dynamical regime than one with high determinism and uniform recurrence times. DET and LAM are identical for both. RTE distinguishes them. Cheapest new signal in the inventory: ~20 lines added to existing RQA computation, reuses the recurrence matrix already constructed.
 - **Citation:** Baptista et al. 2010 (mean recurrence time connects to Kolmogorov-Sinai entropy).
 
-### rqaMeanRecurrenceTime (RANK 7, implementing)
+### rqaMeanRecurrenceTime
 - **Computation:** Mean of the recurrence time distribution computed for rqaRecurrenceTimeEntropy.
 - **Unit:** time steps (dimensionless)
 - **Minimum series:** 30 IKI values
@@ -759,7 +759,7 @@ Extracted from calibration (free-write) responses via Claude Sonnet. These are c
 - **Table:** tb_motor_signals
 - **Citation:** Richman & Moorman 2000; Ajilore et al. 2025
 
-### mseSeries / complexityIndex (RANK 4, implementing)
+### mseSeries / complexityIndex
 - **Capture:** Coarse-grain the IKI series at scales 1 through 5 (scale 1 = original series, scale 2 = pairwise averages, scale 3 = triple averages, etc.). Compute SampEn (m=2, r=0.2*std) at each scale using the existing `sample_entropy()` function. Output: `mseSeries` (JSONB array of 5 SampEn values, one per scale) and `complexityIndex` (scalar sum of all SampEn values across scales).
 - **Unit:** nats (per-scale SampEn), nats (complexity index sum)
 - **Minimum data:** 50+ IKI values (produces scale-5 series of length 10, minimum for SampEn)
@@ -1272,9 +1272,9 @@ None of these require hardware changes. All are computable from the existing key
 
 ---
 
-## Dynamical Signal Extensions (Potential)
+## Dynamical Signal Extensions
 
-Extensions to the existing dynamical signal family in `src-rs/dynamical.rs`. These build on existing infrastructure (DFA box-fitting, PE ordinal pattern extraction, RQA recurrence matrix computation) with minimal new code. All are computable from the existing IKI and hold/flight time series. None are yet implemented.
+Extensions to the dynamical signal family in `src-rs/dynamical.rs`. These build on existing infrastructure (DFA box-fitting, PE ordinal pattern extraction, RQA recurrence matrix computation). All are computed from the existing IKI and hold/flight time series. Implemented in Phases 1-5 (2026-04-17 through 2026-04-24) and operational in the live pipeline.
 
 ### MF-DFA (Multifractal Generalization of DFA)
 
@@ -1412,7 +1412,7 @@ The existing RQA computes determinism, laminarity, trapping time, and recurrence
 **STATUS: NOT IMPLEMENTING.** Allan variance characterizes oscillator stability by computing variance at increasing averaging timescales, with the log-log slope identifying noise type (white, flicker, random walk). The biological oscillator framing is compelling and the metrology provenance is strong (gold standard since 1966, zero prior keystroke applications). However, Allan variance and the IKI power spectral density (already planned) are related by an integral transform. Each noise type has a characteristic Allan variance slope AND a characteristic spectral density slope. The per-timescale noise classification and transition points available from Allan variance are equally available from a piecewise-linear fit on the log-log PSD. With both MF-DFA (multi-scale scaling diversity) and IKI PSD spectral slope (noise type characterization) going into the implementation, Allan variance is mathematically redundant. This was previously considered and excluded in `riffing/SIGNAL_EXPANSION.md` with the note "redundant w/ MF-DFA." The metrology vocabulary (oscillator stability, noise type classification) carries strategic value for actuarial and clinical engineering audiences. If needed for those contexts, Allan variance can be derived from the PSD without a separate computation.
 - **Literature:** Allan 1966 (original); IEEE Std 1139-2008 (oscillator stability characterization standard).
 
-### Causal Emergence (Effective Information across coarse-graining scales, RANK 2, implementing)
+### Causal Emergence (Effective Information across coarse-graining scales)
 
 ### effectiveInformation
 - **Source:** IKI series from the keystroke stream
@@ -1439,7 +1439,7 @@ The existing RQA computes determinism, laminarity, trapping time, and recurrence
 - **Why:** Directly reports the temporal resolution at which the motor-cognitive system operates most deterministically. Tracked longitudinally, migration of the optimal scale toward coarser resolution is a leading indicator of fine-grained cognitive-motor degradation.
 - **Literature:** Hoel et al. 2013 (PNAS).
 
-### Dynamic Mode Decomposition (Koopman spectral analysis, implementing)
+### Dynamic Mode Decomposition (Koopman spectral analysis)
 
 DMD decomposes the IKI dynamical system into a superposition of modes, each with a characteristic frequency AND a growth/decay rate. DFA produces one scaling exponent. MF-DFA produces a spectrum of scaling exponents across moment orders. DMD produces the eigenvalues of the dynamical operator itself: modes, frequencies, and stability classification.
 
@@ -1475,7 +1475,7 @@ DMD decomposes the IKI dynamical system into a superposition of modes, each with
 - **Why:** Whether dynamical energy is concentrated in one mode or distributed across many. Low spectral entropy = one mode dominates (rigid, monolithic dynamics). High spectral entropy = many modes contribute equally (flexible, multi-scale dynamics). Different from peSpectrum (ordinal patterns across scales) and from ikiPsdSpectralSlope (frequency-domain power distribution). DMD spectral entropy is the distribution of dynamical MODE energy, not signal frequency energy.
 - **Literature:** Brunton et al. 2022.
 
-### Criticality Estimation (branching ratio, implementing)
+### Criticality Estimation (branching ratio)
 
 DFA alpha in the range 0.7-0.9 is CONSISTENT with near-critical dynamics (1/f noise), but DFA does not directly test criticality. 1/f scaling can arise from non-critical mechanisms (e.g., superposition of relaxation processes). The branching ratio is the direct test.
 
@@ -1508,11 +1508,9 @@ DFA alpha in the range 0.7-0.9 is CONSISTENT with near-critical dynamics (1/f no
 
 ---
 
-## Frequency-Domain Signals (Potential)
+## Frequency-Domain Signals
 
-The existing signal pipeline operates entirely in the time domain (IKI statistics, DFA), the ordinal domain (PE), or the distributional domain (ex-Gaussian). No signal performs spectral analysis of the keystroke time series. The frequency domain is a structural blind spot. A single Lomb-Scargle periodogram of the IKI series opens this axis, producing multiple new signals from one computation. Lomb-Scargle is required rather than Welch because IKIs are unevenly spaced in time (keystrokes do not occur at regular intervals).
-
-None of these require hardware changes. All are computable from the existing keystroke stream.
+Spectral analysis of the keystroke timing series via power spectral density estimation. Implemented in Phase 1 (2026-04-17) and operational in the live pipeline. Stored in `tb_dynamical_signals`.
 
 ### ikiPsdRespiratoryPeakHz
 - **Source:** IKI series from the keystroke stream
@@ -1556,9 +1554,9 @@ None of these require hardware changes. All are computable from the existing key
 
 ---
 
-## Cross-Session Motor Signals (Potential)
+## Cross-Session Motor Signals (Partial)
 
-Cross-session signals that track motor system trajectory over time. These complement the existing cross-session family (which tracks semantic and linguistic drift) with motor distribution tracking. Both require prior session data. Neither requires hardware changes.
+Cross-session signals that track motor system trajectory over time. `motorSelfPerplexity` is implemented and operational in `tb_cross_session_signals`. Wasserstein distance and motor consolidation index remain potential future additions.
 
 ### distributionShapeChangeRate
 - **Source:** Hold time and flight time distributions from consecutive sessions
@@ -1576,7 +1574,7 @@ Cross-session signals that track motor system trajectory over time. These comple
 - **Why:** Measures sleep-dependent motor memory consolidation, the only signal in the system capturing a physiological process that occurs when the user is not at the keyboard. During sleep, the striatum replays recently practiced motor sequences during sleep spindles, stabilizing and sometimes enhancing them. Degraded consolidation is an early marker of hippocampal and striatal dysfunction. Motor consolidation degrades early in MCI and Alzheimer's (before explicit memory consolidation does), making it a leading indicator from a system (procedural memory) separate from what most cognitive tests measure (declarative memory).
 - **Literature:** Bonstrup et al. 2019, 2020 (Current Biology, rapid micro-learning gains during rest); Walker et al. 2003 (Neuron, practice with sleep makes perfect); motor consolidation validated as degraded in MCI, early AD, PD, and depression.
 
-### motorSelfPerplexity (implementing)
+### motorSelfPerplexity
 - **Source:** IKI series from current session + IKI corpus from all prior sessions
 - **Computation:** Build an autoregressive model on the person's historical IKI sequences. Discretize IKIs into K=8 bins. Build order-3 transition probabilities from all prior sessions (Laplace-smoothed). Score today's IKI bin sequence against the model. Output: perplexity (exponential of cross-entropy). Parallels text selfPerplexity computation (which uses character trigrams) with the same gating (5+ prior sessions required).
 - **Unit:** perplexity (higher = more novel motor patterns)
@@ -1587,9 +1585,9 @@ Cross-session signals that track motor system trajectory over time. These comple
 
 ---
 
-## Cognitive-Linguistic Signal Extensions (Potential)
+## Cognitive-Linguistic Signal Extensions (Partial)
 
-Signals that bridge the motor-timing and linguistic-structural axes. The existing signal inventory treats the IKI stream as pure motor output and the final text as a separate surface-level linguistic product. These extensions model the interaction between what is being typed and how it is being typed.
+Signals that bridge the motor-timing and linguistic-structural axes. `temporalIrreversibility` is implemented in `src-rs/dynamical.rs` (stored in `tb_dynamical_signals`). `discourseGlobalCoherence` and related discourse coherence signals are implemented in TypeScript (stored in `tb_semantic_signals`). Remaining signals in this section are deferred or not implementing.
 
 ### Temporal Irreversibility (thermodynamic arrow of keystroke dynamics)
 
@@ -1766,32 +1764,35 @@ Implementation requires minimum 7 days of sessions with sufficient hourly divers
 
 Counted at the database column level (ground truth). Arrays count as 1 column. Derived state dimensions (7D, 11D) are not double-counted against their source columns.
 
+*Updated 2026-04-24 after Phase 1-5 signal expansion and INC-013 pipeline fix.*
+
 ### Base measurements (database columns)
 
 | Table | Columns | Notes |
 |---|---|---|
 | tb_session_summaries | 76 | All raw production, pause, deletion, P-burst, keystroke dynamics, revision, re-engagement, linguistic densities, session metadata, Phase 1 cursor/writing, Phase 2 mouse/correction/revision/punctuation |
-| tb_dynamical_signals | 13 | 11 scalar + pe_spectrum (JSONB) + iki_count/hold_flight_count metadata |
-| tb_motor_signals | 13 | 11 scalar + iki_autocorrelation (JSONB) + digraph_latency (JSONB) |
-| tb_semantic_signals | 8 | TS-computed linguistic analysis |
+| tb_dynamical_signals | 48 | 44 scalar + pe_spectrum (JSONB) + pe_spectrum raw fields + iki_count/hold_flight_count metadata. 9 sub-families: PE/ordinal, DFA/MF-DFA, spectral, OPTN, RQA, recurrence networks, causal emergence, criticality, DMD, pause mixture, transfer entropy |
+| tb_motor_signals | 16 | 12 scalar + mse_series (JSONB) + iki_autocorrelation (JSONB) + digraph_latency (JSONB) + ex-Gaussian Fisher trace |
+| tb_semantic_signals | 12 | TS-computed linguistic analysis including discourse coherence (global, local, ratio, decay slope) |
 | tb_process_signals | 9 | Rust-computed text reconstruction signals |
-| tb_cross_session_signals | 10 | TS-computed longitudinal signals |
-| **Column total** | **129** | arrays counted as 1 |
+| tb_cross_session_signals | 11 | TS-computed longitudinal signals including motor self-perplexity, text network communities, bridging ratio |
+| **Column total** | **172** | arrays counted as 1 |
 
 ### Expanded dimensions (if counting array elements)
 
 | Array | Elements | Expanded total |
 |---|---|---|
 | pe_spectrum | 5 (orders 3-7) | +4 |
+| mse_series | 5 (scales 1-5) | +4 |
 | iki_autocorrelation | 5 (lags 1-5) | +4 |
 | digraph_latency | ~10-30 (top bigrams) | +~9-29 |
-| **Dimension total** | | **~146-162** |
+| **Dimension total** | | **~193-213** |
 
 ### Derived state dimensions (computed from base, not double-counted)
 
 | Table | Dimensions | Source |
 |---|---|---|
-| tb_entry_states | 8 | 7D behavioral + volatility + convergence, from session summary fields |
+| tb_entry_states | 8 | 7D behavioral + volatility + convergence (derived), from session summary fields |
 | tb_semantic_states | 11 | 11D semantic, from linguistic density fields |
 | tb_calibration_context | 7 | Categorical tags from calibration free-writes |
 
@@ -1801,55 +1802,34 @@ Counted at the database column level (ground truth). Arrays count as 1 column. D
 |---|---|---|
 | tb_rburst_sequences | 5 per burst | Per-burst detail, not per-session |
 | Avatar / ghost engine | 5 variants, 22 profile fields | Reconstruction adversary, not counted as signals |
-| Reconstruction residuals | per-signal | Stored in tb_reconstruction_residuals |
+| Reconstruction residuals | 41 dimensions | Stored in tb_reconstruction_residuals (13 core + 28 extended in JSONB), organized by 7 theoretical families |
 
 ### Somatic signals (potential, not yet implemented)
 
 12 signals derivable from existing keystroke stream: rollover distribution, error topology, thumb channel, correction strategy, shift anticipation, key geography, bilateral rhythm coherence, post-pause motor signature, deletion kinematics, digraph asymmetry, tremor frequency estimation, per-finger hold-time drift.
 
-### Dynamical signal extensions (potential, not yet implemented)
+### Remaining potential extensions (not yet implemented)
 
-~32 columns across 10 sub-families: MF-DFA (spectrum width, asymmetry, peak alpha), symbolic dynamics (statistical complexity, forbidden pattern fraction, weighted PE, Lempel-Ziv complexity), ordinal pattern transition networks (transition entropy, forbidden transition count, clustering, path length), recurrence networks (transitivity, avg path length, clustering coefficient, assortativity), partial information decomposition (synergy, redundancy), Fisher information (ex-Gaussian FI trace), causal emergence (effective information, emergence index, optimal scale), DMD/Koopman (dominant frequency, dominant decay rate, mode count, spectral entropy), criticality (branching ratio, avalanche size exponent), pause mixture decomposition (component count, motor proportion, cognitive load index). Allan variance excluded (redundant with MF-DFA + spectral slope).
+| Category | Columns | Status |
+|---|---|---|
+| Wasserstein distance (cross-session motor) | ~4 | Potential. Wasserstein hold/flight, shape change rate, motor consolidation index |
+| Word frequency IKI residual | ~3 | Potential. Needs SUBTLEX-US data file |
+| Topological (persistent homology) | 5 | Deferred. ~200-300 lines Rust |
+| Circadian rhythm | 5 | Data-gated. Requires 7+ days at varied hours |
+| Cognitive microstates (HSMM) | 4 | Phase 2 deferred. ~500 lines Rust |
 
-### Frequency-domain signals (potential, not yet implemented)
-
-~5 columns from a single Lomb-Scargle periodogram: respiratory band peak Hz, peak typing frequency Hz, LF/HF ratio, spectral slope, fast/slow variance ratio.
-
-### Cross-session motor signals (potential, not yet implemented)
-
-~5 columns: Wasserstein distance for hold times, Wasserstein distance for flight times, distribution shape change rate (slope), motor consolidation index, motor self-perplexity.
-
-### Cognitive-linguistic signal extensions (potential, mixed implementation status)
-
-6 signals documented. 2 implementing (temporal irreversibility, discourse global coherence). 1 implementing in narrow form (word frequency IKI residual, static lookup only). 3 not implementing (full lexical surprisal decomposition, syntactic dependency distance, phonological loading index). 1 existing signal reframed (ecological SSRT maps to existing `errorDetectionLatencyMean`). ~5-7 new columns from the implementing set.
-
-### Topological signals (potential, implementing deferred)
-
-5 columns from persistent homology of Takens delay-embedded IKI series: h0PersistenceEntropy, h1TotalPersistence, h1MaxPersistence, h1Count, persistenceLandscapeNorm. New table tb_topological_signals. ~200-300 lines Rust. Deferred to dedicated session.
-
-### Circadian rhythm signals (potential, implementing, data-gated)
-
-5 columns from cosinor model on hourly IKI medians: circadianAmplitude, circadianAcrophase, circadianMESOR, intradailyVariability, interdailyStability. TypeScript cross-session computation. Requires 7+ days of sessions at varied hours.
-
-### Cognitive microstate decomposition (potential, not implementing, Phase 2)
-
-4 columns from HSMM segmentation: microstateCount, microstateTransitionEntropy, microstateDominance, microstateDurationProfile (JSONB). New table tb_microstate_signals. ~500 lines Rust. Positioned between 11D Semantic State Engine and Dynamical Signals as a third state engine. Deferred to Phase 2.
+Signals explicitly not implementing: full lexical surprisal decomposition (LLM dependency), syntactic dependency distance (Python dependency), phonological loading index (insufficient SNR at session length), Allan variance (redundant with MF-DFA + spectral slope).
 
 ### Ergodicity validity framework
 
-Not a signal family. Reclassifies all existing and planned signals into ergodicity-safe (valid for longitudinal N=1 trajectory tracking) and ergodicity-unsafe (valid per-session, unreliable as trend estimators). Zero columns. Affects downstream weighting in drift detection, calibration, and prediction. See section at top of document.
+Not a signal family. Reclassifies all existing signals into ergodicity-safe (valid for longitudinal N=1 trajectory tracking) and ergodicity-unsafe (valid per-session, unreliable as trend estimators). Zero columns. Affects downstream weighting in drift detection, calibration, and prediction. See section at top of document.
 
 ### Summary
 
-The "~163" historically referenced in the codebase approximated column count + expanded arrays + digraph estimate. The precise count depends on methodology:
-
 | Methodology | Count |
 |---|---|
-| Database columns (arrays as 1) | 129 |
-| Expanded dimensions (arrays expanded, digraph ~30) | ~165 |
-| With derived state dimensions | ~191 |
-| With potential somatic signals | ~203 |
-| With all potential extensions (somatic + dynamical + frequency + cross-session motor) | ~244 |
-| With cognitive-linguistic extensions (implementing subset) | ~251 |
-| With topological + circadian + recurrence time + MSE + causal emergence + DMD + criticality + motor perplexity | ~275 |
+| Database columns (arrays as 1) | 172 |
+| Expanded dimensions (arrays expanded, digraph ~30) | ~193-213 |
+| With derived state dimensions | ~219-239 |
+| With all remaining potential extensions | ~250-260 |
 | With cognitive microstate decomposition (Phase 2) | ~279 |
