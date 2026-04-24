@@ -26,10 +26,45 @@ export interface DynamicalSignals {
   permutationEntropyRaw: number | null;
   peSpectrum: number[] | null;
   dfaAlpha: number | null;
+  mfdfaSpectrumWidth: number | null;
+  mfdfaAsymmetry: number | null;
+  mfdfaPeakAlpha: number | null;
+  temporalIrreversibility: number | null;
+  ikiPsdSpectralSlope: number | null;
+  ikiPsdRespiratoryPeakHz: number | null;
+  peakTypingFrequencyHz: number | null;
+  ikiPsdLfHfRatio: number | null;
+  ikiPsdFastSlowVarianceRatio: number | null;
+  statisticalComplexity: number | null;
+  forbiddenPatternFraction: number | null;
+  weightedPe: number | null;
+  lempelZivComplexity: number | null;
+  optnTransitionEntropy: number | null;
+  optnForbiddenTransitionCount: number | null;
   rqaDeterminism: number | null;
   rqaLaminarity: number | null;
   rqaTrappingTime: number | null;
   rqaRecurrenceRate: number | null;
+  rqaRecurrenceTimeEntropy: number | null;
+  rqaMeanRecurrenceTime: number | null;
+  recurrenceTransitivity: number | null;
+  recurrenceAvgPathLength: number | null;
+  recurrenceClustering: number | null;
+  recurrenceAssortativity: number | null;
+  effectiveInformation: number | null;
+  causalEmergenceIndex: number | null;
+  optimalCausalScale: number | null;
+  pidSynergy: number | null;
+  pidRedundancy: number | null;
+  branchingRatio: number | null;
+  avalancheSizeExponent: number | null;
+  dmdDominantFrequency: number | null;
+  dmdDominantDecayRate: number | null;
+  dmdModeCount: number | null;
+  dmdSpectralEntropy: number | null;
+  pauseMixtureComponentCount: number | null;
+  pauseMixtureMotorProportion: number | null;
+  pauseMixtureCognitiveLoadIndex: number | null;
   teHoldToFlight: number | null;
   teFlightToHold: number | null;
   teDominance: number | null;
@@ -38,6 +73,9 @@ export interface DynamicalSignals {
 export interface MotorSignals {
   parseError: string | null;
   sampleEntropy: number | null;
+  mseSeries: number[] | null;
+  complexityIndex: number | null;
+  exGaussianFisherTrace: number | null;
   ikiAutocorrelation: number[] | null;
   motorJerk: number | null;
   lapseRate: number | null;
@@ -289,10 +327,45 @@ export function computeDynamicalSignals(stream: KeystrokeEvent[]): DynamicalSign
       permutationEntropyRaw: n(result.permutationEntropyRaw),
       peSpectrum: na(result.peSpectrum),
       dfaAlpha: n(result.dfaAlpha),
+      mfdfaSpectrumWidth: n(result.mfdfaSpectrumWidth),
+      mfdfaAsymmetry: n(result.mfdfaAsymmetry),
+      mfdfaPeakAlpha: n(result.mfdfaPeakAlpha),
+      temporalIrreversibility: n(result.temporalIrreversibility),
+      ikiPsdSpectralSlope: n(result.ikiPsdSpectralSlope),
+      ikiPsdRespiratoryPeakHz: n(result.ikiPsdRespiratoryPeakHz),
+      peakTypingFrequencyHz: n(result.peakTypingFrequencyHz),
+      ikiPsdLfHfRatio: n(result.ikiPsdLfHfRatio),
+      ikiPsdFastSlowVarianceRatio: n(result.ikiPsdFastSlowVarianceRatio),
+      statisticalComplexity: n(result.statisticalComplexity),
+      forbiddenPatternFraction: n(result.forbiddenPatternFraction),
+      weightedPe: n(result.weightedPe),
+      lempelZivComplexity: n(result.lempelZivComplexity),
+      optnTransitionEntropy: n(result.optnTransitionEntropy),
+      optnForbiddenTransitionCount: n(result.optnForbiddenTransitionCount),
       rqaDeterminism: n(result.rqaDeterminism),
       rqaLaminarity: n(result.rqaLaminarity),
       rqaTrappingTime: n(result.rqaTrappingTime),
       rqaRecurrenceRate: n(result.rqaRecurrenceRate),
+      rqaRecurrenceTimeEntropy: n(result.rqaRecurrenceTimeEntropy),
+      rqaMeanRecurrenceTime: n(result.rqaMeanRecurrenceTime),
+      recurrenceTransitivity: n(result.recurrenceTransitivity),
+      recurrenceAvgPathLength: n(result.recurrenceAvgPathLength),
+      recurrenceClustering: n(result.recurrenceClustering),
+      recurrenceAssortativity: n(result.recurrenceAssortativity),
+      effectiveInformation: n(result.effectiveInformation),
+      causalEmergenceIndex: n(result.causalEmergenceIndex),
+      optimalCausalScale: n(result.optimalCausalScale),
+      pidSynergy: n(result.pidSynergy),
+      pidRedundancy: n(result.pidRedundancy),
+      branchingRatio: n(result.branchingRatio),
+      avalancheSizeExponent: n(result.avalancheSizeExponent),
+      dmdDominantFrequency: n(result.dmdDominantFrequency),
+      dmdDominantDecayRate: n(result.dmdDominantDecayRate),
+      dmdModeCount: n(result.dmdModeCount),
+      dmdSpectralEntropy: n(result.dmdSpectralEntropy),
+      pauseMixtureComponentCount: n(result.pauseMixtureComponentCount),
+      pauseMixtureMotorProportion: n(result.pauseMixtureMotorProportion),
+      pauseMixtureCognitiveLoadIndex: n(result.pauseMixtureCognitiveLoadIndex),
       teHoldToFlight: n(result.teHoldToFlight),
       teFlightToHold: n(result.teFlightToHold),
       teDominance: n(result.teDominance),
