@@ -1133,6 +1133,34 @@ None of these require hardware changes. All are computable from the existing key
 - **Why:** Hands have a home row. Keys further from home require more reach, more forearm rotation, more motor planning. The timing cost per unit of physical distance is a motor efficiency ratio. If that ratio changes over time, fine motor coordination is changing. This is independent of overall typing speed (which may vary with cognitive load) because it measures the distance-dependent component specifically.
 - **Literature:** Dhakal et al. 2018 found systematic latency variation by key position. Feit et al. 2016 modeled finger-travel optimization in skilled typists.
 
+### Bilateral Rhythm Coherence (inter-hemispheric motor coordination)
+- **Source:** IKI sub-series partitioned by QWERTY left/right hand key mapping
+- **Computation:** Extract left-hand IKI series and right-hand IKI series from the keystroke stream (using the same key-to-hand mapping as holdTimeMeanLeft/Right). Compute windowed cross-correlation between the two series within a session. High coherence means the hands are rhythmically coupled, operating as a unified motor instrument. Low coherence means one hand is being managed independently.
+- **Unit:** cross-correlation coefficient (-1 to 1), windowed trajectory
+- **Why:** This measures inter-hemispheric motor coordination, not just per-hand speed (which holdTimeMeanLeft/Right already capture). Two hands can have identical mean hold times but completely decoupled rhythms. The coherence is the signal. Interhemispheric transfer degrades early in neurodegenerative conditions and under asymmetric cognitive load. High N per session (every alternating-hand digraph contributes). This is the highest-value somatic signal available from a standard keyboard.
+- **Literature:** Serrien et al. 2006 (intermanual coordination and aging); Bangert & Schlaug 2006 (corpus callosum and bimanual coordination); Giancardo et al. 2016 (neuroQWERTY lateral motor features).
+
+### Post-Pause Motor Signature (motor re-engagement quality)
+- **Source:** IKI and hold time values for the first 3-5 keystrokes after each pause (>2s), compared to mid-burst keystrokes
+- **Computation:** For each pause, extract the IKI and hold time distributions of the first N keystrokes after resumption. Compare to the mid-burst distribution (keystrokes 5+ within a burst). The restart penalty ratio (post-pause mean IKI / mid-burst mean IKI) measures how cleanly the motor system re-engages. Track the restart penalty trajectory across the session and across sessions.
+- **Unit:** ratio (post-pause / mid-burst), session trajectory
+- **Why:** Measures motor resilience after cognitive interruption. Independent of pause duration (which is cognitive) because it measures what happens *after* the pause ends. Independent of mid-burst speed (motor baseline) because it's a ratio. If the restart penalty increases through a session, the motor system is losing its ability to re-engage cleanly. Over months, a drifting restart penalty is a motor resilience signal that nothing else in the system captures.
+- **Literature:** Popp et al. 2019 (cognitive-motor dual task restart costs); Springer 2021 (post-correction re-engagement latency).
+
+### Deletion Kinematics (feedback-loop motor integrity)
+- **Source:** IKI and hold time values during deletion sequences vs. production sequences in the keystroke stream
+- **Computation:** Partition all keystrokes into production mode (inserting text) and deletion mode (backspace/delete sequences). Compute IKI mean, std, and CV for each mode independently. The ratio of deletion-IKI-variance to production-IKI-variance isolates feedback-loop motor quality from feedforward motor quality. Production typing is largely feedforward (central motor commands). Deletion is feedback-driven (watching text disappear, deciding when to stop).
+- **Unit:** variance ratio (deletion / production), per-mode distribution statistics
+- **Why:** This is the only signal that decomposes motor behavior into its two constituent control loops. Everything else in the system conflates feedforward and feedback motor performance. If the variance ratio increases over months, the feedback system is getting noisier independent of the feedforward system. Moderate N per session (depends on deletion volume, but most journal sessions produce enough deletion keystrokes).
+- **Literature:** Salthouse 1986 (feedforward vs. feedback in typing skill); Logan & Crump 2011 (hierarchical control of skilled typing: outer loop monitors, inner loop executes).
+
+### Digraph Asymmetry (directional motor planning)
+- **Source:** Digraph latency profiles from the keystroke stream (extends existing digraphLatencyProfile)
+- **Computation:** For each digraph pair AB, find its reverse BA. Compute the asymmetry ratio: `flight_time(AB) / flight_time(BA)` for pairs where both directions have sufficient occurrences. Aggregate by finger pair (e.g., left-index to right-middle vs. right-middle to left-index). Track per-finger-pair asymmetry ratios over sessions.
+- **Unit:** ratio per digraph pair, per-finger-pair aggregates
+- **Why:** The same two fingers produce different latencies depending on direction (AB vs BA). This directional asymmetry isolates motor planning from finger identity, key distance, and overall speed (all of which cancel in the ratio). If specific finger-pair asymmetry ratios drift over time, directional motor planning is changing asymmetrically. Best computed as a rolling cross-session measure due to sparsity of some BA pairs within a single session.
+- **Literature:** Gentner 1983 (digraph frequency and latency in skilled typing); Salthouse 1984 (directional effects in keystroke latency).
+
 ---
 
 ## Signal Count
@@ -1168,6 +1196,6 @@ None of these require hardware changes. All are computable from the existing key
 | Avatar / ghost engine | 5 variants, 22 profile fields |
 | Reconstruction residuals | per-signal residuals |
 | Computation utilities | 3 |
-| Somatic signals (potential) | 6 |
+| Somatic signals (potential) | 10 |
 | **Total implemented** | **~172 distinct signals** |
-| **Total with potential somatic** | **~178 distinct signals** |
+| **Total with potential somatic** | **~182 distinct signals** |
