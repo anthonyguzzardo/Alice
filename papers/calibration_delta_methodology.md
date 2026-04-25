@@ -83,6 +83,8 @@ A signal passes Phase 1 if all three criteria are met simultaneously.
 
 ## 4. Results (n=6-12 pairs, April 13-24, 2026)
 
+The number of available pairs varies across signals because each signal has minimum data requirements that not every session clears (e.g., MF-DFA requires 256+ IKIs, ex-Gaussian fitting requires 50+ flight times, discourse coherence requires 5+ sentences with embeddings), and because keystroke stream capture was not available for the earliest sessions (April 13-17).
+
 ### Phase 1 screen
 
 4 of 68 signals met all three criteria:
