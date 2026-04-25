@@ -44,6 +44,9 @@ export default getViteConfig(
             name: 'db',
             include: ['tests/db/**/*.test.ts'],
             pool: 'forks',
+            // Single shared container per `npm run test:db` invocation.
+            // Per-test isolation via TRUNCATE in test files. See globalSetup.ts.
+            globalSetup: ['tests/db/globalSetup.ts'],
           },
         },
         {

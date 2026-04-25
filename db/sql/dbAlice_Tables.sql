@@ -42,7 +42,7 @@ SET search_path TO alice, public;
 -- pgvector extension installs in public (shared across schemas)
 CREATE EXTENSION IF NOT EXISTS vector;
 
--- @region enums -- te_question_source, te_reflection_type, te_interaction_event_type, te_prompt_trace_type, te_embedding_source, te_context_dimension, te_adversary_variants
+-- @region enums -- te_question_source, te_reflection_type, te_interaction_event_type, te_prompt_trace_type, te_embedding_source, te_context_dimension, te_adversary_variants, te_signal_job_status, te_signal_job_kind
 -- ============================================================================
 -- ENUM TABLES (static, no footer)
 -- ============================================================================
@@ -126,6 +126,43 @@ INSERT INTO te_adversary_variants (adversary_variant_id, name, description) VALU
   ,(4, 'ppm_text',            'Variable-order PPM + independent timing')
   ,(5, 'full_adversary',      'PPM + AR(1) + copula')
 ON CONFLICT (adversary_variant_id) DO NOTHING;
+
+-- --------------------------------------------------------------------------
+
+-- PURPOSE: signal job lifecycle status
+-- MUTABILITY: static after deploy
+-- REFERENCED BY: tb_signal_jobs.signal_job_status_id
+CREATE TABLE IF NOT EXISTS te_signal_job_status (
+   signal_job_status_id  SMALLINT PRIMARY KEY
+  ,enum_code             TEXT UNIQUE NOT NULL
+  ,name                  TEXT NOT NULL
+  ,description           TEXT
+);
+
+INSERT INTO te_signal_job_status (signal_job_status_id, enum_code, name, description) VALUES
+   (1, 'queued',      'Queued',      'Waiting for worker claim')
+  ,(2, 'running',     'Running',     'Claimed by worker; in progress')
+  ,(3, 'completed',   'Completed',   'All stages finished (or skipped via idempotent guards)')
+  ,(4, 'failed',      'Failed',      'Last attempt failed; will retry if attempts < max_attempts')
+  ,(5, 'dead_letter', 'Dead letter', 'Exceeded max_attempts; manual intervention required')
+ON CONFLICT (signal_job_status_id) DO NOTHING;
+
+-- --------------------------------------------------------------------------
+
+-- PURPOSE: which pipeline a signal job runs
+-- MUTABILITY: static after deploy
+-- REFERENCED BY: tb_signal_jobs.signal_job_kind_id
+CREATE TABLE IF NOT EXISTS te_signal_job_kind (
+   signal_job_kind_id  SMALLINT PRIMARY KEY
+  ,enum_code           TEXT UNIQUE NOT NULL
+  ,name                TEXT NOT NULL
+  ,description         TEXT
+);
+
+INSERT INTO te_signal_job_kind (signal_job_kind_id, enum_code, name, description) VALUES
+   (1, 'response_pipeline',    'Response pipeline',    'Owner journal response: prior-day delta + question generation + witness render + embed + derived signals')
+  ,(2, 'calibration_pipeline', 'Calibration pipeline', 'Calibration session: tag extraction + derived signals + drift snapshot')
+ON CONFLICT (signal_job_kind_id) DO NOTHING;
 
 -- @region identity -- tb_subjects
 -- ============================================================================
@@ -1401,3 +1438,55 @@ CREATE TABLE IF NOT EXISTS tb_semantic_trajectory (
   ,dttm_created_utc        TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
   ,created_by              TEXT NOT NULL DEFAULT 'system'
 );
+
+-- --------------------------------------------------------------------------
+
+-- @region jobs -- tb_signal_jobs
+
+-- PURPOSE: durable queue of pipeline jobs that survive process crashes
+-- USE CASE: enqueued in the same transaction as the response/calibration save.
+--           A worker loop atomically claims jobs (FOR UPDATE SKIP LOCKED),
+--           runs the corresponding pipeline (kind 1 = response_pipeline,
+--           kind 2 = calibration_pipeline), marks completed or schedules
+--           retry. Boot-time sweep re-queues 'running' jobs that were in
+--           flight when the process died. Existing idempotent guards in
+--           libSignalPipeline (`if (!(await getXSignals(qid)))`) make the
+--           per-stage replay safe.
+-- MUTABILITY: row-level state machine
+--             queued(1) -> running(2) -> completed(3)
+--                       -> running(2) -> failed(4) -> queued(1)   (retry)
+--                                                  -> dead_letter(5) (max_attempts exceeded)
+-- REFERENCED BY: none (leaf)
+-- FOOTER: created + modified
+CREATE TABLE IF NOT EXISTS tb_signal_jobs (
+   signal_job_id         INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,question_id           INT NOT NULL                                   -- logical FK to tb_questions
+  ,subject_id            INT                                            -- logical FK to tb_subjects (NULL for owner)
+  ,signal_job_kind_id    SMALLINT NOT NULL DEFAULT 1                    -- logical FK to te_signal_job_kind
+  ,signal_job_status_id  SMALLINT NOT NULL DEFAULT 1                    -- logical FK to te_signal_job_status
+  ,attempts              INT NOT NULL DEFAULT 0
+  ,max_attempts          INT NOT NULL DEFAULT 5
+  ,next_run_at           TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ,claimed_at            TIMESTAMPTZ
+  ,completed_at          TIMESTAMPTZ
+  ,last_error            TEXT
+  ,params_json           JSONB                                          -- kind-specific params (e.g., {deviceType} for calibration)
+  ,dttm_created_utc      TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ,created_by            TEXT NOT NULL DEFAULT 'system'
+  ,dttm_modified_utc     TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ,modified_by           TEXT NOT NULL DEFAULT 'system'
+);
+
+-- Atomic-claim path: SELECT ... WHERE signal_job_status_id = 1 AND next_run_at <= NOW()
+-- ORDER BY next_run_at, signal_job_id FOR UPDATE SKIP LOCKED LIMIT 1.
+-- Partial index keeps it small — only queued jobs need scanning.
+CREATE INDEX IF NOT EXISTS idx_signal_jobs_claim
+  ON tb_signal_jobs (next_run_at, signal_job_id)
+  WHERE signal_job_status_id = 1;
+
+-- Idempotent enqueue: same (question_id, kind) can only have one open job.
+-- Excludes dead_letter so admin can re-enqueue after manual investigation
+-- without conflicting with the dead row.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_signal_jobs_question_kind
+  ON tb_signal_jobs (question_id, signal_job_kind_id)
+  WHERE signal_job_status_id <> 5;

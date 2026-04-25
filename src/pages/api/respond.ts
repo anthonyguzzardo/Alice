@@ -3,23 +3,22 @@ import sql, {
   saveResponse, getTodaysQuestion, getTodaysResponse,
   saveSessionSummary, saveBurstSequence, getResponseCount,
   updateDeletionEvents, saveSessionEvents, saveSessionMetadata, getBurstSequence,
+  enqueueSignalJob, SIGNAL_JOB_KIND,
 } from '../../lib/libDb.ts';
-import { runGeneration } from '../../lib/libGenerate.ts';
-import { computePriorDayDelta } from '../../lib/libDailyDelta.ts';
-import { embedResponse } from '../../lib/libEmbeddings.ts';
 import { logError } from '../../lib/utlErrorLog.ts';
-import { localDateStr } from '../../lib/utlDate.ts';
 import { getGitCommitHash } from '../../lib/utlGitCommit.ts';
 import { parseBody } from '../../lib/utlParseBody.ts';
 import { coerceSessionSummary } from '../../lib/utlSessionSummary.ts';
-import { renderWitnessState } from '../../lib/libAliceNegative/libRenderWitness.ts';
 import { computeSessionMetadata } from '../../lib/libSessionMetadata.ts';
-import { computeAndPersistDerivedSignals } from '../../lib/libSignalPipeline.ts';
+import { ensureWorkerStarted } from '../../lib/libSignalWorker.ts';
 
-// Note: runObservation (three-frame + prediction + suppressed question) and
-// runReflection (weekly narrative) removed 2026-04-16 in interpretive-layer
-// restructure. The background pipeline now only generates tomorrow's question
-// and renders the witness state.
+// Background pipeline (prior-day delta, generation, witness, embed, derived
+// signals) is enqueued as a durable job in tb_signal_jobs and executed by
+// libSignalWorker. Pre-2026-04-25 this ran as a fire-and-forget async IIFE
+// after the HTTP response, which silently lost signals on process crash.
+// See GOTCHAS.md historical entry.
+
+void ensureWorkerStarted();
 
 export const POST: APIRoute = async ({ request }) => {
   const body = await parseBody<{ questionId: number; text: string; sessionSummary?: Record<string, unknown> }>(request);
@@ -56,9 +55,9 @@ export const POST: APIRoute = async ({ request }) => {
 
   const trimmedText = text.trim();
 
-  // All DB writes in a single transaction via the tx handle.
-  // Every write function receives tx so it runs on the transaction
-  // connection, not the module-level pool.
+  // All DB writes in a single transaction via the tx handle, including the
+  // signal job enqueue. The job row only exists if the response saved; the
+  // response is never saved without its job row. Either both land or neither.
   let responseId: number;
   try {
     responseId = await sql.begin(async (tx) => {
@@ -120,6 +119,13 @@ export const POST: APIRoute = async ({ request }) => {
         await saveSessionMetadata(meta, tx);
       }
 
+      // Enqueue the durable signal pipeline job inside this same transaction.
+      // libSignalWorker drains tb_signal_jobs and runs the response pipeline.
+      await enqueueSignalJob(
+        { questionId, kindId: SIGNAL_JOB_KIND.RESPONSE_PIPELINE },
+        tx,
+      );
+
       return responseId;
     });
   } catch (err) {
@@ -135,32 +141,7 @@ export const POST: APIRoute = async ({ request }) => {
   // Determine if we should ask "did it land?" (every 5th daily response)
   const askFeedback = responseCount % 5 === 0;
 
-  // Background pipeline — each stage runs independently so one failure
-  // cannot silently skip the others. Each error lands in data/errors.log
-  // tagged with its stage so you can see exactly what broke.
-  (async () => {
-    const ctx = { questionId, responseId, responseCount };
-    try { await computePriorDayDelta(localDateStr()); }
-    catch (err) { logError('respond.daily-delta', err, ctx); }
-
-    try { await runGeneration(); }
-    catch (err) { logError('respond.generation', err, ctx); }
-
-    try { await renderWitnessState(); }
-    catch (err) { logError('respond.witness', err, ctx); }
-
-    // Embed BEFORE derived signals: the semantic baseline updater inside
-    // computeAndPersistDerivedSignals queries tb_embeddings via HNSW to
-    // find topic-matched prior sessions. If the embedding hasn't been
-    // written yet, topic z-scores silently become null.
-    try { await embedResponse(responseId, question.text, trimmedText, localDateStr()); }
-    catch (err) { logError('respond.embed', err, { responseId, ...ctx }); }
-
-    try { await computeAndPersistDerivedSignals(questionId); }
-    catch (err) { logError('respond.derived-signals', err, ctx); }
-  })();
-
-  return new Response(JSON.stringify({ ok: true, askFeedback, questionId }), {
+  return new Response(JSON.stringify({ ok: true, askFeedback, questionId, responseId, responseCount }), {
     headers: { 'Content-Type': 'application/json' },
   });
 };

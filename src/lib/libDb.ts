@@ -697,16 +697,22 @@ export async function getCalibrationPromptsByRecency(): Promise<string[]> {
   return rows.map(r => r.text);
 }
 
+export interface SaveCalibrationSessionOptions {
+  attestation?: { boundaryVersion: string; codePathsRef: string; commitHash: string };
+  events?: Omit<SessionEventsRow, 'session_event_id' | 'question_id'>;
+  /** Enqueue a signal pipeline job in the same transaction as the save. */
+  signalJob?: { kindId: SignalJobKindId; params?: Record<string, unknown> | null };
+}
+
 export async function saveCalibrationSession(
   promptText: string,
   responseText: string,
   summary: SessionSummaryInput,
-  attestation?: { boundaryVersion: string; codePathsRef: string; commitHash: string },
-  events?: Omit<SessionEventsRow, 'session_event_id' | 'question_id'>,
+  options?: SaveCalibrationSessionOptions,
 ): Promise<number> {
-  const bv = attestation?.boundaryVersion ?? 'v1';
-  const ref = attestation?.codePathsRef ?? 'docs/contamination-boundary-v1.md';
-  const hash = attestation?.commitHash ?? 'pre-attestation';
+  const bv = options?.attestation?.boundaryVersion ?? 'v1';
+  const ref = options?.attestation?.codePathsRef ?? 'docs/contamination-boundary-v1.md';
+  const hash = options?.attestation?.commitHash ?? 'pre-attestation';
   return await sql.begin(async (tx) => {
     const [qRow] = await tx`
       INSERT INTO tb_questions (text, question_source_id)
@@ -727,8 +733,21 @@ export async function saveCalibrationSession(
     // this ran outside the transaction, rationalized as "session data is sacred,
     // derived data is best-effort." Keystroke streams are raw measurement input,
     // not derived data; the rationalization was wrong. See GOTCHAS.md.
-    if (events) {
-      await saveSessionEvents({ ...events, question_id: questionId }, tx);
+    if (options?.events) {
+      await saveSessionEvents({ ...options.events, question_id: questionId }, tx);
+    }
+
+    // Optional signal-pipeline job enqueue inside the same transaction.
+    // The job row is durable from the moment the calibration session exists.
+    if (options?.signalJob) {
+      await enqueueSignalJob(
+        {
+          questionId,
+          kindId: options.signalJob.kindId,
+          params: options.signalJob.params ?? null,
+        },
+        tx,
+      );
     }
 
     return questionId;
@@ -2410,6 +2429,206 @@ export async function getSessionIntegrity(questionId: number): Promise<SessionIn
     WHERE question_id = ${questionId}
   `;
   return (rows[0] as SessionIntegrityInput) ?? null;
+}
+
+// ----------------------------------------------------------------------------
+// @region jobs -- SIGNAL_JOB_STATUS, SIGNAL_JOB_KIND, SignalJobRow, EnqueueSignalJobInput, enqueueSignalJob, claimNextSignalJob, markSignalJobCompleted, markSignalJobFailed, sweepStaleSignalJobs, getSignalJobById, getDeadLetterSignalJobs, countOpenSignalJobs
+// SIGNAL JOB QUEUE (durable signal pipeline)
+// ----------------------------------------------------------------------------
+
+export const SIGNAL_JOB_STATUS = {
+  QUEUED: 1,
+  RUNNING: 2,
+  COMPLETED: 3,
+  FAILED: 4,
+  DEAD_LETTER: 5,
+} as const;
+
+export const SIGNAL_JOB_KIND = {
+  RESPONSE_PIPELINE: 1,
+  CALIBRATION_PIPELINE: 2,
+} as const;
+
+export type SignalJobStatusId = (typeof SIGNAL_JOB_STATUS)[keyof typeof SIGNAL_JOB_STATUS];
+export type SignalJobKindId = (typeof SIGNAL_JOB_KIND)[keyof typeof SIGNAL_JOB_KIND];
+
+export interface SignalJobRow {
+  signal_job_id: number;
+  question_id: number;
+  subject_id: number | null;
+  signal_job_kind_id: SignalJobKindId;
+  signal_job_status_id: SignalJobStatusId;
+  attempts: number;
+  max_attempts: number;
+  next_run_at: Date;
+  claimed_at: Date | null;
+  completed_at: Date | null;
+  last_error: string | null;
+  params_json: Record<string, unknown> | null;
+  dttm_created_utc: Date;
+  dttm_modified_utc: Date;
+}
+
+export interface EnqueueSignalJobInput {
+  questionId: number;
+  kindId: SignalJobKindId;
+  subjectId?: number | null;
+  params?: Record<string, unknown> | null;
+  maxAttempts?: number;
+}
+
+/**
+ * Enqueue a signal pipeline job. Idempotent: a partial unique index on
+ * (question_id, signal_job_kind_id) WHERE status_id <> 5 ensures the same
+ * (question, kind) cannot be queued twice while a prior job is still open.
+ * Pass a `tx` to enqueue inside the same transaction as the response/calibration
+ * save, so jobs only exist when their session also exists.
+ *
+ * Returns the new signal_job_id, or the existing one if a duplicate insert
+ * was prevented by the unique index.
+ */
+export async function enqueueSignalJob(
+  input: EnqueueSignalJobInput,
+  tx?: TxSql,
+): Promise<number> {
+  const q = tx ?? sql;
+  // Pass the object directly — postgres.js handles JSON encoding when binding
+  // to a jsonb column. JSON.stringify here would double-encode and store the
+  // value as a JSON-string rather than a JSON-object.
+  const params = input.params ?? null;
+  const maxAttempts = input.maxAttempts ?? 5;
+  const rows = await q`
+    INSERT INTO tb_signal_jobs (
+       question_id, subject_id, signal_job_kind_id, signal_job_status_id,
+       max_attempts, params_json
+    ) VALUES (
+      ${input.questionId}, ${input.subjectId ?? null}, ${input.kindId}, 1,
+      ${maxAttempts}, ${params as never}
+    )
+    ON CONFLICT (question_id, signal_job_kind_id) WHERE signal_job_status_id <> 5
+    DO UPDATE SET dttm_modified_utc = CURRENT_TIMESTAMP
+    RETURNING signal_job_id
+  `;
+  return (rows[0] as { signal_job_id: number }).signal_job_id;
+}
+
+/**
+ * Atomically claim the next runnable signal job. Uses FOR UPDATE SKIP LOCKED
+ * so concurrent workers never grab the same row. Returns null if no job is
+ * currently runnable (queue empty or all queued jobs have future next_run_at).
+ *
+ * The status flips to RUNNING and attempts is incremented in the same statement
+ * the row is selected, so there is no race window where two workers could
+ * observe the same job in QUEUED state.
+ */
+export async function claimNextSignalJob(): Promise<SignalJobRow | null> {
+  const rows = await sql`
+    UPDATE tb_signal_jobs
+    SET signal_job_status_id = 2,
+        claimed_at = CURRENT_TIMESTAMP,
+        attempts = attempts + 1,
+        dttm_modified_utc = CURRENT_TIMESTAMP
+    WHERE signal_job_id = (
+      SELECT signal_job_id
+      FROM tb_signal_jobs
+      WHERE signal_job_status_id = 1
+        AND next_run_at <= CURRENT_TIMESTAMP
+      ORDER BY next_run_at, signal_job_id
+      FOR UPDATE SKIP LOCKED
+      LIMIT 1
+    )
+    RETURNING *
+  `;
+  return (rows[0] as SignalJobRow | undefined) ?? null;
+}
+
+/**
+ * Mark a job completed. Used by the worker after a successful pipeline run.
+ */
+export async function markSignalJobCompleted(signalJobId: number): Promise<void> {
+  await sql`
+    UPDATE tb_signal_jobs
+    SET signal_job_status_id = 3,
+        completed_at = CURRENT_TIMESTAMP,
+        last_error = NULL,
+        dttm_modified_utc = CURRENT_TIMESTAMP
+    WHERE signal_job_id = ${signalJobId}
+  `;
+}
+
+/**
+ * Mark a job failed. If attempts < max_attempts, the job is requeued with
+ * next_run_at = NOW() + backoff. Otherwise it transitions to DEAD_LETTER for
+ * manual investigation.
+ *
+ * The backoff is computed by `computeBackoffMs` in libSignalWorker.ts so it
+ * lives near the worker logic and is unit-testable as a pure function.
+ */
+export async function markSignalJobFailed(
+  signalJobId: number,
+  error: string,
+  backoffMs: number,
+): Promise<void> {
+  await sql`
+    UPDATE tb_signal_jobs
+    SET signal_job_status_id = CASE
+          WHEN attempts >= max_attempts THEN 5  -- dead_letter
+          ELSE 1                                 -- back to queued
+        END,
+        next_run_at = CASE
+          WHEN attempts >= max_attempts THEN next_run_at  -- terminal; don't reschedule
+          ELSE CURRENT_TIMESTAMP + (${backoffMs}::int * INTERVAL '1 millisecond')
+        END,
+        claimed_at = NULL,
+        last_error = ${error},
+        dttm_modified_utc = CURRENT_TIMESTAMP
+    WHERE signal_job_id = ${signalJobId}
+  `;
+}
+
+/**
+ * Boot-time recovery sweep. Any job left in RUNNING state from a prior process
+ * that died mid-claim is moved back to QUEUED so the new process can pick it
+ * up. `staleAfterMs` should be larger than the longest plausible job runtime
+ * so we don't re-queue jobs the current process is actively running.
+ *
+ * Returns the count of jobs re-queued.
+ */
+export async function sweepStaleSignalJobs(staleAfterMs: number): Promise<number> {
+  const rows = await sql`
+    UPDATE tb_signal_jobs
+    SET signal_job_status_id = 1,
+        claimed_at = NULL,
+        last_error = COALESCE(last_error, '') || ' [recovered from stale running state]',
+        dttm_modified_utc = CURRENT_TIMESTAMP
+    WHERE signal_job_status_id = 2
+      AND claimed_at IS NOT NULL
+      AND claimed_at < CURRENT_TIMESTAMP - (${staleAfterMs}::int * INTERVAL '1 millisecond')
+    RETURNING signal_job_id
+  `;
+  return rows.length;
+}
+
+export async function getSignalJobById(signalJobId: number): Promise<SignalJobRow | null> {
+  const rows = await sql`SELECT * FROM tb_signal_jobs WHERE signal_job_id = ${signalJobId}`;
+  return (rows[0] as SignalJobRow | undefined) ?? null;
+}
+
+export async function getDeadLetterSignalJobs(): Promise<SignalJobRow[]> {
+  return await sql`
+    SELECT * FROM tb_signal_jobs
+    WHERE signal_job_status_id = 5
+    ORDER BY dttm_modified_utc DESC
+  ` as unknown as SignalJobRow[];
+}
+
+export async function countOpenSignalJobs(): Promise<number> {
+  const rows = await sql`
+    SELECT COUNT(*)::int AS n
+    FROM tb_signal_jobs
+    WHERE signal_job_status_id IN (1, 2, 4)
+  `;
+  return (rows[0] as { n: number }).n;
 }
 
 export default sql;

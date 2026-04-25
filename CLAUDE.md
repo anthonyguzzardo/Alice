@@ -200,9 +200,20 @@ src-rs/             # Rust native signal engine
 - Every function in `src/lib/libDb.ts` returns a `Promise`. Every call site must `await`.
 - If you add a new db function, it must be `async`.
 - API routes (`src/pages/api/*.ts`) are async handlers returning `Response` objects.
-- Background jobs (embed, observe, generate, signal computation) fire-and-forget after the HTTP response. Errors go to `data/errors.log` via `src/lib/utlErrorLog.ts`.
+- Background work is **durable**, not fire-and-forget. After the HTTP response transaction commits, work that doesn't need to be returned to the user is enqueued in `tb_signal_jobs` (see `enqueueSignalJob` in `libDb.ts`) and drained by the worker loop in `libSignalWorker.ts`. Compute functions are idempotent (guarded by `getXSignals` existence checks) so retries replay safely. Errors land in `data/errors.log` AND on the failed job row's `last_error` column. **Fire-and-forget IIFEs in API routes are forbidden** — pre-2026-04-25 this pattern silently lost signals on process crash. See GOTCHAS.md historical entry.
 - The signal pipeline runs Rust natively via napi-rs. Rust is the single source of truth for signal computation. If the native module fails to load, signal computation returns null and the pipeline skips that family for the session. The session still saves; derived signals are absent until `npm run build:rust` is run. The health endpoint exposes `hasNativeEngine` to surface this state.
 - **Pipelines composed of independent stages must use scoped `if (result) { ... }` blocks, never bare `return`, to skip a failed stage.** A `return` inside one stage exits the whole function and silently voids the independence guarantee. The signal pipeline carried this bug at 3 sites until 2026-04-25 (see GOTCHAS.md). Any function whose contract is "each stage runs independently" must catch the failure, leave the stage's persisted output absent, and continue.
+
+## Signal Job Worker (`libSignalWorker.ts`)
+
+The worker drains `tb_signal_jobs`. State machine: `queued → running → completed | failed → queued | dead_letter`.
+
+- **Atomic claim** via `UPDATE ... WHERE id = (SELECT ... FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING *`. Concurrent workers never grab the same row.
+- **Backoff:** quadratic, capped at 5 minutes. `computeBackoffMs(attempts)` — pure, unit-tested in `tests/unit/signalWorker.test.ts`.
+- **Dead-letter** when `attempts >= max_attempts`. Default `max_attempts = 5`. The partial unique index `uq_signal_jobs_question_kind` excludes dead-lettered rows, so an admin can re-enqueue a `(question_id, kind)` pair after manual investigation.
+- **Boot-time sweep** re-queues any job left in `running` state for longer than `STALE_RUNNING_AFTER_MS` (10 min). This is how a process-crash mid-pipeline recovers without manual intervention.
+- **Worker startup:** `ensureWorkerStarted()` is called from `respond.ts` and `calibrate.ts` at module load. The first call wins; subsequent calls no-op via a `globalThis` flag (also survives HMR reloads in dev).
+- **One job per session, not per family.** The existing idempotent guards (`if (!(await getXSignals(qid)))`) make per-stage replay free, so per-family granularity would multiply schema and coordination cost without commensurate observability gain.
 
 ---
 

@@ -1,13 +1,22 @@
 import type { APIRoute } from 'astro';
-import { saveCalibrationSession, getUsedCalibrationPrompts, getCalibrationPromptsByRecency } from '../../lib/libDb.ts';
+import {
+  saveCalibrationSession,
+  getUsedCalibrationPrompts,
+  getCalibrationPromptsByRecency,
+  SIGNAL_JOB_KIND,
+} from '../../lib/libDb.ts';
 import { CALIBRATION_PROMPTS } from '../../lib/libCalibrationPrompts.ts';
-import { runCalibrationExtraction } from '../../lib/libCalibrationExtract.ts';
-import { snapshotCalibrationBaselinesAfterSubmit } from '../../lib/libCalibrationDrift.ts';
-import { computeAndPersistDerivedSignals } from '../../lib/libSignalPipeline.ts';
-import { logError } from '../../lib/utlErrorLog.ts';
 import { parseBody } from '../../lib/utlParseBody.ts';
 import { getGitCommitHash } from '../../lib/utlGitCommit.ts';
 import { coerceSessionSummary } from '../../lib/utlSessionSummary.ts';
+import { ensureWorkerStarted } from '../../lib/libSignalWorker.ts';
+
+// Background pipeline (extraction + derived signals + drift snapshot) is
+// enqueued in tb_signal_jobs by saveCalibrationSession and executed by
+// libSignalWorker. Pre-2026-04-25 these stages ran fire-and-forget after
+// the HTTP response. See GOTCHAS.md historical entry.
+
+void ensureWorkerStarted();
 
 export const GET: APIRoute = async () => {
   const used = new Set(await getUsedCalibrationPrompts());
@@ -54,10 +63,11 @@ export const POST: APIRoute = async ({ request }) => {
   const trimmedText = text.trim();
   const coerced = coerceSessionSummary(sessionSummary, 0, trimmedText);
 
-  // Event log + keystroke stream persisted atomically with the calibration
-  // session inside saveCalibrationSession's transaction. Either both land or
-  // neither does — calibration sessions cannot exist without their measurement
-  // input.
+  // Event log + keystroke stream and the signal-pipeline job are all persisted
+  // atomically inside saveCalibrationSession's transaction. Either the session,
+  // its measurement input, AND its job all land, or none do. The worker
+  // (libSignalWorker) drains tb_signal_jobs and runs the calibration pipeline
+  // (extraction + derived signals + drift snapshot).
   const events = Array.isArray(sessionSummary.eventLog) && sessionSummary.eventLog.length > 0
     ? {
         event_log_json: JSON.stringify(sessionSummary.eventLog),
@@ -69,37 +79,20 @@ export const POST: APIRoute = async ({ request }) => {
       }
     : undefined;
 
-  const questionId = await saveCalibrationSession(
-    prompt,
-    trimmedText,
-    coerced,
-    {
+  const questionId = await saveCalibrationSession(prompt, trimmedText, coerced, {
+    attestation: {
       boundaryVersion: 'v1',
       codePathsRef: 'docs/contamination-boundary-v1.md',
       commitHash: getGitCommitHash(),
     },
     events,
-  );
+    signalJob: {
+      kindId: SIGNAL_JOB_KIND.CALIBRATION_PIPELINE,
+      params: { deviceType: sessionSummary.deviceType ?? null },
+    },
+  });
 
-  // Fire-and-forget: extract life-context tags from calibration response text.
-  // Non-blocking — extraction failure never prevents calibration from succeeding.
-  void runCalibrationExtraction(questionId, text.trim(), prompt).catch((err) =>
-    logError('calibrate.extraction', err, { questionId })
-  );
-
-  // Fire-and-forget: compute derived signals (motor, semantic, process, cross-session)
-  try { await computeAndPersistDerivedSignals(questionId); }
-  catch (err) { logError('calibrate.derived-signals', err, { questionId }); }
-
-  // Snapshot calibration baselines after this submission so drift can be
-  // tracked over time. Pure deterministic, fire-and-forget.
-  try {
-    await snapshotCalibrationBaselinesAfterSubmit(sessionSummary.deviceType ?? null);
-  } catch (err) {
-    logError('calibrate.driftSnapshot', err, { questionId });
-  }
-
-  return new Response(JSON.stringify({ ok: true }), {
+  return new Response(JSON.stringify({ ok: true, questionId }), {
     headers: { 'Content-Type': 'application/json' },
   });
 };
