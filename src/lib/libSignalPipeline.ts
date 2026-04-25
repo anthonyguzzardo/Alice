@@ -88,57 +88,58 @@ export async function computeAndPersistDerivedSignals(questionId: number): Promi
   if (stream && stream.length >= 10 && !(await getDynamicalSignals(questionId))) {
     try {
       const ds = computeDynamicalSignals(stream);
-      if (!ds) return; // Rust engine unavailable; skip dynamical signals
-      await saveDynamicalSignals(questionId, {
-        iki_count: ds.ikiCount ?? null,
-        hold_flight_count: ds.holdFlightCount ?? null,
-        permutation_entropy: ds.permutationEntropy ?? null,
-        permutation_entropy_raw: ds.permutationEntropyRaw ?? null,
-        pe_spectrum: ds.peSpectrum ? JSON.stringify(ds.peSpectrum) : null,
-        dfa_alpha: ds.dfaAlpha ?? null,
-        mfdfa_spectrum_width: ds.mfdfaSpectrumWidth ?? null,
-        mfdfa_asymmetry: ds.mfdfaAsymmetry ?? null,
-        mfdfa_peak_alpha: ds.mfdfaPeakAlpha ?? null,
-        temporal_irreversibility: ds.temporalIrreversibility ?? null,
-        iki_psd_spectral_slope: ds.ikiPsdSpectralSlope ?? null,
-        iki_psd_respiratory_peak_hz: ds.ikiPsdRespiratoryPeakHz ?? null,
-        peak_typing_frequency_hz: ds.peakTypingFrequencyHz ?? null,
-        iki_psd_lf_hf_ratio: ds.ikiPsdLfHfRatio ?? null,
-        iki_psd_fast_slow_variance_ratio: ds.ikiPsdFastSlowVarianceRatio ?? null,
-        statistical_complexity: ds.statisticalComplexity ?? null,
-        forbidden_pattern_fraction: ds.forbiddenPatternFraction ?? null,
-        weighted_pe: ds.weightedPe ?? null,
-        lempel_ziv_complexity: ds.lempelZivComplexity ?? null,
-        optn_transition_entropy: ds.optnTransitionEntropy ?? null,
-        optn_forbidden_transition_count: ds.optnForbiddenTransitionCount ?? null,
-        rqa_determinism: ds.rqaDeterminism ?? null,
-        rqa_laminarity: ds.rqaLaminarity ?? null,
-        rqa_trapping_time: ds.rqaTrappingTime ?? null,
-        rqa_recurrence_rate: ds.rqaRecurrenceRate ?? null,
-        rqa_recurrence_time_entropy: ds.rqaRecurrenceTimeEntropy ?? null,
-        rqa_mean_recurrence_time: ds.rqaMeanRecurrenceTime ?? null,
-        recurrence_transitivity: ds.recurrenceTransitivity ?? null,
-        recurrence_avg_path_length: ds.recurrenceAvgPathLength ?? null,
-        recurrence_clustering: ds.recurrenceClustering ?? null,
-        recurrence_assortativity: ds.recurrenceAssortativity ?? null,
-        effective_information: ds.effectiveInformation ?? null,
-        causal_emergence_index: ds.causalEmergenceIndex ?? null,
-        optimal_causal_scale: ds.optimalCausalScale ?? null,
-        pid_synergy: ds.pidSynergy ?? null,
-        pid_redundancy: ds.pidRedundancy ?? null,
-        branching_ratio: ds.branchingRatio ?? null,
-        avalanche_size_exponent: ds.avalancheSizeExponent ?? null,
-        dmd_dominant_frequency: ds.dmdDominantFrequency ?? null,
-        dmd_dominant_decay_rate: ds.dmdDominantDecayRate ?? null,
-        dmd_mode_count: ds.dmdModeCount ?? null,
-        dmd_spectral_entropy: ds.dmdSpectralEntropy ?? null,
-        pause_mixture_component_count: ds.pauseMixtureComponentCount ?? null,
-        pause_mixture_motor_proportion: ds.pauseMixtureMotorProportion ?? null,
-        pause_mixture_cognitive_load_index: ds.pauseMixtureCognitiveLoadIndex ?? null,
-        te_hold_to_flight: ds.teHoldToFlight ?? null,
-        te_flight_to_hold: ds.teFlightToHold ?? null,
-        te_dominance: ds.teDominance ?? null,
-      });
+      if (ds) {
+        await saveDynamicalSignals(questionId, {
+          iki_count: ds.ikiCount ?? null,
+          hold_flight_count: ds.holdFlightCount ?? null,
+          permutation_entropy: ds.permutationEntropy ?? null,
+          permutation_entropy_raw: ds.permutationEntropyRaw ?? null,
+          pe_spectrum: ds.peSpectrum ? JSON.stringify(ds.peSpectrum) : null,
+          dfa_alpha: ds.dfaAlpha ?? null,
+          mfdfa_spectrum_width: ds.mfdfaSpectrumWidth ?? null,
+          mfdfa_asymmetry: ds.mfdfaAsymmetry ?? null,
+          mfdfa_peak_alpha: ds.mfdfaPeakAlpha ?? null,
+          temporal_irreversibility: ds.temporalIrreversibility ?? null,
+          iki_psd_spectral_slope: ds.ikiPsdSpectralSlope ?? null,
+          iki_psd_respiratory_peak_hz: ds.ikiPsdRespiratoryPeakHz ?? null,
+          peak_typing_frequency_hz: ds.peakTypingFrequencyHz ?? null,
+          iki_psd_lf_hf_ratio: ds.ikiPsdLfHfRatio ?? null,
+          iki_psd_fast_slow_variance_ratio: ds.ikiPsdFastSlowVarianceRatio ?? null,
+          statistical_complexity: ds.statisticalComplexity ?? null,
+          forbidden_pattern_fraction: ds.forbiddenPatternFraction ?? null,
+          weighted_pe: ds.weightedPe ?? null,
+          lempel_ziv_complexity: ds.lempelZivComplexity ?? null,
+          optn_transition_entropy: ds.optnTransitionEntropy ?? null,
+          optn_forbidden_transition_count: ds.optnForbiddenTransitionCount ?? null,
+          rqa_determinism: ds.rqaDeterminism ?? null,
+          rqa_laminarity: ds.rqaLaminarity ?? null,
+          rqa_trapping_time: ds.rqaTrappingTime ?? null,
+          rqa_recurrence_rate: ds.rqaRecurrenceRate ?? null,
+          rqa_recurrence_time_entropy: ds.rqaRecurrenceTimeEntropy ?? null,
+          rqa_mean_recurrence_time: ds.rqaMeanRecurrenceTime ?? null,
+          recurrence_transitivity: ds.recurrenceTransitivity ?? null,
+          recurrence_avg_path_length: ds.recurrenceAvgPathLength ?? null,
+          recurrence_clustering: ds.recurrenceClustering ?? null,
+          recurrence_assortativity: ds.recurrenceAssortativity ?? null,
+          effective_information: ds.effectiveInformation ?? null,
+          causal_emergence_index: ds.causalEmergenceIndex ?? null,
+          optimal_causal_scale: ds.optimalCausalScale ?? null,
+          pid_synergy: ds.pidSynergy ?? null,
+          pid_redundancy: ds.pidRedundancy ?? null,
+          branching_ratio: ds.branchingRatio ?? null,
+          avalanche_size_exponent: ds.avalancheSizeExponent ?? null,
+          dmd_dominant_frequency: ds.dmdDominantFrequency ?? null,
+          dmd_dominant_decay_rate: ds.dmdDominantDecayRate ?? null,
+          dmd_mode_count: ds.dmdModeCount ?? null,
+          dmd_spectral_entropy: ds.dmdSpectralEntropy ?? null,
+          pause_mixture_component_count: ds.pauseMixtureComponentCount ?? null,
+          pause_mixture_motor_proportion: ds.pauseMixtureMotorProportion ?? null,
+          pause_mixture_cognitive_load_index: ds.pauseMixtureCognitiveLoadIndex ?? null,
+          te_hold_to_flight: ds.teHoldToFlight ?? null,
+          te_flight_to_hold: ds.teFlightToHold ?? null,
+          te_dominance: ds.teDominance ?? null,
+        });
+      }
     } catch (err) {
       logError('signal-pipeline.dynamical', err, { questionId });
     }
@@ -149,25 +150,26 @@ export async function computeAndPersistDerivedSignals(questionId: number): Promi
     try {
       const { totalDurationMs } = await getSessionInfo(questionId);
       const ms = computeMotorSignals(stream, totalDurationMs);
-      if (!ms) return; // Rust engine unavailable; skip motor signals
-      await saveMotorSignals(questionId, {
-        sample_entropy: ms.sampleEntropy ?? null,
-        mse_series: ms.mseSeries ? JSON.stringify(ms.mseSeries) : null,
-        complexity_index: ms.complexityIndex ?? null,
-        ex_gaussian_fisher_trace: ms.exGaussianFisherTrace ?? null,
-        iki_autocorrelation_json: ms.ikiAutocorrelation ? JSON.stringify(ms.ikiAutocorrelation) : null,
-        motor_jerk: ms.motorJerk ?? null,
-        lapse_rate: ms.lapseRate ?? null,
-        tempo_drift: ms.tempoDrift ?? null,
-        iki_compression_ratio: ms.ikiCompressionRatio ?? null,
-        digraph_latency_json: ms.digraphLatencyProfile ? JSON.stringify(ms.digraphLatencyProfile) : null,
-        ex_gaussian_tau: ms.exGaussianTau ?? null,
-        ex_gaussian_mu: ms.exGaussianMu ?? null,
-        ex_gaussian_sigma: ms.exGaussianSigma ?? null,
-        tau_proportion: ms.tauProportion ?? null,
-        adjacent_hold_time_cov: ms.adjacentHoldTimeCov ?? null,
-        hold_flight_rank_corr: ms.holdFlightRankCorr ?? null,
-      });
+      if (ms) {
+        await saveMotorSignals(questionId, {
+          sample_entropy: ms.sampleEntropy ?? null,
+          mse_series: ms.mseSeries ? JSON.stringify(ms.mseSeries) : null,
+          complexity_index: ms.complexityIndex ?? null,
+          ex_gaussian_fisher_trace: ms.exGaussianFisherTrace ?? null,
+          iki_autocorrelation_json: ms.ikiAutocorrelation ? JSON.stringify(ms.ikiAutocorrelation) : null,
+          motor_jerk: ms.motorJerk ?? null,
+          lapse_rate: ms.lapseRate ?? null,
+          tempo_drift: ms.tempoDrift ?? null,
+          iki_compression_ratio: ms.ikiCompressionRatio ?? null,
+          digraph_latency_json: ms.digraphLatencyProfile ? JSON.stringify(ms.digraphLatencyProfile) : null,
+          ex_gaussian_tau: ms.exGaussianTau ?? null,
+          ex_gaussian_mu: ms.exGaussianMu ?? null,
+          ex_gaussian_sigma: ms.exGaussianSigma ?? null,
+          tau_proportion: ms.tauProportion ?? null,
+          adjacent_hold_time_cov: ms.adjacentHoldTimeCov ?? null,
+          hold_flight_rank_corr: ms.holdFlightRankCorr ?? null,
+        });
+      }
     } catch (err) {
       logError('signal-pipeline.motor', err, { questionId });
     }
@@ -216,23 +218,24 @@ export async function computeAndPersistDerivedSignals(questionId: number): Promi
       const eventLogJson = await getEventLogJson(questionId);
       if (eventLogJson) {
         const ps = computeProcessSignals(eventLogJson);
-        if (!ps) return; // Rust engine unavailable; skip process signals
-        await saveProcessSignals(questionId, {
-          pause_within_word: ps.pauseWithinWord,
-          pause_between_word: ps.pauseBetweenWord,
-          pause_between_sentence: ps.pauseBetweenSentence,
-          abandoned_thought_count: ps.abandonedThoughtCount,
-          r_burst_count: ps.rBurstCount,
-          i_burst_count: ps.iBurstCount,
-          vocab_expansion_rate: ps.vocabExpansionRate,
-          phase_transition_point: ps.phaseTransitionPoint,
-          strategy_shift_count: ps.strategyShiftCount,
-        });
+        if (ps) {
+          await saveProcessSignals(questionId, {
+            pause_within_word: ps.pauseWithinWord,
+            pause_between_word: ps.pauseBetweenWord,
+            pause_between_sentence: ps.pauseBetweenSentence,
+            abandoned_thought_count: ps.abandonedThoughtCount,
+            r_burst_count: ps.rBurstCount,
+            i_burst_count: ps.iBurstCount,
+            vocab_expansion_rate: ps.vocabExpansionRate,
+            phase_transition_point: ps.phaseTransitionPoint,
+            strategy_shift_count: ps.strategyShiftCount,
+          });
 
-        // Persist per-R-burst sequences and compute trajectory shape
-        if (ps.rBurstSequences.length > 0) {
-          await saveRburstSequence(questionId, ps.rBurstSequences);
-          await updateRburstTrajectoryShape(questionId);
+          // Persist per-R-burst sequences and compute trajectory shape
+          if (ps.rBurstSequences.length > 0) {
+            await saveRburstSequence(questionId, ps.rBurstSequences);
+            await updateRburstTrajectoryShape(questionId);
+          }
         }
       }
     } catch (err) {

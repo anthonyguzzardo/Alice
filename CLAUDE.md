@@ -201,6 +201,7 @@ src-rs/             # Rust native signal engine
 - API routes (`src/pages/api/*.ts`) are async handlers returning `Response` objects.
 - Background jobs (embed, observe, generate, signal computation) fire-and-forget after the HTTP response. Errors go to `data/errors.log` via `src/lib/utlErrorLog.ts`.
 - The signal pipeline runs Rust natively via napi-rs. Rust is the single source of truth for signal computation. If the native module fails to load, signal computation returns null and the pipeline skips that family for the session. The session still saves; derived signals are absent until `npm run build:rust` is run. The health endpoint exposes `hasNativeEngine` to surface this state.
+- **Pipelines composed of independent stages must use scoped `if (result) { ... }` blocks, never bare `return`, to skip a failed stage.** A `return` inside one stage exits the whole function and silently voids the independence guarantee. The signal pipeline carried this bug at 3 sites until 2026-04-25 (see GOTCHAS.md). Any function whose contract is "each stage runs independently" must catch the failure, leave the stage's persisted output absent, and continue.
 
 ---
 
