@@ -12,6 +12,7 @@ INSERT INTO te_question_source (question_source_id, enum_code, name) VALUES
    (1, 'seed',        'Seed')
   ,(2, 'generated',   'Generated')
   ,(3, 'calibration', 'Calibration')
+  ,(4, 'corpus',      'Corpus')
 ON CONFLICT DO NOTHING;
 
 -- te_reflection_type

@@ -127,7 +127,7 @@ INSERT INTO te_adversary_variants (adversary_variant_id, name, description) VALU
   ,(5, 'full_adversary',      'PPM + AR(1) + copula')
 ON CONFLICT (adversary_variant_id) DO NOTHING;
 
--- @region core -- tb_questions, tb_responses, tb_interaction_events, tb_reflections, tb_question_feedback
+-- @region core -- tb_questions, tb_question_corpus, tb_responses, tb_interaction_events, tb_reflections, tb_question_feedback
 -- ============================================================================
 -- CORE MUTABLE TABLES
 -- ============================================================================
@@ -148,6 +148,24 @@ CREATE TABLE IF NOT EXISTS tb_questions (
   ,created_by             TEXT NOT NULL DEFAULT 'system'
   ,dttm_modified_utc      TIMESTAMPTZ
   ,modified_by            TEXT
+);
+
+-- --------------------------------------------------------------------------
+
+-- PURPOSE: shared pool of reviewed questions for all subjects
+-- USE CASE: one row per unique question text. Subjects are scheduled from this
+--           pool via tb_scheduled_questions. Owner may also draw from this pool
+--           but is not required to.
+-- MUTABILITY: insert by owner, soft-retire via is_retired. Never deleted.
+-- REFERENCED BY: tb_scheduled_questions (logical FK)
+-- FOOTER: created only (append-only, retirement is a flag not an update)
+CREATE TABLE IF NOT EXISTS tb_question_corpus (
+   corpus_question_id   INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,text                 TEXT UNIQUE NOT NULL
+  ,theme_tag            TEXT
+  ,is_retired           BOOLEAN NOT NULL DEFAULT FALSE
+  ,added_by             TEXT NOT NULL DEFAULT 'owner'
+  ,dttm_created_utc     TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- --------------------------------------------------------------------------

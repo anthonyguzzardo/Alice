@@ -1689,6 +1689,73 @@ export async function saveComment(slug: string, authorName: string, commentText:
   return row.paper_comment_id;
 }
 
+// @region corpus -- getCorpusQuestions, getCorpusQuestionById, insertCorpusQuestion, retireCorpusQuestion, getActiveCorpusCount
+// ----------------------------------------------------------------------------
+// QUESTION CORPUS
+// ----------------------------------------------------------------------------
+
+export interface CorpusQuestion {
+  corpus_question_id: number;
+  text: string;
+  theme_tag: string | null;
+  is_retired: boolean;
+  added_by: string;
+  dttm_created_utc: string;
+}
+
+/** All corpus questions (including retired). Ordered by ID ascending. */
+export async function getCorpusQuestions(): Promise<CorpusQuestion[]> {
+  const rows = await sql`
+    SELECT corpus_question_id, text, theme_tag, is_retired, added_by, dttm_created_utc
+    FROM tb_question_corpus
+    ORDER BY corpus_question_id ASC
+  `;
+  return rows as CorpusQuestion[];
+}
+
+/** Single corpus question by ID, or null. */
+export async function getCorpusQuestionById(id: number): Promise<CorpusQuestion | null> {
+  const rows = await sql`
+    SELECT corpus_question_id, text, theme_tag, is_retired, added_by, dttm_created_utc
+    FROM tb_question_corpus
+    WHERE corpus_question_id = ${id}
+  `;
+  return (rows[0] as CorpusQuestion) ?? null;
+}
+
+/** Insert a new corpus question. Returns the new ID. Idempotent on text (ON CONFLICT DO NOTHING). */
+export async function insertCorpusQuestion(input: {
+  text: string;
+  theme_tag?: string | null;
+  added_by?: string;
+}): Promise<number | null> {
+  const [row] = await sql`
+    INSERT INTO tb_question_corpus (text, theme_tag, added_by)
+    VALUES (${input.text}, ${input.theme_tag ?? null}, ${input.added_by ?? 'owner'})
+    ON CONFLICT (text) DO NOTHING
+    RETURNING corpus_question_id
+  `;
+  return (row as { corpus_question_id: number })?.corpus_question_id ?? null;
+}
+
+/** Soft-retire a corpus question. Returns true if the row was updated. */
+export async function retireCorpusQuestion(id: number): Promise<boolean> {
+  const result = await sql`
+    UPDATE tb_question_corpus
+    SET is_retired = TRUE
+    WHERE corpus_question_id = ${id} AND is_retired = FALSE
+  `;
+  return result.count > 0;
+}
+
+/** Count of active (non-retired) corpus questions. */
+export async function getActiveCorpusCount(): Promise<number> {
+  const [row] = await sql`
+    SELECT count(*)::int AS count FROM tb_question_corpus WHERE is_retired = FALSE
+  `;
+  return (row as { count: number }).count;
+}
+
 // ----------------------------------------------------------------------------
 // @region signals -- saveDynamicalSignals, getDynamicalSignals, saveMotorSignals, getMotorSignals, saveSemanticSignals, getSemanticSignals, saveProcessSignals, getProcessSignals, saveCrossSessionSignals, getCrossSessionSignals, saveReconstructionResidual, getReconstructionResidual, saveSessionIntegrity, getSessionIntegrity
 // DYNAMICAL SIGNALS (persisted, previously on-demand)
