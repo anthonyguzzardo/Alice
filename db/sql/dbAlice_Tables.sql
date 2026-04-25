@@ -153,7 +153,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_subjects_single_owner
 
 -- --------------------------------------------------------------------------
 
--- @region core -- tb_questions, tb_question_corpus, tb_responses, tb_interaction_events, tb_reflections, tb_question_feedback
+-- @region core -- tb_questions, tb_question_corpus, tb_scheduled_questions, tb_responses, tb_interaction_events, tb_reflections, tb_question_feedback
 -- ============================================================================
 -- CORE MUTABLE TABLES
 -- ============================================================================
@@ -193,6 +193,26 @@ CREATE TABLE IF NOT EXISTS tb_question_corpus (
   ,added_by             TEXT NOT NULL DEFAULT 'owner'
   ,dttm_created_utc     TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- --------------------------------------------------------------------------
+
+-- PURPOSE: per-subject daily question assignments from the corpus
+-- USE CASE: one row per (subject, date). The scheduler assigns a corpus question
+--           to each active subject for each day. Round-robin with no-repeat window.
+-- MUTABILITY: insert once per (subject, date). Never updated or deleted.
+-- REFERENCED BY: tb_subject_responses (logical FK)
+-- FOOTER: created only
+CREATE TABLE IF NOT EXISTS tb_scheduled_questions (
+   scheduled_question_id  INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,subject_id             INT NOT NULL
+  ,corpus_question_id     INT NOT NULL
+  ,scheduled_for          DATE NOT NULL
+  ,UNIQUE (subject_id, scheduled_for)
+  ,dttm_created_utc       TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS ix_scheduled_questions_subject_corpus
+  ON tb_scheduled_questions (subject_id, corpus_question_id);
 
 -- --------------------------------------------------------------------------
 
