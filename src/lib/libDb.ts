@@ -2432,6 +2432,78 @@ export async function getSessionIntegrity(questionId: number): Promise<SessionIn
 }
 
 // ----------------------------------------------------------------------------
+// @region provenance -- EngineProvenanceInput, EngineProvenanceRow, upsertEngineProvenance, getEngineProvenanceById, stampEngineProvenance
+// ENGINE BINARY PROVENANCE
+// ----------------------------------------------------------------------------
+
+export interface EngineProvenanceInput {
+  binary_sha256: string;
+  code_commit_hash: string | null;
+  cpu_model: string;
+  host_arch: string;
+  target_cpu_flag: string | null;
+  napi_rs_version: string | null;
+  rustc_version: string | null;
+}
+
+export interface EngineProvenanceRow extends EngineProvenanceInput {
+  engine_provenance_id: number;
+  dttm_observed_first: Date;
+}
+
+/**
+ * Idempotent upsert: same (binary_sha256, cpu_model) returns the existing row's
+ * id; new pairs get a new row. Called once per process at first signal save.
+ */
+export async function upsertEngineProvenance(input: EngineProvenanceInput): Promise<number> {
+  const rows = await sql`
+    INSERT INTO tb_engine_provenance (
+       binary_sha256, code_commit_hash, cpu_model, host_arch,
+       target_cpu_flag, napi_rs_version, rustc_version
+    ) VALUES (
+      ${input.binary_sha256}, ${input.code_commit_hash}, ${input.cpu_model}, ${input.host_arch},
+      ${input.target_cpu_flag}, ${input.napi_rs_version}, ${input.rustc_version}
+    )
+    ON CONFLICT (binary_sha256, cpu_model)
+    DO UPDATE SET dttm_observed_first = tb_engine_provenance.dttm_observed_first
+    RETURNING engine_provenance_id
+  `;
+  return (rows[0] as { engine_provenance_id: number }).engine_provenance_id;
+}
+
+export async function getEngineProvenanceById(id: number): Promise<EngineProvenanceRow | null> {
+  const rows = await sql`SELECT * FROM tb_engine_provenance WHERE engine_provenance_id = ${id}`;
+  return (rows[0] as EngineProvenanceRow | undefined) ?? null;
+}
+
+/**
+ * Stamp the engine provenance id onto every Rust-derived signal row for a
+ * given question. Called by the signal worker AFTER the full pipeline
+ * completes — so a failed/in-flight pipeline never leaves rows marked with
+ * the wrong (or partially-applied) provenance.
+ *
+ * Idempotent: only updates rows whose engine_provenance_id IS NULL. Re-runs
+ * of the worker (boot sweep recovery) are safe; rows already stamped stay
+ * stamped, missing rows pick up the current provenance.
+ *
+ * Wrapped in a transaction so all 6 tables update atomically. Either every
+ * Rust-derived row for this question has provenance, or none of them do.
+ */
+export async function stampEngineProvenance(
+  questionId: number,
+  engineProvenanceId: number,
+): Promise<void> {
+  await sql.begin(async (tx) => {
+    await tx`UPDATE tb_dynamical_signals      SET engine_provenance_id = ${engineProvenanceId} WHERE question_id = ${questionId} AND engine_provenance_id IS NULL`;
+    await tx`UPDATE tb_motor_signals          SET engine_provenance_id = ${engineProvenanceId} WHERE question_id = ${questionId} AND engine_provenance_id IS NULL`;
+    await tx`UPDATE tb_process_signals        SET engine_provenance_id = ${engineProvenanceId} WHERE question_id = ${questionId} AND engine_provenance_id IS NULL`;
+    await tx`UPDATE tb_cross_session_signals  SET engine_provenance_id = ${engineProvenanceId} WHERE question_id = ${questionId} AND engine_provenance_id IS NULL`;
+    await tx`UPDATE tb_session_integrity      SET engine_provenance_id = ${engineProvenanceId} WHERE question_id = ${questionId} AND engine_provenance_id IS NULL`;
+    await tx`UPDATE tb_reconstruction_residuals SET engine_provenance_id = ${engineProvenanceId} WHERE question_id = ${questionId} AND engine_provenance_id IS NULL`;
+  });
+}
+
+// ----------------------------------------------------------------------------
 // @region jobs -- SIGNAL_JOB_STATUS, SIGNAL_JOB_KIND, SignalJobRow, EnqueueSignalJobInput, enqueueSignalJob, claimNextSignalJob, markSignalJobCompleted, markSignalJobFailed, sweepStaleSignalJobs, getSignalJobById, getDeadLetterSignalJobs, countOpenSignalJobs
 // SIGNAL JOB QUEUE (durable signal pipeline)
 // ----------------------------------------------------------------------------

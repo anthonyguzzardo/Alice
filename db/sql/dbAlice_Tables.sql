@@ -966,6 +966,7 @@ CREATE TABLE IF NOT EXISTS tb_dynamical_signals (
   ,recurrence_clustering        DOUBLE PRECISION
   ,recurrence_assortativity     DOUBLE PRECISION
   ,te_dominance                 DOUBLE PRECISION
+  ,engine_provenance_id         INT                                  -- logical FK to tb_engine_provenance; identifies the binary that computed this row
   ,dttm_created_utc             TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
   ,created_by                   TEXT NOT NULL DEFAULT 'system'
 );
@@ -992,6 +993,7 @@ CREATE TABLE IF NOT EXISTS tb_motor_signals (
   ,tau_proportion               DOUBLE PRECISION
   ,adjacent_hold_time_cov       DOUBLE PRECISION
   ,hold_flight_rank_corr        DOUBLE PRECISION
+  ,engine_provenance_id         INT                                  -- logical FK to tb_engine_provenance
   ,dttm_created_utc             TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
   ,created_by                   TEXT NOT NULL DEFAULT 'system'
 );
@@ -1041,6 +1043,7 @@ CREATE TABLE IF NOT EXISTS tb_process_signals (
   ,vocab_expansion_rate         DOUBLE PRECISION
   ,phase_transition_point       DOUBLE PRECISION
   ,strategy_shift_count         INT
+  ,engine_provenance_id         INT                                  -- logical FK to tb_engine_provenance
   ,dttm_created_utc             TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
   ,created_by                   TEXT NOT NULL DEFAULT 'system'
 );
@@ -1065,6 +1068,7 @@ CREATE TABLE IF NOT EXISTS tb_cross_session_signals (
   ,text_network_density         DOUBLE PRECISION
   ,text_network_communities     INT
   ,bridging_ratio               DOUBLE PRECISION
+  ,engine_provenance_id         INT                                  -- logical FK to tb_engine_provenance
   ,dttm_created_utc             TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
   ,created_by                   TEXT NOT NULL DEFAULT 'system'
 );
@@ -1362,6 +1366,8 @@ CREATE TABLE IF NOT EXISTS tb_reconstruction_residuals (
   ,behavioral_l2_norm           DOUBLE PRECISION   -- paper-reported: dynamical + motor + perplexity only
   ,behavioral_residual_count    INT                -- paper-reported: excludes semantic residuals
 
+  ,engine_provenance_id         INT                -- logical FK to tb_engine_provenance
+
   -- ── Footer ──────────────────────────────────────────────────────────
   ,dttm_created_utc             TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
   ,created_by                   TEXT NOT NULL DEFAULT 'system'
@@ -1385,6 +1391,7 @@ CREATE TABLE IF NOT EXISTS tb_session_integrity (
   ,is_flagged             BOOLEAN NOT NULL DEFAULT FALSE
   ,threshold_used         DOUBLE PRECISION
   ,profile_session_count  INT
+  ,engine_provenance_id   INT                                        -- logical FK to tb_engine_provenance
   ,dttm_created_utc       TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
   ,created_by             TEXT NOT NULL DEFAULT 'system'
 );
@@ -1441,7 +1448,39 @@ CREATE TABLE IF NOT EXISTS tb_semantic_trajectory (
 
 -- --------------------------------------------------------------------------
 
--- @region jobs -- tb_signal_jobs
+-- @region jobs -- tb_engine_provenance, tb_signal_jobs
+
+-- PURPOSE: identify which Rust signal-engine binary produced a given signal
+-- USE CASE: at process boot, the engine module computes SHA-256 of the loaded
+--           .node file, reads CPU model + arch + target_cpu flag, and looks up
+--           or inserts a row here. The returned engine_provenance_id is cached
+--           process-wide and stamped on every signal row written by that
+--           process. Two processes with the same binary on the same CPU model
+--           share a row; different CPU generations (Milan vs Genoa) get
+--           distinct rows even with the same binary because vectorized FP
+--           paths can diverge.
+-- MUTABILITY: insert-only; rows are immutable identity records
+-- REFERENCED BY: tb_dynamical_signals.engine_provenance_id,
+--                tb_motor_signals.engine_provenance_id,
+--                tb_process_signals.engine_provenance_id,
+--                tb_cross_session_signals.engine_provenance_id,
+--                tb_session_integrity.engine_provenance_id,
+--                tb_reconstruction_residuals.engine_provenance_id
+-- FOOTER: dttm_observed_first only (no modification)
+CREATE TABLE IF NOT EXISTS tb_engine_provenance (
+   engine_provenance_id  INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,binary_sha256         TEXT NOT NULL                                 -- SHA-256 of the .node file as loaded
+  ,code_commit_hash      TEXT                                          -- git rev-parse HEAD at build time (best-effort)
+  ,cpu_model             TEXT NOT NULL                                 -- e.g. "Apple M1 Pro" or "AMD EPYC 9654 96-Core Processor"
+  ,host_arch             TEXT NOT NULL                                 -- "aarch64" / "x86_64"
+  ,target_cpu_flag       TEXT                                          -- "x86-64-v3" on Linux production, NULL on dev
+  ,napi_rs_version       TEXT                                          -- e.g. "3.6.2"
+  ,rustc_version         TEXT                                          -- e.g. "rustc 1.85.0"
+  ,UNIQUE (binary_sha256, cpu_model)
+  ,dttm_observed_first   TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- --------------------------------------------------------------------------
 
 -- PURPOSE: durable queue of pipeline jobs that survive process crashes
 -- USE CASE: enqueued in the same transaction as the response/calibration save.

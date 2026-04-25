@@ -19,6 +19,7 @@ import sql, {
   markSignalJobCompleted,
   markSignalJobFailed,
   sweepStaleSignalJobs,
+  stampEngineProvenance,
   SIGNAL_JOB_KIND,
   type SignalJobRow,
 } from './libDb.ts';
@@ -29,6 +30,7 @@ import { renderWitnessState } from './libAliceNegative/libRenderWitness.ts';
 import { embedResponse } from './libEmbeddings.ts';
 import { runCalibrationExtraction } from './libCalibrationExtract.ts';
 import { snapshotCalibrationBaselinesAfterSubmit } from './libCalibrationDrift.ts';
+import { getEngineProvenanceId } from './libEngineProvenance.ts';
 import { localDateStr } from './utlDate.ts';
 import { logError } from './utlErrorLog.ts';
 
@@ -153,6 +155,23 @@ async function runJob(job: SignalJobRow): Promise<void> {
     } else {
       throw new Error(`Unknown signal_job_kind_id: ${String(job.signal_job_kind_id)}`);
     }
+
+    // Stamp engine provenance on every Rust-derived signal row written by this
+    // job. Idempotent — only updates rows whose engine_provenance_id IS NULL.
+    // Runs AFTER the pipeline completes (and BEFORE markSignalJobCompleted) so
+    // a completed job always has every signal row stamped with the binary that
+    // produced it. If provenance lookup fails (e.g. .node missing), we skip
+    // stamping rather than fail the job — a missing stamp is recoverable
+    // (re-run after rebuild); a failed signal save isn't.
+    try {
+      const provenanceId = await getEngineProvenanceId();
+      if (provenanceId !== null) {
+        await stampEngineProvenance(job.question_id, provenanceId);
+      }
+    } catch (err) {
+      logError('worker.stampProvenance', err, ctx);
+    }
+
     await markSignalJobCompleted(job.signal_job_id);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

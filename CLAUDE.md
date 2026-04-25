@@ -309,6 +309,17 @@ The avatar (ghost) is a reconstruction adversary: it generates synthetic keystro
 
 Rust is the only implementation of signal computation. There is no TypeScript fallback. A measurement instrument cannot have two implementations, because two implementations can disagree, and disagreement between sources of truth is indistinguishable from a bug. If the instrument is unavailable (native module not built), the measurement doesn't happen. The session saves; derived signals are absent until `npm run build:rust` restores the engine. The health endpoint exposes `rustEngine: true/false` so this state is visible.
 
+### Binary Provenance
+
+A bit-identity claim that doesn't extend to the rows in production is a marketing claim, not a measurement guarantee. Every Rust-derived signal row records an `engine_provenance_id` linking back to `tb_engine_provenance`, which identifies the specific `(binary_sha256, cpu_model)` pair that produced the row.
+
+- **One row per (binary, CPU model) pair.** Same binary on different microarchitectures (e.g. AMD EPYC Milan vs Genoa) gets distinct rows because vectorized FP paths can diverge across uarchs.
+- **Captured once per process.** `getEngineProvenanceId()` in `libEngineProvenance.ts` lazily computes SHA-256 of the loaded `.node`, reads CPU model (`sysctl` on macOS, `/proc/cpuinfo` on Linux), reads `napi-rs` and `rustc` versions, and upserts into `tb_engine_provenance`. The id is cached for the process lifetime.
+- **Stamped after pipeline completes.** `libSignalWorker.runJob` calls `stampEngineProvenance(questionId, provenanceId)` AFTER the pipeline runs and BEFORE marking the job completed. The stamp updates all 6 Rust-derived signal tables atomically, only setting the column where it `IS NULL`. Idempotent on retry.
+- **NULL means pre-provenance era.** Existing rows from before 2026-04-25 stay NULL. The column is nullable by design — a missing stamp must never block a measurement.
+- **Production build flag.** Linux/x86_64 production builds compile with `RUSTFLAGS="-C target-cpu=x86-64-v3"`. This pins the instruction baseline (AVX2 + FMA + BMI2) so AMD EPYC Milan and Genoa hosts produce bit-identical output. Without it, runtime CPU dispatch can take divergent code paths across the Hetzner fleet's microarchitecture mix and break the bit-identity claim. The CI workflow's `build-linux-x64` job sets this flag.
+- **The compiled `.node` file is never checked into git.** It is built per-target locally (`npm run build:rust`) or in CI (`signal-reproducibility.yml`). `src-rs/*.node` is in `.gitignore`. Dev `.node` and prod `.node` are different binaries with different SHA-256 — the provenance row tells you which.
+
 ---
 
 ## Known Gotchas

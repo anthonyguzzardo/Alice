@@ -17,7 +17,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  check:
+  # macOS / aarch64 (dev target): clippy, unit tests, full reproducibility
+  # check via two-clean-build snapshot diff. This is the locked-in bit-identity
+  # guarantee for the dev-machine build artifact.
+  check-darwin-arm64:
     runs-on: macos-14
     timeout-minutes: 20
     defaults:
@@ -54,3 +57,68 @@ jobs:
 
       - name: Reproducibility check
         run: ./reproducibility-check.sh
+
+  # Linux / x86_64 (production target on Hetzner CCX): build with
+  # `-C target-cpu=x86-64-v3` so the binary takes identical code paths on
+  # AMD EPYC Milan and Genoa. Without this flag, runtime CPU dispatch can
+  # diverge across the Hetzner fleet's microarchitecture mix and break
+  # bit-identity. This job validates the production build succeeds and
+  # publishes the SHA-256 + .node artifact for traceability.
+  build-linux-x64:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: src-rs
+    env:
+      RUSTFLAGS: "-C target-cpu=x86-64-v3"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache Rust toolchain
+        uses: actions/cache@v4
+        with:
+          path: ~/.rustup/toolchains
+          key: rustup-linux-${{ hashFiles('src-rs/rust-toolchain.toml') }}
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-registry-linux-${{ hashFiles('src-rs/Cargo.lock') }}
+          restore-keys: cargo-registry-linux-
+
+      - name: Install Rust toolchain
+        run: rustup show
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install napi-rs CLI
+        run: npm install -g @napi-rs/cli@3
+
+      - name: Build linux-x64 .node (target-cpu=x86-64-v3)
+        run: napi build --release --platform
+
+      - name: Print binary SHA-256
+        run: |
+          BIN=$(ls *.linux-x64-gnu.node || ls *.linux-x64.node || true)
+          if [ -z "$BIN" ]; then
+            echo "::error::no .node binary produced"; exit 1
+          fi
+          echo "binary: $BIN"
+          shasum -a 256 "$BIN"
+
+      - name: Upload .node artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: alice-signals-linux-x64
+          path: src-rs/*.linux-x64*.node
+          if-no-files-found: error
+          retention-days: 30
