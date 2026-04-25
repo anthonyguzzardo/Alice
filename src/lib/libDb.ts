@@ -1689,6 +1689,123 @@ export async function saveComment(slug: string, authorName: string, commentText:
   return row.paper_comment_id;
 }
 
+// @region subject-data -- saveSubjectResponse, getSubjectResponse, saveSubjectSessionSummary
+// ----------------------------------------------------------------------------
+// SUBJECT DATA
+// ----------------------------------------------------------------------------
+
+/** Save a subject's journal response. Returns the new ID. */
+export async function saveSubjectResponse(
+  subjectId: number,
+  scheduledQuestionId: number,
+  text: string,
+  tx?: TxSql,
+): Promise<number> {
+  const q = tx ?? sql;
+  const [row] = await q`
+    INSERT INTO tb_subject_responses (subject_id, scheduled_question_id, text)
+    VALUES (${subjectId}, ${scheduledQuestionId}, ${text})
+    RETURNING subject_response_id
+  `;
+  return (row as { subject_response_id: number }).subject_response_id;
+}
+
+/** Check if a subject has already responded to a scheduled question. */
+export async function getSubjectResponse(
+  scheduledQuestionId: number,
+): Promise<{ subject_response_id: number; text: string } | null> {
+  const rows = await sql`
+    SELECT subject_response_id, text
+    FROM tb_subject_responses
+    WHERE scheduled_question_id = ${scheduledQuestionId}
+  `;
+  return (rows[0] as { subject_response_id: number; text: string }) ?? null;
+}
+
+/** Save a subject's session summary. Uses the same SessionSummaryInput shape as the owner. */
+export async function saveSubjectSessionSummary(
+  subjectId: number,
+  scheduledQuestionId: number,
+  s: SessionSummaryInput,
+  tx?: TxSql,
+): Promise<void> {
+  const q = tx ?? sql;
+  await q`
+    INSERT INTO tb_subject_session_summaries (
+       subject_id, scheduled_question_id,
+       first_keystroke_ms, total_duration_ms,
+       total_chars_typed, final_char_count, commitment_ratio,
+       pause_count, total_pause_ms, deletion_count, largest_deletion,
+       total_chars_deleted, tab_away_count, total_tab_away_ms,
+       word_count, sentence_count,
+       small_deletion_count, large_deletion_count, large_deletion_chars,
+       first_half_deletion_chars, second_half_deletion_chars,
+       active_typing_ms, chars_per_minute, p_burst_count, avg_p_burst_length,
+       nrc_anger_density, nrc_fear_density, nrc_joy_density,
+       nrc_sadness_density, nrc_trust_density, nrc_anticipation_density,
+       cognitive_density, hedging_density, first_person_density,
+       inter_key_interval_mean, inter_key_interval_std,
+       revision_chain_count, revision_chain_avg_length,
+       hold_time_mean, hold_time_std, flight_time_mean, flight_time_std,
+       keystroke_entropy,
+       mattr, avg_sentence_length, sentence_length_variance,
+       scroll_back_count, question_reread_count,
+       confirmation_latency_ms, paste_count, paste_chars_total, drop_count,
+       read_back_count, leading_edge_ratio,
+       contextual_revision_count, pre_contextual_revision_count,
+       considered_and_kept_count,
+       hold_time_mean_left, hold_time_mean_right,
+       hold_time_std_left, hold_time_std_right, hold_time_cv,
+       negative_flight_time_count,
+       iki_skewness, iki_kurtosis,
+       error_detection_latency_mean, terminal_velocity,
+       cursor_distance_during_pauses, cursor_fidget_ratio,
+       cursor_stillness_during_pauses, drift_to_submit_count,
+       cursor_pause_sample_count,
+       deletion_execution_speed_mean, postcorrection_latency_mean,
+       mean_revision_distance, max_revision_distance,
+       punctuation_flight_mean, punctuation_letter_ratio,
+       device_type, user_agent, hour_of_day, day_of_week
+    ) VALUES (
+      ${subjectId}, ${scheduledQuestionId},
+      ${s.firstKeystrokeMs}, ${s.totalDurationMs},
+      ${s.totalCharsTyped}, ${s.finalCharCount}, ${s.commitmentRatio},
+      ${s.pauseCount}, ${s.totalPauseMs}, ${s.deletionCount}, ${s.largestDeletion},
+      ${s.totalCharsDeleted}, ${s.tabAwayCount}, ${s.totalTabAwayMs},
+      ${s.wordCount}, ${s.sentenceCount},
+      ${s.smallDeletionCount}, ${s.largeDeletionCount}, ${s.largeDeletionChars},
+      ${s.firstHalfDeletionChars}, ${s.secondHalfDeletionChars},
+      ${s.activeTypingMs}, ${s.charsPerMinute}, ${s.pBurstCount}, ${s.avgPBurstLength},
+      ${s.nrcAngerDensity}, ${s.nrcFearDensity}, ${s.nrcJoyDensity},
+      ${s.nrcSadnessDensity}, ${s.nrcTrustDensity}, ${s.nrcAnticipationDensity},
+      ${s.cognitiveDensity}, ${s.hedgingDensity}, ${s.firstPersonDensity},
+      ${s.interKeyIntervalMean}, ${s.interKeyIntervalStd},
+      ${s.revisionChainCount}, ${s.revisionChainAvgLength},
+      ${s.holdTimeMean}, ${s.holdTimeStd}, ${s.flightTimeMean}, ${s.flightTimeStd},
+      ${s.keystrokeEntropy},
+      ${s.mattr}, ${s.avgSentenceLength}, ${s.sentenceLengthVariance},
+      ${s.scrollBackCount}, ${s.questionRereadCount},
+      ${s.confirmationLatencyMs}, ${s.pasteCount}, ${s.pasteCharsTotal}, ${s.dropCount},
+      ${s.readBackCount}, ${s.leadingEdgeRatio},
+      ${s.contextualRevisionCount}, ${s.preContextualRevisionCount},
+      ${s.consideredAndKeptCount},
+      ${s.holdTimeMeanLeft}, ${s.holdTimeMeanRight},
+      ${s.holdTimeStdLeft}, ${s.holdTimeStdRight}, ${s.holdTimeCV},
+      ${s.negativeFlightTimeCount},
+      ${s.ikiSkewness}, ${s.ikiKurtosis},
+      ${s.errorDetectionLatencyMean}, ${s.terminalVelocity},
+      ${s.cursorDistanceDuringPauses}, ${s.cursorFidgetRatio},
+      ${s.cursorStillnessDuringPauses}, ${s.driftToSubmitCount},
+      ${s.cursorPauseSampleCount},
+      ${s.deletionExecutionSpeedMean}, ${s.postcorrectionLatencyMean},
+      ${s.meanRevisionDistance}, ${s.maxRevisionDistance},
+      ${s.punctuationFlightMean}, ${s.punctuationLetterRatio},
+      ${s.deviceType}, ${s.userAgent}, ${s.hourOfDay}, ${s.dayOfWeek}
+    )
+    ON CONFLICT (scheduled_question_id) DO NOTHING
+  `;
+}
+
 // @region corpus -- getCorpusQuestions, getCorpusQuestionById, insertCorpusQuestion, retireCorpusQuestion, getActiveCorpusCount
 // ----------------------------------------------------------------------------
 // QUESTION CORPUS

@@ -1,0 +1,732 @@
+---
+/**
+ * Subject daily journal page.
+ *
+ * Identical keystroke instrumentation as the owner page (src/pages/index.astro).
+ * Posts to /api/subject/respond instead of /api/respond.
+ * No owner-only UI: no health panel, no nav menu, no observatory links.
+ * No background tasks fire on submit.
+ */
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Alice</title>
+    <script is:inline>
+      (function() {
+        var t = localStorage.getItem('alice-theme') || 'light';
+        document.documentElement.setAttribute('data-theme', t);
+      })();
+    </script>
+    <style is:global>
+      @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap');
+
+      :root {
+        --bg: #f5f2ed;
+        --bg-input: #ebe7e1;
+        --text: #1a1a1a;
+        --text-muted: #6b6560;
+        --text-faint: #9a9590;
+        --border: #ccc5bc;
+        --border-focus: #8a8580;
+        --btn-bg: #e0dbd5;
+        --btn-hover: #ccc5bc;
+        --done-text: #8a8580;
+      }
+
+      [data-theme="dark"] {
+        --bg: #141210;
+        --bg-input: #161514;
+        --text: #ffffff;
+        --text-muted: #7a7570;
+        --text-faint: #4a4540;
+        --border: #333;
+        --border-focus: #666;
+        --btn-bg: #222;
+        --btn-hover: #444;
+        --done-text: #555;
+      }
+
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      body {
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+      }
+
+      .container {
+        max-width: 640px;
+        margin: 0 auto;
+        padding: 3rem 1.5rem;
+      }
+
+      .date {
+        font-size: 0.75rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--text-faint);
+        margin-bottom: 1.5rem;
+        text-align: center;
+      }
+
+      .question {
+        font-size: 1.5rem;
+        font-weight: 300;
+        line-height: 1.5;
+        text-align: center;
+        margin-bottom: 2rem;
+        color: var(--text);
+        transition: opacity 8s ease;
+      }
+
+      .question.loading { color: var(--text-faint); }
+      .question.faded { opacity: 0.25; }
+
+      .response-area {
+        width: 100%;
+        min-height: 300px;
+        padding: 1rem;
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-size: 1.15rem;
+        line-height: 1.7;
+        background: var(--bg-input);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        color: var(--text);
+        resize: vertical;
+        outline: none;
+        transition: border-color 0.2s ease;
+      }
+
+      .response-area:focus { border-color: var(--border-focus); }
+
+      .submit-row {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 1rem;
+        transition: opacity 0.3s ease;
+      }
+
+      .submit-row.hidden { opacity: 0; pointer-events: none; }
+      .submit-row.visible { opacity: 1; pointer-events: auto; }
+
+      .submit-btn {
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-size: 1rem;
+        padding: 0.5rem 1.5rem;
+        background: var(--btn-bg);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        color: var(--text);
+        cursor: pointer;
+        transition: background 0.2s ease;
+      }
+
+      .submit-btn:hover { background: var(--btn-hover); }
+      .submit-btn:disabled { opacity: 0.4; cursor: default; }
+
+      .done-message {
+        font-size: 1.2rem;
+        font-weight: 300;
+        color: var(--done-text);
+        text-align: center;
+        margin-top: 3rem;
+      }
+
+      .no-question {
+        font-size: 1.2rem;
+        font-weight: 300;
+        color: var(--text-muted);
+        text-align: center;
+        margin-top: 3rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="date" id="date"></div>
+      <div class="question loading" id="question">...</div>
+      <div id="input-area"></div>
+    </div>
+
+    <script>
+      const dateEl = document.getElementById('date')!;
+      const questionEl = document.getElementById('question')!;
+      const inputArea = document.getElementById('input-area')!;
+
+      const today = new Date();
+      dateEl.textContent = today.toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+
+      // Device context
+      const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+      const deviceType = isMobile ? 'mobile' : 'desktop';
+      const hourOfDay = new Date().getHours();
+      const dayOfWeek = new Date().getDay();
+      const rawUserAgent = navigator.userAgent;
+
+      // QWERTY left-hand mapping (Kim et al. 2024)
+      const LEFT_HAND_CODES = new Set([
+        'Backquote','Digit1','Digit2','Digit3','Digit4','Digit5',
+        'KeyQ','KeyW','KeyE','KeyR','KeyT',
+        'KeyA','KeyS','KeyD','KeyF','KeyG',
+        'KeyZ','KeyX','KeyC','KeyV','KeyB',
+        'Tab','CapsLock','ShiftLeft','ControlLeft','AltLeft','MetaLeft',
+      ]);
+
+      const PUNCTUATION_CODES = new Set([
+        'Period', 'Comma', 'Slash', 'Quote', 'Semicolon',
+        'BracketLeft', 'BracketRight', 'Minus', 'Equal',
+        'Backquote', 'Backslash',
+      ]);
+
+      function getDoneMessage(): string {
+        const messages = [
+          "Noted. Let it sit.",
+          "That thought is yours now. Come back tomorrow.",
+          "Done. Don't rehearse it.",
+          "Saved. Go do something with your hands.",
+          "Good. Now forget about it until tomorrow.",
+          "The thought is planted. Leave it alone.",
+          "You showed up. That's the whole thing.",
+          "Stop thinking about what you just wrote.",
+          "That's enough for today.",
+        ];
+        return messages[Math.floor(Math.random() * messages.length)];
+      }
+
+      async function load() {
+        const res = await fetch('/api/subject/today');
+
+        if (res.status === 401) {
+          window.location.href = '/enter';
+          return;
+        }
+
+        if (res.status === 404) {
+          questionEl.textContent = '';
+          questionEl.classList.remove('loading');
+          inputArea.innerHTML = '<div class="no-question">No question today. Check back tomorrow.</div>';
+          return;
+        }
+
+        if (!res.ok) {
+          questionEl.textContent = 'Something went wrong.';
+          questionEl.classList.remove('loading');
+          return;
+        }
+
+        const data = await res.json();
+        questionEl.textContent = data.text;
+        questionEl.classList.remove('loading');
+
+        if (data.existing_response_text) {
+          questionEl.textContent = '';
+          inputArea.innerHTML = `<div class="done-message">${getDoneMessage()}</div>`;
+          return;
+        }
+
+        const scheduledQuestionId = data.scheduled_question_id;
+        const pageOpenTime = performance.now();
+
+        inputArea.innerHTML = `
+          <textarea
+            class="response-area"
+            id="response"
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="off"
+            spellcheck="false"
+          ></textarea>
+          <div class="submit-row hidden" id="submit-row">
+            <button class="submit-btn" id="submit" disabled>done</button>
+          </div>
+        `;
+
+        const textarea = document.getElementById('response') as HTMLTextAreaElement;
+        const submitBtn = document.getElementById('submit') as HTMLButtonElement;
+        const submitRow = document.getElementById('submit-row')!;
+
+        textarea.focus();
+        const writingOpenedAt = performance.now();
+
+        setTimeout(maybeShowSubmit, 90000);
+
+        function maybeShowSubmit() {
+          const timeOk = performance.now() - writingOpenedAt >= 90000;
+          const contentOk = textarea.value.trim().length >= 20;
+          if (timeOk && contentOk) {
+            submitRow.classList.remove('hidden');
+            submitRow.classList.add('visible');
+          }
+        }
+
+        // ================================================================
+        // KEYSTROKE INSTRUMENTATION (identical to owner path in index.astro)
+        // ================================================================
+
+        let firstKeystrokeSent = false;
+        let firstKeystrokeTime: number | null = null;
+        let pauseTimer: number | null = null;
+        let isPaused = false;
+        let pauseStartTime: number | null = null;
+        let totalPauseMs = 0;
+        let pauseCount = 0;
+        let totalCharsTyped = 0;
+        let totalCharsDeleted = 0;
+        let deletionCount = 0;
+        let largestDeletion = 0;
+        let lastTextLength = 0;
+        let tabAwayCount = 0;
+        let tabAwayStartTime: number | null = null;
+        let totalTabAwayMs = 0;
+        let smallDeletionCount = 0;
+        let largeDeletionCount = 0;
+        let largeDeletionChars = 0;
+        const deletionTimestamps: Array<{chars: number; time: number}> = [];
+        let eventLogTotalInputs = 0;
+        const eventLog: Array<[number, string]> = [];
+        let lastInputTime: number | null = null;
+        let currentBurstChars = 0;
+        let burstStartTime: number | null = null;
+        const burstLengths: number[] = [];
+        const burstSequence: Array<{chars: number; startOffsetMs: number; durationMs: number}> = [];
+        let lastKeystrokeTime: number | null = null;
+        const interKeyIntervals: number[] = [];
+        let currentRevisionChainLength = 0;
+        let lastDeletionTime: number | null = null;
+        const revisionChains: number[] = [];
+        const holdTimes: number[] = [];
+        const flightTimes: number[] = [];
+        let lastKeyupTime: number | null = null;
+        const keydownTimes = new Map<string, number>();
+        const keystrokeStream: Array<{c: string; d: number; u: number}> = [];
+        let leadingEdgeInputCount = 0;
+        let totalInputActionCount = 0;
+        let contextualRevisionCount = 0;
+        let preContextualRevisionCount = 0;
+        let readBackCount = 0;
+        let readBackPending = false;
+        let readBackTimer: ReturnType<typeof setTimeout> | null = null;
+        let consideredAndKeptCount = 0;
+        let lastSelectionWasRange = false;
+        let pasteCount = 0;
+        let pasteCharsTotal = 0;
+        let dropCount = 0;
+        const holdTimesLeft: number[] = [];
+        const holdTimesRight: number[] = [];
+        let negativeFlightTimeCount = 0;
+        const errorDetectionLatencies: number[] = [];
+        let lastNonDeleteKeystrokeTime: number | null = null;
+        const mousePauseSamples: Array<{x: number; y: number}> = [];
+        let currentMouseX = 0;
+        let currentMouseY = 0;
+        let lastMouseSampleX = 0;
+        let lastMouseSampleY = 0;
+        let cursorTotalDistance = 0;
+        let cursorStillSamples = 0;
+        let driftToSubmitCount = 0;
+        let lastWasInSubmit = false;
+        const deletionExecutionIKIs: number[] = [];
+        const postcorrectionLatencies: number[] = [];
+        let lastDeletionKeystrokeTime: number | null = null;
+        let awaitingPostcorrection = false;
+        const revisionDistances: number[] = [];
+        const punctuationFlightTimes: number[] = [];
+        const letterFlightTimes: number[] = [];
+        let scrollBackCount = 0;
+        let questionRereadCount = 0;
+        let lastScrollTop = 0;
+
+        // Mouse tracking during pauses
+        document.addEventListener('mousemove', (e: MouseEvent) => {
+          currentMouseX = e.clientX;
+          currentMouseY = e.clientY;
+        });
+
+        const mouseTrackingInterval = window.setInterval(() => {
+          if (!firstKeystrokeSent || !lastInputTime) return;
+          if ((performance.now() - lastInputTime) < 2000) return;
+          const dx = currentMouseX - lastMouseSampleX;
+          const dy = currentMouseY - lastMouseSampleY;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          cursorTotalDistance += dist;
+          if (dist < 5) cursorStillSamples++;
+          mousePauseSamples.push({ x: currentMouseX, y: currentMouseY });
+          lastMouseSampleX = currentMouseX;
+          lastMouseSampleY = currentMouseY;
+          const btnRect = submitBtn.getBoundingClientRect();
+          const inSubmit = currentMouseX >= btnRect.left && currentMouseX <= btnRect.right
+            && currentMouseY >= btnRect.top && currentMouseY <= btnRect.bottom;
+          if (inSubmit && !lastWasInSubmit) driftToSubmitCount++;
+          lastWasInSubmit = inSubmit;
+        }, 200);
+
+        // Scroll tracking
+        textarea.addEventListener('scroll', () => {
+          if (textarea.scrollTop < lastScrollTop && lastScrollTop > 0) scrollBackCount++;
+          lastScrollTop = textarea.scrollTop;
+        });
+        window.addEventListener('scroll', () => {
+          if (window.scrollY < 50 && textarea.value.length > 0) questionRereadCount++;
+        }, { passive: true });
+
+        // Read-back + selection tracking
+        document.addEventListener('selectionchange', () => {
+          if (document.activeElement !== textarea) return;
+          if (readBackTimer) clearTimeout(readBackTimer);
+          readBackPending = true;
+          readBackTimer = setTimeout(() => {
+            if (readBackPending) { readBackCount++; readBackPending = false; }
+          }, 500);
+          const hasRange = textarea.selectionStart !== textarea.selectionEnd;
+          if (lastSelectionWasRange && !hasRange) consideredAndKeptCount++;
+          lastSelectionWasRange = hasRange;
+        });
+
+        // Paste/drop blocked
+        let pasteMessageShown = false;
+        textarea.addEventListener('paste', (e: ClipboardEvent) => {
+          e.preventDefault();
+          pasteCount++;
+          pasteCharsTotal += (e.clipboardData?.getData('text/plain') ?? '').length;
+          if (!pasteMessageShown) {
+            pasteMessageShown = true;
+            const msg = document.createElement('div');
+            msg.textContent = 'paste is disabled during writing';
+            msg.style.cssText = 'position:fixed;bottom:2rem;left:50%;transform:translateX(-50%);font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-faint);opacity:1;transition:opacity 2s ease 3s;pointer-events:none;';
+            document.body.appendChild(msg);
+            setTimeout(() => { msg.style.opacity = '0'; }, 100);
+            setTimeout(() => { msg.remove(); }, 6000);
+          }
+        });
+        textarea.addEventListener('dragover', (e: DragEvent) => { e.preventDefault(); });
+        textarea.addEventListener('drop', (e: DragEvent) => { e.preventDefault(); dropCount++; });
+
+        // Keydown handler
+        textarea.addEventListener('keydown', (e: KeyboardEvent) => {
+          const now = performance.now();
+          if (!e.repeat) {
+            if (lastKeystrokeTime !== null) {
+              const interval = now - lastKeystrokeTime;
+              if (interval < 5000) interKeyIntervals.push(interval);
+            }
+            lastKeystrokeTime = now;
+            keydownTimes.set(e.code, now);
+            if (lastKeyupTime !== null) {
+              const ft = now - lastKeyupTime;
+              if (ft > 0 && ft < 5000) {
+                flightTimes.push(ft);
+                if (PUNCTUATION_CODES.has(e.code)) punctuationFlightTimes.push(ft);
+                else if (e.code.startsWith('Key')) letterFlightTimes.push(ft);
+              } else if (ft < 0) {
+                negativeFlightTimeCount++;
+              }
+            }
+          }
+          totalInputActionCount++;
+          if (textarea.selectionStart >= textarea.value.length) leadingEdgeInputCount++;
+          if (readBackPending) { readBackPending = false; if (readBackTimer) clearTimeout(readBackTimer); }
+
+          if (e.key === 'Backspace' || e.key === 'Delete') {
+            if (lastDeletionTime !== null && (now - lastDeletionTime) < 500) {
+              currentRevisionChainLength++;
+              const delIKI = now - lastDeletionTime;
+              if (delIKI > 0 && delIKI < 2000) deletionExecutionIKIs.push(delIKI);
+            } else {
+              if (currentRevisionChainLength > 0) revisionChains.push(currentRevisionChainLength);
+              currentRevisionChainLength = 1;
+            }
+            lastDeletionTime = now;
+            lastDeletionKeystrokeTime = now;
+            awaitingPostcorrection = true;
+            if (lastNonDeleteKeystrokeTime !== null) {
+              const edl = now - lastNonDeleteKeystrokeTime;
+              if (edl > 0 && edl < 5000) errorDetectionLatencies.push(edl);
+            }
+            const isContextual = textarea.selectionStart < textarea.value.length - 1;
+            if (isContextual) {
+              contextualRevisionCount++;
+              const dist = textarea.value.length - textarea.selectionStart;
+              if (dist > 0) revisionDistances.push(dist);
+            } else {
+              preContextualRevisionCount++;
+            }
+          } else {
+            if (currentRevisionChainLength > 0) { revisionChains.push(currentRevisionChainLength); currentRevisionChainLength = 0; }
+            lastNonDeleteKeystrokeTime = now;
+          }
+        });
+
+        // Keyup handler
+        textarea.addEventListener('keyup', (e: KeyboardEvent) => {
+          const now = performance.now();
+          lastKeyupTime = now;
+          const downTime = keydownTimes.get(e.code);
+          if (downTime != null) {
+            const ht = now - downTime;
+            if (ht > 0 && ht < 2000) {
+              holdTimes.push(ht);
+              keystrokeStream.push({ c: e.code, d: downTime - pageOpenTime, u: now - pageOpenTime });
+              if (LEFT_HAND_CODES.has(e.code)) holdTimesLeft.push(ht);
+              else holdTimesRight.push(ht);
+            }
+            keydownTimes.delete(e.code);
+          }
+        });
+
+        // Input handler
+        textarea.addEventListener('input', () => {
+          const now = performance.now();
+          const currentLength = textarea.value.length;
+          const delta = currentLength - lastTextLength;
+
+          eventLogTotalInputs++;
+          const cursorPos = textarea.selectionStart;
+          if (delta > 0) {
+            const inserted = textarea.value.slice(cursorPos - delta, cursorPos);
+            eventLog.push([now - pageOpenTime, cursorPos - delta, 0, inserted]);
+          } else if (delta < 0) {
+            eventLog.push([now - pageOpenTime, cursorPos, -delta, '']);
+          }
+
+          // Question fade on first keystroke
+          if (!firstKeystrokeSent && delta > 0) {
+            questionEl.classList.add('faded');
+          }
+
+          if (delta > 0) {
+            totalCharsTyped += delta;
+            if (awaitingPostcorrection && lastDeletionKeystrokeTime !== null) {
+              const pcl = now - lastDeletionKeystrokeTime;
+              if (pcl > 0 && pcl < 10000) postcorrectionLatencies.push(pcl);
+              awaitingPostcorrection = false;
+            }
+            if (lastInputTime !== null && (now - lastInputTime) > 2000) {
+              if (currentBurstChars > 0) {
+                burstLengths.push(currentBurstChars);
+                burstSequence.push({
+                  chars: currentBurstChars,
+                  startOffsetMs: (burstStartTime ?? now) - pageOpenTime,
+                  durationMs: lastInputTime - (burstStartTime ?? lastInputTime),
+                });
+              }
+              currentBurstChars = 0;
+              burstStartTime = now;
+            }
+            if (burstStartTime === null) burstStartTime = now;
+            currentBurstChars += delta;
+            lastInputTime = now;
+          } else if (delta < 0) {
+            const deleted = Math.abs(delta);
+            totalCharsDeleted += deleted;
+            deletionCount++;
+            if (deleted > largestDeletion) largestDeletion = deleted;
+            if (deleted < 10) smallDeletionCount++;
+            else { largeDeletionCount++; largeDeletionChars += deleted; }
+            deletionTimestamps.push({ chars: deleted, time: now });
+          }
+
+          lastTextLength = currentLength;
+          submitBtn.disabled = !textarea.value.trim();
+          maybeShowSubmit();
+
+          if (!firstKeystrokeSent) {
+            firstKeystrokeTime = performance.now();
+            firstKeystrokeSent = true;
+          }
+
+          if (isPaused) {
+            if (pauseStartTime) { totalPauseMs += performance.now() - pauseStartTime; pauseStartTime = null; }
+            isPaused = false;
+          }
+
+          if (pauseTimer) clearTimeout(pauseTimer);
+          pauseTimer = window.setTimeout(() => {
+            if (firstKeystrokeSent) { pauseCount++; pauseStartTime = performance.now(); isPaused = true; }
+          }, 30000);
+        });
+
+        // Tab away tracking
+        document.addEventListener('visibilitychange', () => {
+          if (document.hidden) {
+            tabAwayStartTime = performance.now();
+            if (currentBurstChars > 0) {
+              burstLengths.push(currentBurstChars);
+              burstSequence.push({
+                chars: currentBurstChars,
+                startOffsetMs: (burstStartTime ?? performance.now()) - pageOpenTime,
+                durationMs: performance.now() - (burstStartTime ?? performance.now()),
+              });
+              currentBurstChars = 0;
+              burstStartTime = null;
+            }
+          } else {
+            if (tabAwayStartTime) {
+              totalTabAwayMs += performance.now() - tabAwayStartTime;
+              tabAwayCount++;
+              tabAwayStartTime = null;
+            }
+          }
+        });
+
+        // Submit handler
+        submitBtn.addEventListener('click', async () => {
+          const text = textarea.value.trim();
+          if (!text) return;
+
+          submitBtn.disabled = true;
+          submitBtn.textContent = '...';
+
+          if (isPaused && pauseStartTime) totalPauseMs += performance.now() - pauseStartTime;
+          if (currentBurstChars > 0) {
+            const now = performance.now();
+            burstLengths.push(currentBurstChars);
+            burstSequence.push({
+              chars: currentBurstChars,
+              startOffsetMs: (burstStartTime ?? now) - pageOpenTime,
+              durationMs: now - (burstStartTime ?? now),
+            });
+          }
+          if (currentRevisionChainLength > 0) revisionChains.push(currentRevisionChainLength);
+
+          const submitTime = performance.now();
+          const finalCharCount = text.length;
+          const wordCount = text.split(/\s+/).filter(Boolean).length;
+          const sentenceCount = text.split(/[.!?]+/).filter((s: string) => s.trim()).length;
+          const totalDurationMs = submitTime - pageOpenTime;
+          const firstKeystrokeMs = firstKeystrokeTime ? firstKeystrokeTime - pageOpenTime : null;
+          const commitmentRatio = totalCharsTyped > 0 ? finalCharCount / totalCharsTyped : null;
+          const activeTypingMs = Math.max(0, totalDurationMs - totalPauseMs - totalTabAwayMs);
+          const charsPerMinute = activeTypingMs > 0 ? totalCharsTyped / (activeTypingMs / 60000) : null;
+          const pBurstCount = burstLengths.length;
+          const avgPBurstLength = pBurstCount > 0 ? burstLengths.reduce((a, b) => a + b, 0) / pBurstCount : null;
+          const midpoint = pageOpenTime + totalDurationMs / 2;
+          let firstHalfDeletionChars = 0, secondHalfDeletionChars = 0;
+          for (const d of deletionTimestamps) {
+            if (d.time <= midpoint) firstHalfDeletionChars += d.chars;
+            else secondHalfDeletionChars += d.chars;
+          }
+          const ikiCount = interKeyIntervals.length;
+          const ikiMean = ikiCount > 0 ? interKeyIntervals.reduce((a, b) => a + b, 0) / ikiCount : null;
+          const ikiStd = ikiCount > 1 ? Math.sqrt(interKeyIntervals.reduce((sum, v) => sum + (v - ikiMean!) ** 2, 0) / (ikiCount - 1)) : null;
+          const htCount = holdTimes.length;
+          const holdTimeMean = htCount > 0 ? holdTimes.reduce((a, b) => a + b, 0) / htCount : null;
+          const holdTimeStd = htCount > 1 ? Math.sqrt(holdTimes.reduce((sum, v) => sum + (v - holdTimeMean!) ** 2, 0) / (htCount - 1)) : null;
+          const ftCount = flightTimes.length;
+          const flightTimeMean = ftCount > 0 ? flightTimes.reduce((a, b) => a + b, 0) / ftCount : null;
+          const flightTimeStd = ftCount > 1 ? Math.sqrt(flightTimes.reduce((sum, v) => sum + (v - flightTimeMean!) ** 2, 0) / (ftCount - 1)) : null;
+          let keystrokeEntropy: number | null = null;
+          if (ikiCount >= 10) {
+            const BIN_WIDTH = 50, NUM_BINS = 40;
+            const bins = new Array(NUM_BINS).fill(0);
+            for (const iki of interKeyIntervals) bins[Math.min(NUM_BINS - 1, Math.floor(iki / BIN_WIDTH))]++;
+            let entropy = 0;
+            for (const count of bins) { if (count > 0) { const p = count / ikiCount; entropy -= p * Math.log2(p); } }
+            keystrokeEntropy = entropy;
+          }
+          const revChainCount = revisionChains.length;
+          const revChainAvgLength = revChainCount > 0 ? revisionChains.reduce((a, b) => a + b, 0) / revChainCount : null;
+          const confirmationLatencyMs = lastInputTime ? submitTime - lastInputTime : null;
+          const leadingEdgeRatio = totalInputActionCount > 0 ? leadingEdgeInputCount / totalInputActionCount : null;
+          const htLeftCount = holdTimesLeft.length;
+          const holdTimeMeanLeft = htLeftCount > 0 ? holdTimesLeft.reduce((a, b) => a + b, 0) / htLeftCount : null;
+          const holdTimeStdLeft = htLeftCount > 1 ? Math.sqrt(holdTimesLeft.reduce((s, v) => s + (v - holdTimeMeanLeft!) ** 2, 0) / (htLeftCount - 1)) : null;
+          const htRightCount = holdTimesRight.length;
+          const holdTimeMeanRight = htRightCount > 0 ? holdTimesRight.reduce((a, b) => a + b, 0) / htRightCount : null;
+          const holdTimeStdRight = htRightCount > 1 ? Math.sqrt(holdTimesRight.reduce((s, v) => s + (v - holdTimeMeanRight!) ** 2, 0) / (htRightCount - 1)) : null;
+          const holdTimeCV = (holdTimeMean != null && holdTimeMean > 0 && holdTimeStd != null) ? holdTimeStd / holdTimeMean : null;
+          let ikiSkewness: number | null = null, ikiKurtosis: number | null = null;
+          if (ikiCount >= 10 && ikiMean != null && ikiStd != null && ikiStd > 0) {
+            let m3 = 0, m4 = 0;
+            for (const iki of interKeyIntervals) { const d = (iki - ikiMean) / ikiStd; m3 += d ** 3; m4 += d ** 4; }
+            ikiSkewness = m3 / ikiCount;
+            ikiKurtosis = (m4 / ikiCount) - 3;
+          }
+          const edlCount = errorDetectionLatencies.length;
+          const errorDetectionLatencyMean = edlCount > 0 ? errorDetectionLatencies.reduce((a, b) => a + b, 0) / edlCount : null;
+          let terminalVelocity: number | null = null;
+          if (ikiCount >= 20 && ikiMean != null && ikiMean > 0) {
+            const tail = Math.max(2, Math.floor(ikiCount * 0.1));
+            const tailMean = interKeyIntervals.slice(-tail).reduce((a, b) => a + b, 0) / tail;
+            terminalVelocity = tailMean / ikiMean;
+          }
+          clearInterval(mouseTrackingInterval);
+          const totalMouseSamples = mousePauseSamples.length;
+          const cursorFidgetRatio = activeTypingMs > 0 ? cursorTotalDistance / activeTypingMs : null;
+          const cursorStillnessDuringPauses = totalMouseSamples > 0 ? cursorStillSamples / totalMouseSamples : null;
+          const delExecCount = deletionExecutionIKIs.length;
+          const deletionExecutionSpeedMean = delExecCount > 0 ? deletionExecutionIKIs.reduce((a, b) => a + b, 0) / delExecCount : null;
+          const pcCount = postcorrectionLatencies.length;
+          const postcorrectionLatencyMean = pcCount > 0 ? postcorrectionLatencies.reduce((a, b) => a + b, 0) / pcCount : null;
+          const revDistCount = revisionDistances.length;
+          const meanRevisionDistance = revDistCount > 0 ? revisionDistances.reduce((a, b) => a + b, 0) / revDistCount : null;
+          const maxRevisionDistance = revDistCount > 0 ? Math.max(...revisionDistances) : null;
+          const punctFtCount = punctuationFlightTimes.length;
+          const punctuationFlightMean = punctFtCount > 0 ? punctuationFlightTimes.reduce((a, b) => a + b, 0) / punctFtCount : null;
+          const letterFtCount = letterFlightTimes.length;
+          const letterFlightMean = letterFtCount > 0 ? letterFlightTimes.reduce((a, b) => a + b, 0) / letterFtCount : null;
+          const punctuationLetterRatio = (punctuationFlightMean != null && letterFlightMean != null && letterFlightMean > 0) ? punctuationFlightMean / letterFlightMean : null;
+
+          const sessionSummary = {
+            scheduledQuestionId,
+            firstKeystrokeMs, totalDurationMs, totalCharsTyped, finalCharCount,
+            commitmentRatio, pauseCount, totalPauseMs, deletionCount, largestDeletion,
+            totalCharsDeleted, tabAwayCount, totalTabAwayMs, wordCount, sentenceCount,
+            smallDeletionCount, largeDeletionCount, largeDeletionChars,
+            firstHalfDeletionChars, secondHalfDeletionChars,
+            activeTypingMs, charsPerMinute, pBurstCount, avgPBurstLength,
+            burstSequence,
+            interKeyIntervalMean: ikiMean, interKeyIntervalStd: ikiStd,
+            revisionChainCount: revChainCount, revisionChainAvgLength: revChainAvgLength,
+            holdTimeMean, holdTimeStd, flightTimeMean, flightTimeStd,
+            keystrokeEntropy, scrollBackCount, questionRereadCount,
+            confirmationLatencyMs, pasteCount, pasteCharsTotal, dropCount,
+            readBackCount, leadingEdgeRatio,
+            contextualRevisionCount, preContextualRevisionCount, consideredAndKeptCount,
+            holdTimeMeanLeft, holdTimeMeanRight, holdTimeStdLeft, holdTimeStdRight,
+            holdTimeCV, negativeFlightTimeCount, ikiSkewness, ikiKurtosis,
+            errorDetectionLatencyMean, terminalVelocity,
+            cursorDistanceDuringPauses: cursorTotalDistance, cursorFidgetRatio,
+            cursorStillnessDuringPauses, driftToSubmitCount,
+            cursorPauseSampleCount: totalMouseSamples,
+            deletionExecutionSpeedMean, postcorrectionLatencyMean,
+            meanRevisionDistance, maxRevisionDistance,
+            punctuationFlightMean, punctuationLetterRatio,
+            deletionEvents: deletionTimestamps.map(d => ({ chars: d.chars, time: d.time - pageOpenTime })),
+            eventLog, eventLogTotalInputs, keystrokeStream,
+            deviceType, userAgent: rawUserAgent, hourOfDay, dayOfWeek,
+          };
+
+          const res = await fetch('/api/subject/respond', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              scheduled_question_id: scheduledQuestionId,
+              text,
+              sessionSummary,
+            }),
+          });
+
+          if (res.ok) {
+            questionEl.textContent = '';
+            inputArea.innerHTML = `<div class="done-message">${getDoneMessage()}</div>`;
+          } else {
+            submitBtn.textContent = 'done';
+            submitBtn.disabled = false;
+          }
+        });
+      }
+
+      load();
+    </script>
+  </body>
+</html>

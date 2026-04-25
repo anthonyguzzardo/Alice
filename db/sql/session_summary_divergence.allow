@@ -1,0 +1,24 @@
+# Session Summary Schema Divergence Allowlist
+#
+# This file documents intentional column differences between
+# tb_session_summaries and tb_subject_session_summaries.
+#
+# Format: one column name per line (unqualified). Lines starting with #
+# are comments. Blank lines are ignored.
+#
+# When the schema-alignment test fails, you must either:
+# 1. Add the missing column to the other table (preferred), OR
+# 2. Add the column name here with a comment explaining why the
+#    divergence is intentional.
+#
+# STRUCTURAL COLUMNS (different by design — different PKs and FK targets):
+
+# Owner PK and FK
+session_summary_id
+question_id
+created_by
+
+# Subject PK and FKs
+subject_session_summary_id
+subject_id
+scheduled_question_id
