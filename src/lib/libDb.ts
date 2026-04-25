@@ -702,6 +702,7 @@ export async function saveCalibrationSession(
   responseText: string,
   summary: SessionSummaryInput,
   attestation?: { boundaryVersion: string; codePathsRef: string; commitHash: string },
+  events?: Omit<SessionEventsRow, 'session_event_id' | 'question_id'>,
 ): Promise<number> {
   const bv = attestation?.boundaryVersion ?? 'v1';
   const ref = attestation?.codePathsRef ?? 'docs/contamination-boundary-v1.md';
@@ -720,6 +721,15 @@ export async function saveCalibrationSession(
     `;
 
     await saveSessionSummary({ ...summary, questionId }, tx);
+
+    // Event log + keystroke stream persisted in the same transaction so a
+    // calibration session never exists without its measurement input. Pre-2026-04-25
+    // this ran outside the transaction, rationalized as "session data is sacred,
+    // derived data is best-effort." Keystroke streams are raw measurement input,
+    // not derived data; the rationalization was wrong. See GOTCHAS.md.
+    if (events) {
+      await saveSessionEvents({ ...events, question_id: questionId }, tx);
+    }
 
     return questionId;
   });

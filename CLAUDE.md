@@ -13,6 +13,7 @@ A personal, monastic daily thinking journal. One question per day. No gamificati
 - Before data-layer work, run `grep '@region' db/sql/dbAlice_Tables.sql` for the schema table of contents and `grep '@region' src/lib/libDb.ts` for the function table of contents.
 - When adding new tables or exported functions to these files, update the nearest `@region` marker to include the new name. When adding a new gotcha, append it to `GOTCHAS.md`.
 - Before touching unfamiliar areas, check `GOTCHAS.md` for known landmines.
+- **`GOTCHAS.md` is not a holding pen for bugs.** Read its charter (top of file) before adding an entry. Entries belong only in four categories: necessary friction, historical landmines (with fix date), discipline rules, or philosophy-driven choices (with the principle cited). If you find yourself writing "semi-intentional" or "matches the pattern of X being best-effort," you are rationalizing a bug — fix the bug and write the entry as a historical landmine instead.
 
 ## Architecture
 - Single user, no auth

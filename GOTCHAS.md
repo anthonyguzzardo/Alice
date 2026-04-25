@@ -1,6 +1,21 @@
 # Gotchas
 
-Things that look wrong but aren't, things that will bite you, things that are non-obvious from reading the code.
+## Charter
+
+This file documents landmines that genuinely belong in long-term memory. It is **not** a holding pen for bugs that should be fixed.
+
+Entries belong here if they fall into one of four categories:
+
+1. **Necessary friction** — constraints from a deliberate architectural choice (logical FKs, JSONB auto-parse, `COUNT(*)` returning bigint). The friction is the cost of a tool the project chose on purpose.
+2. **Historical landmines** — bugs that have been fixed; documented to prevent regression. Must include the fix date and what the wrong behavior was, so future-you doesn't reintroduce it.
+3. **Discipline rules** — filters or checks the code must always apply (`gated = false`, `invalidated_at IS NULL`). The rule itself is the gotcha.
+4. **Philosophy-driven choices** — behavior tied to a stated principle in CLAUDE.md, with that principle cited explicitly. The behavior is intended even though it's surprising.
+
+Entries do **not** belong here if they describe a bug as a feature. Phrases like *"semi-intentional"*, *"matches the pattern of X being best-effort"*, or *"intentional but counterintuitive"* are smells. If you find yourself reaching for that phrasing, stop: is the underlying behavior actually intended, or are you laundering a fix you should be making? Documentation that rationalizes a bug ossifies it — future-you reads the framing and trusts it. The signal pipeline early-return bug (line below) lived for weeks because GOTCHAS described it as "semi-intentional." Don't repeat that mistake.
+
+When you fix a bug that previously had a rationalizing entry, rewrite the entry as a category 2 historical landmine — keep the institutional memory, drop the rationalization.
+
+---
 
 ## Database
 
@@ -60,7 +75,7 @@ Things that look wrong but aren't, things that will bite you, things that are no
 
 - **Response submission is a single transaction, background work is fire-and-forget.** The POST to `/api/respond` saves the response, session summary, burst sequences, events, and metadata in one `sql.begin` transaction. Then it kicks off generation, witness rendering, and the signal pipeline as a detached async IIFE. If the background work fails, it logs to `data/errors.log` but the response is already saved. The HTTP response returns before background work starts.
 
-- **Calibration submit does NOT use a transaction for event storage.** `saveSessionEvents` in `/api/calibrate` runs outside the `saveCalibrationSession` transaction. If the event save fails, the calibration session exists without its event log. This matches the pattern of "session data is sacred, derived data is best-effort."
+- **Pre-2026-04-25, calibration event storage ran outside the `saveCalibrationSession` transaction.** `saveSessionEvents` in `/api/calibrate` was called after `saveCalibrationSession` returned, so a failed event save left the calibration session row in place without its keystroke stream or event log. The earlier rationalization that "session data is sacred, derived data is best-effort" was wrong: keystroke streams are raw measurement input, not derived data — they are *the* signal source the Rust engine consumes. Fixed by extending `saveCalibrationSession` to accept an optional events row and persist it inside the same transaction. If you see a `saveSessionEvents` call appear outside a transaction in a calibration or response code path, that is a regression.
 
 - **`updateDeletionEvents` is an UPDATE, not an INSERT.** It modifies the session summary row that `saveSessionSummary` just created. Must run AFTER saveSessionSummary within the same transaction. If you reorder the transaction block, this silently updates zero rows.
 
@@ -90,7 +105,7 @@ Things that look wrong but aren't, things that will bite you, things that are no
 
 ## General
 
-- **`localDateStr()` is timezone-sensitive.** It uses the server's local timezone, NOT UTC. This is intentional (the journal is for one person in one timezone) but means `localDateStr()` and `new Date().toISOString().slice(0,10)` return different dates near midnight UTC. All date comparisons in the app use `localDateStr()`.
+- **`localDateStr()` is timezone-sensitive — RATIONALIZATION, revisit at Phase 6 multi-user transition.** It uses the server's local timezone, NOT UTC. This was framed as "intentional (the journal is for one person in one timezone)" — true at single-user scale, but the framing becomes a bug the moment multiple subjects in different timezones share the same server. A subject in PST writing at 11pm and a subject in CET reading at 8am the next day would silently disagree on which "day" their session belongs to. Phase 6 puts IANA timezones on `tb_subjects`; until then, every existing call site that uses `localDateStr()` must be re-evaluated against the per-subject timezone. Do not extend the current pattern to new code. Tag tracked here so Phase 6 cannot miss it.
 
 - **`nowStr()` has a date override for simulation.** `libDb.ts` has a module-level `_dateOverride` that, when set, replaces `CURRENT_TIMESTAMP` in all save functions. Production never calls `setDateOverride`. But if you're debugging and see timestamps stuck at noon, this is why.
 

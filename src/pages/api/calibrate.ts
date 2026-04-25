@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { saveCalibrationSession, getUsedCalibrationPrompts, getCalibrationPromptsByRecency, saveSessionEvents } from '../../lib/libDb.ts';
+import { saveCalibrationSession, getUsedCalibrationPrompts, getCalibrationPromptsByRecency } from '../../lib/libDb.ts';
 import { CALIBRATION_PROMPTS } from '../../lib/libCalibrationPrompts.ts';
 import { runCalibrationExtraction } from '../../lib/libCalibrationExtract.ts';
 import { snapshotCalibrationBaselinesAfterSubmit } from '../../lib/libCalibrationDrift.ts';
@@ -53,24 +53,33 @@ export const POST: APIRoute = async ({ request }) => {
 
   const trimmedText = text.trim();
   const coerced = coerceSessionSummary(sessionSummary, 0, trimmedText);
-  const questionId = await saveCalibrationSession(prompt, trimmedText, coerced, {
-    boundaryVersion: 'v1',
-    codePathsRef: 'docs/contamination-boundary-v1.md',
-    commitHash: getGitCommitHash(),
-  });
 
-  // Store event log + keystroke stream for calibration sessions (same as journal)
-  if (Array.isArray(sessionSummary.eventLog) && sessionSummary.eventLog.length > 0) {
-    await saveSessionEvents({
-      question_id: questionId,
-      event_log_json: JSON.stringify(sessionSummary.eventLog),
-      total_events: sessionSummary.eventLog.length,
-      session_duration_ms: sessionSummary.totalDurationMs ?? 0,
-      keystroke_stream_json: Array.isArray(sessionSummary.keystrokeStream) && sessionSummary.keystrokeStream.length > 0
-        ? JSON.stringify(sessionSummary.keystrokeStream)
-        : null,
-    });
-  }
+  // Event log + keystroke stream persisted atomically with the calibration
+  // session inside saveCalibrationSession's transaction. Either both land or
+  // neither does — calibration sessions cannot exist without their measurement
+  // input.
+  const events = Array.isArray(sessionSummary.eventLog) && sessionSummary.eventLog.length > 0
+    ? {
+        event_log_json: JSON.stringify(sessionSummary.eventLog),
+        total_events: sessionSummary.eventLog.length,
+        session_duration_ms: sessionSummary.totalDurationMs ?? 0,
+        keystroke_stream_json: Array.isArray(sessionSummary.keystrokeStream) && sessionSummary.keystrokeStream.length > 0
+          ? JSON.stringify(sessionSummary.keystrokeStream)
+          : null,
+      }
+    : undefined;
+
+  const questionId = await saveCalibrationSession(
+    prompt,
+    trimmedText,
+    coerced,
+    {
+      boundaryVersion: 'v1',
+      codePathsRef: 'docs/contamination-boundary-v1.md',
+      commitHash: getGitCommitHash(),
+    },
+    events,
+  );
 
   // Fire-and-forget: extract life-context tags from calibration response text.
   // Non-blocking — extraction failure never prevents calibration from succeeding.
