@@ -257,10 +257,18 @@ The Rust crate must be written to Rust's standards, not JavaScript's.
 
 ### napi Boundary (`lib.rs`)
 
-- `lib.rs` is a thin mapping layer. It accepts typed napi inputs (`Vec<KeystrokeEventInput>`, `Vec<f64>`, `Vec<Vec<f64>>`, `Vec<String>`), converts them to internal Rust types if needed, calls module `compute()` functions, and maps internal result types to flat `#[napi(object)]` structs. **No signal logic belongs here.**
-- **Inputs and outputs at the napi boundary are typed `#[napi(object)]` structs and primitive vectors.** JSON strings are reserved for genuinely heterogeneous payloads (e.g. `event_log_json` with variable event shapes per event type, or `profile_json`/`corpus_json` until those entry points are typed in a follow-up). Never use `String` to transport a value that has a fixed schema — pre-2026-04-25 the boundary used `stream_json: String` for keystroke streams and serialized ~1MB of JSON per call. See `KeystrokeEventInput` for the boundary-mirror pattern: a separate `pub` napi-decorated struct with the wire-format names (`c`, `d`, `u`) and a `From` impl into the internal `pub(crate)` `KeystrokeEvent`. This keeps the FFI ABI decoupled from the internal Rust representation.
+- `lib.rs` is a thin mapping layer. It accepts typed napi inputs (`Vec<KeystrokeEventInput>`, `Vec<f64>`, `Vec<Vec<f64>>`, `Vec<String>`, `AvatarProfileInput`), converts them to internal Rust types if needed, calls module `compute()` functions, and maps internal result types to flat `#[napi(object)]` structs. **No signal logic belongs here.**
+- **Inputs and outputs at the napi boundary are typed `#[napi(object)]` structs and primitive vectors.** JSON strings are reserved for genuinely heterogeneous payloads (e.g. `event_log_json` with variable event shapes per event type). Never use `String` to transport a value that has a fixed schema — pre-2026-04-25 the boundary used `stream_json: String` for keystroke streams and serialized ~1MB of JSON per call.
+- **Boundary-mirror pattern.** When the internal Rust type and the FFI shape disagree on visibility or naming, define a separate `pub` `#[napi(object)]` struct with the wire-format names and a `From` impl into the internal `pub(crate)` type. Examples: `KeystrokeEventInput` → `KeystrokeEvent`; `AvatarProfileInput` → `TimingProfile` (via `profile_input_to_json`). The boundary type is what crosses the FFI; the internal type is unchanged.
+- **TypeScript types are auto-generated.** `napi-derive` with the `type-def` feature emits a JSONL temp file at `target/.napi_type_def.tmp` during `cargo build`. The build script (`src-rs/build.sh`) sets `TYPE_DEF_TMP_PATH`, runs cargo, and then `src-rs/scripts/generate-dts.mjs` stitches the JSONL into `src-rs/index.d.ts`. The TypeScript integration layer (`libSignalsNative.ts`) imports types from this generated file — **hand-written interfaces that mirror napi shapes are forbidden**. They drift; the generated file cannot.
 - `usize` counts convert to `i32` via `i32::try_from(x).unwrap_or(i32::MAX)`. Never use `as i32`.
-- `Option::None` from Rust becomes `undefined` in JS. The TS integration layer (`libSignalsNative.ts`) coerces these to `null` for postgres.js compatibility.
+- `Option::None` from Rust becomes `undefined` in JS. The TS integration layer coerces `undefined` to `null` for postgres.js compatibility via the `NullCoerced<T>` mapped type and the `n()` / `na()` runtime helpers.
+
+### Persistence Field Maps (`libSignalFieldMaps.ts`)
+
+The camelCase ↔ snake_case correspondence between typed signal results and `tb_*_signals` DB columns lives in **one source of truth per family** (`DYNAMICAL_FIELD_MAP`, `MOTOR_FIELD_MAP`, `PROCESS_FIELD_MAP`, `CROSS_SESSION_FIELD_MAP`). Each map is `as const satisfies CompleteMap<T>` so missing keys are tsc errors. The DB-integration test in `tests/db/fieldMaps.test.ts` cross-checks every entry against the live schema — turning a typo that would silently null a column into a loud test failure.
+
+When adding a new signal field: edit the Rust struct, rebuild (regenerates the d.ts), add the field to the matching map. The CI test catches drift in either direction.
 
 ### Clippy & Linting
 
