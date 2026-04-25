@@ -3,7 +3,7 @@ title: "Calibration Delta Replication Plan"
 slug: calibration-delta-replication-plan
 author: Anthony Guzzardo
 date: 2026-04-24
-status: draft
+status: published
 version: 1
 ---
 

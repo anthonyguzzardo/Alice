@@ -3,7 +3,7 @@ title: "Calibration Design Recommendation"
 slug: calibration-design-recommendation
 author: Anthony Guzzardo
 date: 2026-04-24
-status: draft
+status: published
 version: 1
 ---
 

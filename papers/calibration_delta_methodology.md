@@ -3,7 +3,7 @@ title: "Calibration Delta Methodology: Within-Person Provocation Analysis"
 slug: calibration-delta-methodology
 author: Anthony Guzzardo
 date: 2026-04-24
-status: draft
+status: published
 version: 1
 abstract: "A within-person matched-pair design compares behavioral and linguistic signals between reflective journal sessions and neutral calibration sessions. Initial screening of 68 signals across four families identified four signals across two families (one semantic, three dynamical). A confound battery revealed that the three dynamical signals were series-length artifacts. One signal (integrative complexity) survives all checks. The methodology is documented for replication at larger sample sizes."
 ---
