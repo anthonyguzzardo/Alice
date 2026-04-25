@@ -966,6 +966,24 @@ CREATE TABLE IF NOT EXISTS tb_dynamical_signals (
   ,recurrence_clustering        DOUBLE PRECISION
   ,recurrence_assortativity     DOUBLE PRECISION
   ,te_dominance                 DOUBLE PRECISION
+  -- Phase 3-5 extensions (migrations 017-021): folded back into canonical
+  -- schema 2026-04-25 to satisfy "schema file always reads as a complete,
+  -- intact script" rule. Prior to this date the schema was missing these
+  -- columns even though production had them.
+  ,effective_information           DOUBLE PRECISION
+  ,causal_emergence_index          DOUBLE PRECISION
+  ,optimal_causal_scale            INT
+  ,pid_synergy                     DOUBLE PRECISION
+  ,pid_redundancy                  DOUBLE PRECISION
+  ,branching_ratio                 DOUBLE PRECISION
+  ,avalanche_size_exponent         DOUBLE PRECISION
+  ,dmd_dominant_frequency          DOUBLE PRECISION
+  ,dmd_dominant_decay_rate         DOUBLE PRECISION
+  ,dmd_mode_count                  INT
+  ,dmd_spectral_entropy            DOUBLE PRECISION
+  ,pause_mixture_component_count   INT
+  ,pause_mixture_motor_proportion  DOUBLE PRECISION
+  ,pause_mixture_cognitive_load_index DOUBLE PRECISION
   ,engine_provenance_id         INT                                  -- logical FK to tb_engine_provenance; identifies the binary that computed this row
   ,dttm_created_utc             TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
   ,created_by                   TEXT NOT NULL DEFAULT 'system'
@@ -993,6 +1011,10 @@ CREATE TABLE IF NOT EXISTS tb_motor_signals (
   ,tau_proportion               DOUBLE PRECISION
   ,adjacent_hold_time_cov       DOUBLE PRECISION
   ,hold_flight_rank_corr        DOUBLE PRECISION
+  -- Phase 2 extensions (migration 019): folded back into canonical schema 2026-04-25.
+  ,mse_series                   JSONB
+  ,complexity_index             DOUBLE PRECISION
+  ,ex_gaussian_fisher_trace     DOUBLE PRECISION
   ,engine_provenance_id         INT                                  -- logical FK to tb_engine_provenance
   ,dttm_created_utc             TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
   ,created_by                   TEXT NOT NULL DEFAULT 'system'

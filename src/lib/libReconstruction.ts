@@ -51,6 +51,7 @@ import {
   computeMotorSignals,
   generateAvatar,
   regenerateAvatar,
+  profileFromLegacyJson,
   computePerplexity,
   type DynamicalSignals,
   type MotorSignals,
@@ -122,8 +123,14 @@ async function computeForVariant(
   // Gate: idempotent per variant
   if (await getReconstructionResidual(questionId, variantId)) return;
 
-  // Generate avatar for this variant
-  const avatar = generateAvatar(corpusJson, questionText, profileJson, realWordCount, variantId);
+  // Generate avatar for this variant. Inputs cross the napi boundary as typed
+  // values (Vec<String> corpus, AvatarProfileInput profile). corpusJson and
+  // profileJson stay around because both are stored on the residual row for
+  // replay (see `profile_snapshot_json` save below) and corpusJson feeds the
+  // SHA-256 corpus integrity hash.
+  const corpus = JSON.parse(corpusJson) as string[];
+  const profile = profileFromLegacyJson(profileJson);
+  const avatar = generateAvatar(corpus, questionText, profile, realWordCount, variantId);
   if (!avatar) return;
 
   // Compute avatar total duration from keystroke stream
@@ -144,9 +151,7 @@ async function computeForVariant(
     avatarSem = computeSemanticSignals(avatar.text, 0);
   }
 
-  // Compute perplexity for both texts. computePerplexity now takes a typed
-  // string[] at the FFI boundary; parse the existing corpusJson once here.
-  const corpus = JSON.parse(corpusJson) as string[];
+  // computePerplexity reuses the typed corpus array constructed above.
   const realPerp = computePerplexity(corpus, realText);
   const avatarPerp = computePerplexity(corpus, avatar.text);
 
@@ -562,7 +567,13 @@ export async function verifyResidual(
   const resolvedTopic = topic ?? '';
   const resolvedProfile = typeof profileJson === 'string' ? profileJson : JSON.stringify(profileJson);
 
-  const avatar = regenerateAvatar(corpusJson, resolvedTopic, resolvedProfile, realWordCount, variantId, seed);
+  // Typed boundary: parse the legacy-format JSON once into the typed inputs
+  // the napi function accepts. Old rows (pre-2026-04-25) and new rows both
+  // round-trip cleanly because `profileFromLegacyJson` accepts the
+  // record-shaped digraph the project always stored.
+  const corpusReplay = JSON.parse(corpusJson) as string[];
+  const profileReplay = profileFromLegacyJson(resolvedProfile);
+  const avatar = regenerateAvatar(corpusReplay, resolvedTopic, profileReplay, realWordCount, variantId, seed);
   if (!avatar) return null;
 
   // 5. Compute signals on regenerated ghost
@@ -610,7 +621,7 @@ export async function verifyResidual(
   compare('tau_proportion', 'motor', stored.avatar_tau_proportion, regenMot?.tauProportion);
 
   // Perplexity (computed from corpus + avatar text, deterministic)
-  const regenPerp = computePerplexity(JSON.parse(corpusJson) as string[], avatar.text);
+  const regenPerp = computePerplexity(corpusReplay, avatar.text);
   compare('perplexity', 'perplexity', stored.avatar_perplexity, regenPerp?.perplexity);
 
   // Extended signals (from JSONB)

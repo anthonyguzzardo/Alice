@@ -32,7 +32,7 @@ pub(crate) struct MotorResult {
     pub(crate) lapse_rate: Option<f64>,
     pub(crate) tempo_drift: Option<f64>,
     pub(crate) iki_compression_ratio: Option<f64>,
-    pub(crate) digraph_latency_profile: Option<String>,
+    pub(crate) digraph_latency_profile: Option<Vec<crate::DigraphEntry>>,
     pub(crate) ex_gaussian: Option<ExGaussianValues>,
     pub(crate) adjacent_hold_time_cov: Option<f64>,
     pub(crate) hold_flight_rank_corr: Option<f64>,
@@ -238,7 +238,7 @@ fn iki_compression_ratio(ikis: &[f64]) -> SignalResult<f64> {
 
 // ─── Digraph Latency Profile ─────────────────────────────────────
 
-fn digraph_latency_profile(stream: &[KeystrokeEvent]) -> Option<String> {
+fn digraph_latency_profile(stream: &[KeystrokeEvent]) -> Option<Vec<crate::DigraphEntry>> {
     if stream.len() < 20 {
         return None;
     }
@@ -267,15 +267,22 @@ fn digraph_latency_profile(stream: &[KeystrokeEvent]) -> Option<String> {
         return None;
     }
 
-    // BTreeMap for deterministic JSON serialization order.
-    // HashMap iteration order is nondeterministic; serde_json serializes
-    // in iteration order, so the JSON output would differ across runs.
-    let profile: std::collections::BTreeMap<String, f64> = sorted
-        .iter()
-        .map(|(key, values)| (key.clone(), mean(values)))
-        .collect();
+    // After top-10 selection by count, sort the surviving entries by digraph
+    // alphabetically. This makes the output Vec's iteration order deterministic
+    // (by the digraph string), which is the same guarantee the previous
+    // BTreeMap+JSON pipeline gave us. The typed Vec carries that guarantee
+    // in the data structure rather than via JSON serialization order.
+    sorted.sort_by(|a, b| a.0.cmp(&b.0));
 
-    serde_json::to_string(&profile).ok()
+    Some(
+        sorted
+            .into_iter()
+            .map(|(digraph, values)| crate::DigraphEntry {
+                latency_ms: mean(&values),
+                digraph,
+            })
+            .collect(),
+    )
 }
 
 // ─── Ex-Gaussian Fit (MLE via EM, Lacouture & Cousineau 2008) ────

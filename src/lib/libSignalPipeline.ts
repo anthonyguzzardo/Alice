@@ -161,7 +161,14 @@ export async function computeAndPersistDerivedSignals(questionId: number): Promi
           lapse_rate: ms.lapseRate ?? null,
           tempo_drift: ms.tempoDrift ?? null,
           iki_compression_ratio: ms.ikiCompressionRatio ?? null,
-          digraph_latency_json: ms.digraphLatencyProfile ? JSON.stringify(ms.digraphLatencyProfile) : null,
+          // Storage format intentionally preserved as `Record<digraph, latencyMs>`
+          // for backward compatibility with existing readers (libProfile,
+          // libCrossSessionSignals). The FFI is now typed `Vec<DigraphEntry>`;
+          // we collapse back to Record at the JSONB boundary so historical rows
+          // and analytical queries keep working unchanged.
+          digraph_latency_json: ms.digraphLatencyProfile
+            ? JSON.stringify(Object.fromEntries(ms.digraphLatencyProfile.map((e) => [e.digraph, e.latencyMs])))
+            : null,
           ex_gaussian_tau: ms.exGaussianTau ?? null,
           ex_gaussian_mu: ms.exGaussianMu ?? null,
           ex_gaussian_sigma: ms.exGaussianSigma ?? null,

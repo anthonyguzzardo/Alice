@@ -12,43 +12,48 @@
 use alice_signals::*;
 
 /// Fixed 5-entry corpus for deterministic Markov chain construction.
-fn fixture_corpus_json() -> String {
-    serde_json::to_string(&vec![
-        "I think about the way mornings feel when everything is still quiet and the light comes in slow.",
-        "There is something about writing that makes me see things I did not know I was carrying around.",
-        "The question made me pause because I realized I have been avoiding the obvious answer for weeks.",
-        "Sometimes the hardest part is not knowing what to say but deciding what actually matters right now.",
-        "I noticed today that my thinking changes shape depending on whether I am tired or just uncertain.",
-    ]).unwrap()
+///
+/// As of 2026-04-25 the napi boundary takes typed `Vec<String>` directly.
+fn fixture_corpus() -> Vec<String> {
+    vec![
+        "I think about the way mornings feel when everything is still quiet and the light comes in slow.".to_string(),
+        "There is something about writing that makes me see things I did not know I was carrying around.".to_string(),
+        "The question made me pause because I realized I have been avoiding the obvious answer for weeks.".to_string(),
+        "Sometimes the hardest part is not knowing what to say but deciding what actually matters right now.".to_string(),
+        "I noticed today that my thinking changes shape depending on whether I am tired or just uncertain.".to_string(),
+    ]
 }
 
 /// Fixed profile with all timing fields populated.
 /// Values are realistic but arbitrary; the point is determinism, not accuracy.
-fn fixture_profile_json() -> &'static str {
-    r#"{
-        "digraph": null,
-        "mu": 85.0,
-        "sigma": 22.0,
-        "tau": 45.0,
-        "burst_length": 12.0,
-        "pause_between_pct": 0.35,
-        "pause_sent_pct": 0.10,
-        "first_keystroke": 2500.0,
-        "small_del_rate": 1.8,
-        "large_del_rate": 0.4,
-        "revision_timing_bias": 0.55,
-        "r_burst_ratio": 0.25,
-        "rburst_mean_size": 3.2,
-        "rburst_leading_edge_pct": 0.6,
-        "rburst_consolidation": 0.45,
-        "rburst_mean_duration": 1800.0,
-        "iki_autocorrelation_lag1": 0.35,
-        "hold_flight_rank_correlation": 0.28,
-        "hold_time_mean": 92.0,
-        "hold_time_std": 19.0,
-        "flight_time_mean": 110.0,
-        "flight_time_std": 35.0
-    }"#
+///
+/// Returns a fresh struct on each call (AvatarProfileInput contains a Vec
+/// that doesn't impl Clone in napi(object) form).
+fn fixture_profile() -> AvatarProfileInput {
+    AvatarProfileInput {
+        digraph: None,
+        mu: Some(85.0),
+        sigma: Some(22.0),
+        tau: Some(45.0),
+        burst_length: Some(12.0),
+        pause_between_pct: Some(0.35),
+        pause_sent_pct: Some(0.10),
+        first_keystroke: Some(2500.0),
+        small_del_rate: Some(1.8),
+        large_del_rate: Some(0.4),
+        revision_timing_bias: Some(0.55),
+        r_burst_ratio: Some(0.25),
+        rburst_mean_size: Some(3.2),
+        rburst_leading_edge_pct: Some(0.6),
+        rburst_consolidation: Some(0.45),
+        rburst_mean_duration: Some(1800.0),
+        iki_autocorrelation_lag1: Some(0.35),
+        hold_flight_rank_correlation: Some(0.28),
+        hold_time_mean: Some(92.0),
+        hold_time_std: Some(19.0),
+        flight_time_mean: Some(110.0),
+        flight_time_std: Some(35.0),
+    }
 }
 
 const FIXED_SEED: &str = "99999";
@@ -57,9 +62,9 @@ const MAX_WORDS: i32 = 50;
 /// Write snapshot for a single variant.
 fn snapshot_variant(variant: i32, snapshot_dir: &str) {
     let result = regenerate_avatar(
-        fixture_corpus_json(),
+        fixture_corpus(),
         "morning".to_string(),
-        fixture_profile_json().to_string(),
+        fixture_profile(),
         MAX_WORDS,
         variant,
         FIXED_SEED.to_string(),
@@ -81,12 +86,12 @@ fn avatar_v1_reproducible() {
 
     // Within-binary determinism: same inputs, same output
     let a = regenerate_avatar(
-        fixture_corpus_json(), "morning".into(),
-        fixture_profile_json().into(), MAX_WORDS, 1, FIXED_SEED.into(),
+        fixture_corpus(), "morning".into(),
+        fixture_profile(), MAX_WORDS, 1, FIXED_SEED.into(),
     );
     let b = regenerate_avatar(
-        fixture_corpus_json(), "morning".into(),
-        fixture_profile_json().into(), MAX_WORDS, 1, FIXED_SEED.into(),
+        fixture_corpus(), "morning".into(),
+        fixture_profile(), MAX_WORDS, 1, FIXED_SEED.into(),
     );
     assert_eq!(
         serde_json::to_string(&a).unwrap(),
@@ -101,12 +106,12 @@ fn avatar_v2_reproducible() {
     snapshot_variant(2, &dir);
 
     let a = regenerate_avatar(
-        fixture_corpus_json(), "morning".into(),
-        fixture_profile_json().into(), MAX_WORDS, 2, FIXED_SEED.into(),
+        fixture_corpus(), "morning".into(),
+        fixture_profile(), MAX_WORDS, 2, FIXED_SEED.into(),
     );
     let b = regenerate_avatar(
-        fixture_corpus_json(), "morning".into(),
-        fixture_profile_json().into(), MAX_WORDS, 2, FIXED_SEED.into(),
+        fixture_corpus(), "morning".into(),
+        fixture_profile(), MAX_WORDS, 2, FIXED_SEED.into(),
     );
     assert_eq!(
         serde_json::to_string(&a).unwrap(),
@@ -121,12 +126,12 @@ fn avatar_v3_reproducible() {
     snapshot_variant(3, &dir);
 
     let a = regenerate_avatar(
-        fixture_corpus_json(), "morning".into(),
-        fixture_profile_json().into(), MAX_WORDS, 3, FIXED_SEED.into(),
+        fixture_corpus(), "morning".into(),
+        fixture_profile(), MAX_WORDS, 3, FIXED_SEED.into(),
     );
     let b = regenerate_avatar(
-        fixture_corpus_json(), "morning".into(),
-        fixture_profile_json().into(), MAX_WORDS, 3, FIXED_SEED.into(),
+        fixture_corpus(), "morning".into(),
+        fixture_profile(), MAX_WORDS, 3, FIXED_SEED.into(),
     );
     assert_eq!(
         serde_json::to_string(&a).unwrap(),
@@ -141,12 +146,12 @@ fn avatar_v4_reproducible() {
     snapshot_variant(4, &dir);
 
     let a = regenerate_avatar(
-        fixture_corpus_json(), "morning".into(),
-        fixture_profile_json().into(), MAX_WORDS, 4, FIXED_SEED.into(),
+        fixture_corpus(), "morning".into(),
+        fixture_profile(), MAX_WORDS, 4, FIXED_SEED.into(),
     );
     let b = regenerate_avatar(
-        fixture_corpus_json(), "morning".into(),
-        fixture_profile_json().into(), MAX_WORDS, 4, FIXED_SEED.into(),
+        fixture_corpus(), "morning".into(),
+        fixture_profile(), MAX_WORDS, 4, FIXED_SEED.into(),
     );
     assert_eq!(
         serde_json::to_string(&a).unwrap(),
@@ -161,12 +166,12 @@ fn avatar_v5_reproducible() {
     snapshot_variant(5, &dir);
 
     let a = regenerate_avatar(
-        fixture_corpus_json(), "morning".into(),
-        fixture_profile_json().into(), MAX_WORDS, 5, FIXED_SEED.into(),
+        fixture_corpus(), "morning".into(),
+        fixture_profile(), MAX_WORDS, 5, FIXED_SEED.into(),
     );
     let b = regenerate_avatar(
-        fixture_corpus_json(), "morning".into(),
-        fixture_profile_json().into(), MAX_WORDS, 5, FIXED_SEED.into(),
+        fixture_corpus(), "morning".into(),
+        fixture_profile(), MAX_WORDS, 5, FIXED_SEED.into(),
     );
     assert_eq!(
         serde_json::to_string(&a).unwrap(),

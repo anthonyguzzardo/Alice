@@ -59,9 +59,6 @@ fn into_internal_stream(input: Vec<KeystrokeEventInput>) -> Vec<KeystrokeEvent> 
 #[napi(object)]
 #[derive(Serialize, Default)]
 pub struct DynamicalSignals {
-    /// Non-empty if the input JSON failed to parse. Caller should log this
-    /// rather than treating the all-None result as "insufficient data."
-    pub parse_error: Option<String>,
     pub iki_count: i32,
     pub hold_flight_count: i32,
     pub permutation_entropy: Option<f64>,
@@ -123,7 +120,6 @@ pub fn compute_dynamical_signals(stream: Vec<KeystrokeEventInput>) -> DynamicalS
     let r = dynamical::compute(&stream);
 
     DynamicalSignals {
-        parse_error: None,
         iki_count: i32::try_from(r.iki_count).unwrap_or(i32::MAX),
         hold_flight_count: i32::try_from(r.hold_flight_count).unwrap_or(i32::MAX),
         permutation_entropy: r.permutation_entropy,
@@ -177,11 +173,24 @@ pub fn compute_dynamical_signals(stream: Vec<KeystrokeEventInput>) -> DynamicalS
 
 // ─── Motor signals ───────────────────────────────────────────────
 
+/// One (digraph, latency) pair from the digraph latency profile. Returned as
+/// a sorted `Vec<DigraphEntry>` so iteration is deterministic — pre-2026-04-25
+/// this crossed the boundary as a JSON-stringified `Record<string, number>`,
+/// which forced the Rust side to maintain a `BTreeMap` purely for
+/// serialization-order determinism. The typed Vec carries the determinism
+/// guarantee in the data structure itself.
+#[napi(object)]
+#[derive(Serialize, Default)]
+pub struct DigraphEntry {
+    /// Two-character digraph encoded as `prev>next` (e.g. `"t>h"`).
+    pub digraph: String,
+    /// Mean flight time across all observations of this digraph (ms).
+    pub latency_ms: f64,
+}
+
 #[napi(object)]
 #[derive(Serialize, Default)]
 pub struct MotorSignals {
-    /// Non-empty if the input JSON failed to parse.
-    pub parse_error: Option<String>,
     pub sample_entropy: Option<f64>,
     pub mse_series: Option<Vec<f64>>,
     pub complexity_index: Option<f64>,
@@ -191,7 +200,10 @@ pub struct MotorSignals {
     pub lapse_rate: Option<f64>,
     pub tempo_drift: Option<f64>,
     pub iki_compression_ratio: Option<f64>,
-    pub digraph_latency_profile: Option<String>, // JSON-serialized Record<string, number>
+    /// Top-10 digraphs by frequency (sorted by count desc, then key asc for
+    /// deterministic tie-breaking). `None` if the stream is too short to
+    /// observe any digraph at least twice.
+    pub digraph_latency_profile: Option<Vec<DigraphEntry>>,
     pub ex_gaussian_tau: Option<f64>,
     pub ex_gaussian_mu: Option<f64>,
     pub ex_gaussian_sigma: Option<f64>,
@@ -208,7 +220,6 @@ pub fn compute_motor_signals(stream: Vec<KeystrokeEventInput>, total_duration_ms
     let r = motor::compute(&stream, total_duration_ms);
 
     MotorSignals {
-        parse_error: None,
         sample_entropy: r.sample_entropy,
         mse_series: r.mse_series,
         complexity_index: r.complexity_index,
@@ -286,6 +297,97 @@ pub fn compute_process_signals(event_log_json: String) -> ProcessSignals {
 
 // ─── Avatar (text generation + timing synthesis) ────────────────
 
+/// One (digraph, mean_latency_ms) pair from the personal-profile aggregate.
+/// Shape mirrors `DigraphEntry` for the per-session output, but the semantic
+/// meaning differs: this is the long-term aggregate across all sessions, used
+/// by the avatar timing synthesis to look up expected latency for a given
+/// bigram during generation.
+#[napi(object)]
+pub struct DigraphAggregateEntry {
+    pub digraph: String,
+    pub mean_latency_ms: f64,
+}
+
+/// Typed napi mirror of the personal motor profile loaded by the avatar
+/// pipeline. Pre-2026-04-25 this crossed the FFI as a heterogeneous JSON
+/// string built in `libReconstruction.ts` and parsed by `serde_json` in
+/// avatar.rs. Typing the boundary forces an explicit Rust+TS update for
+/// every new profile field — silent profile-schema evolution (where the
+/// TS side adds a field that Rust silently ignores) is no longer possible.
+///
+/// Internal avatar.rs still consumes a JSON string (preserves the 1900-line
+/// internal API). The napi entry points serialize this struct to JSON before
+/// delegating; the cost of one re-serialization is bounded and the schema
+/// guarantee is what matters.
+#[napi(object)]
+pub struct AvatarProfileInput {
+    /// Top-K digraphs by frequency, with mean latency. Used as a per-bigram
+    /// timing lookup during text generation.
+    pub digraph: Option<Vec<DigraphAggregateEntry>>,
+    /// Ex-Gaussian mu (Gaussian mean of IKI distribution)
+    pub mu: Option<f64>,
+    /// Ex-Gaussian sigma
+    pub sigma: Option<f64>,
+    /// Ex-Gaussian tau (exponential tail; attentional lapses)
+    pub tau: Option<f64>,
+    /// Mean P-burst length in chars
+    pub burst_length: Option<f64>,
+    /// Proportion of pauses at word boundaries
+    pub pause_between_pct: Option<f64>,
+    /// Proportion of pauses at sentence boundaries
+    pub pause_sent_pct: Option<f64>,
+    /// First keystroke latency in ms
+    pub first_keystroke: Option<f64>,
+    pub small_del_rate: Option<f64>,
+    pub large_del_rate: Option<f64>,
+    pub revision_timing_bias: Option<f64>,
+    pub r_burst_ratio: Option<f64>,
+    pub rburst_mean_size: Option<f64>,
+    pub rburst_leading_edge_pct: Option<f64>,
+    pub rburst_consolidation: Option<f64>,
+    pub rburst_mean_duration: Option<f64>,
+    pub iki_autocorrelation_lag1: Option<f64>,
+    pub hold_flight_rank_correlation: Option<f64>,
+    pub hold_time_mean: Option<f64>,
+    pub hold_time_std: Option<f64>,
+    pub flight_time_mean: Option<f64>,
+    pub flight_time_std: Option<f64>,
+}
+
+/// Serialize the typed napi profile input back to the JSON string that the
+/// internal avatar pipeline consumes. The shape matches what
+/// `libReconstruction.ts` previously constructed by hand.
+fn profile_input_to_json(p: &AvatarProfileInput) -> String {
+    let digraph: Option<std::collections::HashMap<&str, f64>> = p.digraph.as_ref().map(|v| {
+        v.iter().map(|e| (e.digraph.as_str(), e.mean_latency_ms)).collect()
+    });
+    serde_json::json!({
+        "digraph": digraph,
+        "mu": p.mu,
+        "sigma": p.sigma,
+        "tau": p.tau,
+        "burst_length": p.burst_length,
+        "pause_between_pct": p.pause_between_pct,
+        "pause_sent_pct": p.pause_sent_pct,
+        "first_keystroke": p.first_keystroke,
+        "small_del_rate": p.small_del_rate,
+        "large_del_rate": p.large_del_rate,
+        "revision_timing_bias": p.revision_timing_bias,
+        "r_burst_ratio": p.r_burst_ratio,
+        "rburst_mean_size": p.rburst_mean_size,
+        "rburst_leading_edge_pct": p.rburst_leading_edge_pct,
+        "rburst_consolidation": p.rburst_consolidation,
+        "rburst_mean_duration": p.rburst_mean_duration,
+        "iki_autocorrelation_lag1": p.iki_autocorrelation_lag1,
+        "hold_flight_rank_correlation": p.hold_flight_rank_correlation,
+        "hold_time_mean": p.hold_time_mean,
+        "hold_time_std": p.hold_time_std,
+        "flight_time_mean": p.flight_time_mean,
+        "flight_time_std": p.flight_time_std,
+    })
+    .to_string()
+}
+
 #[napi(object)]
 #[derive(Serialize, Default)]
 pub struct AvatarOutput {
@@ -326,19 +428,20 @@ pub struct PerplexityOutput {
 
 /// Generate text from a personal corpus Markov chain with timing from a motor profile.
 ///
-/// `corpus_json`: JSON array of response text strings
-/// `topic`: seed topic for generation
-/// `profile_json`: JSON object with timing profile fields (digraph, mu, sigma, tau, etc.)
-/// `max_words`: maximum words to generate
+/// Inputs are typed at the napi boundary (`Vec<String>` for the corpus,
+/// `AvatarProfileInput` for the profile). Internally re-serialized to the
+/// JSON form that `avatar::compute` consumes; this preserves the avatar's
+/// existing internal API while moving schema-evolution defense to the FFI.
 #[napi]
-#[allow(clippy::needless_pass_by_value)]
 pub fn generate_avatar(
-    corpus_json: String,
+    corpus: Vec<String>,
     topic: String,
-    profile_json: String,
+    profile: AvatarProfileInput,
     max_words: i32,
     variant: i32,
 ) -> AvatarOutput {
+    let corpus_json = serde_json::to_string(&corpus).unwrap_or_else(|_| "[]".to_string());
+    let profile_json = profile_input_to_json(&profile);
     let av = avatar::AdversaryVariant::from_i32(variant);
     let seeded = match avatar::compute(
         &corpus_json,
@@ -388,11 +491,11 @@ pub fn generate_avatar(
 /// instead of being derived from `SystemTime`. Given the same inputs and seed,
 /// the output is bit-identical to the original generation.
 #[napi]
-#[allow(clippy::needless_pass_by_value)]
+#[allow(clippy::needless_pass_by_value)] // `seed: String` retained from prior typed signature
 pub fn regenerate_avatar(
-    corpus_json: String,
+    corpus: Vec<String>,
     topic: String,
-    profile_json: String,
+    profile: AvatarProfileInput,
     max_words: i32,
     variant: i32,
     seed: String,
@@ -402,6 +505,8 @@ pub fn regenerate_avatar(
         Err(_) => return AvatarOutput::default(),
     };
 
+    let corpus_json = serde_json::to_string(&corpus).unwrap_or_else(|_| "[]".to_string());
+    let profile_json = profile_input_to_json(&profile);
     let av = avatar::AdversaryVariant::from_i32(variant);
     let r = match avatar::compute_seeded(
         &corpus_json,

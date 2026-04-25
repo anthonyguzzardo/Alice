@@ -38,8 +38,21 @@ fi
 
 echo "[signals] Building Rust signal engine..."
 cd "$DIR"
-cargo build --release 2>&1
+
+# Generate type-def temp file via napi-derive's `type-def` feature.
+# `cargo build` here is just to trigger the type-def emission; the actual
+# .node binary is produced by `napi build` below.
+TYPE_DEF_TMP="$DIR/target/.napi_type_def.tmp"
+rm -f "$TYPE_DEF_TMP"
+TYPE_DEF_TMP_PATH="$TYPE_DEF_TMP" cargo build --release 2>&1
+
+# Build the .node binary and the JS binding wrapper.
 npx napi build --release --platform 2>&1
+
+# Stitch the type-def temp file into a clean index.d.ts.
+# This makes the Rust #[napi] annotations the single source of truth for
+# the TypeScript bindings — no hand-written interface drift.
+node "$DIR/scripts/generate-dts.mjs" "$TYPE_DEF_TMP" "$DIR/index.d.ts"
 
 mkdir -p "$DIR/target"
 echo "$CURRENT_HASH" > "$HASH_FILE"

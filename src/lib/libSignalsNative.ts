@@ -9,113 +9,38 @@
 
 import { createRequire } from 'node:module';
 import { logError } from './utlErrorLog.ts';
+import type * as Native from '../../src-rs/index.d.ts';
 
-// ─── Signal types (canonical definitions) ─────────────────────────
+// ─── Signal types ──────────────────────────────────────────────────
+//
+// Single source of truth: `src-rs/index.d.ts` is generated from the Rust
+// `#[napi]` annotations on every Rust build (see `src-rs/build.sh` and
+// `src-rs/scripts/generate-dts.mjs`). Hand-written interfaces are forbidden;
+// edit the Rust struct, rebuild, and the type updates here automatically.
+//
+// The exported types are post-coercion shapes: napi maps Rust `Option::None`
+// to JS `undefined`, but postgres.js rejects undefined values. Below we apply
+// the `NullCoerced<T>` mapped type that converts every optional field to
+// `T[K] | null`. The `n()` / `na()` runtime helpers do the same coercion at
+// the value level. Together they keep the type system honest about what
+// reaches the database layer.
 
-export interface KeystrokeEvent {
-  c: string;   // key code
-  d: number;   // keydown offset ms
-  u: number;   // keyup offset ms
-}
+/** Converts every `T?` field to `T | null` while preserving array-vs-scalar typing. */
+type NullCoerced<T> = {
+  [K in keyof T]-?: undefined extends T[K]
+    ? Exclude<T[K], undefined> | null
+    : T[K];
+};
 
-export interface DynamicalSignals {
-  parseError: string | null;
-  ikiCount: number;
-  holdFlightCount: number;
-  permutationEntropy: number | null;
-  permutationEntropyRaw: number | null;
-  peSpectrum: number[] | null;
-  dfaAlpha: number | null;
-  mfdfaSpectrumWidth: number | null;
-  mfdfaAsymmetry: number | null;
-  mfdfaPeakAlpha: number | null;
-  temporalIrreversibility: number | null;
-  ikiPsdSpectralSlope: number | null;
-  ikiPsdRespiratoryPeakHz: number | null;
-  peakTypingFrequencyHz: number | null;
-  ikiPsdLfHfRatio: number | null;
-  ikiPsdFastSlowVarianceRatio: number | null;
-  statisticalComplexity: number | null;
-  forbiddenPatternFraction: number | null;
-  weightedPe: number | null;
-  lempelZivComplexity: number | null;
-  optnTransitionEntropy: number | null;
-  optnForbiddenTransitionCount: number | null;
-  rqaDeterminism: number | null;
-  rqaLaminarity: number | null;
-  rqaTrappingTime: number | null;
-  rqaRecurrenceRate: number | null;
-  rqaRecurrenceTimeEntropy: number | null;
-  rqaMeanRecurrenceTime: number | null;
-  recurrenceTransitivity: number | null;
-  recurrenceAvgPathLength: number | null;
-  recurrenceClustering: number | null;
-  recurrenceAssortativity: number | null;
-  effectiveInformation: number | null;
-  causalEmergenceIndex: number | null;
-  optimalCausalScale: number | null;
-  pidSynergy: number | null;
-  pidRedundancy: number | null;
-  branchingRatio: number | null;
-  avalancheSizeExponent: number | null;
-  dmdDominantFrequency: number | null;
-  dmdDominantDecayRate: number | null;
-  dmdModeCount: number | null;
-  dmdSpectralEntropy: number | null;
-  pauseMixtureComponentCount: number | null;
-  pauseMixtureMotorProportion: number | null;
-  pauseMixtureCognitiveLoadIndex: number | null;
-  teHoldToFlight: number | null;
-  teFlightToHold: number | null;
-  teDominance: number | null;
-}
-
-export interface MotorSignals {
-  parseError: string | null;
-  sampleEntropy: number | null;
-  mseSeries: number[] | null;
-  complexityIndex: number | null;
-  exGaussianFisherTrace: number | null;
-  ikiAutocorrelation: number[] | null;
-  motorJerk: number | null;
-  lapseRate: number | null;
-  tempoDrift: number | null;
-  ikiCompressionRatio: number | null;
-  digraphLatencyProfile: Record<string, number> | null;
-  exGaussianTau: number | null;
-  exGaussianMu: number | null;
-  exGaussianSigma: number | null;
-  tauProportion: number | null;
-  adjacentHoldTimeCov: number | null;
-  holdFlightRankCorr: number | null;
-}
-
-export interface RBurstEntry {
-  deletedCharCount: number;
-  totalCharCount: number;
-  durationMs: number;
-  startOffsetMs: number;
-  isLeadingEdge: boolean;
-}
-
-export interface ProcessSignals {
-  pauseWithinWord: number | null;
-  pauseBetweenWord: number | null;
-  pauseBetweenSentence: number | null;
-  abandonedThoughtCount: number | null;
-  rBurstCount: number | null;
-  iBurstCount: number | null;
-  rBurstSequences: RBurstEntry[];
-  vocabExpansionRate: number | null;
-  phaseTransitionPoint: number | null;
-  strategyShiftCount: number | null;
-}
-
-export interface PerplexityResult {
-  perplexity: number;
-  wordCount: number;
-  knownFraction: number;
-}
+// Re-exports under public names. Native input type aliased to `KeystrokeEvent`
+// for readability at call sites; structurally identical to `KeystrokeEventInput`.
+export type KeystrokeEvent = Native.KeystrokeEventInput;
+export type DynamicalSignals = NullCoerced<Native.DynamicalSignals>;
+export type MotorSignals = NullCoerced<Native.MotorSignals>;
+export type ProcessSignals = NullCoerced<Native.ProcessSignals>;
+export type RBurstEntry = Native.RBurstEntry;
+export type DigraphEntry = Native.DigraphEntry;
+export type PerplexityResult = Native.PerplexityOutput;
 
 export interface AvatarResult {
   text: string;
@@ -130,8 +55,8 @@ export interface AvatarResult {
 }
 
 // ─── Null coercion helpers ────────────────────────────────────────
-// napi-rs omits Rust Option::None fields entirely, producing undefined.
-// postgres.js rejects undefined values. Coerce to null.
+// Runtime counterparts to NullCoerced<T>. napi-rs omits `Option::None` fields
+// entirely (so they read as `undefined`); postgres.js rejects undefined.
 
 function n(v: number | null | undefined): number | null {
   return v ?? null;
@@ -141,157 +66,15 @@ function na(v: number[] | null | undefined): number[] | null {
 }
 
 // ─── Native module loading ─────────────────────────────────────────
+//
+// The shape of the loaded .node module is `typeof Native` — i.e. the auto-
+// generated module type. No hand-written interface that can drift from the
+// Rust binary.
 
-interface NativeModule {
-  computeDynamicalSignals(stream: KeystrokeEvent[]): {
-    ikiCount: number;
-    holdFlightCount: number;
-    permutationEntropy: number | null;
-    permutationEntropyRaw: number | null;
-    peSpectrum: number[] | null;
-    dfaAlpha: number | null;
-    mfdfaSpectrumWidth: number | null;
-    mfdfaAsymmetry: number | null;
-    mfdfaPeakAlpha: number | null;
-    temporalIrreversibility: number | null;
-    ikiPsdSpectralSlope: number | null;
-    ikiPsdRespiratoryPeakHz: number | null;
-    peakTypingFrequencyHz: number | null;
-    ikiPsdLfHfRatio: number | null;
-    ikiPsdFastSlowVarianceRatio: number | null;
-    statisticalComplexity: number | null;
-    forbiddenPatternFraction: number | null;
-    weightedPe: number | null;
-    lempelZivComplexity: number | null;
-    optnTransitionEntropy: number | null;
-    optnForbiddenTransitionCount: number | null;
-    rqaDeterminism: number | null;
-    rqaLaminarity: number | null;
-    rqaTrappingTime: number | null;
-    rqaRecurrenceRate: number | null;
-    rqaRecurrenceTimeEntropy: number | null;
-    rqaMeanRecurrenceTime: number | null;
-    recurrenceTransitivity: number | null;
-    recurrenceAvgPathLength: number | null;
-    recurrenceClustering: number | null;
-    recurrenceAssortativity: number | null;
-    effectiveInformation: number | null;
-    causalEmergenceIndex: number | null;
-    optimalCausalScale: number | null;
-    pidSynergy: number | null;
-    pidRedundancy: number | null;
-    branchingRatio: number | null;
-    avalancheSizeExponent: number | null;
-    dmdDominantFrequency: number | null;
-    dmdDominantDecayRate: number | null;
-    dmdModeCount: number | null;
-    dmdSpectralEntropy: number | null;
-    pauseMixtureComponentCount: number | null;
-    pauseMixtureMotorProportion: number | null;
-    pauseMixtureCognitiveLoadIndex: number | null;
-    teHoldToFlight: number | null;
-    teFlightToHold: number | null;
-    teDominance: number | null;
-  };
-  computeMotorSignals(stream: KeystrokeEvent[], totalDurationMs: number): {
-    sampleEntropy: number | null;
-    mseSeries: number[] | null;
-    complexityIndex: number | null;
-    exGaussianFisherTrace: number | null;
-    ikiAutocorrelation: number[] | null;
-    motorJerk: number | null;
-    lapseRate: number | null;
-    tempoDrift: number | null;
-    ikiCompressionRatio: number | null;
-    digraphLatencyProfile: string | null;
-    exGaussianTau: number | null;
-    exGaussianMu: number | null;
-    exGaussianSigma: number | null;
-    tauProportion: number | null;
-    adjacentHoldTimeCov: number | null;
-    holdFlightRankCorr: number | null;
-  };
-  computeProcessSignals(eventLogJson: string): {
-    pauseWithinWord: number | null;
-    pauseBetweenWord: number | null;
-    pauseBetweenSentence: number | null;
-    abandonedThoughtCount: number | null;
-    rBurstCount: number | null;
-    iBurstCount: number | null;
-    rBurstSequences: Array<{
-      deletedCharCount: number;
-      totalCharCount: number;
-      durationMs: number;
-      startOffsetMs: number;
-      isLeadingEdge: boolean;
-    }>;
-    vocabExpansionRate: number | null;
-    phaseTransitionPoint: number | null;
-    strategyShiftCount: number | null;
-  };
-  generateAvatar(
-    corpusJson: string,
-    topic: string,
-    profileJson: string,
-    maxWords: number,
-    variant: number,
-  ): {
-    text: string;
-    delays: number[];
-    keystrokeStreamJson: string;
-    wordCount: number;
-    order: number;
-    chainSize: number;
-    iBurstCount: number;
-    variant: number;
-    seed: string;
-  };
-  regenerateAvatar(
-    corpusJson: string,
-    topic: string,
-    profileJson: string,
-    maxWords: number,
-    variant: number,
-    seed: string,
-  ): {
-    text: string;
-    delays: number[];
-    keystrokeStreamJson: string;
-    wordCount: number;
-    order: number;
-    chainSize: number;
-    iBurstCount: number;
-    variant: number;
-    seed: string;
-  };
-  computeProfileDistance(
-    values: number[],
-    means: number[],
-    stds: number[],
-  ): {
-    zScores: number[];
-    distance: number;
-    dimensionCount: number;
-  };
-  computePerplexity(corpus: string[], text: string): {
-    perplexity: number;
-    wordCount: number;
-    knownFraction: number;
-  };
-  computeBatchCorrelations(
-    seriesA: number[][],
-    seriesB: number[][],
-    windowSizes: number[],
-    maxLag: number,
-    threshold: number,
-  ): Array<{
-    aIndex: number;
-    bIndex: number;
-    windowSize: number;
-    correlation: number;
-    lag: number;
-  }>;
-}
+type NativeModule = typeof Native;
+
+// (Hand-written interface deleted 2026-04-25; replaced by the generated
+// d.ts at src-rs/index.d.ts. To regenerate: `npm run build:rust`.)
 
 let native: NativeModule | null = null;
 
@@ -317,7 +100,6 @@ export function computeDynamicalSignals(stream: KeystrokeEvent[]): DynamicalSign
     const result = native.computeDynamicalSignals(stream);
     console.log(`[signals] rust dynamical: ${(performance.now() - t0).toFixed(1)}ms (${stream.length} keystrokes)`);
     return {
-      parseError: null,
       ikiCount: result.ikiCount ?? 0,
       holdFlightCount: result.holdFlightCount ?? 0,
       permutationEntropy: n(result.permutationEntropy),
@@ -386,7 +168,6 @@ export function computeMotorSignals(
     const result = native.computeMotorSignals(stream, totalDurationMs);
     console.log(`[signals] rust motor: ${(performance.now() - t0).toFixed(1)}ms`);
     return {
-      parseError: null,
       sampleEntropy: n(result.sampleEntropy),
       mseSeries: na(result.mseSeries),
       complexityIndex: n(result.complexityIndex),
@@ -396,9 +177,9 @@ export function computeMotorSignals(
       lapseRate: n(result.lapseRate),
       tempoDrift: n(result.tempoDrift),
       ikiCompressionRatio: n(result.ikiCompressionRatio),
-      digraphLatencyProfile: result.digraphLatencyProfile
-        ? JSON.parse(result.digraphLatencyProfile) as Record<string, number>
-        : null,
+      // Typed Vec<DigraphEntry> from Rust — no JSON parse step, deterministic
+      // iteration order is preserved by the sort applied on the Rust side.
+      digraphLatencyProfile: result.digraphLatencyProfile ?? null,
       exGaussianTau: n(result.exGaussianTau),
       exGaussianMu: n(result.exGaussianMu),
       exGaussianSigma: n(result.exGaussianSigma),
@@ -462,10 +243,54 @@ export function computePerplexity(corpus: string[], text: string): PerplexityRes
 
 // ─── Avatar generation ────────────────────────────────────────────
 
+export type AvatarProfileInput = Native.AvatarProfileInput;
+export type DigraphAggregateEntry = Native.DigraphAggregateEntry;
+
+/**
+ * Convert a legacy-format profile JSON record (stored as
+ * `{ digraph: { "t>h": 87.3, ... }, mu: ..., sigma: ..., ... }`) into the
+ * typed `AvatarProfileInput` accepted by the napi boundary.
+ *
+ * Used by the replay path (`regenerateFromStored`) which reads
+ * `profile_snapshot_json` columns persisted before and after this refactor.
+ * Both shapes resolve cleanly: the digraph map is converted to a Vec, and
+ * scalar fields are read directly.
+ */
+export function profileFromLegacyJson(json: string): AvatarProfileInput {
+  const obj = JSON.parse(json) as Record<string, unknown>;
+  const digraphObj = obj.digraph as Record<string, number> | null | undefined;
+  return {
+    digraph: digraphObj
+      ? Object.entries(digraphObj).map(([digraph, meanLatencyMs]) => ({ digraph, meanLatencyMs }))
+      : undefined,
+    mu: (obj.mu as number | null) ?? undefined,
+    sigma: (obj.sigma as number | null) ?? undefined,
+    tau: (obj.tau as number | null) ?? undefined,
+    burstLength: (obj.burst_length as number | null) ?? undefined,
+    pauseBetweenPct: (obj.pause_between_pct as number | null) ?? undefined,
+    pauseSentPct: (obj.pause_sent_pct as number | null) ?? undefined,
+    firstKeystroke: (obj.first_keystroke as number | null) ?? undefined,
+    smallDelRate: (obj.small_del_rate as number | null) ?? undefined,
+    largeDelRate: (obj.large_del_rate as number | null) ?? undefined,
+    revisionTimingBias: (obj.revision_timing_bias as number | null) ?? undefined,
+    rBurstRatio: (obj.r_burst_ratio as number | null) ?? undefined,
+    rburstMeanSize: (obj.rburst_mean_size as number | null) ?? undefined,
+    rburstLeadingEdgePct: (obj.rburst_leading_edge_pct as number | null) ?? undefined,
+    rburstConsolidation: (obj.rburst_consolidation as number | null) ?? undefined,
+    rburstMeanDuration: (obj.rburst_mean_duration as number | null) ?? undefined,
+    ikiAutocorrelationLag1: (obj.iki_autocorrelation_lag1 as number | null) ?? undefined,
+    holdFlightRankCorrelation: (obj.hold_flight_rank_correlation as number | null) ?? undefined,
+    holdTimeMean: (obj.hold_time_mean as number | null) ?? undefined,
+    holdTimeStd: (obj.hold_time_std as number | null) ?? undefined,
+    flightTimeMean: (obj.flight_time_mean as number | null) ?? undefined,
+    flightTimeStd: (obj.flight_time_std as number | null) ?? undefined,
+  };
+}
+
 export function generateAvatar(
-  corpusJson: string,
+  corpus: string[],
   topic: string,
-  profileJson: string,
+  profile: AvatarProfileInput,
   maxWords: number,
   variant: number = 1,
 ): AvatarResult | null {
@@ -473,7 +298,7 @@ export function generateAvatar(
 
   try {
     const t0 = performance.now();
-    const result = native.generateAvatar(corpusJson, topic, profileJson, maxWords, variant);
+    const result = native.generateAvatar(corpus, topic, profile, maxWords, variant);
     console.log(`[signals] rust avatar v${variant}: ${(performance.now() - t0).toFixed(1)}ms (${result.wordCount} words)`);
     if (!result.text) return null;
     const stream: KeystrokeEvent[] = result.keystrokeStreamJson
@@ -499,9 +324,9 @@ export function generateAvatar(
 // ─── Avatar regeneration (reproducibility verification) ──────────
 
 export function regenerateAvatar(
-  corpusJson: string,
+  corpus: string[],
   topic: string,
-  profileJson: string,
+  profile: AvatarProfileInput,
   maxWords: number,
   variant: number,
   seed: string,
@@ -510,7 +335,7 @@ export function regenerateAvatar(
 
   try {
     const t0 = performance.now();
-    const result = native.regenerateAvatar(corpusJson, topic, profileJson, maxWords, variant, seed);
+    const result = native.regenerateAvatar(corpus, topic, profile, maxWords, variant, seed);
     console.log(`[signals] rust regenerate avatar v${variant}: ${(performance.now() - t0).toFixed(1)}ms (${result.wordCount} words)`);
     if (!result.text) return null;
     const stream: KeystrokeEvent[] = result.keystrokeStreamJson
