@@ -58,3 +58,8 @@ INSERT INTO te_context_dimension (context_dimension_id, enum_code, name) VALUES
   ,(6, 'exercise',        'Exercise')
   ,(7, 'routine',         'Routine')
 ON CONFLICT DO NOTHING;
+
+-- tb_subjects (owner identity)
+INSERT INTO tb_subjects (invite_code, display_name, is_owner)
+VALUES ('alice-owner', 'Owner', TRUE)
+ON CONFLICT (invite_code) DO NOTHING;

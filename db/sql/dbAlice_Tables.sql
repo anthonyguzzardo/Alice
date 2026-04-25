@@ -127,6 +127,32 @@ INSERT INTO te_adversary_variants (adversary_variant_id, name, description) VALU
   ,(5, 'full_adversary',      'PPM + AR(1) + copula')
 ON CONFLICT (adversary_variant_id) DO NOTHING;
 
+-- @region identity -- tb_subjects
+-- ============================================================================
+-- IDENTITY
+-- ============================================================================
+
+-- PURPOSE: all users of Alice (owner + subjects)
+-- USE CASE: one row per identity. invite_code is the authentication token.
+--           Owner row seeded at deploy; subjects created by owner via CLI.
+-- MUTABILITY: insert by owner, soft-disable via is_active. Never deleted.
+-- REFERENCED BY: tb_scheduled_questions, tb_subject_responses, tb_subject_session_summaries (all logical FK)
+-- FOOTER: created only
+CREATE TABLE IF NOT EXISTS tb_subjects (
+   subject_id       INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,invite_code      TEXT UNIQUE NOT NULL
+  ,display_name     TEXT
+  ,is_owner         BOOLEAN NOT NULL DEFAULT FALSE
+  ,is_active        BOOLEAN NOT NULL DEFAULT TRUE
+  ,dttm_created_utc TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Enforce exactly one owner at the database level.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_subjects_single_owner
+  ON tb_subjects (is_owner) WHERE is_owner = TRUE;
+
+-- --------------------------------------------------------------------------
+
 -- @region core -- tb_questions, tb_question_corpus, tb_responses, tb_interaction_events, tb_reflections, tb_question_feedback
 -- ============================================================================
 -- CORE MUTABLE TABLES
