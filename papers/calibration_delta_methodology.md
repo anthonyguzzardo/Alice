@@ -5,7 +5,7 @@ author: Anthony Guzzardo
 date: 2026-04-24
 status: draft
 version: 1
-abstract: "A within-person matched-pair design compares behavioral and linguistic signals between reflective journal sessions and neutral calibration sessions. Initial screening of 68 signals across four families identified four candidates. A confound battery revealed that three dynamical signals were series-length artifacts. One signal (integrative complexity) survives all checks. The methodology is documented for replication at larger sample sizes."
+abstract: "A within-person matched-pair design compares behavioral and linguistic signals between reflective journal sessions and neutral calibration sessions. Initial screening of 68 signals across four families identified four signals across two families (one semantic, three dynamical). A confound battery revealed that the three dynamical signals were series-length artifacts. One signal (integrative complexity) survives all checks. The methodology is documented for replication at larger sample sizes."
 ---
 
 # Calibration Delta Methodology: Within-Person Provocation Analysis
@@ -19,7 +19,7 @@ April 2026 (v1, draft)
 
 ### Matched-pair structure
 
-Alice collects two writing sessions per day from a single participant: a journal session (reflective writing in response to a generated question about the person's inner life) and a calibration session (neutral writing in response to a randomly selected prompt from a pool of 303 knowledge-telling tasks). The two sessions form a within-person, within-day matched pair. The delta (journal value minus calibration value) on any behavioral or linguistic signal isolates what the reflective question provoked beyond the person's same-day neutral writing baseline.
+Alice collects two writing sessions per day from a single participant: a journal session (reflective writing in response to a generated question about the person's inner life) and a calibration session (neutral writing in response to a randomly selected prompt from a pool of 303 knowledge-telling tasks). The two sessions form a within-person, within-day matched pair. The delta (journal value minus calibration value) on any behavioral or linguistic signal isolates what the reflective question provoked beyond the person's same-day neutral writing baseline. The same-day pairing is motivated by evidence that 76-89% of stress response variance is within-day (Toledo et al. 2024), making same-day controls more appropriate than between-day baselines for isolating state-level provocation effects.
 
 ### Calibration prompt design
 
@@ -31,7 +31,7 @@ In the first 12 day-pairs (April 13-24, 2026), journal sessions occur in the mor
 
 ### Signal inventory
 
-68 signals are computed per session across four families: dynamical (35 signals, Rust-computed from IKI series: permutation entropy, DFA, MF-DFA, RQA, transfer entropy, PID, DMD, causal emergence, criticality), motor (13 signals, Rust-computed from keystroke timing: sample entropy, ex-Gaussian distribution, motor jerk, tempo drift, compression ratio, digraph latency, hold-flight correlation), process (9 signals, Rust-computed from event log replay: pause location, burst classification, vocabulary expansion, phase transition, strategy shifts), and semantic (11 signals, TypeScript-computed from response text: idea density, lexical sophistication, epistemic stance, integrative complexity, cohesion measures, discourse coherence, text compression ratio). A fifth family (cross-session, 11 signals) is structurally excluded because it compares against prior history that calibration sessions may not have.
+68 signals are computed per session across four families: dynamical (35 signals, Rust-computed from IKI series: permutation entropy, DFA, MF-DFA, RQA, transfer entropy, PID, DMD, causal emergence, criticality), motor (13 signals, Rust-computed from keystroke timing: sample entropy, ex-Gaussian distribution, motor jerk, tempo drift, compression ratio, digraph latency, hold-flight correlation), process (9 signals, Rust-computed from event log replay: pause location, burst classification, vocabulary expansion, phase transition, strategy shifts), and semantic (11 signals, TypeScript-computed from response text: idea density, lexical sophistication, epistemic stance, integrative complexity, cohesion measures, discourse coherence, text compression ratio). All signals are classified by ergodicity (Mangalam et al. 2022): signals derived from fractal and entropy measures are safe for longitudinal trending in N=1 designs, while IKI-derived means and motor timing means are valid per-session but unreliable as trend estimators for non-ergodic multiplicative processes. A fifth family (cross-session, 11 signals) is structurally excluded from the delta analysis. Cross-session signals (self-perplexity, NCD, vocab recurrence, digraph stability, text network metrics) are computed by comparing the current session against the participant's prior journal history; calibration sessions lack a comparable calibration-only history to reference, so the comparison is undefined and the family is excluded by design.
 
 ---
 
@@ -108,9 +108,13 @@ Length-matched recomputation was applied to the three dynamical signals (integra
 
 Temporal irreversibility is the clearest artifact: 100% sign consistency reverses direction entirely under length-matching. LZC and PID synergy lose sign consistency and CI significance.
 
-Time-of-day regression on integrative complexity: r=0.315, R^2=0.099, p=0.458. Not significant. The IC provocation effect does not covary with the 10-hour circadian gap.
+Time-of-day regression on integrative complexity: r=0.315, R^2=0.099, p=0.458. Not significant. The IC provocation effect does not covary with the 10-hour circadian gap. (Note: the regression has low power at n=7; a weak TOD effect cannot be excluded. See Limitations.)
 
-Length-matched pause and burst structure comparison shows comparable distributions: pause count (4.3 vs 3.7 per session), median pause duration (2929ms vs 2695ms), median burst length (67 vs 56 IKIs), inter-burst interval (2929ms vs 2695ms). No structural divergence at equal keystroke counts.
+### Pacing and structural comparability at equal keystroke counts
+
+When journal streams are truncated to calibration length, the two conditions produce comparable writing process signatures. Pause count: 4.3 vs 3.7 per session. Median pause duration: 2929ms vs 2695ms. Pause IQR: 912ms vs 1309ms. Median burst length (IKIs between pauses >= 2000ms): 67 vs 56. Burst IQR: 89 vs 117. Mean inter-burst interval: 2968ms vs 2908ms.
+
+This is a non-trivial finding. The 2.5x length asymmetry in total production coexists with equivalent keystroke-level pacing (IKI mean 169ms vs 179ms, p=0.51; IKI CV 1.5 vs 1.5, p=0.48; chars per minute 273 vs 252, p=0.42) and equivalent within-session microstructure (pause frequency, pause duration, burst length, inter-burst gaps). The reflective question does not change the motor-cognitive process of typing. It changes how long the process runs and what linguistic content it produces. The structural production machinery is the same; the semantic output is different. This dissociation between process equivalence and output divergence is what makes the integrative complexity finding interpretable: the IC difference is not driven by a different writing process but by a different cognitive engagement with the material.
 
 ### Surviving signal
 
@@ -130,14 +134,13 @@ Length-matched pause and burst structure comparison shows comparable distributio
 
 **Series-length sensitivity.** The confound battery revealed that three of four Phase 1 survivors were series-length artifacts. This underscores that any future analysis of dynamical signal deltas must control for series length. The 2.5x length asymmetry is a structural feature of the current design, not an anomaly.
 
+**Integrative complexity is a computational proxy.** The IC signal used here measures contrastive and integrative connective density per sentence, computed deterministically from word lists. This approximates but does not reproduce the trained-rater integrative complexity construct from Suedfeld and Tetlock (1977), which involves holistic paragraph-level scoring of differentiation and integration by trained coders. The word-list proxy captures connective usage (a necessary component of IC) but not the conceptual structure that human raters assess. A high connective density score can occur without genuine multi-perspective integration if the writer uses connectives as filler or in formulaic constructions. The finding that the reflective question increases connective density relative to neutral writing is robust; the claim that this constitutes increased integrative complexity in the Suedfeld-Tetlock sense is weaker.
+
 ---
 
 ## References
 
 - Hedges, L.V. (1981). Distribution theory for Glass's estimator of effect size. *JASA*, 76, 107-128.
-- Jacobson, N.S. & Truax, P. (1991). Clinical significance: A statistical approach. *JCCP*, 59, 12-19.
-- Suedfeld, P. & Tetlock, P.E. (1977). Integrative complexity of communications in international crises. *J. Conflict Resolution*, 21, 169-184.
-- Pennebaker, J.W. (1997). Writing about emotional experiences as a therapeutic process. *Psychological Science*, 8, 162-166.
 - Mangalam, M. et al. (2022). Ergodic descriptors of non-ergodic stochastic processes. *J. Royal Society Interface*.
-- Bandt, C. & Pompe, B. (2002). Permutation entropy. *Physical Review Letters*, 88, 174102.
+- Suedfeld, P. & Tetlock, P.E. (1977). Integrative complexity of communications in international crises. *J. Conflict Resolution*, 21, 169-184.
 - Toledo, N. et al. (2024). Within-day stress response variance. *Psychoneuroendocrinology*.

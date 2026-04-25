@@ -9,11 +9,23 @@ version: 1
 
 # Calibration Design Recommendation
 
-The Phase 1 confound battery surfaced two structural problems: a 2.5x length asymmetry between journal and calibration sessions, and a systematic 10-hour time-of-day gap with fixed journal-first ordering. Three options for addressing the length asymmetry, plus an ordering recommendation.
+The Phase 1 confound battery surfaced two structural problems: a 2.5x length asymmetry between journal and calibration sessions, and a systematic 10-hour time-of-day gap with fixed journal-first ordering.
 
 ---
 
-## Option A: Extend the calibration prompt to target equal length
+## Immediate action: Randomize session ordering
+
+**Effective immediately.** Alternate which session comes first on odd vs even calendar days: journal first on odd days, calibration first on even days. This is a behavioral change only (no code modification). It breaks the fixed-ordering confound (currently 83% journal-first) and partially addresses the time-of-day gap by ensuring some calibration sessions occur in the morning and some journal sessions occur in the evening.
+
+This is the single most impactful change available at zero cost. It does not require UI changes, prompt pool modifications, or analysis pipeline updates. It does not solve the length asymmetry, but it converts the ordering and time-of-day confounds from systematic biases into balanced noise.
+
+---
+
+## Length asymmetry options
+
+Three options for addressing the 2.5x length asymmetry.
+
+### Option A: Extend the calibration prompt to target equal length
 
 **What it does.** Add a target word count or minimum writing time to the calibration UI. The current calibration sessions average 56 words and 97 seconds. Journal sessions average 146 words and 240 seconds. A floor of "write for at least 2 minutes" or "aim for 100+ words" would narrow the gap.
 
@@ -41,15 +53,15 @@ The Phase 1 confound battery surfaced two structural problems: a 2.5x length asy
 
 ---
 
-## Option C: Multiple short calibration sessions bracketing the journal
+### Option C: Multiple short calibration sessions bracketing the journal
 
 **What it does.** Instead of one calibration session per day, run two: one before the journal and one after. Each calibration session stays at its natural short length (~1-2 minutes). The pre-journal calibration controls for time-of-day and fatigue state at journal time. The post-journal calibration captures within-day change.
 
-**What it fixes.** Time-of-day gap (pre-journal calibration is at the same time as journal). Fixed ordering (one calibration on each side). Enables a pre/post design: the delta between pre-journal calibration and journal isolates the question's effect at matched time-of-day; the delta between pre and post calibration isolates within-day change independent of the question.
+**What it fixes.** Time-of-day gap (pre-journal calibration is at the same time as journal). Fixed ordering (one calibration on each side). Enables a pre/post design: the delta between pre-journal calibration and journal isolates the question's effect at matched time-of-day; the delta between pre and post calibration isolates within-day change independent of the question. This is the only option that fixes the time-of-day confound structurally rather than analytically. The TOD regression at n=7 (p=0.458) has very low power; a non-significant result at this N is weak evidence of no TOD effect. Option C eliminates the need to rely on that regression.
 
 **What it doesn't fix.** Length asymmetry persists (each calibration is still ~60 words). Requires length-matching for dynamical signals (same as Option B).
 
-**What it costs.** Triples daily session count (from 2 to 3). Significantly increases instrument burden. Requires a new prompt selection mechanism to avoid giving two calibration prompts from the same category on the same day. The pre-journal calibration must not prime or contaminate the journal response (prompt must be from a different cognitive domain than the journal question).
+**What it costs.** Increases daily session count from 2 to 3. Total daily writing time increases from ~5.5 minutes (4 min journal + 1.5 min calibration) to ~7 minutes (4 min journal + 1.5 min x 2 calibrations). This is a 25% increase in daily instrument time, not a tripling. Requires a new prompt selection mechanism to avoid giving two calibration prompts from the same cognitive category on the same day. The pre-journal calibration must not prime or contaminate the journal response (prompt must be from a different cognitive domain than the journal question).
 
 **New confounds.** Practice effects within the day: the second calibration benefits from having already written once (journal) and once (first calibration). Priming: even a neutral calibration prompt before the journal may anchor the participant's cognitive state in a way that changes the journal response. The matched-pair design becomes a matched-triple design, complicating analysis.
 
@@ -57,20 +69,18 @@ The Phase 1 confound battery surfaced two structural problems: a 2.5x length asy
 
 ## Recommendation
 
-**Option B (accept asymmetry, standardize length-matching) for immediate use. Option A (extend calibration) for evaluation at n=25.**
+**Session ordering randomization is already specified above as an immediate action.** For the length asymmetry:
+
+**Option B (accept asymmetry, standardize length-matching) for immediate use. Option A (extend calibration) for evaluation at n=25. Option C (bracketing) for evaluation if the TOD regression becomes significant.**
 
 Rationale: Option B costs nothing, introduces no new confounds, and the Phase 1 confound battery already demonstrated that length-matching works. The three artifact signals collapsed cleanly under truncation, confirming the method is valid. The surviving signal (integrative complexity) is text-based and unaffected by length-matching. For the dynamical family, length-matching is the honest analysis.
 
 Option A should be evaluated, not implemented now. At n=25, if no dynamical signals survive length-matching, the length asymmetry is not just a confound but a design limitation that prevents dynamical delta analysis entirely. At that point, extending calibration to target equal length is warranted. But extending now, before establishing what the natural calibration length produces, would lose the ability to compare against the current baseline.
 
-Option C is intellectually appealing but operationally heavy. A pre-journal calibration session solves the time-of-day confound cleanly, but the tripled daily burden risks compliance degradation. Defer unless the time-of-day regression becomes significant at larger N.
-
-### Ordering
-
-Independent of the length decision: randomize the order of journal and calibration within each day. If the participant is willing, alternate which comes first on odd vs even days. This breaks the fixed-ordering confound without requiring any code changes to the instrument (only a behavioral change in when the participant opens each session).
+Option C is the strongest design for isolating the provocation effect from time-of-day and ordering confounds, and its operational cost (~1.5 additional minutes per day) is modest. It should be evaluated at n=25 if either (a) the TOD regression on integrative complexity becomes significant, indicating the ordering randomization alone was insufficient, or (b) the ordering randomization reveals that calibration-first days produce systematically different deltas than journal-first days, suggesting time-of-day is a real confound that randomization can characterize but not eliminate.
 
 ---
 
 ### Calibration drift and prompt rotation
 
-Two signals show calibration baseline drift (DMD dominant frequency falling, lexical sophistication rising). The prompt pool is large (303 prompts across 12 categories) and already implements maximum-temporal-spacing recycling. With 56 calibration sessions over 12 days, the pool is not near exhaustion. The drift is more likely a participant familiarity effect with the calibration task itself (becoming more practiced at neutral writing) than a prompt repetition effect. Prompt rotation within the existing pool is already implemented and adequate. The drift should be monitored at replication checkpoints; if it accelerates or spreads to more signals, a redesign of the prompt categories (not just rotation within them) may be needed.
+Two signals show calibration baseline drift (DMD dominant frequency falling, lexical sophistication rising). The prompt pool is large (303 prompts across 12 categories) and already implements maximum-temporal-spacing recycling. With 56 calibration sessions over 12 days, the pool is not near exhaustion. The drift mechanism is an open question: it could be a participant familiarity effect (becoming more practiced at neutral writing in general), a prompt category effect (certain categories producing systematically different signals than others, with category sampling order creating a trend), or a genuine within-person change over the 12-day observation window that happens to appear in the calibration channel. These cannot be distinguished from the current data. Prompt rotation within the existing pool is already implemented and adequate for preventing repetition. The drift should be monitored at replication checkpoints; if it accelerates or spreads to more signals, the mechanism question becomes urgent and may require analysis by prompt category to diagnose.
