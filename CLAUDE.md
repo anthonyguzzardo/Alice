@@ -257,8 +257,8 @@ The Rust crate must be written to Rust's standards, not JavaScript's.
 
 ### napi Boundary (`lib.rs`)
 
-- `lib.rs` is a thin mapping layer. It deserializes JSON, calls module `compute()` functions, and maps internal result types to flat `#[napi(object)]` structs. No signal logic belongs here.
-- napi entry points take `String` by value (required by FFI). Suppress `clippy::needless_pass_by_value` with `#[allow]`.
+- `lib.rs` is a thin mapping layer. It accepts typed napi inputs (`Vec<KeystrokeEventInput>`, `Vec<f64>`, `Vec<Vec<f64>>`, `Vec<String>`), converts them to internal Rust types if needed, calls module `compute()` functions, and maps internal result types to flat `#[napi(object)]` structs. **No signal logic belongs here.**
+- **Inputs and outputs at the napi boundary are typed `#[napi(object)]` structs and primitive vectors.** JSON strings are reserved for genuinely heterogeneous payloads (e.g. `event_log_json` with variable event shapes per event type, or `profile_json`/`corpus_json` until those entry points are typed in a follow-up). Never use `String` to transport a value that has a fixed schema — pre-2026-04-25 the boundary used `stream_json: String` for keystroke streams and serialized ~1MB of JSON per call. See `KeystrokeEventInput` for the boundary-mirror pattern: a separate `pub` napi-decorated struct with the wire-format names (`c`, `d`, `u`) and a `From` impl into the internal `pub(crate)` `KeystrokeEvent`. This keeps the FFI ABI decoupled from the internal Rust representation.
 - `usize` counts convert to `i32` via `i32::try_from(x).unwrap_or(i32::MAX)`. Never use `as i32`.
 - `Option::None` from Rust becomes `undefined` in JS. The TS integration layer (`libSignalsNative.ts`) coerces these to `null` for postgres.js compatibility.
 

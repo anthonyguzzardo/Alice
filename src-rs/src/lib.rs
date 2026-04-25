@@ -23,6 +23,37 @@ use serde::Serialize;
 
 use types::KeystrokeEvent;
 
+// ─── napi boundary input types ────────────────────────────────────
+// These are the JS-side representation of structured inputs. They use the
+// short wire-format names (c/d/u) directly; conversion to internal Rust
+// types happens at the entry point. Keeping a separate boundary type means
+// the internal `KeystrokeEvent` (with `pub(crate)` visibility and readable
+// field names) is decoupled from the FFI ABI.
+
+#[napi(object)]
+pub struct KeystrokeEventInput {
+    /// Key character / code
+    pub c: String,
+    /// Key-down offset (ms)
+    pub d: f64,
+    /// Key-up offset (ms)
+    pub u: f64,
+}
+
+impl From<KeystrokeEventInput> for KeystrokeEvent {
+    fn from(e: KeystrokeEventInput) -> Self {
+        KeystrokeEvent {
+            character: e.c,
+            key_down_ms: e.d,
+            key_up_ms: e.u,
+        }
+    }
+}
+
+fn into_internal_stream(input: Vec<KeystrokeEventInput>) -> Vec<KeystrokeEvent> {
+    input.into_iter().map(KeystrokeEvent::from).collect()
+}
+
 // ─── Dynamical signals ───────────────────────────────────────────
 
 #[napi(object)]
@@ -82,15 +113,12 @@ pub struct DynamicalSignals {
 }
 
 #[napi]
-#[allow(clippy::needless_pass_by_value)] // napi-rs requires owned String at FFI boundary
-pub fn compute_dynamical_signals(stream_json: String) -> DynamicalSignals {
-    let stream: Vec<KeystrokeEvent> = match serde_json::from_str(&stream_json) {
-        Ok(s) => s,
-        Err(e) => return DynamicalSignals {
-            parse_error: Some(format!("keystroke JSON: {e}")),
-            ..DynamicalSignals::default()
-        },
-    };
+pub fn compute_dynamical_signals(stream: Vec<KeystrokeEventInput>) -> DynamicalSignals {
+    // Typed-boundary path: napi-rs decodes the JS array of {c,d,u} objects
+    // directly into Vec<KeystrokeEventInput>, replacing the previous
+    // JSON-string + serde_json::from_str round trip. For a 10K-keystroke
+    // session this is ~1MB of serialization avoided per call.
+    let stream = into_internal_stream(stream);
 
     let r = dynamical::compute(&stream);
 
@@ -173,15 +201,9 @@ pub struct MotorSignals {
 }
 
 #[napi]
-#[allow(clippy::needless_pass_by_value)]
-pub fn compute_motor_signals(stream_json: String, total_duration_ms: f64) -> MotorSignals {
-    let stream: Vec<KeystrokeEvent> = match serde_json::from_str(&stream_json) {
-        Ok(s) => s,
-        Err(e) => return MotorSignals {
-            parse_error: Some(format!("keystroke JSON: {e}")),
-            ..MotorSignals::default()
-        },
-    };
+pub fn compute_motor_signals(stream: Vec<KeystrokeEventInput>, total_duration_ms: f64) -> MotorSignals {
+    // Typed-boundary path: see compute_dynamical_signals for rationale.
+    let stream = into_internal_stream(stream);
 
     let r = motor::compute(&stream, total_duration_ms);
 
@@ -436,25 +458,11 @@ pub struct ProfileDistanceOutput {
 /// Compute profile distance: z-score each dimension against profile means/stds,
 /// return L2 norm. Used for mediation detection (flagging anomalous sessions).
 #[napi]
-#[allow(clippy::needless_pass_by_value)]
 pub fn compute_profile_distance(
-    values_json: String,
-    means_json: String,
-    stds_json: String,
+    values: Vec<f64>,
+    means: Vec<f64>,
+    stds: Vec<f64>,
 ) -> ProfileDistanceOutput {
-    let values: Vec<f64> = match serde_json::from_str(&values_json) {
-        Ok(v) => v,
-        Err(_) => return ProfileDistanceOutput::default(),
-    };
-    let means: Vec<f64> = match serde_json::from_str(&means_json) {
-        Ok(v) => v,
-        Err(_) => return ProfileDistanceOutput::default(),
-    };
-    let stds: Vec<f64> = match serde_json::from_str(&stds_json) {
-        Ok(v) => v,
-        Err(_) => return ProfileDistanceOutput::default(),
-    };
-
     let (z_scores, distance) = stats::z_scores_and_distance(&values, &means, &stds);
     let dimension_count = i32::try_from(z_scores.len()).unwrap_or(i32::MAX);
 
@@ -492,29 +500,15 @@ pub struct CorrelationResult {
 /// `max_lag`: maximum lag to test
 /// `threshold`: minimum |r| to include in results
 #[napi]
-#[allow(clippy::needless_pass_by_value)]
 pub fn compute_batch_correlations(
-    series_a_json: String,
-    series_b_json: String,
-    window_sizes_json: String,
+    series_a: Vec<Vec<f64>>,
+    series_b: Vec<Vec<f64>>,
+    window_sizes: Vec<i32>,
     max_lag: i32,
     threshold: f64,
 ) -> Vec<CorrelationResult> {
-    let series_a: Vec<Vec<f64>> = match serde_json::from_str(&series_a_json) {
-        Ok(v) => v,
-        Err(_) => return Vec::new(),
-    };
-    let series_b: Vec<Vec<f64>> = match serde_json::from_str(&series_b_json) {
-        Ok(v) => v,
-        Err(_) => return Vec::new(),
-    };
-    let window_sizes_i32: Vec<i32> = match serde_json::from_str(&window_sizes_json) {
-        Ok(v) => v,
-        Err(_) => return Vec::new(),
-    };
-
     let ml = max_lag.max(0) as usize;
-    let ws: Vec<usize> = window_sizes_i32.iter().map(|&w| w.max(0) as usize).collect();
+    let ws: Vec<usize> = window_sizes.iter().map(|&w| w.max(0) as usize).collect();
 
     stats::batch_lagged_correlations(&series_a, &series_b, &ws, ml, threshold)
         .into_iter()
@@ -532,8 +526,13 @@ pub fn compute_batch_correlations(
 /// Tracks convergence: as the corpus grows, perplexity of real journal
 /// responses should decrease monotonically.
 #[napi]
-#[allow(clippy::needless_pass_by_value)]
-pub fn compute_perplexity(corpus_json: String, text: String) -> PerplexityOutput {
+pub fn compute_perplexity(corpus: Vec<String>, text: String) -> PerplexityOutput {
+    // Re-serialize the corpus to JSON for the internal `compute_text_perplexity`
+    // function. The avatar module accepts the JSON form because it's shared with
+    // generate_avatar which still uses heterogeneous JSON profiles. Once the
+    // avatar module is refactored to take typed inputs (Phase 4 follow-up),
+    // this re-serialization can be removed too.
+    let corpus_json = serde_json::to_string(&corpus).unwrap_or_else(|_| "[]".to_string());
     let r = match avatar::compute_text_perplexity(&corpus_json, &text) {
         Ok(r) => r,
         Err(_) => return PerplexityOutput { perplexity: -1.0, ..PerplexityOutput::default() },

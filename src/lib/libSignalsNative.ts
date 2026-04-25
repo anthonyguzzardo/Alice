@@ -143,8 +143,7 @@ function na(v: number[] | null | undefined): number[] | null {
 // ─── Native module loading ─────────────────────────────────────────
 
 interface NativeModule {
-  computeDynamicalSignals(streamJson: string): {
-    parseError?: string;
+  computeDynamicalSignals(stream: KeystrokeEvent[]): {
     ikiCount: number;
     holdFlightCount: number;
     permutationEntropy: number | null;
@@ -194,8 +193,7 @@ interface NativeModule {
     teFlightToHold: number | null;
     teDominance: number | null;
   };
-  computeMotorSignals(streamJson: string, totalDurationMs: number): {
-    parseError?: string;
+  computeMotorSignals(stream: KeystrokeEvent[], totalDurationMs: number): {
     sampleEntropy: number | null;
     mseSeries: number[] | null;
     complexityIndex: number | null;
@@ -230,11 +228,6 @@ interface NativeModule {
     vocabExpansionRate: number | null;
     phaseTransitionPoint: number | null;
     strategyShiftCount: number | null;
-  };
-  computePerplexity(corpusJson: string, text: string): {
-    perplexity: number;
-    wordCount: number;
-    knownFraction: number;
   };
   generateAvatar(
     corpusJson: string,
@@ -272,18 +265,23 @@ interface NativeModule {
     seed: string;
   };
   computeProfileDistance(
-    valuesJson: string,
-    meansJson: string,
-    stdsJson: string,
+    values: number[],
+    means: number[],
+    stds: number[],
   ): {
     zScores: number[];
     distance: number;
     dimensionCount: number;
   };
+  computePerplexity(corpus: string[], text: string): {
+    perplexity: number;
+    wordCount: number;
+    knownFraction: number;
+  };
   computeBatchCorrelations(
-    seriesAJson: string,
-    seriesBJson: string,
-    windowSizesJson: string,
+    seriesA: number[][],
+    seriesB: number[][],
+    windowSizes: number[],
     maxLag: number,
     threshold: number,
   ): Array<{
@@ -314,13 +312,12 @@ export function computeDynamicalSignals(stream: KeystrokeEvent[]): DynamicalSign
 
   try {
     const t0 = performance.now();
-    const result = native.computeDynamicalSignals(JSON.stringify(stream));
+    // Typed FFI: pass the stream array directly. napi-rs decodes from JS to
+    // Vec<KeystrokeEventInput> on the Rust side. No JSON round-trip.
+    const result = native.computeDynamicalSignals(stream);
     console.log(`[signals] rust dynamical: ${(performance.now() - t0).toFixed(1)}ms (${stream.length} keystrokes)`);
-    if (result.parseError) {
-      logError('signalsNative.dynamical.parseError', result.parseError, { eventCount: stream.length });
-    }
     return {
-      parseError: result.parseError ?? null,
+      parseError: null,
       ikiCount: result.ikiCount ?? 0,
       holdFlightCount: result.holdFlightCount ?? 0,
       permutationEntropy: n(result.permutationEntropy),
@@ -386,13 +383,10 @@ export function computeMotorSignals(
 
   try {
     const t0 = performance.now();
-    const result = native.computeMotorSignals(JSON.stringify(stream), totalDurationMs);
+    const result = native.computeMotorSignals(stream, totalDurationMs);
     console.log(`[signals] rust motor: ${(performance.now() - t0).toFixed(1)}ms`);
-    if (result.parseError) {
-      logError('signalsNative.motor.parseError', result.parseError, { eventCount: stream.length });
-    }
     return {
-      parseError: result.parseError ?? null,
+      parseError: null,
       sampleEntropy: n(result.sampleEntropy),
       mseSeries: na(result.mseSeries),
       complexityIndex: n(result.complexityIndex),
@@ -447,12 +441,12 @@ export function computeProcessSignals(eventLogJson: string): ProcessSignals | nu
 
 // ─── Perplexity (Markov model) ────────────────────────────────────
 
-export function computePerplexity(corpusJson: string, text: string): PerplexityResult | null {
+export function computePerplexity(corpus: string[], text: string): PerplexityResult | null {
   if (!native) return null;
 
   try {
     const t0 = performance.now();
-    const result = native.computePerplexity(corpusJson, text);
+    const result = native.computePerplexity(corpus, text);
     console.log(`[signals] rust perplexity: ${(performance.now() - t0).toFixed(1)}ms`);
     if (result.perplexity < 0) return null; // Rust signals error with -1.0
     return {
@@ -555,11 +549,7 @@ export function computeProfileDistance(
   if (!native) return null;
 
   try {
-    return native.computeProfileDistance(
-      JSON.stringify(values),
-      JSON.stringify(means),
-      JSON.stringify(stds),
-    );
+    return native.computeProfileDistance(values, means, stds);
   } catch (err) {
     logError('signalsNative.profileDistance', err);
     return null;
@@ -586,13 +576,7 @@ export function computeBatchCorrelations(
   if (!native) return null;
 
   try {
-    return native.computeBatchCorrelations(
-      JSON.stringify(seriesA),
-      JSON.stringify(seriesB),
-      JSON.stringify(windowSizes),
-      maxLag,
-      threshold,
-    );
+    return native.computeBatchCorrelations(seriesA, seriesB, windowSizes, maxLag, threshold);
   } catch (err) {
     logError('signalsNative.batchCorrelations', err);
     return null;

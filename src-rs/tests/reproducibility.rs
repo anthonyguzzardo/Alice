@@ -13,7 +13,11 @@ use alice_signals::*;
 
 /// Deterministic fixture: 100 keystrokes with known timing.
 /// Uses a simple linear pattern so the expected signals are predictable.
-fn fixture_stream_json() -> String {
+///
+/// As of 2026-04-25 the FFI takes typed `Vec<KeystrokeEventInput>` directly,
+/// not a JSON string. This fixture builds the typed vec; helper `fixture_clone`
+/// duplicates it for two-call reproducibility assertions.
+fn fixture_stream() -> Vec<KeystrokeEventInput> {
     let mut events = Vec::new();
     let mut clock = 0.0_f64;
 
@@ -30,20 +34,35 @@ fn fixture_stream_json() -> String {
 
         // Insert a space every 5 characters for word boundaries
         if i > 0 && i % 5 == 0 {
-            events.push(serde_json::json!({"c": " ", "d": key_down - 30.0, "u": key_down - 10.0}));
+            events.push(KeystrokeEventInput {
+                c: " ".to_string(),
+                d: key_down - 30.0,
+                u: key_down - 10.0,
+            });
         }
 
-        events.push(serde_json::json!({"c": ch.to_string(), "d": key_down, "u": key_up}));
+        events.push(KeystrokeEventInput {
+            c: ch.to_string(),
+            d: key_down,
+            u: key_up,
+        });
     }
 
-    serde_json::to_string(&events).unwrap()
+    events
+}
+
+fn fixture_clone(stream: &[KeystrokeEventInput]) -> Vec<KeystrokeEventInput> {
+    stream
+        .iter()
+        .map(|e| KeystrokeEventInput { c: e.c.clone(), d: e.d, u: e.u })
+        .collect()
 }
 
 #[test]
 fn dynamical_signals_reproducible() {
-    let json = fixture_stream_json();
-    let result_a = compute_dynamical_signals(json.clone());
-    let result_b = compute_dynamical_signals(json);
+    let stream = fixture_stream();
+    let result_a = compute_dynamical_signals(fixture_clone(&stream));
+    let result_b = compute_dynamical_signals(stream);
 
     let json_a = serde_json::to_string(&result_a).unwrap();
     let json_b = serde_json::to_string(&result_b).unwrap();
@@ -56,9 +75,9 @@ fn dynamical_signals_reproducible() {
 
 #[test]
 fn motor_signals_reproducible() {
-    let json = fixture_stream_json();
-    let result_a = compute_motor_signals(json.clone(), 15000.0);
-    let result_b = compute_motor_signals(json, 15000.0);
+    let stream = fixture_stream();
+    let result_a = compute_motor_signals(fixture_clone(&stream), 15000.0);
+    let result_b = compute_motor_signals(stream, 15000.0);
 
     let json_a = serde_json::to_string(&result_a).unwrap();
     let json_b = serde_json::to_string(&result_b).unwrap();
@@ -75,8 +94,7 @@ fn motor_signals_reproducible() {
 /// a deliberate algorithm modification, not from compiler nondeterminism.
 #[test]
 fn dynamical_golden_snapshot() {
-    let json = fixture_stream_json();
-    let result = compute_dynamical_signals(json);
+    let result = compute_dynamical_signals(fixture_stream());
     let output = serde_json::to_string(&result).unwrap();
 
     // Write the snapshot to a temp file for cross-build comparison.
@@ -98,8 +116,7 @@ fn dynamical_golden_snapshot() {
 
 #[test]
 fn motor_golden_snapshot() {
-    let json = fixture_stream_json();
-    let result = compute_motor_signals(json, 15000.0);
+    let result = compute_motor_signals(fixture_stream(), 15000.0);
     let output = serde_json::to_string(&result).unwrap();
 
     let snapshot_path = std::env::var("REPRO_SNAPSHOT_DIR").unwrap_or_default();

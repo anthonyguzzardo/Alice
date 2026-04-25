@@ -144,9 +144,11 @@ async function computeForVariant(
     avatarSem = computeSemanticSignals(avatar.text, 0);
   }
 
-  // Compute perplexity for both texts
-  const realPerp = computePerplexity(corpusJson, realText);
-  const avatarPerp = computePerplexity(corpusJson, avatar.text);
+  // Compute perplexity for both texts. computePerplexity now takes a typed
+  // string[] at the FFI boundary; parse the existing corpusJson once here.
+  const corpus = JSON.parse(corpusJson) as string[];
+  const realPerp = computePerplexity(corpus, realText);
+  const avatarPerp = computePerplexity(corpus, avatar.text);
 
   // PE spectrum comparison
   const { realParsed: realPeSpec, residual: peSpecResidual } = spectrumDelta(
@@ -608,7 +610,7 @@ export async function verifyResidual(
   compare('tau_proportion', 'motor', stored.avatar_tau_proportion, regenMot?.tauProportion);
 
   // Perplexity (computed from corpus + avatar text, deterministic)
-  const regenPerp = computePerplexity(corpusJson, avatar.text);
+  const regenPerp = computePerplexity(JSON.parse(corpusJson) as string[], avatar.text);
   compare('perplexity', 'perplexity', stored.avatar_perplexity, regenPerp?.perplexity);
 
   // Extended signals (from JSONB)
