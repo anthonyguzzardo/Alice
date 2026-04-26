@@ -99,7 +99,7 @@ When you fix a bug that previously had a rationalizing entry, rewrite the entry 
 
 - **Invalidated embeddings coexist with active ones.** `tb_embeddings` has an `invalidated_at` column. The 10 original voyage-3-lite rows are preserved but invalidated. All queries (HNSW search, topic matching, `isRecordEmbedded`) filter `invalidated_at IS NULL`. If you add a new query against `tb_embeddings`, include this filter.
 
-- **Embedding failures are never fatal.** `embedResponse` runs fire-and-forget after submission. If TEI is down, it logs a warning and the response saves without an embedding. Backfill later with `npm run backfill`. **Analytical implication:** `tb_embeddings` is not a reliable index of which responses exist. A response can be saved without a successful embedding. Any analysis that assumes "responses with embeddings = all responses" will be wrong.
+- **Embedding failures are never fatal.** `embedResponse` runs inside the durable worker pipeline (`libSignalWorker.runResponsePipeline`), wrapped in try/catch. If TEI is down, the failure is logged and the rest of the pipeline continues — derived signals compute, semantic baseline z-scores are NULL for that session until the embed lands. Backfill later with `npm run backfill`. **Analytical implication:** `tb_embeddings` is not a reliable index of which responses exist. A response can be saved without a successful embedding. Any analysis that assumes "responses with embeddings = all responses" will be wrong. Phase 6d will move the embed step to its own retryable job kind so eventual consistency is automatic.
 
 ## Semantic Baselines
 
@@ -119,7 +119,7 @@ When you fix a bug that previously had a rationalizing entry, rewrite the entry 
 
 - **`nowStr()` has a date override for simulation.** `libDb.ts` has a module-level `_dateOverride` that, when set, replaces `CURRENT_TIMESTAMP` in all save functions. Production never calls `setDateOverride`. But if you're debugging and see timestamps stuck at noon, this is why.
 
-- **Error log is a flat file, not a database table.** `data/errors.log` is appended by `utlErrorLog.ts` via `fs.appendFileSync`. It's the only way to see what failed in fire-and-forget background jobs. If this file doesn't exist, errors are console-only and vanish on restart.
+- **Error log is a flat file, not a database table.** `data/errors.log` is appended by `utlErrorLog.ts` via `fs.appendFileSync`. For background work, errors land here AND on the failed job's `last_error` column in `tb_signal_jobs` (set by `markSignalJobFailed`). If `data/errors.log` doesn't exist, console-only errors vanish on restart, but durable job rows still preserve the last failure reason for queue-level diagnostics.
 
 - **`npm run dev` builds Rust first.** The dev script runs `./src-rs/build.sh && astro dev`. If the Rust build fails (missing toolchain, compile error), the dev server doesn't start. If you're only working on frontend/API code and don't need signals, you can run `astro dev` directly, but signal computation will be disabled.
 
