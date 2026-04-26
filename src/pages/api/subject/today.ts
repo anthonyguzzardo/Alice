@@ -1,29 +1,21 @@
 /**
  * GET /api/subject/today
  *
- * Returns today's scheduled question for an authenticated subject.
- * Subjects only — owner gets 403.
+ * Returns today's scheduled question for the authenticated subject.
+ *
+ * Auth: middleware has verified the session, attached `locals.subject`,
+ * rejected owner accounts, and gated `must_reset_password = TRUE`. By the
+ * time this handler runs, `locals.subject` is non-null, non-owner, and has
+ * a real password set.
  */
 import type { APIRoute } from 'astro';
-import { getRequestSubject } from '../../../lib/libSubject.ts';
 import { getScheduledQuestion } from '../../../lib/libScheduler.ts';
 import { getSubjectResponse } from '../../../lib/libDb.ts';
 import { localDateStr } from '../../../lib/utlDate.ts';
 
-export const GET: APIRoute = async ({ request }) => {
-  const subject = await getRequestSubject(request);
-  if (!subject) {
-    return new Response(JSON.stringify({ error: 'unauthorized' }), {
-      status: 401,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-  if (subject.is_owner) {
-    return new Response(JSON.stringify({ error: 'owner_use_main_path' }), {
-      status: 403,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
+export const GET: APIRoute = async ({ locals }) => {
+  // Middleware guarantees this is non-null + non-owner + reset complete.
+  const subject = locals.subject!;
 
   const today = localDateStr();
   const scheduled = await getScheduledQuestion(subject.subject_id, today);

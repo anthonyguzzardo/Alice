@@ -83,11 +83,19 @@ let activeJob: Promise<void> | null = null;
  * Idempotent worker boot. Safe to call from multiple modules at import time;
  * the first call wins, subsequent calls return immediately. The `globalThis`
  * flag survives HMR reloads in dev so the loop is not duplicated.
+ *
+ * Also installs a SIGTERM/SIGINT handler so a `systemctl stop alice` (or
+ * Ctrl-C in dev) waits for an in-flight job to finish before exiting. Without
+ * this, a deploy mid-pipeline would leave a job in `running` state until the
+ * 10-minute boot sweep on the next start. The handler is installed once
+ * (guarded by the same flag) so HMR reloads don't stack up listeners.
  */
 export async function ensureWorkerStarted(): Promise<void> {
   const g = globalThis as unknown as WorkerGlobals;
   if (g[WORKER_FLAG]) return;
   g[WORKER_FLAG] = true;
+
+  installShutdownHandlers();
 
   // Boot-time sweep: re-queue jobs left in RUNNING state from a prior process.
   try {
@@ -102,6 +110,23 @@ export async function ensureWorkerStarted(): Promise<void> {
   console.log('[worker] signal job worker started');
   // Kick off the poll loop.
   void pollLoop();
+}
+
+function installShutdownHandlers(): void {
+  const onShutdown = (signal: NodeJS.Signals): void => {
+    console.log(`[worker] received ${signal}, draining in-flight job and exiting`);
+    void (async () => {
+      try {
+        await stopWorker();
+      } catch (err) {
+        logError('worker.shutdown', err);
+      } finally {
+        process.exit(0);
+      }
+    })();
+  };
+  process.once('SIGTERM', onShutdown);
+  process.once('SIGINT', onShutdown);
 }
 
 /**

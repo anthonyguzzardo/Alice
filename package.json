@@ -18,7 +18,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "smoke": "tsx scripts/smokeTestPhase23.ts"
+    "smoke": "tsx scripts/smokeTestPhase23.ts",
+    "create-subject": "tsx src/scripts/create-subject.ts",
+    "set-owner-password": "tsx src/scripts/set-owner-password.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.88.0",

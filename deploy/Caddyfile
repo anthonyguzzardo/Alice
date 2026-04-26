@@ -1,0 +1,56 @@
+# Caddy config for Alice on Hetzner.
+# Place at /etc/caddy/Caddyfile, then `sudo systemctl reload caddy`.
+#
+# Caddy auto-issues + renews TLS certs via Let's Encrypt. This handles
+# real end-to-end TLS — Cloudflare flexible-mode (no real TLS to origin)
+# was rejected as a downgrade.
+#
+# DNS: Cloudflare A record fweeo.com → Hetzner IP, proxy ON.
+#      Cloudflare A record www.fweeo.com → Hetzner IP, proxy ON.
+#
+# Owner endpoints (/api/respond, /api/calibrate, /, /observatory, …) are
+# globally protected by HTTP Basic Auth until session-based owner auth lands
+# in a future phase. Subject endpoints (/api/subject/*, /enter,
+# /reset-password, /subject) are unprotected here — they have their own
+# session auth in the app. The split is path-based.
+
+# Redirect www → apex (canonical hostname is fweeo.com).
+www.fweeo.com {
+  redir https://fweeo.com{uri} permanent
+}
+
+fweeo.com {
+  encode gzip zstd
+
+  # Gate owner-only paths with HTTP Basic Auth. Generate the hash with:
+  #   caddy hash-password
+  # then put the hash in OWNER_BASICAUTH_HASH (set via systemd or your
+  # secrets manager — never commit it).
+  @owner_paths {
+    not path /api/subject/*
+    not path /enter
+    not path /reset-password
+    not path /subject
+    not path /subject/*
+    not path /favicon.ico
+    not path /robots.txt
+  }
+  basic_auth @owner_paths {
+    owner {env.OWNER_BASICAUTH_HASH}
+  }
+
+  reverse_proxy localhost:4321 {
+    header_up Host {host}
+    header_up X-Real-IP {remote_host}
+    header_up X-Forwarded-For {remote_host}
+    header_up X-Forwarded-Proto {scheme}
+  }
+
+  log {
+    output file /var/log/caddy/alice.log {
+      roll_size 50mb
+      roll_keep 5
+    }
+    format console
+  }
+}

@@ -29,7 +29,6 @@
  */
 import type { APIRoute } from 'astro';
 import sql from '../../../lib/libDbPool.ts';
-import { getRequestSubject } from '../../../lib/libSubject.ts';
 import { getScheduledQuestion } from '../../../lib/libScheduler.ts';
 import {
   saveSubjectResponse,
@@ -41,20 +40,9 @@ import { parseBody } from '../../../lib/utlParseBody.ts';
 import { coerceSessionSummary } from '../../../lib/utlSessionSummary.ts';
 import { logError } from '../../../lib/utlErrorLog.ts';
 
-export const POST: APIRoute = async ({ request }) => {
-  const subject = await getRequestSubject(request);
-  if (!subject) {
-    return new Response(JSON.stringify({ error: 'unauthorized' }), {
-      status: 401,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-  if (subject.is_owner) {
-    return new Response(JSON.stringify({ error: 'owner_use_main_path' }), {
-      status: 403,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
+export const POST: APIRoute = async ({ request, locals }) => {
+  // Middleware guarantees this is non-null + non-owner + reset complete.
+  const subject = locals.subject!;
 
   const body = await parseBody<{
     scheduled_question_id: number;

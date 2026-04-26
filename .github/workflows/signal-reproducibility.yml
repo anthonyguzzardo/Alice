@@ -7,10 +7,14 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/signal-reproducibility.yml'
+  # Push to main: always run (no path filter) so the linux-x64 .node artifact
+  # is available for deploy.sh on any commit, not just ones that touched
+  # src-rs. The reproducibility job is path-filtered on PRs (saves CI minutes
+  # when only TS changes), but the build-linux-x64 job below uploads the
+  # deployable artifact every time.
   push:
     branches: [main]
-    paths:
-      - 'src-rs/**'
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -121,4 +125,6 @@ jobs:
           name: alice-signals-linux-x64
           path: src-rs/*.linux-x64*.node
           if-no-files-found: error
-          retention-days: 30
+          # 90-day retention so a deploy off a slightly older main commit can
+          # still pull its matching binary.
+          retention-days: 90

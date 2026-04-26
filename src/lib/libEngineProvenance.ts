@@ -25,15 +25,21 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { upsertEngineProvenance, type EngineProvenanceInput } from './libDb.ts';
+import { BINARY_PATH } from './libSignalsNative.ts';
 import { logError } from './utlErrorLog.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /**
- * Path to the .node binary loaded by libSignalsNative. This must match the
- * path used in libSignalsNative.ts; if you move the binary, update both.
+ * Absolute path to the .node binary that libSignalsNative actually loaded.
+ * The provenance row records SHA-256 of *this* file, so the hash must match
+ * the binary the engine is running with — not whichever .node happens to
+ * live next to it on disk. If BINARY_PATH is null (unsupported platform),
+ * provenance lookup will fail loudly when collectProvenance runs.
  */
-const NODE_BINARY_PATH = resolve(__dirname, '..', '..', 'src-rs', 'alice-signals.darwin-arm64.node');
+const NODE_BINARY_PATH = BINARY_PATH
+  ? resolve(__dirname, '..', '..', 'src-rs', BINARY_PATH)
+  : null;
 
 let cachedId: number | null = null;
 let inflight: Promise<number | null> | null = null;
@@ -77,6 +83,9 @@ async function lookupOrInsert(): Promise<number | null> {
 }
 
 function collectProvenance(): EngineProvenanceInput {
+  if (!NODE_BINARY_PATH) {
+    throw new Error('no .node binary mapping for current platform/arch');
+  }
   const binary_sha256 = sha256OfFile(NODE_BINARY_PATH);
   const cpu_model = readCpuModel();
   const host_arch = process.arch === 'arm64' ? 'aarch64' : process.arch;

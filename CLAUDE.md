@@ -334,7 +334,79 @@ A bit-identity claim that doesn't extend to the rows in production is a marketin
 - **VoyageAI types in `libEmbeddings.ts`**: The `voyageai` package is imported via `createRequire` (CJS shim in ESM). TypeScript can't resolve types cleanly through this path. If type errors resurface on `VoyageAIClient` or `result` being `unknown`, the fix is: extract the module ref separately, use `InstanceType<typeof VoyageAIClient>` for the type alias, and cast embed responses to `{ data?: Array<{ embedding?: number[] }> }`.
 - **PostgreSQL camelCase aliases**: PG lowercases unquoted identifiers. Use double quotes for camelCase aliases in SQL: `SELECT col AS "camelCase"`.
 - **JSONB auto-parsing**: The postgres driver auto-parses JSONB columns into JS objects. Functions returning JSONB fields that callers expect as strings must re-stringify them.
-- **Rust native module**: Loaded via `createRequire` in `libSignalsNative.ts`. The `.node` file is platform-specific (`alice-signals.darwin-arm64.node`). If it fails to load, signal computation returns null and the pipeline skips the affected families. The health endpoint's `rustEngine: false` surfaces this state. Rebuild with `npm run build:rust` after changing `src-rs/` code. See **Rust Signal Engine** section above for coding standards.
+- **Rust native module**: Loaded via `createRequire` in `libSignalsNative.ts`. Binary path resolves per `process.platform`/`process.arch` via `resolveBinaryFilename()` and is exported as `BINARY_PATH` so `libEngineProvenance` hashes the exact file the engine ran with. Supported targets: `darwin-arm64`, `darwin-x64`, `linux-x64-gnu`, `linux-arm64-gnu`, `win32-x64-msvc`. If the binary is missing for the running platform, signal computation returns null and the pipeline skips the affected families. The health endpoint's `rustEngine: false` surfaces this state. Rebuild with `npm run build:rust` after changing `src-rs/` code.
+
+---
+
+## Subject Auth (Path 2-lite, 2026-04-25)
+
+Subjects authenticate with username + Argon2id password. The owner manually
+provisions accounts via `npm run create-subject`, hands the temp credentials
+to the subject through a private channel, and the subject is forced to reset
+the password on first login (`must_reset_password` flag flips to FALSE).
+There is no self-service signup, no email service, no email-based recovery.
+The owner is the recovery mechanism (re-run `create-subject` with a new temp
+password if needed).
+
+**Key files:**
+- `src/lib/libSubjectAuth.ts` — Argon2id hash/verify, session token issue/verify, password reset, owner provisioning
+- `src/lib/libSubject.ts` — `getRequestSubject()` resolves the cookie to a subject row via `verifySubjectSession`
+- `src/middleware.ts` — Astro middleware: attaches `locals.subject`, gates `/api/subject/*` (auth + owner check + must_reset_password)
+- `src/pages/api/subject/login.ts` — POST username + password → session cookie
+- `src/pages/api/subject/reset-password.ts` — POST current + new password (also wipes all sessions)
+- `src/pages/api/subject/logout.ts` — POST → invalidates session
+- `src/pages/enter.astro` — login form
+- `src/pages/reset-password.astro` — forced-reset form
+- `src/scripts/create-subject.ts` — `npm run create-subject -- <username> <temp-password> [tz] [display-name]`
+- `src/scripts/set-owner-password.ts` — `npm run set-owner-password -- <password>` (one-time bootstrap)
+
+**Token model:** raw 32-byte hex token in cookie, SHA-256(token) in `tb_subject_sessions`. A DB leak does not grant active sessions because the attacker would also need the live cookie. Sessions expire after 30 days with no sliding-window renewal. A password reset deletes ALL sessions for that subject (forces re-login everywhere).
+
+**Owner endpoints:** `/api/respond`, `/api/calibrate`, `/observatory`, `/` are NOT gated by this middleware. On `fweeo.com` they are protected by HTTP Basic Auth in Caddy via `OWNER_BASICAUTH_HASH` (path-based exclusion in `deploy/Caddyfile`). Session-based owner auth is a future phase.
+
+**`invite_code` is legacy.** The pre-2026-04-25 auth used a single static `invite_code` per subject; the column still exists on `tb_subjects` (nullable) for backward compat with any unmigrated read paths but new code MUST use session auth. See `GOTCHAS.md` for the historical landmine.
+
+---
+
+## At-rest Encryption (`libCrypto.ts`)
+
+Subject journal text is encrypted before being written to Supabase via
+AES-256-GCM. Key sourced from `ALICE_ENCRYPTION_KEY` (base64-encoded 32 bytes,
+loaded from systemd `EnvironmentFile`). GCM's auth tag is appended to the
+ciphertext for storage; decrypt splits it back apart and throws on tampering.
+
+```ts
+import { encrypt, decrypt } from './libCrypto.ts';
+const { ciphertext, nonce } = encrypt(plaintext);  // both base64
+const original = decrypt(ciphertext, nonce);       // throws on tamper
+```
+
+**Key facts:**
+- `ALICE_ENCRYPTION_KEY` is permanent. Lose it = lose every encrypted row. Backed up in operator's password manager AND in `/etc/alice/secrets.env`.
+- Each `encrypt()` generates a fresh 12-byte random nonce — same plaintext yields different ciphertext.
+- `decrypt()` throws on tampered ciphertext, tampered nonce, or wrong key. Never returns garbage.
+- No key rotation in v1.
+
+---
+
+## Deployment (Hetzner Hillsboro CCX13 + Supabase us-west-2)
+
+The production stack runs on a single Hetzner CCX13 in the Hillsboro, OR
+datacenter (matching the Supabase project's region for sub-5ms DB latency).
+Code lives at `/opt/alice` owned by a non-root `alice` user; the systemd unit
+in `deploy/alice.service` runs the Astro Node server which auto-starts the
+signal worker via `ensureWorkerStarted()` on first import.
+
+`deploy/deploy.sh` pushes the latest main and the linux-x64 `.node` artifact
+(downloaded from CI's `alice-signals-linux-x64` artifact) and restarts the
+unit. systemd `TimeoutStopSec=30` lets in-flight signal jobs drain before
+exit (the worker installs a SIGTERM handler that calls `stopWorker()`).
+
+Database migrations are NOT auto-applied — run by hand against Supabase via
+`psql -d "$ALICE_PG_URL" -f db/sql/migrations/NNN_*.sql`. Auditing before
+running is the discipline.
+
+See `deploy/README.md` for the one-time host-setup walkthrough.
 
 ---
 

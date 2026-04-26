@@ -1,0 +1,52 @@
+[Unit]
+Description=Alice journaling app (Astro Node server + signal worker)
+Documentation=https://github.com/your-org/alice
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=alice
+Group=alice
+WorkingDirectory=/opt/alice
+
+# Secrets are loaded from a root-owned, group-readable file.
+# On first install: copy /etc/alice/secrets.env.example → /etc/alice/secrets.env,
+# fill in real values, chmod 640, chown root:alice.
+EnvironmentFile=/etc/alice/secrets.env
+Environment=NODE_ENV=production
+Environment=PORT=4321
+
+# Astro Node adapter emits dist/server/entry.mjs.
+ExecStart=/usr/bin/node /opt/alice/dist/server/entry.mjs
+
+Restart=on-failure
+RestartSec=5
+
+# Allow up to 30s for in-flight signal jobs to drain on stop.
+# libSignalWorker installs a SIGTERM handler that calls stopWorker(),
+# waits for the active job to finish, then exits. Without this margin a
+# deploy mid-pipeline would leave a job in `running` state until the
+# next process's 10-minute boot sweep recovers it.
+TimeoutStopSec=30
+KillMode=mixed
+KillSignal=SIGTERM
+
+# Hardening: no escalation, sandbox the filesystem, drop most caps.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/alice/data /opt/alice/dist
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=false  # napi-rs .node files mmap with PROT_EXEC
+
+# Resource caps. CCX13 has 8 GB; reserve some headroom for Caddy + system.
+MemoryHigh=4G
+MemoryMax=6G
+
+[Install]
+WantedBy=multi-user.target

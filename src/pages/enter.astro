@@ -1,9 +1,10 @@
 ---
 /**
- * Invite code entry page.
+ * Subject login page.
  *
- * Subject enters their invite code, which is stored as an httpOnly cookie.
- * After successful validation, redirects to /subject.
+ * Subject enters username + password, which POSTs to /api/subject/login.
+ * On success, the server sets an HttpOnly session cookie and the page
+ * redirects to /reset-password (if must_reset) or /subject (otherwise).
  * Minimal UI — no nav, no chrome.
  */
 ---
@@ -112,16 +113,25 @@
   </head>
   <body>
     <div class="enter-container">
-      <div class="enter-title">enter your code</div>
+      <div class="enter-title">sign in</div>
       <input
         type="text"
         class="enter-input"
-        id="code-input"
-        placeholder="invite code"
-        autocomplete="off"
+        id="username-input"
+        placeholder="username"
+        autocomplete="username"
         autocorrect="off"
         autocapitalize="off"
         spellcheck="false"
+      />
+      <br />
+      <input
+        type="password"
+        class="enter-input"
+        id="password-input"
+        placeholder="password"
+        autocomplete="current-password"
+        style="margin-top: 0.6rem;"
       />
       <br />
       <button class="enter-btn" id="enter-btn" disabled>enter</button>
@@ -129,49 +139,67 @@
     </div>
 
     <script>
-      const input = document.getElementById('code-input') as HTMLInputElement;
+      const usernameInput = document.getElementById('username-input') as HTMLInputElement;
+      const passwordInput = document.getElementById('password-input') as HTMLInputElement;
       const btn = document.getElementById('enter-btn') as HTMLButtonElement;
       const errorMsg = document.getElementById('error-msg')!;
 
-      input.addEventListener('input', () => {
-        btn.disabled = input.value.trim().length === 0;
+      function refreshDisabled() {
+        btn.disabled = usernameInput.value.trim().length === 0
+          || passwordInput.value.length === 0;
         errorMsg.textContent = '';
-      });
+      }
+      usernameInput.addEventListener('input', refreshDisabled);
+      passwordInput.addEventListener('input', refreshDisabled);
 
-      input.addEventListener('keydown', (e: KeyboardEvent) => {
-        if (e.key === 'Enter' && !btn.disabled) btn.click();
+      [usernameInput, passwordInput].forEach((el) => {
+        el.addEventListener('keydown', (e: KeyboardEvent) => {
+          if (e.key === 'Enter' && !btn.disabled) btn.click();
+        });
       });
 
       btn.addEventListener('click', async () => {
-        const code = input.value.trim();
-        if (!code) return;
+        const username = usernameInput.value.trim();
+        const password = passwordInput.value;
+        if (!username || !password) return;
 
         btn.disabled = true;
         errorMsg.textContent = '';
 
-        // Set cookie and validate via the subject/today endpoint
-        document.cookie = `alice_subject=${encodeURIComponent(code)}; path=/; max-age=${60 * 60 * 24 * 365}; SameSite=Strict`;
-
-        const res = await fetch('/api/subject/today');
+        const res = await fetch('/api/subject/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password }),
+        });
 
         if (res.status === 401) {
-          errorMsg.textContent = 'code not recognized';
-          document.cookie = 'alice_subject=; path=/; max-age=0';
-          btn.disabled = false;
+          errorMsg.textContent = 'invalid credentials';
+          passwordInput.value = '';
+          refreshDisabled();
           return;
         }
 
         if (res.status === 403) {
-          // Owner — redirect to main path
+          // Owner accidentally hit the subject login.
           window.location.href = '/';
           return;
         }
 
-        // Valid subject (200 or 404-no-question-yet both mean the code worked)
+        if (!res.ok) {
+          errorMsg.textContent = 'server error, try again';
+          btn.disabled = false;
+          return;
+        }
+
+        const body = await res.json() as { mustResetPassword?: boolean };
+        if (body.mustResetPassword) {
+          window.location.href = '/reset-password';
+          return;
+        }
         window.location.href = '/subject';
       });
 
-      input.focus();
+      usernameInput.focus();
     </script>
   </body>
 </html>

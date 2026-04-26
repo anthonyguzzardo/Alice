@@ -70,20 +70,45 @@ function na(v: number[] | null | undefined): number[] | null {
 // The shape of the loaded .node module is `typeof Native` — i.e. the auto-
 // generated module type. No hand-written interface that can drift from the
 // Rust binary.
+//
+// Binary path is platform-dependent. napi-rs emits per-target files named
+// `alice-signals.<platform>-<arch>[-<libc>].node`. We resolve the right one
+// at boot. `BINARY_PATH` is exported so `libEngineProvenance` can hash the
+// exact same file the engine loaded — provenance must match the running
+// binary, not whichever happens to live next to it.
 
 type NativeModule = typeof Native;
 
-// (Hand-written interface deleted 2026-04-25; replaced by the generated
-// d.ts at src-rs/index.d.ts. To regenerate: `npm run build:rust`.)
+function resolveBinaryFilename(platform: NodeJS.Platform, arch: NodeJS.Architecture): string {
+  if (platform === 'darwin' && arch === 'arm64')   return 'alice-signals.darwin-arm64.node';
+  if (platform === 'darwin' && arch === 'x64')     return 'alice-signals.darwin-x64.node';
+  if (platform === 'linux'  && arch === 'x64')     return 'alice-signals.linux-x64-gnu.node';
+  if (platform === 'linux'  && arch === 'arm64')   return 'alice-signals.linux-arm64-gnu.node';
+  if (platform === 'win32'  && arch === 'x64')     return 'alice-signals.win32-x64-msvc.node';
+  throw new Error(`Unsupported platform/arch combination: ${platform}/${arch}`);
+}
+
+export const BINARY_PATH = (() => {
+  try {
+    return resolveBinaryFilename(process.platform, process.arch);
+  } catch {
+    return null;
+  }
+})();
 
 let native: NativeModule | null = null;
 
-try {
-  const require = createRequire(import.meta.url);
-  native = require('../../src-rs/alice-signals.darwin-arm64.node') as NativeModule;
-  console.log('[signals] Rust engine loaded');
-} catch {
-  console.warn('[signals] Rust engine unavailable — signal computation disabled');
+if (BINARY_PATH) {
+  try {
+    const require = createRequire(import.meta.url);
+    native = require(`../../src-rs/${BINARY_PATH}`) as NativeModule;
+    console.log(`[signals] Rust engine loaded (${BINARY_PATH})`);
+  } catch (err) {
+    console.warn(`[signals] Rust engine unavailable (${BINARY_PATH}) — signal computation disabled`);
+    if (process.env.ALICE_DEBUG_NATIVE) console.warn(err);
+  }
+} else {
+  console.warn(`[signals] no .node mapping for ${process.platform}/${process.arch} — signal computation disabled`);
 }
 
 export const hasNativeEngine = native !== null;
