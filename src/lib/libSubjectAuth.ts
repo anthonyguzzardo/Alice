@@ -226,21 +226,37 @@ export async function createSubject(
 }
 
 /**
- * Set the owner's password directly. Used by `npm run set-owner-password`
- * during initial deploy: the migration leaves the owner with a placeholder
- * hash that fails verification, so this is the bootstrap step that makes
- * the owner row usable.
+ * Set the owner's password. Used by `npm run set-owner-password` during
+ * initial deploy and any time the owner needs to rotate their password.
+ *
+ * On a fresh database with no owner row, INSERTs a row with
+ * username='owner', is_owner=TRUE, and the supplied password.
+ * On a database that already has an owner row, UPDATEs the password.
+ * Idempotent in both directions.
  */
 export async function setOwnerPassword(plaintextPassword: string): Promise<void> {
   const passwordHash = await hashPassword(plaintextPassword);
-  const result = await sql`
+  const updated = await sql`
     UPDATE tb_subjects
     SET password_hash       = ${passwordHash}
       , must_reset_password = FALSE
       , dttm_modified_utc   = CURRENT_TIMESTAMP
     WHERE is_owner = TRUE
   `;
-  if (result.count !== 1) {
-    throw new Error(`expected exactly 1 owner row to update, got ${result.count}`);
+  if (updated.count === 1) return;
+  if (updated.count > 1) {
+    throw new Error(`multiple owner rows found (${updated.count}); expected 0 or 1`);
+  }
+  const inserted = await sql`
+    INSERT INTO tb_subjects (
+      username, password_hash, must_reset_password,
+      iana_timezone, display_name, is_owner
+    ) VALUES (
+      'owner', ${passwordHash}, FALSE,
+      'UTC', 'Owner', TRUE
+    )
+  `;
+  if (inserted.count !== 1) {
+    throw new Error(`failed to insert owner row, got ${inserted.count}`);
   }
 }

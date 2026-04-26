@@ -216,13 +216,22 @@ describe('setOwnerPassword', () => {
     expect(result!.mustResetPassword).toBe(false);
   });
 
-  it('throws if no owner row exists', async () => {
-    // Temporarily delete the owner row, restore at end.
+  it('inserts the owner row when none exists (fresh-deploy bootstrap)', async () => {
+    // Temporarily delete the owner row to simulate a fresh database.
     const placeholder = await hashPassword('temp-owner-restore-after-test');
     await sql`DELETE FROM tb_subjects WHERE is_owner = TRUE`;
     try {
-      await expect(setOwnerPassword('whatever')).rejects.toThrow(/expected exactly 1 owner row/);
+      await setOwnerPassword('bootstrap-password');
+
+      const result = await loginSubject('owner', 'bootstrap-password');
+      expect(result).not.toBeNull();
+      expect(result!.isOwner).toBe(true);
+      // Inserts always set must_reset_password=FALSE — bootstrap caller
+      // already supplies the real password.
+      expect(result!.mustResetPassword).toBe(false);
     } finally {
+      // Restore the seeded state for the rest of the test file.
+      await sql`DELETE FROM tb_subjects WHERE is_owner = TRUE`;
       await sql`
         INSERT INTO tb_subjects (username, password_hash, is_owner, must_reset_password, iana_timezone)
         VALUES ('owner', ${placeholder}, TRUE, TRUE, 'UTC')

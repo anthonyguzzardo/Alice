@@ -59,7 +59,10 @@ INSERT INTO te_context_dimension (context_dimension_id, enum_code, name) VALUES
   ,(7, 'routine',         'Routine')
 ON CONFLICT DO NOTHING;
 
--- tb_subjects (owner identity)
-INSERT INTO tb_subjects (invite_code, display_name, is_owner)
-VALUES ('alice-owner', 'Owner', TRUE)
-ON CONFLICT (invite_code) DO NOTHING;
+-- tb_subjects: NOT seeded here. Path-2-lite auth (migration 029) made
+-- username and password_hash NOT NULL, so the legacy invite_code-only
+-- seed row no longer satisfies the schema. The owner row is now created
+-- explicitly via:
+--   npm run set-owner-password -- '<password>'
+-- which performs an INSERT with the placeholder hash on first run, then
+-- UPDATEs to the real hash on subsequent runs. See src/scripts/set-owner-password.ts.

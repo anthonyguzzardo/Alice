@@ -27,11 +27,21 @@ apt install -y curl ca-certificates gnupg git build-essential
 curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
 apt install -y nodejs
 
-# 3. Caddy 2 (official repo)
+# 3. Caddy 2 (Cloudsmith stable repo — required for Caddy >= 2.8)
+#
+# Ubuntu 24.04's `noble-updates/universe` ships Caddy 2.6.2, which has both
+# (a) a known panic in the cert worker and (b) the legacy `basicauth`
+# directive name only. The Caddyfile uses the modern `basic_auth` form, so
+# we pin to Cloudsmith's stable repo and get >= 2.11.
 apt install -y debian-keyring debian-archive-keyring apt-transport-https
 curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
 curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
 apt update
+# Verify Cloudsmith is the candidate before installing — `apt-cache policy caddy`
+# should show 2.11.x as candidate, NOT 2.6.2-6ubuntu0.X. If it shows the
+# Ubuntu version, the cloudsmith .list file or GPG key didn't write — fix
+# before continuing.
+apt-cache policy caddy | head -5
 apt install -y caddy
 
 # 4. Application user (no shell login, no home dir password — SSH key only via deploy)
@@ -86,9 +96,20 @@ systemctl enable alice.service
 systemctl start alice.service
 systemctl status alice.service     # confirm "active (running)"
 
-# 12. Install the Caddyfile
+# 12. Install the Caddyfile + a systemd drop-in so caddy.service loads
+#     /etc/alice/secrets.env (it needs OWNER_BASICAUTH_HASH at boot).
+#     Without the drop-in, basic-auth fails with "username and password
+#     are required" because caddy.service has no env vars by default.
 cp /opt/alice/deploy/Caddyfile /etc/caddy/Caddyfile
-systemctl reload caddy
+
+mkdir -p /etc/systemd/system/caddy.service.d
+cat >/etc/systemd/system/caddy.service.d/override.conf <<'EOF'
+[Service]
+EnvironmentFile=/etc/alice/secrets.env
+EOF
+
+systemctl daemon-reload
+systemctl restart caddy
 journalctl -u caddy --since '1 minute ago'   # confirm cert provisioning
 
 # 13. Set the owner password (one-time)

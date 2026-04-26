@@ -38,11 +38,15 @@ PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/opt/alice/data /opt/alice/dist
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+# AF_NETLINK is needed by Node's uv_interface_addresses (network interface
+# enumeration on Linux). Without it, Node spams errno 97 (EAFNOSUPPORT) at
+# startup but does not crash.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 RestrictNamespaces=true
 RestrictRealtime=true
 LockPersonality=true
-MemoryDenyWriteExecute=false  # napi-rs .node files mmap with PROT_EXEC
+# napi-rs .node files mmap with PROT_EXEC
+MemoryDenyWriteExecute=false
 
 # Resource caps. CCX13 has 8 GB; reserve some headroom for Caddy + system.
 MemoryHigh=4G

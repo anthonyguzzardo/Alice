@@ -35,6 +35,11 @@ fweeo.com {
     not path /favicon.ico
     not path /robots.txt
   }
+  # `basic_auth` (with underscore) is Caddy 2.8+. Both forms are accepted by
+  # Caddy >= 2.8, but Ubuntu 24.04's apt ships 2.6.2 which only knows the
+  # legacy `basicauth` form. The deploy README pins us to Cloudsmith's repo
+  # to get >= 2.8, so we use the canonical underscore form here. If you
+  # downgrade Caddy below 2.8, change to `basicauth` (one word).
   basic_auth @owner_paths {
     owner {env.OWNER_BASICAUTH_HASH}
   }
