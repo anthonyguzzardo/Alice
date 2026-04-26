@@ -35,11 +35,24 @@
 --   that exact comment string. Application code referencing `ON CONFLICT (X)`
 --   on these columns must be updated in Step 5 to use the new tuple. Sites
 --   surfaced in Step 0 write-path pass:
---     - tb_questions       : (scheduled_for) → (subject_id, scheduled_for)
+--     - tb_questions          : (scheduled_for) → (subject_id, scheduled_for)
 --     - tb_semantic_baselines : (signal_name) → (subject_id, signal_name)
---     - tb_session_delta   : (session_date) → (subject_id, session_date)
---     - tb_witness_states  : new UNIQUE(subject_id, entry_count) (none existed before)
---     - tb_personal_profile : new UNIQUE(subject_id) (was implicit singleton)
+--     - tb_session_delta      : (session_date) → (subject_id, session_date)
+--     - tb_personal_profile   : new UNIQUE(subject_id) (was implicit singleton)
+--
+-- ALICE NEGATIVE — DEPRIORITIZED, MINIMAL TREATMENT
+--   The Alice Negative (witness/state/dynamics/coupling) tables are legacy
+--   baggage being carried through this migration unchanged. Per directive,
+--   they get `subject_id` added (default 1, NOT NULL) and nothing else:
+--   no UNIQUE constraints, no per-subject indexes, no query-shape work.
+--   Affected tables (eight):
+--     - tb_witness_states, tb_entry_states, tb_semantic_states
+--     - tb_semantic_dynamics, tb_semantic_coupling
+--     - tb_trait_dynamics, tb_coupling_matrix, tb_emotion_behavior_coupling
+--   Surfaced during Step 2 dry-run: tb_witness_states.entry_count is NOT
+--   unique in production data (entry_count=3 has two snapshots from
+--   consecutive days). The header comment "one row per observation cycle"
+--   is intent, not enforcement. We honor the data: skip the UNIQUE.
 --
 -- NOT MODIFIED (intentionally)
 --   - te_*               : static enums
@@ -309,11 +322,12 @@ ALTER TABLE tb_semantic_baselines DROP CONSTRAINT IF EXISTS tb_semantic_baseline
 ALTER TABLE tb_semantic_baselines ADD CONSTRAINT tb_semantic_baselines_subject_signal_key
   UNIQUE (subject_id, signal_name);
 
--- CONFLICT TARGET CHANGED: tb_witness_states — new UNIQUE (entry_count was implicitly unique-by-convention)
--- Each subject has their own monotonic entry_count counter post-unification.
--- Application sites: src/lib/libDb.ts:1048 (INSERT) reads MAX(entry_count) before insert.
-ALTER TABLE tb_witness_states ADD CONSTRAINT tb_witness_states_subject_entry_key
-  UNIQUE (subject_id, entry_count);
+-- HONORING DATA: tb_witness_states has duplicate entry_count values in
+-- production (entry_count=3 has two snapshots, ~10 hours apart). The header
+-- comment "one row per observation cycle" is intent, not enforcement, and
+-- the writer at libDb.ts:1048 is a bare INSERT. This is a snapshot log, not
+-- a state register. No UNIQUE added; subject_id column-add only (above).
+-- Per Alice Negative deprioritization, also skip the per-subject index.
 
 -- CONFLICT TARGET CHANGED: tb_personal_profile — new UNIQUE(subject_id) (was implicit singleton)
 -- Application sites: src/lib/libProfile.ts:312 (INSERT, currently relies on app-level "only one row" assumption)
