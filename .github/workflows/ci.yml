@@ -1,7 +1,7 @@
 name: CI
 
-# Project-level CI: builds the Rust signal engine for the dev target
-# (darwin-arm64) and runs the full vitest suite. The vitest `db` project
+# Project-level CI: builds the Rust signal engine for the runner target
+# (linux-x64) and runs the full vitest suite. The vitest `db` project
 # spins up `pgvector/pgvector:pg17` via @testcontainers/postgresql, applies
 # the canonical schema, and exercises the same code paths as the local
 # `npm run smoke` script — so smoke is intentionally NOT a separate CI step.
@@ -23,7 +23,7 @@ concurrency:
 
 jobs:
   test:
-    runs-on: macos-14
+    runs-on: ubuntu-latest
     timeout-minutes: 25
 
     steps:
