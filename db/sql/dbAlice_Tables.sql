@@ -164,29 +164,60 @@ INSERT INTO te_signal_job_kind (signal_job_kind_id, enum_code, name, description
   ,(2, 'calibration_pipeline', 'Calibration pipeline', 'Calibration session: tag extraction + derived signals + drift snapshot')
 ON CONFLICT (signal_job_kind_id) DO NOTHING;
 
--- @region identity -- tb_subjects
+-- @region identity -- tb_subjects, tb_subject_sessions
 -- ============================================================================
 -- IDENTITY
 -- ============================================================================
 
 -- PURPOSE: all users of Alice (owner + subjects)
--- USE CASE: one row per identity. invite_code is the authentication token.
---           Owner row seeded at deploy; subjects created by owner via CLI.
--- MUTABILITY: insert by owner, soft-disable via is_active. Never deleted.
--- REFERENCED BY: tb_scheduled_questions, tb_subject_responses, tb_subject_session_summaries (all logical FK)
--- FOOTER: created only
+-- USE CASE: one row per identity. Auth via username + Argon2id password_hash.
+--           Owner row seeded at deploy; subjects created by owner via CLI
+--           (`npm run create-subject`). New subjects are issued a temp password
+--           and `must_reset_password = TRUE`; the reset endpoint flips it to FALSE.
+--           `invite_code` is legacy (kept for backward compat with read paths).
+-- MUTABILITY: insert by owner CLI, soft-disable via is_active. Never deleted.
+-- REFERENCED BY: tb_scheduled_questions, tb_subject_responses, tb_subject_session_summaries, tb_subject_sessions (all logical FK)
+-- FOOTER: created + modified
 CREATE TABLE IF NOT EXISTS tb_subjects (
-   subject_id       INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
-  ,invite_code      TEXT UNIQUE NOT NULL
-  ,display_name     TEXT
-  ,is_owner         BOOLEAN NOT NULL DEFAULT FALSE
-  ,is_active        BOOLEAN NOT NULL DEFAULT TRUE
-  ,dttm_created_utc TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+   subject_id           INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,username             TEXT NOT NULL UNIQUE                          -- login identifier
+  ,password_hash        TEXT NOT NULL                                 -- Argon2id (use libSubjectAuth.hashPassword)
+  ,must_reset_password  BOOLEAN NOT NULL DEFAULT TRUE                 -- TRUE on temp-password issue; FALSE after reset
+  ,iana_timezone        TEXT NOT NULL DEFAULT 'UTC'                   -- per-subject timezone (Phase 6b multi-tz scheduling)
+  ,invite_code          TEXT UNIQUE                                   -- legacy; nullable
+  ,display_name         TEXT
+  ,is_owner             BOOLEAN NOT NULL DEFAULT FALSE
+  ,is_active            BOOLEAN NOT NULL DEFAULT TRUE
+  ,dttm_created_utc     TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ,dttm_modified_utc    TIMESTAMPTZ
+  ,modified_by          TEXT
 );
 
 -- Enforce exactly one owner at the database level.
 CREATE UNIQUE INDEX IF NOT EXISTS uq_subjects_single_owner
   ON tb_subjects (is_owner) WHERE is_owner = TRUE;
+
+-- --------------------------------------------------------------------------
+
+-- PURPOSE: active subject login sessions
+-- USE CASE: one row per (subject, login). Cookie holds the raw token; the DB
+--           stores SHA-256(token) so a DB leak does not grant active sessions.
+-- MUTABILITY: insert on login, delete on logout or expiry sweep.
+-- REFERENCED BY: none (leaf)
+-- FOOTER: created only
+CREATE TABLE IF NOT EXISTS tb_subject_sessions (
+   subject_session_id  INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,subject_id          INT NOT NULL                                   -- logical FK to tb_subjects
+  ,token_hash          TEXT NOT NULL UNIQUE                           -- SHA-256(raw_token)
+  ,expires_at          TIMESTAMPTZ NOT NULL
+  ,dttm_created_utc    TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS ix_subject_sessions_subject_id
+  ON tb_subject_sessions (subject_id);
+
+CREATE INDEX IF NOT EXISTS ix_subject_sessions_expires_at
+  ON tb_subject_sessions (expires_at);
 
 -- --------------------------------------------------------------------------
 
