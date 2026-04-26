@@ -10,6 +10,7 @@ Run:
 - `npm test` — single pass, all projects
 - `npm run test:watch` — watch mode for the dev loop
 - `npm run test:coverage` — V8 coverage report
+- `npm run smoke` — full Phase 2/3 end-to-end against the local `alice` DB (real `.node`, real Postgres, real provenance flow). Local complement to the testcontainer-based DB suite; useful as a "is everything actually wired up?" check after schema migrations or binary rebuilds. Cleans up its synthetic test session on completion. See `scripts/smokeTestPhase23.ts`.
 
 ## Patterns
 

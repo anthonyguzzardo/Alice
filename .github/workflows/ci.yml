@@ -1,0 +1,65 @@
+name: CI
+
+# Project-level CI: builds the Rust signal engine for the dev target
+# (darwin-arm64) and runs the full vitest suite. The vitest `db` project
+# spins up `pgvector/pgvector:pg17` via @testcontainers/postgresql, applies
+# the canonical schema, and exercises the same code paths as the local
+# `npm run smoke` script — so smoke is intentionally NOT a separate CI step.
+# It would re-run paths already covered by tests/db/engineProvenance.test.ts
+# and tests/db/signalJobs.test.ts and would also require a long-running
+# Postgres outside the testcontainer lifecycle.
+#
+# Bit-identity reproducibility for the Rust binary is enforced by the
+# `signal-reproducibility` workflow. This one covers TS + integration paths.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: macos-14
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Cache Rust toolchain
+        uses: actions/cache@v4
+        with:
+          path: ~/.rustup/toolchains
+          key: rustup-${{ hashFiles('src-rs/rust-toolchain.toml') }}
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-registry-${{ hashFiles('src-rs/Cargo.lock') }}
+          restore-keys: cargo-registry-
+
+      - name: Install Rust toolchain
+        run: rustup show
+        working-directory: src-rs
+
+      - name: Install npm deps
+        run: npm ci
+
+      - name: Build Rust signal engine
+        run: npm run build:rust
+
+      - name: Run vitest suite
+        run: npm test
