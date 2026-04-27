@@ -510,6 +510,9 @@ export const FIXTURE_TABLES = [
   'tb_burst_sequences',
   'tb_process_signals',
   'tb_motor_signals',
+  'tb_semantic_trajectory',
+  'tb_semantic_baselines',
+  'tb_embeddings',
   'tb_semantic_signals',
   'tb_session_summaries',
   'tb_responses',
@@ -584,6 +587,96 @@ export async function insertPersonalProfileRow(
       ${profile.ikiAutocorrelationJson[0] ?? 0},
       ${profile.holdFlightRankCorr},
       ${profile.mattr}
+    )
+  `;
+}
+
+// ----------------------------------------------------------------------------
+// Hotspot F helpers — semantic baselines, embeddings, semantic-signal rows
+// ----------------------------------------------------------------------------
+
+/**
+ * Pre-insert a tb_semantic_baselines row for a subject + signal_name.
+ * Used to seed F1 (getBaseline contamination source) and F2 (pre-existing
+ * row to demonstrate ON CONFLICT target correctness).
+ */
+export async function insertSemanticBaselineSeed(
+  sql: Sql,
+  subjectId: number,
+  signalName: string,
+  sessionCount: number,
+  runningMean: number,
+  runningM2: number,
+  lastQuestionId: number | null = null,
+): Promise<void> {
+  await sql`
+    INSERT INTO tb_semantic_baselines (
+      subject_id, signal_name, running_mean, running_m2, session_count,
+      last_question_id, dttm_modified_utc, modified_by
+    ) VALUES (
+      ${subjectId}, ${signalName}, ${runningMean}, ${runningM2}, ${sessionCount},
+      ${lastQuestionId}, CURRENT_TIMESTAMP, 'fixture'
+    )
+  `;
+}
+
+/**
+ * Pre-insert a tb_semantic_signals row keyed by question_id. Used to
+ * provide signal values for the test-current session and for prior
+ * topic-matched neighbors. Defaults all signals to null except the
+ * fields specified in `values`.
+ */
+export async function insertSemanticSignalsRow(
+  sql: Sql,
+  subjectId: number,
+  questionId: number,
+  values: Partial<Record<string, number | null>>,
+): Promise<void> {
+  // Build column / value lists dynamically. Keys are snake_case schema cols.
+  const cols = ['subject_id', 'question_id', ...Object.keys(values)];
+  const colList = cols.join(', ');
+  const placeholders = cols.map((_, i) => `$${i + 1}`).join(', ');
+  const params = [subjectId, questionId, ...Object.values(values)];
+  await sql.unsafe(
+    `INSERT INTO tb_semantic_signals (${colList}) VALUES (${placeholders})`,
+    params as unknown[] as never[],
+  );
+}
+
+/**
+ * Pre-insert a tb_embeddings row pointing at a tb_responses row. The
+ * `vector` is a fixed-length number[] (vector(512) per the schema). To
+ * keep test fixtures readable, callers typically construct a 512-dim
+ * vector with a few non-zero leading entries; the function pads the
+ * rest with zeros.
+ */
+export async function insertEmbeddingRow(
+  sql: Sql,
+  subjectId: number,
+  sourceRecordId: number,        // typically a response_id
+  vectorPrefix: number[],        // first N dims; rest padded to 512 with 0
+  options: {
+    embeddingSourceId?: number;  // default 1 (response)
+    embeddedText?: string;
+    sourceDate?: string | null;
+    modelName?: string;
+  } = {},
+): Promise<void> {
+  const padded = [...vectorPrefix];
+  while (padded.length < 512) padded.push(0);
+  const vectorString = `[${padded.join(',')}]`;
+  await sql`
+    INSERT INTO tb_embeddings (
+      subject_id, embedding_source_id, source_record_id, embedded_text,
+      source_date, model_name, embedding
+    ) VALUES (
+      ${subjectId},
+      ${options.embeddingSourceId ?? 1},
+      ${sourceRecordId},
+      ${options.embeddedText ?? 'fixture'},
+      ${options.sourceDate ?? null},
+      ${options.modelName ?? 'fixture-model'},
+      ${vectorString}::vector
     )
   `;
 }
