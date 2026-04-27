@@ -8,6 +8,75 @@ Newest first.
 
 ---
 
+## INC-015: Calibration context extraction deprecated (orphan producer purged)
+
+**Date:** 2026-04-27
+**Type:** Architectural correction (orphan producer left running after consumer was deleted)
+
+### What was wrong
+
+The calibration context extraction pipeline (`src/lib/libCalibrationExtract.ts` → `tb_calibration_context`) was a producer with no surviving consumer. The Anthropic LLM call extracted seven dimensions of life-context tags (sleep, physical_state, emotional_event, social_quality, stress, exercise, routine) from every calibration response and persisted them encrypted at rest. The only thing that ever read these tags was `runGeneration`, which used them to feed life-context into next-day question prompts.
+
+`runGeneration` was deleted in INC-014 (same day) as part of the corpus pivot. The extraction pipeline was missed in that scrub: it kept writing to a table that nothing queried. The Anthropic call was triggered from `libSignalWorker.runCalibrationPipeline`, the worker per-stage try/catch swallowed any failure, and the resulting `tb_calibration_context` rows were inert from the moment of write.
+
+The orphan-producer pattern is identical to alice-negative tonight: a feature was archived, but a satellite producer kept running because its dependency edge was load-bearing only via a single deleted consumer. Once is an oversight; twice in one week is a pattern that needs a discipline rule.
+
+### Discovery method
+
+Direct from the operator immediately after INC-014 landed: "yeah let's fucking deprecate this retard ass shit." The grep that confirmed zero non-extractor consumers of `tb_calibration_context`:
+
+```
+grep -rn "tb_calibration_context\|saveCalibrationContext\|getCalibrationContext" src/ tests/
+```
+
+Every match either wrote to the table (`saveCalibrationContext`) or was the now-deleted `runGeneration` reading via `getRecentCalibrationContext` / `getCalibrationContextNearDate`. After confirming no other reader, the deprecation was greenlit.
+
+### Resolution
+
+**Code removed (per CLAUDE.md "archival means removal" discipline):**
+
+- `src/lib/libCalibrationExtract.ts` — entire file (the `runCalibrationExtraction` function and its prompt builder)
+- `src/lib/libSignalWorker.ts` — `runCalibrationExtraction` import and the try/catch invocation in `runCalibrationPipeline`
+- `src/lib/libDb.ts` — `saveCalibrationContext`, `getCalibrationContextForQuestion`, `getRecentCalibrationContext`, `getCalibrationContextNearDate`, the `CalibrationContextTag` type, and the `DIMENSION_ID_MAP` helper. The `@region calibration-context` marker was renamed to `@region calibration-deltas` (the section now contains only `tb_session_delta` helpers).
+- `src/pages/api/health.ts` — `pendingWork.extractions`, `extractionsBySubject`, `anthropicAvailable`, the underlying SQL, the overall-status check, and the `HealthResponse` type fields. The pending-work badge now counts only embeds + seed alerts.
+- `src/pages/index.astro` `renderHealth` — `pw.extractions` removed from the badge total, `anthropicAvailable` removed from the auto-drainable check, "Extractions pending" panel section deleted.
+- Stale references in `src/pages/api/subject/respond.ts` and `src/pages/api/subject/calibrate.ts` CONTAMINATION BOUNDARY docstrings — `runCalibrationExtraction()` bullet removed.
+- `tests/db/encryption.test.ts` — `tb_calibration_context` round-trip case and its imports (`saveCalibrationContext`, `getCalibrationContextForQuestion`) removed; the per-test cleanup loop and the `te_context_dimension` seed were also dropped (no remaining caller in this test file).
+
+**Schema-side work:**
+
+- `db/sql/migrations/034_archive_calibration_context.sql` — new migration. Renames `tb_calibration_context` → `zz_archive_tb_calibration_context` (idempotent DO block, post-archive verification query). Operator runs `psql "$ALICE_PG_URL" -v ON_ERROR_STOP=1 -f db/sql/migrations/034_archive_calibration_context.sql` against Supabase when ready. NOT auto-applied.
+- `db/sql/dbAlice_Tables.sql` — the `CREATE TABLE tb_calibration_context` block, its index, and the table mention in the `@region calibration` marker removed. The deprecation rationale is captured in a one-line comment pointing back to INC-015 / migration 034.
+- `tests/unit/lint/subjectScopeLint.ts` — `tb_calibration_context` removed from `SUBJECT_BEARING_TABLES`.
+- `tests/unit/lint/subjectScopeLint.test.ts` — `tb_calibration_context` added to `ARCHIVED_SINCE_030` exemption set so the migration-drift test still passes against the historical reference in migration 030.
+- `CLAUDE.md` — calibration_context removed from the `tb_questions` cascade list and the post-031 encrypted-columns inventory, with a pointer to migration 034.
+
+### Existing data
+
+35 historical calibrations had `tb_calibration_context` rows ranging from extracted to never-run. After the rename, those rows live in `zz_archive_tb_calibration_context` and are inert. The 35 backlog disappears from the operator's pending-work badge (which also no longer has an extractions counter).
+
+`te_context_dimension` (the seven-dimension enum table) is now also orphaned — no production code joins against it. Left in place for forensic readability of the archived rows; safe to drop in a future schema cleanup.
+
+### Verification
+
+| System | Pre-fix | Post-fix |
+|---|---|---|
+| `runCalibrationExtraction` invocations on calibration submit | 1 (per submit, every subject) | 0 |
+| Files referencing `tb_calibration_context` (excluding migrations + handoffs) | 5 | 0 |
+| Files referencing `saveCalibrationContext`/`getCalibrationContext*` | 4 | 0 |
+| `npm run vitest tests/unit` | 72 passing | 72 passing |
+| TS check on touched files | clean | clean (pre-existing strict-null noise unchanged) |
+| Pending-work badge categories | embeds + extractions + seedAlerts | embeds + seedAlerts |
+
+The producer is gone, the consumer was already gone (INC-014), the table is queued for archive in migration 034.
+
+### What this does NOT fix
+
+- **Migration 034 not yet applied to Supabase.** Operator runs it manually. Until then, `tb_calibration_context` remains as a live table in the database with 35 rows of inert data. No code reads or writes it; the only effect of leaving it un-archived is database surface area.
+- **Discipline memo.** The orphan-producer pattern fired twice in one week (alice-negative + this). A new memory entry (`feedback_orphan_pipeline_discipline.md`) captures the rule: when archiving a feature, grep for the table/function family to confirm there is no satellite producer left running with no consumer.
+
+---
+
 ## INC-014: Legacy per-submission question generation removed, corpus-refresh model documented
 
 **Date:** 2026-04-27

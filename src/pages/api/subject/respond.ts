@@ -8,7 +8,6 @@
  * CONTAMINATION BOUNDARY — READ BEFORE EDITING
  * ============================================================================
  * This handler must NEVER trigger:
- *   - runCalibrationExtraction() — LLM call, owner-only
  *   - embedResponse()          — writes to owner RAG corpus, owner-only
  *   - computeAndPersistDerivedSignals() — writes to owner signal tables, owner-only
  *   - computePriorDayDelta()   — owner signal pipeline, owner-only

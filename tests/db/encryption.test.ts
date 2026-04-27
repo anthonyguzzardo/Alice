@@ -18,8 +18,9 @@
  *      this re-exercises it through the libDb path to confirm the wiring.)
  *
  * The test exercises the complete column inventory (tb_responses,
- * tb_questions, tb_reflections, tb_calibration_context, tb_embeddings,
- * tb_session_events) so any wiring drift is caught — not just one column.
+ * tb_questions, tb_reflections, tb_embeddings, tb_session_events) so any
+ * wiring drift is caught — not just one column. tb_calibration_context was
+ * archived 2026-04-27 (INC-015) and dropped from this test.
  */
 
 import { describe, it, expect, beforeEach, afterAll } from 'vitest';
@@ -27,13 +28,11 @@ import sql, {
   saveResponse,
   scheduleQuestion,
   saveReflection,
-  saveCalibrationContext,
   saveSessionEvents,
   insertEmbeddingMeta,
   getResponseText,
   getQuestionTextById,
   getLatestReflectionWithCoverage,
-  getCalibrationContextForQuestion,
   getEventLogJson,
   getKeystrokeStreamJson,
   getSessionEvents,
@@ -49,7 +48,7 @@ beforeEach(async () => {
   // Clean only this test's subject rows so we don't disturb other db-project
   // test files that share the container.
   for (const t of [
-    'tb_calibration_context', 'tb_session_events', 'tb_embeddings',
+    'tb_session_events', 'tb_embeddings',
     'tb_reflections', 'tb_responses', 'tb_questions', 'tb_subjects',
   ]) {
     await sql.unsafe(`DELETE FROM ${t} WHERE subject_id = $1`, [SUBJECT_ID]);
@@ -58,20 +57,6 @@ beforeEach(async () => {
     INSERT INTO tb_subjects (subject_id, username, password_hash, is_owner, must_reset_password, iana_timezone)
     OVERRIDING SYSTEM VALUE
     VALUES (${SUBJECT_ID}, ${'enc-test-' + SUBJECT_ID}, 'placeholder', FALSE, FALSE, 'UTC')
-  `;
-  // te_context_dimension is seeded in dbAlice_Seed.sql, not the schema file.
-  // The test container only applies the schema, so seed the dimensions this
-  // test relies on. ON CONFLICT keeps it idempotent across the suite.
-  await sql`
-    INSERT INTO te_context_dimension (context_dimension_id, enum_code, name) VALUES
-       (1, 'sleep',           'Sleep')
-      ,(2, 'physical_state',  'Physical State')
-      ,(3, 'emotional_event', 'Emotional Event')
-      ,(4, 'social_quality',  'Social Quality')
-      ,(5, 'stress',          'Stress')
-      ,(6, 'exercise',        'Exercise')
-      ,(7, 'routine',         'Routine')
-    ON CONFLICT (context_dimension_id) DO NOTHING
   `;
 });
 
@@ -135,41 +120,6 @@ describe('migration 031 — encryption round-trip through libDb', () => {
     const latest = await getLatestReflectionWithCoverage(SUBJECT_ID);
     expect(latest?.text).toBe(plaintext);
     expect(latest?.coverage_through_response_id).toBe(999);
-  });
-
-  it('tb_calibration_context — value + detail (nullable detail) round-trip', async () => {
-    await scheduleQuestion(SUBJECT_ID, 'How did you sleep?', '2026-04-29', 'calibration');
-    const qRowsX = await sql`
-      SELECT question_id FROM tb_questions WHERE subject_id = ${SUBJECT_ID} AND scheduled_for = '2026-04-29'
-    ` as Array<{ question_id: number }>;
-    const question_id = qRowsX[0]!.question_id;
-
-    await saveCalibrationContext(SUBJECT_ID, question_id, [
-      { dimension: 'sleep', value: 'poor', detail: 'woke at 4am, couldn\'t fall back', confidence: 0.9 },
-      { dimension: 'physical_state', value: 'tired', detail: null, confidence: 0.8 },
-    ]);
-
-    const rawRows = await sql`
-      SELECT value_ciphertext, detail_ciphertext, detail_nonce
-      FROM tb_calibration_context
-      WHERE subject_id = ${SUBJECT_ID} AND question_id = ${question_id}
-      ORDER BY context_dimension_id
-    ` as Array<{ value_ciphertext: string; detail_ciphertext: string | null; detail_nonce: string | null }>;
-    expect(rawRows).toHaveLength(2);
-    expect(rawRows[0]!.value_ciphertext).not.toContain('poor');
-    expect(rawRows[0]!.detail_ciphertext).not.toContain('4am');
-    // null-detail row keeps both fields null
-    expect(rawRows[1]!.detail_ciphertext).toBeNull();
-    expect(rawRows[1]!.detail_nonce).toBeNull();
-
-    const tags = await getCalibrationContextForQuestion(SUBJECT_ID, question_id);
-    expect(tags).toHaveLength(2);
-    const sleep = tags.find(t => t.dimension === 'sleep');
-    expect(sleep?.value).toBe('poor');
-    expect(sleep?.detail).toBe('woke at 4am, couldn\'t fall back');
-    const physical = tags.find(t => t.dimension === 'physical_state');
-    expect(physical?.value).toBe('tired');
-    expect(physical?.detail).toBeNull();
   });
 
   it('tb_embeddings.embedded_text — round-trip via insertEmbeddingMeta path', async () => {

@@ -1093,33 +1093,13 @@ CREATE INDEX IF NOT EXISTS ix_semantic_signals_subject_id    ON tb_semantic_sign
 CREATE INDEX IF NOT EXISTS ix_process_signals_subject_id     ON tb_process_signals (subject_id);
 CREATE INDEX IF NOT EXISTS ix_cross_session_subject_id       ON tb_cross_session_signals (subject_id);
 
--- @region calibration -- tb_calibration_context, tb_calibration_baselines_history, tb_session_delta
+-- @region calibration -- tb_calibration_baselines_history, tb_session_delta
 -- ============================================================================
 -- CALIBRATION & CONTEXT TABLES
 -- ============================================================================
-
--- PURPOSE: extracted context tags from calibration responses
--- USE CASE: incidental supervision for confound tracking
--- MUTABILITY: insert once per calibration
--- FOOTER: created only
-CREATE TABLE IF NOT EXISTS tb_calibration_context (
-   calibration_context_id  INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
-  ,subject_id              INT      NOT NULL                              -- logical FK to tb_subjects
-  ,question_id             INT      NOT NULL
-  ,context_dimension_id    SMALLINT NOT NULL
-  -- value + detail encrypted at rest (migration 031). Plaintext columns removed.
-  ,value_ciphertext        TEXT NOT NULL
-  ,value_nonce             TEXT NOT NULL
-  ,detail_ciphertext       TEXT
-  ,detail_nonce            TEXT
-  ,confidence              DOUBLE PRECISION NOT NULL DEFAULT 1.0
-  ,dttm_created_utc        TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-  ,created_by              TEXT NOT NULL DEFAULT 'system'
-);
-
-CREATE INDEX IF NOT EXISTS ix_calibration_context_subject_id ON tb_calibration_context (subject_id);
-
--- --------------------------------------------------------------------------
+-- (tb_calibration_context archived 2026-04-27 per migration 034 / INC-015 —
+--  the extraction pipeline had no surviving consumers after INC-014 removed
+--  runGeneration.)
 
 -- PURPOSE: calibration vs journal session delta for same-day comparison
 -- USE CASE: separating state-of-day from trait signal

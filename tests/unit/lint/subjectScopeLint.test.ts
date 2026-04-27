@@ -391,7 +391,8 @@ function formatViolation(v: Violation): string {
 // archived, drop it from SUBJECT_BEARING_TABLES and add it here in the same
 // commit as the archive migration.
 const ARCHIVED_SINCE_030 = new Set<string>([
-  'tb_witness_states',  // archived via migration 033 (2026-04-27, INC-014)
+  'tb_witness_states',       // archived via migration 033 (2026-04-27, INC-014)
+  'tb_calibration_context',  // archived via migration 034 (2026-04-27, INC-015)
 ]);
 
 describe('subjectScopeLint — migration drift', () => {

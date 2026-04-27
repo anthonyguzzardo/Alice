@@ -56,11 +56,8 @@ interface HealthResponse {
   pendingWork: {
     embeds: number;
     embedsBySubject: Array<{ subject_id: number; username: string; count: number }>;
-    extractions: number;
-    extractionsBySubject: Array<{ subject_id: number; username: string; count: number }>;
     seedAlerts: Array<{ subject_id: number; username: string; remaining: number }>;
     teiAvailable: boolean;
-    anthropicAvailable: boolean;
   };
   rustEngine: boolean;
   overall: 'green' | 'yellow' | 'red';
@@ -229,31 +226,6 @@ export const GET: APIRoute = async () => {
   const pendingEmbeds = embedsBySubject.reduce((sum, r) => sum + r.count, 0);
   const teiAvailable = await isTeiAvailable();
 
-  // Calibration extractions pending — calibration sessions (source_id = 3)
-  // with no `tb_calibration_context` rows. The runCalibrationExtraction LLM
-  // call writes these tags; on `npm run dev` (no ANTHROPIC_API_KEY) the call
-  // fails and the row count stays 0. Operator drains by re-running with the
-  // key set (currently manual: see followup queue).
-  const extractionRows = await sql`
-    SELECT s.subject_id AS "subjectId", s.username, COUNT(*)::int AS cnt
-    FROM tb_subjects s
-    JOIN tb_responses r ON r.subject_id = s.subject_id
-    JOIN tb_questions q ON r.question_id = q.question_id
-    WHERE q.question_source_id = 3
-      AND NOT EXISTS (
-        SELECT 1 FROM tb_calibration_context cc
-        WHERE cc.subject_id = s.subject_id AND cc.question_id = q.question_id
-      )
-    GROUP BY s.subject_id, s.username
-    HAVING COUNT(*) > 0
-    ORDER BY cnt DESC
-  ` as Array<{ subjectId: number; username: string; cnt: number }>;
-  const extractionsBySubject = extractionRows.map(r => ({
-    subject_id: r.subjectId, username: r.username, count: r.cnt,
-  }));
-  const pendingExtractions = extractionsBySubject.reduce((sum, r) => sum + r.count, 0);
-  const anthropicAvailable = !!process.env.ANTHROPIC_API_KEY;
-
   // Seed alerts — any subject with 0 < unanswered_seeds ≤ 5. Triggers the
   // owner to manually run an LLM corpus refresh (additive to tb_question_corpus,
   // never overwrites a subject's personal queue). See METHODS_PROVENANCE.md
@@ -283,7 +255,7 @@ export const GET: APIRoute = async () => {
   else if (recentErrors.length > 0) overall = 'red';
   else if (!todayQuestion || !tomorrowQuestion) overall = 'yellow';
   else if (duplicateScheduledQuestions > 0 || sessionsMissingSummary > 0) overall = 'yellow';
-  else if (pendingEmbeds > 0 || pendingExtractions > 0 || seedAlerts.length > 0) overall = 'yellow';
+  else if (pendingEmbeds > 0 || seedAlerts.length > 0) overall = 'yellow';
 
   const body: HealthResponse = {
     today: {
@@ -308,11 +280,8 @@ export const GET: APIRoute = async () => {
     pendingWork: {
       embeds: pendingEmbeds,
       embedsBySubject,
-      extractions: pendingExtractions,
-      extractionsBySubject,
       seedAlerts,
       teiAvailable,
-      anthropicAvailable,
     },
     rustEngine: hasNativeEngine,
     overall,

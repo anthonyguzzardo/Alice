@@ -93,7 +93,6 @@ export const SUBJECT_BEARING_TABLES: ReadonlySet<string> = new Set([
   'tb_semantic_signals',
   'tb_process_signals',
   'tb_cross_session_signals',
-  'tb_calibration_context',
   'tb_calibration_baselines_history',
   'tb_entry_states',
   'tb_semantic_states',

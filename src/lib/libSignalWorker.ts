@@ -28,7 +28,6 @@ import sql, {
 import { computeAndPersistDerivedSignals } from './libSignalPipeline.ts';
 import { computePriorDayDelta } from './libDailyDelta.ts';
 import { embedResponse, isTeiAvailable } from './libEmbeddings.ts';
-import { runCalibrationExtraction } from './libCalibrationExtract.ts';
 import { snapshotCalibrationBaselinesAfterSubmit } from './libCalibrationDrift.ts';
 import { getEngineProvenanceId } from './libEngineProvenance.ts';
 import { localDateStr } from './utlDate.ts';
@@ -252,22 +251,10 @@ async function runResponsePipeline(job: SignalJobRow): Promise<void> {
 
 /**
  * Calibration pipeline. Mirrors the post-save sequence from /api/calibrate:
- * extract life-context tags, compute derived signals, snapshot drift baseline.
+ * compute derived signals, snapshot drift baseline.
  */
 async function runCalibrationPipeline(job: SignalJobRow): Promise<void> {
   const ctx = { signal_job_id: job.signal_job_id, subject_id: job.subject_id, question_id: job.question_id };
-
-  try {
-    // Plaintext for both prompt and response come back through libDb's
-    // decryption boundary.
-    const qInfo = await getQuestionTextById(job.subject_id, job.question_id);
-    const responseText = await getResponseText(job.subject_id, job.question_id);
-    if (qInfo && responseText !== null) {
-      await runCalibrationExtraction(job.subject_id, job.question_id, responseText, qInfo.text);
-    }
-  } catch (err) {
-    logError('worker.calibration-extraction', err, ctx);
-  }
 
   try {
     await computeAndPersistDerivedSignals(job.subject_id, job.question_id);

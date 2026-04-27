@@ -6,7 +6,6 @@
  * CONTAMINATION BOUNDARY — READ BEFORE EDITING
  * ============================================================================
  * This handler must NEVER trigger:
- *   - runCalibrationExtraction()             — LLM, owner-only
  *   - embedResponse()                        — TEI/Qwen, owner-only (local-mode draining)
  *   - computeAndPersistDerivedSignals()      — Rust pipeline, owner-only on prod
  *   - snapshotCalibrationBaselinesAfterSubmit() — owner drift signal
@@ -23,8 +22,8 @@
  *
  * Architectural note: subjects must always have unlimited calibration access.
  * Raw measurement input (event log + keystroke stream) is persisted encrypted
- * so the owner can drain pending analysis later via local-mode `npm run dev:full`
- * — that is where the LLM extraction + signal computation happens, off-prod.
+ * so the owner can drain pending signal computation later via local-mode
+ * `npm run dev:full` — that runs off-prod.
  * ============================================================================
  */
 
