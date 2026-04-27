@@ -505,6 +505,7 @@ export async function seedTwoSubjectFingerprintFixture(
 export const FIXTURE_TABLES = [
   'tb_reconstruction_residuals',
   'tb_calibration_baselines_history',
+  'tb_session_integrity',
   'tb_personal_profile',
   'tb_rburst_sequences',
   'tb_burst_sequences',
