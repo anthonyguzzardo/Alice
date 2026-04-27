@@ -103,7 +103,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
         await saveSubjectSessionSummary(
           subject.subject_id,
           scheduled_question_id,
-          coerceSessionSummary(sessionSummary, 0, trimmedText),
+          coerceSessionSummary(subject.subject_id, sessionSummary, 0, trimmedText),
           tx,
         );
       }

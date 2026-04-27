@@ -12,7 +12,7 @@
  * surfaces only the count of recent errors and which jobs produced them.
  */
 import type { APIRoute } from 'astro';
-import sql from '../../lib/libDb.ts';
+import sql, { OWNER_SUBJECT_ID } from '../../lib/libDb.ts';
 import { localDateStr } from '../../lib/utlDate.ts';
 import { readRecentErrors } from '../../lib/utlErrorLog.ts';
 import { hasNativeEngine } from '../../lib/libSignalsNative.ts';
@@ -57,13 +57,16 @@ interface HealthResponse {
 }
 
 export const GET: APIRoute = async () => {
+  // Owner-only endpoint (Caddy basic-auth gated). subjectId pinned to OWNER_SUBJECT_ID.
+  // TODO(step5): review — if a per-subject health view ever lands, accept ?subjectId.
+  const subjectId = OWNER_SUBJECT_ID;
   const today = localDateStr();
   const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
   // --- TODAY ---------------------------------------------------------------
   const todayQuestionRows = await sql`
     SELECT question_id, question_source_id
-    FROM tb_questions WHERE scheduled_for = ${today}
+    FROM tb_questions WHERE subject_id = ${subjectId} AND scheduled_for = ${today}
   `;
   const todayQuestion = todayQuestionRows[0] as { question_id: number; question_source_id: number } | undefined;
 
@@ -72,7 +75,9 @@ export const GET: APIRoute = async () => {
     const submittedRows = await sql`
       SELECT 1 FROM tb_responses r
       JOIN tb_questions q ON r.question_id = q.question_id
-      WHERE q.scheduled_for = ${today} AND q.question_source_id != 3
+      WHERE q.subject_id = ${subjectId}
+        AND q.scheduled_for = ${today}
+        AND q.question_source_id != 3
     `;
     sessionSubmittedToday = submittedRows.length > 0;
   }
@@ -82,7 +87,8 @@ export const GET: APIRoute = async () => {
     SELECT r.response_id, r.question_id, DATE(r.dttm_created_utc) AS day
     FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
-    WHERE q.question_source_id != 3
+    WHERE q.subject_id = ${subjectId}
+      AND q.question_source_id != 3
     ORDER BY r.response_id DESC LIMIT 1
   `;
   const lastSession = lastSessionRows[0] as { response_id: number; question_id: number; day: string } | undefined;
@@ -92,12 +98,12 @@ export const GET: APIRoute = async () => {
     // Observation + suppressed-question coverage checks removed 2026-04-16.
     const coverageRows = await sql`
       SELECT
-        (SELECT 1 FROM tb_embeddings WHERE source_record_id = ${lastSession.response_id} AND embedding_source_id = 1 LIMIT 1) AS embedded,
-        (SELECT 1 FROM tb_entry_states WHERE response_id = ${lastSession.response_id} LIMIT 1) AS entry_state,
-        (SELECT 1 FROM tb_trait_dynamics WHERE entry_count = (
+        (SELECT 1 FROM tb_embeddings WHERE subject_id = ${subjectId} AND source_record_id = ${lastSession.response_id} AND embedding_source_id = 1 LIMIT 1) AS embedded,
+        (SELECT 1 FROM tb_entry_states WHERE subject_id = ${subjectId} AND response_id = ${lastSession.response_id} LIMIT 1) AS entry_state,
+        (SELECT 1 FROM tb_trait_dynamics WHERE subject_id = ${subjectId} AND entry_count = (
            SELECT COUNT(*)::int FROM tb_session_summaries ss
            JOIN tb_questions q ON ss.question_id = q.question_id
-           WHERE q.question_source_id != 3
+           WHERE q.subject_id = ${subjectId} AND q.question_source_id != 3
          ) LIMIT 1) AS witness_rendered
     `;
     const coverage = coverageRows[0] as { embedded: number | null; entry_state: number | null; witness_rendered: number | null };
@@ -126,7 +132,8 @@ export const GET: APIRoute = async () => {
   const [sessionCountRow] = await sql`
     SELECT COUNT(*)::int AS c FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
-    WHERE q.question_source_id != 3
+    WHERE q.subject_id = ${subjectId}
+      AND q.question_source_id != 3
   `;
   const sessionCount = (sessionCountRow as { c: number }).c;
 
@@ -135,7 +142,7 @@ export const GET: APIRoute = async () => {
   // sessions-only. We surface the next fire count as informational; if the
   // cadence is session-scoped instead, this number just reads differently.
   const [totalResponsesRow] = await sql`
-    SELECT COUNT(*)::int AS c FROM tb_responses
+    SELECT COUNT(*)::int AS c FROM tb_responses WHERE subject_id = ${subjectId}
   `;
   const totalResponses = (totalResponsesRow as { c: number }).c;
   let nextReflectionAt: number | null = null;
@@ -147,7 +154,7 @@ export const GET: APIRoute = async () => {
 
   // --- TOMORROW -----------------------------------------------------------
   const tomorrowQuestionRows = await sql`
-    SELECT 1 FROM tb_questions WHERE scheduled_for = ${tomorrow}
+    SELECT 1 FROM tb_questions WHERE subject_id = ${subjectId} AND scheduled_for = ${tomorrow}
   `;
   const tomorrowQuestion = tomorrowQuestionRows[0];
 
@@ -155,7 +162,7 @@ export const GET: APIRoute = async () => {
   const [dupRow] = await sql`
     SELECT COUNT(*)::int AS c FROM (
       SELECT text FROM tb_questions
-      WHERE scheduled_for >= ${today}
+      WHERE subject_id = ${subjectId} AND scheduled_for >= ${today}
       GROUP BY text HAVING COUNT(*) > 1
     ) sub
   `;
@@ -171,7 +178,9 @@ export const GET: APIRoute = async () => {
     FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
     LEFT JOIN tb_session_summaries ss ON ss.question_id = r.question_id
-    WHERE q.question_source_id != 3 AND ss.question_id IS NULL
+    WHERE q.subject_id = ${subjectId}
+      AND q.question_source_id != 3
+      AND ss.question_id IS NULL
   `;
   const sessionsMissingSummary = (missingRow as { c: number }).c;
 

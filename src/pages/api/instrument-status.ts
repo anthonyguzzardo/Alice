@@ -7,25 +7,29 @@
  * status, family coverage.
  */
 import type { APIRoute } from 'astro';
-import sql from '../../lib/libDb.ts';
+import sql, { OWNER_SUBJECT_ID } from '../../lib/libDb.ts';
 import { hasNativeEngine } from '../../lib/libSignalsNative.ts';
 import { logError } from '../../lib/utlErrorLog.ts';
 
 export const GET: APIRoute = async () => {
+  // Public research page; serves owner instrument statistics (n=1 paper claims).
+  // TODO(step5): review — if subjects' data ever rolls up into a public summary,
+  // this needs a different aggregation model (separate owner stats from population stats).
+  const subjectId = OWNER_SUBJECT_ID;
   try {
     const [counts] = await sql`
       SELECT
-        (SELECT COUNT(*)::int FROM tb_responses) AS responses,
-        (SELECT COUNT(*)::int FROM tb_session_summaries) AS sessions,
-        (SELECT COUNT(*)::int FROM tb_dynamical_signals) AS dynamical,
-        (SELECT COUNT(*)::int FROM tb_motor_signals) AS motor,
-        (SELECT COUNT(*)::int FROM tb_semantic_signals) AS semantic,
-        (SELECT COUNT(*)::int FROM tb_process_signals) AS process,
-        (SELECT COUNT(*)::int FROM tb_cross_session_signals) AS cross_session,
-        (SELECT COUNT(*)::int FROM tb_reconstruction_residuals) AS residuals,
-        (SELECT COUNT(*)::int FROM tb_questions WHERE question_source_id = 3) AS calibration_questions,
-        (SELECT MIN(scheduled_for)::text FROM tb_questions WHERE scheduled_for IS NOT NULL) AS first_date,
-        (SELECT MAX(scheduled_for)::text FROM tb_questions WHERE scheduled_for IS NOT NULL) AS latest_date
+        (SELECT COUNT(*)::int FROM tb_responses WHERE subject_id = ${subjectId}) AS responses,
+        (SELECT COUNT(*)::int FROM tb_session_summaries WHERE subject_id = ${subjectId}) AS sessions,
+        (SELECT COUNT(*)::int FROM tb_dynamical_signals WHERE subject_id = ${subjectId}) AS dynamical,
+        (SELECT COUNT(*)::int FROM tb_motor_signals WHERE subject_id = ${subjectId}) AS motor,
+        (SELECT COUNT(*)::int FROM tb_semantic_signals WHERE subject_id = ${subjectId}) AS semantic,
+        (SELECT COUNT(*)::int FROM tb_process_signals WHERE subject_id = ${subjectId}) AS process,
+        (SELECT COUNT(*)::int FROM tb_cross_session_signals WHERE subject_id = ${subjectId}) AS cross_session,
+        (SELECT COUNT(*)::int FROM tb_reconstruction_residuals WHERE subject_id = ${subjectId}) AS residuals,
+        (SELECT COUNT(*)::int FROM tb_questions WHERE subject_id = ${subjectId} AND question_source_id = 3) AS calibration_questions,
+        (SELECT MIN(scheduled_for)::text FROM tb_questions WHERE subject_id = ${subjectId} AND scheduled_for IS NOT NULL) AS first_date,
+        (SELECT MAX(scheduled_for)::text FROM tb_questions WHERE subject_id = ${subjectId} AND scheduled_for IS NOT NULL) AS latest_date
     ` as [Record<string, unknown>];
 
     const c = counts as {
@@ -74,7 +78,7 @@ export const GET: APIRoute = async () => {
         ROUND(AVG(semantic_l2_norm)::numeric, 3)      AS "semanticL2",
         ROUND(AVG(total_l2_norm)::numeric, 1)         AS "totalL2"
       FROM tb_reconstruction_residuals
-      WHERE adversary_variant_id = ${variantId}
+      WHERE subject_id = ${subjectId} AND adversary_variant_id = ${variantId}
     `;
 
     // Per-variant behavioral L2 summary for multi-adversary comparison
@@ -87,6 +91,7 @@ export const GET: APIRoute = async () => {
         ROUND(AVG(semantic_l2_norm)::numeric, 3) AS "semanticL2",
         COUNT(*)::int AS "sessions"
       FROM tb_reconstruction_residuals
+      WHERE subject_id = ${subjectId}
       GROUP BY adversary_variant_id
       ORDER BY adversary_variant_id
     ` as Array<Record<string, unknown>>;
