@@ -44,7 +44,7 @@ Tables affected:
 
 **Schema-side work:**
 
-- `db/sql/migrations/036_archive_entry_states_and_reflections.sql` — new migration. One DO block, two idempotent renames to `zz_archive_*`, post-archive verification query. Operator runs `psql "$ALICE_PG_URL" -v ON_ERROR_STOP=1 -f db/sql/migrations/036_archive_entry_states_and_reflections.sql` against Supabase when ready. NOT auto-applied.
+- `db/sql/migrations/036_archive_entry_states_and_reflections.sql` — new migration. One DO block, two idempotent renames to `zz_archive_*`, post-archive verification query. **Applied to Supabase 2026-04-27 in this same session.** psql output confirmed both `RENAME` notices fired and the post-archive `to_regclass` query returned NULL for both live names.
 - `db/sql/dbAlice_Tables.sql` — the two `CREATE TABLE` blocks deleted; the `@region state -- tb_entry_states` marker replaced with `@region session-data` covering the five session-related tables that physically live there (bursts, rbursts, metadata, calibration history, session events); the stale `REFERENCED BY: tb_entry_states, tb_embeddings` comment on `tb_responses` corrected to drop `tb_entry_states`; `tb_reflections` dropped from the `@region core` marker.
 - `tests/unit/lint/subjectScopeLint.ts` — `tb_entry_states` and `tb_reflections` removed from `SUBJECT_BEARING_TABLES`.
 - `tests/unit/lint/subjectScopeLint.test.ts` — `tb_entry_states` and `tb_reflections` added to `ARCHIVED_SINCE_030` exemption set.
@@ -55,9 +55,16 @@ Tables affected:
 
 ### Existing data
 
-`tb_entry_states`: rows frozen at 2026-04-25 11:58. After migration, every row lives in `zz_archive_tb_entry_states` and is inert.
+Pre-migration snapshot (Supabase, 2026-04-27):
 
-`tb_reflections`: row count was already low (the legacy generator hadn't fired in weeks). Whatever's there moves to `zz_archive_tb_reflections`. No live code reads it.
+| Table             | Rows |
+|-------------------|------|
+| tb_entry_states   | 14   |
+| tb_reflections    | 0    |
+
+`tb_entry_states`: 14 rows frozen at 2026-04-25 11:58. Now live at `zz_archive_tb_entry_states` with the same row count, inert.
+
+`tb_reflections`: zero rows (the legacy generator hadn't ever populated it on this deploy). Now lives at `zz_archive_tb_reflections`. The empty archive table is kept for shape symmetry with the other archives — rolling back simply renames it back if ever needed.
 
 ### Verification
 
@@ -66,16 +73,16 @@ Tables affected:
 | Live `src/` references to `tb_entry_states` or `tb_reflections` (excluding the libDb deprecation comment) | non-zero | 0 |
 | `saveEntryState` / `saveReflection` callers | 0 (already orphaned) | 0 (now also deleted) |
 | Files reading either table | 4 (`states.ts`, `entry/[id].ts`, `entry/[id].astro`, encryption test for reflections) | 0 |
-| `to_regclass('alice.tb_entry_states')` and `tb_reflections` | non-NULL | NULL after migration runs |
-| `to_regclass('alice.zz_archive_tb_entry_states')` and `zz_archive_tb_reflections` | NULL | non-NULL with original row counts |
+| `to_regclass('alice.tb_entry_states')` and `tb_reflections` | non-NULL | NULL (verified post-apply on Supabase) |
+| `to_regclass('alice.zz_archive_tb_entry_states')` and `zz_archive_tb_reflections` | NULL | non-NULL, row counts 14 + 0 (matches pre-snapshot exactly) |
 | Unit tests | 78 passing | 78 passing |
 | Lint test `SUBJECT_BEARING_TABLES covers every BLOCK 1 table in migration 030 (excluding archived)` | passing | passing |
 | TS check on touched files | clean | clean (pre-existing strict-null noise unchanged) |
 
 ### What this does NOT fix
 
-- **Migration 036 not yet applied to Supabase.** Until then, both tables remain live in production. No code reads them; the only effect of leaving them un-archived is database surface area.
 - **Migration 035 numbering collision.** Two files in `db/sql/migrations/` are both prefixed `035` (`035_archive_alice_negative_state_tables.sql` and `035_session_telemetry.sql`). Pre-existing; not addressed in this commit. The operator can apply migrations in either order; the file collision is cosmetic but worth resolving before the next archival pass.
+- **Earlier archival migrations may still be pending on Supabase.** Migration 036 was applied directly; migrations 033 (witness_states), 034 (calibration_context), and 035 (alice-negative state tables, session_telemetry) were noted as "not yet applied" in earlier handoffs. They are independent of 036 — 036 succeeded because its tables (tb_entry_states, tb_reflections) were never touched by the earlier migrations. Confirm 033/034/035 status separately if drift between local schema and Supabase becomes a concern.
 
 ### Discipline note
 
