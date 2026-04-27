@@ -1,8 +1,8 @@
 /**
  * Observatory Entry API
  *
- * Returns full per-entry detail: behavioral 7D state + semantic 11D state
- * + session summary + session metadata + replay availability + nav.
+ * Returns full per-entry detail: behavioral 7D state + session summary +
+ * session metadata + replay availability + nav.
  *
  * Pulls from the live PostgreSQL database.
  */
@@ -53,19 +53,6 @@ export const GET: APIRoute = async ({ params }) => {
 
     const qInfo = await getQuestionTextById(subjectId, entryState.question_id);
     entryState.question_text = qInfo?.text ?? '';
-
-    // Semantic state
-    const semanticStateRows = await sql`
-      SELECT
-         syntactic_complexity, interrogation, self_focus, uncertainty
-        ,cognitive_processing
-        ,nrc_anger, nrc_fear, nrc_joy, nrc_sadness, nrc_trust, nrc_anticipation
-        ,sentiment, abstraction, agency_framing, temporal_orientation
-        ,convergence as semantic_convergence
-      FROM tb_semantic_states
-      WHERE subject_id = ${subjectId} AND response_id = ${responseId}
-    `;
-    const semanticState = semanticStateRows[0] as any;
 
     // Session summary
     const sessionSummaryRows = await sql`
@@ -287,7 +274,6 @@ export const GET: APIRoute = async ({ params }) => {
 
     return new Response(JSON.stringify({
       entryState,
-      semanticState,
       sessionSummary,
       metadata,
       burstSequence,

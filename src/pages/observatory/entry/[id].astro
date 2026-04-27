@@ -5,7 +5,6 @@
  * Drill-down for one journal entry. Surfaces:
  *   - The question + scheduled date
  *   - Behavioral 7D radar
- *   - Semantic 11D radar
  *   - Session summary metrics
  *   - Slice-3 metadata (deletion curve, burst shape, hour typicality, etc.)
  *   - Replay link if event log was captured
@@ -68,11 +67,6 @@ const responseId = parseInt(id ?? '', 10);
 
     <script type="module" define:vars={{ responseId }}>
       const BEHAVIORAL_DIMS = ['fluency','deliberation','revision','commitment','volatility','thermal','presence'];
-      const SEMANTIC_DIMS = [
-        'syntactic_complexity','interrogation','self_focus','uncertainty',
-        'cognitive_processing',
-        'nrc_anger','nrc_fear','nrc_joy','nrc_sadness','nrc_trust','nrc_anticipation',
-      ];
 
       function fmtZ(v) {
         if (v == null) return '—';
@@ -171,7 +165,7 @@ const responseId = parseInt(id ?? '', 10);
           document.getElementById('entry-content').innerHTML = `<div class="empty">${data.error}</div>`;
           return;
         }
-        const { entryState, semanticState, sessionSummary, metadata, dynamicalSignals, motorSignals, processSignals, crossSessionSignals, semanticSignals, replay, navigation } = data;
+        const { entryState, sessionSummary, metadata, dynamicalSignals, motorSignals, processSignals, crossSessionSignals, semanticSignals, replay, navigation } = data;
 
         const navRow = `
           <div class="nav-row">
@@ -189,29 +183,16 @@ const responseId = parseInt(id ?? '', 10);
         `;
 
         const behVals = BEHAVIORAL_DIMS.map(d => entryState[d]);
-        const semVals = semanticState ? SEMANTIC_DIMS.map(d => semanticState[d]) : null;
 
         const radars = `
-          <div class="grid-two">
-            <section class="panel">
-              <h2>Behavioral 7D · z-score from baseline</h2>
-              <canvas id="radar-beh"></canvas>
-              <div class="stat-grid" style="margin-top:16px;">
-                ${BEHAVIORAL_DIMS.map(d => `<div><div class="k">${d}</div><div class="v">${fmtZ(entryState[d])}</div></div>`).join('')}
-                <div><div class="k">convergence</div><div class="v">${Number(entryState.convergence ?? 0).toFixed(2)}</div></div>
-              </div>
-            </section>
-            <section class="panel">
-              <h2>Semantic 11D · z-score from baseline</h2>
-              ${semanticState ? '<canvas id="radar-sem"></canvas>' : '<div class="empty">no semantic state for this entry</div>'}
-              ${semanticState ? `
-                <div class="stat-grid" style="margin-top:16px;">
-                  ${SEMANTIC_DIMS.map(d => `<div><div class="k">${d.replace(/_/g, ' ')}</div><div class="v">${fmtZ(semanticState[d])}</div></div>`).join('')}
-                  <div><div class="k">semantic convergence</div><div class="v">${Number(semanticState.semantic_convergence ?? 0).toFixed(2)}</div></div>
-                </div>
-              ` : ''}
-            </section>
-          </div>
+          <section class="panel">
+            <h2>Behavioral 7D · z-score from baseline</h2>
+            <canvas id="radar-beh"></canvas>
+            <div class="stat-grid" style="margin-top:16px;">
+              ${BEHAVIORAL_DIMS.map(d => `<div><div class="k">${d}</div><div class="v">${fmtZ(entryState[d])}</div></div>`).join('')}
+              <div><div class="k">convergence</div><div class="v">${Number(entryState.convergence ?? 0).toFixed(2)}</div></div>
+            </div>
+          </section>
         `;
 
         const metaPills = [];
@@ -473,10 +454,6 @@ const responseId = parseInt(id ?? '', 10);
         // Draw radars after DOM is in place
         const behCanvas = document.getElementById('radar-beh');
         if (behCanvas) drawRadar(behCanvas, BEHAVIORAL_DIMS, behVals, '#7a5a44');
-        if (semanticState) {
-          const semCanvas = document.getElementById('radar-sem');
-          if (semCanvas) drawRadar(semCanvas, SEMANTIC_DIMS, semVals, '#7a5a7a');
-        }
       }).catch(err => {
         document.getElementById('entry-content').innerHTML = `<div class="empty">failed to load: ${err?.message ?? err}</div>`;
       });

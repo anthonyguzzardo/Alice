@@ -1596,7 +1596,7 @@ export async function savePromptTrace(trace: PromptTraceInput): Promise<void> {
 }
 
 // ----------------------------------------------------------------------------
-// @region state -- EntryStateRow, saveEntryState, getAllEntryStates, getEntryStateCount, SemanticStateRow, saveSemanticState, saveSemanticDynamics, saveSemanticCoupling, TraitDynamicRow, saveTraitDynamics, getLatestTraitDynamics, saveCouplingMatrix, getLatestCouplingMatrix, saveEmotionBehaviorCoupling, getLatestEmotionBehaviorCoupling
+// @region state -- EntryStateRow, saveEntryState, getAllEntryStates, getEntryStateCount, saveSemanticDynamics, saveSemanticCoupling, TraitDynamicRow, saveTraitDynamics, getLatestTraitDynamics, saveCouplingMatrix, getLatestCouplingMatrix, saveEmotionBehaviorCoupling, getLatestEmotionBehaviorCoupling
 // ----------------------------------------------------------------------------
 // ENTRY STATES (7D deterministic behavioral state vectors)
 // ----------------------------------------------------------------------------
@@ -1638,61 +1638,6 @@ export async function getAllEntryStates(subjectId: number): Promise<EntryStateRo
 
 export async function getEntryStateCount(subjectId: number): Promise<number> {
   const [row] = await sql`SELECT COUNT(*)::int AS c FROM tb_entry_states WHERE subject_id = ${subjectId}`;
-  return (row as { c: number }).c;
-}
-
-// ----------------------------------------------------------------------------
-// SEMANTIC STATES (parallel space; deterministic densities + LLM placeholders)
-// ----------------------------------------------------------------------------
-
-export interface SemanticStateRow {
-  semantic_state_id: number;
-  subject_id: number;
-  response_id: number;
-  // Deterministic dimensions (always populated)
-  syntactic_complexity: number;
-  interrogation: number;
-  self_focus: number;
-  uncertainty: number;
-  cognitive_processing: number;
-  nrc_anger: number;
-  nrc_fear: number;
-  nrc_joy: number;
-  nrc_sadness: number;
-  nrc_trust: number;
-  nrc_anticipation: number;
-  // LLM-extracted (schema-ready, null until extraction lands)
-  sentiment: number | null;
-  abstraction: number | null;
-  agency_framing: number | null;
-  temporal_orientation: number | null;
-  convergence: number;
-}
-
-export async function saveSemanticState(state: Omit<SemanticStateRow, 'semantic_state_id'>): Promise<number> {
-  const [row] = await sql`
-    INSERT INTO tb_semantic_states (
-       subject_id, response_id,
-       syntactic_complexity, interrogation, self_focus, uncertainty,
-       cognitive_processing,
-       nrc_anger, nrc_fear, nrc_joy, nrc_sadness, nrc_trust, nrc_anticipation,
-       sentiment, abstraction, agency_framing, temporal_orientation,
-       convergence
-    ) VALUES (
-      ${state.subject_id}, ${state.response_id},
-      ${state.syntactic_complexity}, ${state.interrogation}, ${state.self_focus}, ${state.uncertainty},
-      ${state.cognitive_processing},
-      ${state.nrc_anger}, ${state.nrc_fear}, ${state.nrc_joy}, ${state.nrc_sadness}, ${state.nrc_trust}, ${state.nrc_anticipation},
-      ${state.sentiment}, ${state.abstraction}, ${state.agency_framing}, ${state.temporal_orientation},
-      ${state.convergence}
-    )
-    RETURNING semantic_state_id
-  `;
-  return row.semantic_state_id;
-}
-
-export async function getSemanticStateCount(subjectId: number): Promise<number> {
-  const [row] = await sql`SELECT COUNT(*)::int AS c FROM tb_semantic_states WHERE subject_id = ${subjectId}`;
   return (row as { c: number }).c;
 }
 
