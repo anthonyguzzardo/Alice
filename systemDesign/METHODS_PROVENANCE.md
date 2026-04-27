@@ -81,8 +81,11 @@ Pre-migration snapshot (Supabase, 2026-04-27):
 
 ### What this does NOT fix
 
-- **Migration 035 numbering collision.** Two files in `db/sql/migrations/` are both prefixed `035` (`035_archive_alice_negative_state_tables.sql` and `035_session_telemetry.sql`). Pre-existing; not addressed in this commit. The operator can apply migrations in either order; the file collision is cosmetic but worth resolving before the next archival pass.
-- **Earlier archival migrations may still be pending on Supabase.** Migration 036 was applied directly; migrations 033 (witness_states), 034 (calibration_context), and 035 (alice-negative state tables, session_telemetry) were noted as "not yet applied" in earlier handoffs. They are independent of 036 — 036 succeeded because its tables (tb_entry_states, tb_reflections) were never touched by the earlier migrations. Confirm 033/034/035 status separately if drift between local schema and Supabase becomes a concern.
+### Side cleanups in the same commit
+
+- **Migration 035 numbering collision resolved.** Two files in `db/sql/migrations/` were both prefixed `035` — `035_archive_alice_negative_state_tables.sql` (commit `fa839f1`, 16:04 2026-04-27) and `035_session_telemetry.sql` (commit `3705e18`, 17:33 2026-04-27, the auth-hardening pass). Both had already been applied to Supabase before this session; the collision was purely a local filename clash. The session-telemetry file was renamed `035_session_telemetry.sql` → `037_session_telemetry.sql` (skipping 036 since that slot is taken by this incident's archival migration). The internal `\echo` banner and the header comment were updated to match. The migration content itself is byte-identical and idempotent if re-run.
+
+- **Full Supabase migration audit performed.** `psql` queries against `information_schema.columns` and `to_regclass()` confirmed every migration 030-036 plus the renamed 037 is applied to Supabase: `subject_id` columns present on subject-bearing tables, `text_ciphertext` columns present, `tb_subject_responses` dropped, `corpus_question_id` column present, `tb_witness_states` / `tb_calibration_context` / six alice-negative state tables / `tb_entry_states` / `tb_reflections` all confirmed renamed to `zz_archive_*`, `last_seen_at` + `last_ip` columns present on `tb_subject_sessions`. No drift between the migrations directory and Supabase as of 2026-04-27.
 
 ### Discipline note
 

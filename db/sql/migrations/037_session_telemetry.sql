@@ -1,9 +1,15 @@
 -- ============================================================================
--- Migration 035 — Session telemetry columns on tb_subject_sessions
+-- Migration 037 — Session telemetry columns on tb_subject_sessions
 -- ============================================================================
 --
 -- DATE: 2026-04-27
 -- TIE-IN: Auth hardening pass (rate-limit + 7-day expiry + session telemetry)
+--
+-- HISTORY: Originally landed as 035_session_telemetry.sql in commit 3705e18,
+-- creating a filename collision with 035_archive_alice_negative_state_tables.sql.
+-- Renamed to 037 (post-036 entry-states archival) once both 035 files were
+-- confirmed already applied to Supabase. Pure cosmetic rename — the migration
+-- itself is unchanged and idempotent if run again.
 --
 -- WHAT
 --   Adds two nullable columns to `tb_subject_sessions`:
@@ -29,7 +35,7 @@
 --   ALTER TABLE alice.tb_subject_sessions DROP COLUMN IF EXISTS last_seen_at;
 -- ============================================================================
 
-\echo '--- 035: adding last_seen_at + last_ip to tb_subject_sessions ---'
+\echo '--- 037: adding last_seen_at + last_ip to tb_subject_sessions ---'
 
 ALTER TABLE alice.tb_subject_sessions
   ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ,
