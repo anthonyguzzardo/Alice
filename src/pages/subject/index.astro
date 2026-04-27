@@ -872,7 +872,10 @@
           const punctuationLetterRatio = (punctuationFlightMean != null && letterFlightMean != null && letterFlightMean > 0) ? punctuationFlightMean / letterFlightMean : null;
 
           const sessionSummary = {
-            questionId,
+            // Journal mode: real question_id; calibration: 0 placeholder, the
+            // server overwrites with the inserted question_id inside the
+            // calibration transaction.
+            questionId: ctx.questionId ?? 0,
             firstKeystrokeMs, totalDurationMs, totalCharsTyped, finalCharCount,
             commitmentRatio, pauseCount, totalPauseMs, deletionCount, largestDeletion,
             totalCharsDeleted, tabAwayCount, totalTabAwayMs, wordCount, sentenceCount,
