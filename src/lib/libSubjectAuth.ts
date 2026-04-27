@@ -14,8 +14,10 @@
  * are hashed with Argon2id (memory-hard, side-channel resistant) so a leaked
  * `password_hash` column does not expose plaintext.
  *
- * Sessions expire after 30 days with no sliding-window extension. A password
- * reset deletes ALL sessions for that subject (forces re-login everywhere).
+ * Sessions expire after 7 days with no sliding-window extension (was 30 days
+ * pre-2026-04-27 — shortened during the auth-hardening pass to bound the
+ * stolen-cookie window). A password reset deletes ALL sessions for that
+ * subject (forces re-login everywhere).
  */
 
 import argon2 from 'argon2';
@@ -37,7 +39,7 @@ const ARGON2_OPTIONS: argon2.Options = {
   parallelism: 1,
 };
 
-const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
+const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** Cookie name carrying the raw session token. */
 export const SESSION_COOKIE = 'alice_session';
@@ -128,8 +130,17 @@ export async function loginSubject(
  * Resolve a raw cookie token to the underlying subject. Returns null when the
  * token is missing, unknown, expired, or the subject has been deactivated.
  * Does NOT extend the session; v1 has no sliding-window renewal.
+ *
+ * Side effect: on a successful resolve, updates `last_seen_at` and `last_ip`
+ * on the matching session row, throttled so the write fires at most once per
+ * 5 minutes per session. Telemetry only — auth still resolves on token_hash +
+ * expires_at alone. The throttle keeps a chatty client (every page load) from
+ * generating an unbounded write rate.
  */
-export async function verifySubjectSession(token: string): Promise<SubjectAuthRow | null> {
+export async function verifySubjectSession(
+  token: string,
+  ip?: string | null,
+): Promise<SubjectAuthRow | null> {
   if (!token) return null;
   const tokenHash = hashToken(token);
   const rows = await sql`
@@ -141,7 +152,23 @@ export async function verifySubjectSession(token: string): Promise<SubjectAuthRo
       AND sess.expires_at > CURRENT_TIMESTAMP
       AND s.is_active = TRUE
   `;
-  return (rows[0] as SubjectAuthRow | undefined) ?? null;
+  const subject = (rows[0] as SubjectAuthRow | undefined) ?? null;
+  if (subject) {
+    // Throttle: only update if last_seen_at is NULL (first verify post-rollout)
+    // or older than 5 minutes. The conditional in the WHERE clause keeps the
+    // write a no-op when the row is fresh.
+    await sql`
+      UPDATE tb_subject_sessions
+      SET last_seen_at = CURRENT_TIMESTAMP,
+          last_ip      = ${ip ?? null}
+      WHERE token_hash = ${tokenHash}
+        AND (
+          last_seen_at IS NULL
+          OR last_seen_at < CURRENT_TIMESTAMP - INTERVAL '5 minutes'
+        )
+    `;
+  }
+  return subject;
 }
 
 /** Invalidate a single session by token. No-op if the token doesn't exist. */

@@ -4,7 +4,7 @@
  * Body: { username: string, password: string }
  *
  * On success: sets the session cookie (HttpOnly, Secure, SameSite=Lax,
- * 30-day Max-Age) and returns `{ ok: true, mustResetPassword }`. On any
+ * 7-day Max-Age) and returns `{ ok: true, mustResetPassword }`. On any
  * failure (wrong username, wrong password, deactivated account) returns
  * 401 without distinguishing — auth handlers must not leak which condition
  * failed.
@@ -16,10 +16,41 @@
 import type { APIRoute } from 'astro';
 import { loginSubject, SESSION_COOKIE } from '../../../lib/libSubjectAuth.ts';
 import { parseBody } from '../../../lib/utlParseBody.ts';
+import { consume, reset as resetRateLimit } from '../../../lib/utlRateLimit.ts';
 
-const SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
+const SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
+
+// Rate limit: 10 login attempts per 15 minutes per IP. Argon2id already adds
+// ~100ms per verify, so the absolute upper bound on guesses-per-window is low
+// to begin with; this caps it to a number that defeats credential stuffing
+// without inconveniencing a human who fat-fingers their password.
+const LOGIN_LIMIT = 10;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+
+function clientIpKey(request: Request): string {
+  const xff = request.headers.get('x-forwarded-for');
+  if (xff) {
+    const first = xff.split(',')[0]?.trim();
+    if (first) return `login:${first.slice(0, 45)}`;
+  }
+  const real = request.headers.get('x-real-ip');
+  if (real) return `login:${real.trim().slice(0, 45)}`;
+  return 'login:unknown';
+}
 
 export const POST: APIRoute = async ({ request, cookies }) => {
+  const rateKey = clientIpKey(request);
+  const limited = consume(rateKey, LOGIN_LIMIT, LOGIN_WINDOW_MS);
+  if (!limited.allowed) {
+    return new Response(JSON.stringify({ error: 'rate_limited' }), {
+      status: 429,
+      headers: {
+        'Content-Type': 'application/json',
+        'Retry-After': String(limited.retryAfterSeconds),
+      },
+    });
+  }
+
   const body = await parseBody<{ username?: string; password?: string }>(request);
   if (!body) {
     return new Response(JSON.stringify({ error: 'invalid_json' }), {
@@ -54,6 +85,11 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       headers: { 'Content-Type': 'application/json' },
     });
   }
+
+  // Successful auth: reset this IP's rate-limit bucket so a legitimate user
+  // who mistypes their password a few times before getting it right does not
+  // get throttled on their next session.
+  resetRateLimit(rateKey);
 
   cookies.set(SESSION_COOKIE, result.token, {
     httpOnly: true,

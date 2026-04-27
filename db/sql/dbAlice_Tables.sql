@@ -223,6 +223,11 @@ CREATE TABLE IF NOT EXISTS tb_subject_sessions (
   ,subject_id          INT NOT NULL                                   -- logical FK to tb_subjects
   ,token_hash          TEXT NOT NULL UNIQUE                           -- SHA-256(raw_token)
   ,expires_at          TIMESTAMPTZ NOT NULL
+  -- Session telemetry (migration 035, 2026-04-27). Updated on verify, throttled
+  -- to a 5-minute floor so the write rate stays bounded. Nullable on first
+  -- verify after rollout; populated organically thereafter.
+  ,last_seen_at        TIMESTAMPTZ
+  ,last_ip             TEXT
   ,dttm_created_utc    TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

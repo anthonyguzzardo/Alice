@@ -50,7 +50,10 @@ export { SESSION_COOKIE };
  * Resolve a request to a Subject by reading the session cookie and verifying
  * the token against `tb_subject_sessions`. Returns null if the cookie is
  * absent, the token is unknown, the session is expired, or the subject has
- * been deactivated. No side effects (does not extend or rotate the session).
+ * been deactivated. Does not extend or rotate the session; the only side
+ * effect is the throttled telemetry update inside `verifySubjectSession`
+ * (last_seen_at + last_ip on the matching session row, at most once per
+ * 5 minutes per session).
  */
 export async function getRequestSubject(request: Request): Promise<Subject | null> {
   const cookieHeader = request.headers.get('cookie');
@@ -62,8 +65,26 @@ export async function getRequestSubject(request: Request): Promise<Subject | nul
   const token = decodeURIComponent(match[1]).trim();
   if (!token) return null;
 
-  const auth = await verifySubjectSession(token);
+  const ip = extractClientIp(request);
+  const auth = await verifySubjectSession(token, ip);
   return auth ? authRowToSubject(auth) : null;
+}
+
+/**
+ * Extract the client IP from forwarded-for headers (Caddy sets these on the
+ * proxied request). Falls back to the first hop of x-forwarded-for, then
+ * x-real-ip. Returns null when neither is present (local dev without a proxy).
+ * Truncated to 45 chars to fit IPv6 textual maximum and resist log injection.
+ */
+function extractClientIp(request: Request): string | null {
+  const xff = request.headers.get('x-forwarded-for');
+  if (xff) {
+    const first = xff.split(',')[0]?.trim();
+    if (first) return first.slice(0, 45);
+  }
+  const real = request.headers.get('x-real-ip');
+  if (real) return real.trim().slice(0, 45);
+  return null;
 }
 
 function authRowToSubject(row: SubjectAuthRow): Subject {
