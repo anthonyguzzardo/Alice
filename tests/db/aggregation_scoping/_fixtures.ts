@@ -458,6 +458,7 @@ export async function seedTwoSubjectFingerprintFixture(
  * other rows, but conventional cleanup goes children → parent.
  */
 export const FIXTURE_TABLES = [
+  'tb_reconstruction_residuals',
   'tb_personal_profile',
   'tb_rburst_sequences',
   'tb_burst_sequences',
@@ -480,4 +481,63 @@ export async function cleanupFixtureRows(sql: Sql): Promise<void> {
       [ids as unknown as number[]],
     );
   }
+}
+
+// ----------------------------------------------------------------------------
+// tb_personal_profile direct-write helper (hotspot D and beyond)
+// ----------------------------------------------------------------------------
+
+/**
+ * Insert a tb_personal_profile row for the given subject directly, using
+ * the distinguishable values from a ProfileFixture. Used by hotspot D
+ * (libReconstruction reads tb_personal_profile to seed the avatar timing
+ * model) and any later hotspot that depends on a populated profile row.
+ *
+ * We INSERT directly rather than calling libProfile.updateProfile() to
+ * avoid coupling tests to libProfile's correctness — that's hotspot C's
+ * job, and a circular test dependency would mask bugs in either.
+ *
+ * lastQuestionId pins the profile to a specific session for traceability;
+ * tests typically pass the latest journal session for the subject.
+ */
+export async function insertPersonalProfileRow(
+  sql: Sql,
+  subjectId: number,
+  profile: ProfileFixture,
+  lastQuestionId: number,
+): Promise<void> {
+  await sql`
+    INSERT INTO tb_personal_profile (
+      subject_id, session_count, last_question_id,
+      digraph_aggregate_json,
+      ex_gaussian_mu_mean, ex_gaussian_sigma_mean, ex_gaussian_tau_mean,
+      iki_mean_mean, iki_std_mean,
+      hold_time_mean_mean, hold_time_mean_std,
+      flight_time_mean_mean, flight_time_mean_std,
+      hold_time_cv_mean,
+      burst_length_mean,
+      pause_within_word_pct, pause_between_word_pct, pause_between_sent_pct,
+      first_keystroke_mean,
+      r_burst_ratio_mean,
+      rburst_consolidation, rburst_mean_size, rburst_mean_duration, rburst_leading_edge_pct,
+      iki_autocorrelation_lag1_mean, hold_flight_rank_correlation,
+      mattr_mean
+    ) VALUES (
+      ${subjectId}, 5, ${lastQuestionId},
+      ${JSON.stringify(profile.digraphLatencyJson)}::jsonb,
+      ${profile.exGaussianMu}, ${profile.exGaussianSigma}, ${profile.exGaussianTau},
+      ${profile.ikiMean}, ${profile.ikiStd},
+      ${profile.holdTimeMean}, ${profile.holdTimeStd},
+      ${profile.flightTimeMean}, ${profile.flightTimeStd},
+      ${profile.holdTimeCv},
+      ${profile.avgPBurstLength},
+      0.625, 0.3, 0.075,
+      ${profile.firstKeystrokeMs},
+      ${profile.rBurstCount / (profile.rBurstCount + profile.iBurstCount)},
+      1.0, ${profile.rburstDeletedCounts[0] ?? 5}, ${profile.rburstDurationMs}, ${profile.rburstIsLeadingEdge ? 1.0 : 0.0},
+      ${profile.ikiAutocorrelationJson[0] ?? 0},
+      ${profile.holdFlightRankCorr},
+      ${profile.mattr}
+    )
+  `;
 }

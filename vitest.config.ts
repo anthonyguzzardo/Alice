@@ -44,6 +44,17 @@ export default getViteConfig(
             name: 'db',
             include: ['tests/db/**/*.test.ts'],
             pool: 'forks',
+            // singleFork is load-bearing here. The db project shares ONE
+            // Postgres container across all test files (started by
+            // globalSetup). Without singleFork, vitest spawns multiple
+            // forks that all connect to the same container and race on
+            // shared rows: one file's beforeEach DELETE clobbers another
+            // file's seeded fixture mid-test. Aggregation-scoping tests
+            // (tests/db/aggregation_scoping/*) reuse fixture subject IDs
+            // by design, so the conflict is the rule, not the exception.
+            // singleFork serializes the suite. The cost is parallelism;
+            // the benefit is that tests stop being non-deterministic.
+            poolOptions: { forks: { singleFork: true } },
             // Single shared container per `npm run test:db` invocation.
             // Per-test isolation via TRUNCATE in test files. See globalSetup.ts.
             globalSetup: ['tests/db/globalSetup.ts'],
