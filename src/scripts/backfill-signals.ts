@@ -12,12 +12,16 @@
 
 import { sql } from '../lib/libDb.ts';
 import { computeAndPersistDerivedSignals } from '../lib/libSignalPipeline.ts';
+import { parseSubjectIdArg } from '../lib/utlSubjectIdArg.ts';
 
 async function main() {
+  const subjectId = parseSubjectIdArg();
+
   const questionIds = await sql`
     SELECT DISTINCT se.question_id
     FROM tb_session_events se
     JOIN tb_responses r ON se.question_id = r.question_id
+    WHERE se.subject_id = ${subjectId}
     ORDER BY se.question_id ASC
   ` as Array<{ question_id: number }>;
 
@@ -28,7 +32,7 @@ async function main() {
 
   for (const { question_id } of questionIds) {
     try {
-      await computeAndPersistDerivedSignals(question_id);
+      await computeAndPersistDerivedSignals(subjectId, question_id);
       success++;
       process.stdout.write(`\r  ${success}/${questionIds.length} done`);
     } catch (err) {
@@ -49,7 +53,7 @@ async function main() {
   ];
 
   for (const table of tables) {
-    const [row] = await sql.unsafe(`SELECT COUNT(*) as c FROM ${table}`) as [{ c: number }];
+    const [row] = await sql.unsafe(`SELECT COUNT(*) as c FROM ${table} WHERE subject_id = $1`, [subjectId]) as [{ c: number }];
     console.log(`  ${table}: ${row.c} rows`);
   }
 }

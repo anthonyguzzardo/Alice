@@ -14,6 +14,7 @@
  */
 
 import sql, { getDynamicalSignals, getMotorSignals } from '../lib/libDb.ts';
+import { parseSubjectIdArg } from '../lib/utlSubjectIdArg.ts';
 import {
   computeDynamicalSignals,
   computeMotorSignals,
@@ -47,6 +48,8 @@ function snakeToCamel(s: string): string {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
+  const subjectId = parseSubjectIdArg();
+
   // Find rows that need backfill
   const rows = await sql`
     SELECT reconstruction_residual_id, question_id, adversary_variant_id,
@@ -71,7 +74,8 @@ async function main() {
            real_deep_cohesion, avatar_deep_cohesion,
            real_text_compression_ratio, avatar_text_compression_ratio
     FROM tb_reconstruction_residuals
-    WHERE avatar_seed IS NOT NULL
+    WHERE subject_id = ${subjectId}
+      AND avatar_seed IS NOT NULL
       AND (extended_residuals_json IS NULL OR jsonb_typeof(extended_residuals_json) != 'object')
     ORDER BY question_id ASC, adversary_variant_id ASC
   ` as Array<Record<string, unknown>>;
@@ -88,7 +92,8 @@ async function main() {
     SELECT r.text
     FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
-    WHERE q.question_source_id != 3
+    WHERE q.subject_id = ${subjectId}
+      AND q.question_source_id != 3
     ORDER BY q.scheduled_for ASC
   ` as Array<{ text: string }>;
 
@@ -138,8 +143,8 @@ async function main() {
     }
 
     // Load real signals
-    const realDyn = await getDynamicalSignals(qid);
-    const realMot = await getMotorSignals(qid);
+    const realDyn = await getDynamicalSignals(subjectId, qid);
+    const realMot = await getMotorSignals(subjectId, qid);
 
     // Compute extended residuals
     const extDynResiduals: Record<string, number | null> = {
@@ -257,6 +262,7 @@ async function main() {
       COUNT(*) AS total,
       COUNT(extended_residuals_json) AS has_extended
     FROM tb_reconstruction_residuals
+    WHERE subject_id = ${subjectId}
   ` as [{ total: number; has_extended: number }];
   console.log(`  Coverage: ${coverage.has_extended}/${coverage.total} rows have extended residuals`);
 }

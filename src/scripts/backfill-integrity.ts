@@ -12,13 +12,17 @@ import 'dotenv/config';
 import sql from '../lib/libDbPool.ts';
 import { computeSessionIntegrity } from '../lib/libIntegrity.ts';
 import { saveSessionIntegrity } from '../lib/libDb.ts';
+import { parseSubjectIdArg } from '../lib/utlSubjectIdArg.ts';
 
 async function main() {
+  const subjectId = parseSubjectIdArg();
+
   const rows = await sql`
     SELECT ss.question_id
     FROM tb_session_summaries ss
     LEFT JOIN tb_session_integrity si ON ss.question_id = si.question_id
-    WHERE si.session_integrity_id IS NULL
+    WHERE ss.subject_id = ${subjectId}
+      AND si.session_integrity_id IS NULL
     ORDER BY ss.session_summary_id ASC
   `;
 
@@ -29,12 +33,13 @@ async function main() {
   for (const row of rows) {
     const qid = (row as { question_id: number }).question_id;
     try {
-      const result = await computeSessionIntegrity(qid);
+      const result = await computeSessionIntegrity(subjectId, qid);
       if (!result) {
         skipped++;
         continue;
       }
       await saveSessionIntegrity({
+        subjectId,
         questionId: result.questionId,
         profileDistance: result.profileDistance,
         dimensionCount: result.dimensionCount,

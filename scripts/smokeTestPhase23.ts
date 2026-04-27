@@ -21,6 +21,7 @@ import sql, {
 import { computeAndPersistDerivedSignals } from '../src/lib/libSignalPipeline.ts';
 import { getEngineProvenanceId } from '../src/lib/libEngineProvenance.ts';
 import { coerceSessionSummary } from '../src/lib/utlSessionSummary.ts';
+import { parseSubjectIdArg } from '../src/lib/utlSubjectIdArg.ts';
 
 const MARKER = '[SMOKE-2026-04-25]';
 
@@ -49,7 +50,7 @@ function synthesizeKeystrokeStream(text: string): { stream: KeystrokeEvent[]; ev
   return { stream, eventLog, durationMs: t };
 }
 
-async function setupTestSession(): Promise<number> {
+async function setupTestSession(subjectId: number): Promise<number> {
   const promptText = `${MARKER} test question — depth over speed`;
   const responseText = `${MARKER} this is a synthetic response written for the phase 2 and phase 3 end to end smoke test. it has enough characters to clear the dynamical and motor signal thresholds, with reasonable variance in keystroke timing to allow the rust engine to compute meaningful values.`;
 
@@ -57,19 +58,20 @@ async function setupTestSession(): Promise<number> {
 
   const questionId = await sql.begin(async (tx) => {
     const [q] = await tx`
-      INSERT INTO tb_questions (text, question_source_id)
-      VALUES (${promptText}, 3)
+      INSERT INTO tb_questions (subject_id, text, question_source_id)
+      VALUES (${subjectId}, ${promptText}, 3)
       RETURNING question_id
     `;
     const qid = q.question_id as number;
 
-    await saveResponse(qid, responseText, tx, {
+    await saveResponse(subjectId, qid, responseText, tx, {
       boundaryVersion: 'v1',
       codePathsRef: 'docs/contamination-boundary-v1.md',
       commitHash: 'smoke-test',
     });
 
     await saveSessionEvents({
+      subject_id: subjectId,
       question_id: qid,
       event_log_json: JSON.stringify(eventLog),
       total_events: eventLog.length,
@@ -80,6 +82,7 @@ async function setupTestSession(): Promise<number> {
     }, tx);
 
     const coerced = coerceSessionSummary(
+      subjectId,
       {
         totalDurationMs: durationMs,
         pasteCount: 0,
@@ -118,20 +121,21 @@ async function cleanup(questionId: number): Promise<void> {
 }
 
 async function main() {
+  const subjectId = parseSubjectIdArg();
   console.log('=== Phase 2/3 smoke test ===');
   let questionId = -1;
   let exitCode = 0;
   try {
     console.log('1. Inserting synthetic test session...');
-    questionId = await setupTestSession();
+    questionId = await setupTestSession(subjectId);
     console.log(`   ✓ test question_id = ${questionId}`);
 
     console.log('2. Running computeAndPersistDerivedSignals (real Rust engine)...');
-    await computeAndPersistDerivedSignals(questionId);
+    await computeAndPersistDerivedSignals(subjectId, questionId);
 
-    const ds = await getDynamicalSignals(questionId);
-    const ms = await getMotorSignals(questionId);
-    const ps = await getProcessSignals(questionId);
+    const ds = await getDynamicalSignals(subjectId, questionId);
+    const ms = await getMotorSignals(subjectId, questionId);
+    const ps = await getProcessSignals(subjectId, questionId);
     console.log(`   ✓ dynamical: ${ds ? 'saved' : 'MISSING'}`);
     console.log(`   ✓ motor:     ${ms ? 'saved' : 'MISSING'}`);
     console.log(`   ✓ process:   ${ps ? 'saved' : 'MISSING'}`);
@@ -148,7 +152,7 @@ async function main() {
     console.log(`   ✓ host_arch     = ${(provRow as { host_arch: string }).host_arch}`);
 
     console.log('4. Stamping provenance on signal rows...');
-    await stampEngineProvenance(questionId, provId);
+    await stampEngineProvenance(subjectId, questionId, provId);
 
     const [stampedDyn] = await sql`SELECT engine_provenance_id FROM tb_dynamical_signals WHERE question_id = ${questionId}`;
     const [stampedMot] = await sql`SELECT engine_provenance_id FROM tb_motor_signals    WHERE question_id = ${questionId}`;

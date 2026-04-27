@@ -22,15 +22,18 @@
 
 import sql from '../lib/libDb.ts';
 import { computeReconstructionResidual, verifyResidual } from '../lib/libReconstruction.ts';
+import { parseSubjectIdArg } from '../lib/utlSubjectIdArg.ts';
 
 async function main(): Promise<void> {
+  const subjectId = parseSubjectIdArg();
   console.log('=== Residual Reproducibility Integration Test ===\n');
 
   // 1. Find a question with full signal coverage and an existing residual
   const candidates = await sql`
     SELECT r.question_id
     FROM tb_reconstruction_residuals r
-    WHERE r.adversary_variant_id = 1
+    WHERE r.subject_id = ${subjectId}
+      AND r.adversary_variant_id = 1
       AND r.avatar_seed IS NULL
     ORDER BY r.question_id DESC
     LIMIT 1
@@ -48,21 +51,25 @@ async function main(): Promise<void> {
   // 2. Delete the pre-reproducibility-era variant-1 residual
   const deleted = await sql`
     DELETE FROM tb_reconstruction_residuals
-    WHERE question_id = ${questionId} AND adversary_variant_id = 1
+    WHERE subject_id = ${subjectId}
+      AND question_id = ${questionId}
+      AND adversary_variant_id = 1
     RETURNING reconstruction_residual_id
   `;
   console.log(`Deleted pre-reproducibility residual: id=${(deleted[0] as Record<string, unknown>)?.reconstruction_residual_id}`);
 
   // 3. Recompute via production pipeline (stores seed + profile + hash + topic)
   console.log('Recomputing residual via production pipeline...');
-  await computeReconstructionResidual(questionId);
+  await computeReconstructionResidual(subjectId, questionId);
 
   // 4. Verify the new residual has reproducibility data
   const check = await sql`
     SELECT avatar_seed, corpus_sha256, avatar_topic,
            pg_column_size(profile_snapshot_json::text) AS profile_bytes
     FROM tb_reconstruction_residuals
-    WHERE question_id = ${questionId} AND adversary_variant_id = 1
+    WHERE subject_id = ${subjectId}
+      AND question_id = ${questionId}
+      AND adversary_variant_id = 1
   ` as Array<Record<string, unknown>>;
 
   if (!check[0]?.avatar_seed) {
@@ -79,7 +86,7 @@ async function main(): Promise<void> {
 
   // 5. Verify: regenerate ghost from stored inputs and compare signals
   console.log('Verifying residual via regeneration...\n');
-  const result = await verifyResidual(questionId, 1);
+  const result = await verifyResidual(subjectId, questionId, 1);
 
   if (!result) {
     console.error('FAIL: verifyResidual returned null (missing seed/profile or corpus mismatch).');

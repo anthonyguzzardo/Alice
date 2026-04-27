@@ -11,11 +11,14 @@
 import 'dotenv/config';
 import sql from '../lib/libDbPool.ts';
 import { updateSemanticBaselines } from '../lib/libSemanticBaseline.ts';
+import { parseSubjectIdArg } from '../lib/utlSubjectIdArg.ts';
 
 async function main() {
-  // Clear existing trajectory and baselines
+  const subjectId = parseSubjectIdArg();
+
+  // Clear existing trajectory and baselines for this subject
   console.log('[semantic-backfill] Clearing tb_semantic_trajectory...');
-  const deleted = await sql`DELETE FROM tb_semantic_trajectory`;
+  const deleted = await sql`DELETE FROM tb_semantic_trajectory WHERE subject_id = ${subjectId}`;
   console.log(`[semantic-backfill] Deleted ${deleted.count} trajectory rows`);
 
   console.log('[semantic-backfill] Resetting tb_semantic_baselines...');
@@ -23,6 +26,7 @@ async function main() {
     UPDATE tb_semantic_baselines
     SET running_mean = 0, running_m2 = 0, session_count = 0, last_question_id = NULL,
         dttm_modified_utc = CURRENT_TIMESTAMP, modified_by = 'semantic-backfill'
+    WHERE subject_id = ${subjectId}
   `;
 
   // Get all non-calibration question IDs in chronological order
@@ -30,21 +34,22 @@ async function main() {
     SELECT q.question_id
     FROM tb_questions q
     JOIN tb_responses r ON q.question_id = r.question_id
-    WHERE q.question_source_id != 3
+    WHERE q.subject_id = ${subjectId}
+      AND q.question_source_id != 3
     ORDER BY q.scheduled_for ASC
   ` as Array<{ question_id: number }>;
 
   console.log(`[semantic-backfill] Reprocessing ${questions.length} sessions...`);
 
   for (let i = 0; i < questions.length; i++) {
-    const qid = questions[i].question_id;
-    await updateSemanticBaselines(qid);
+    const qid = questions[i]!.question_id;
+    await updateSemanticBaselines(subjectId, qid);
     console.log(`[semantic-backfill] ${i + 1}/${questions.length}: question_id=${qid}`);
   }
 
   // Report final state
   const baselines = await sql`
-    SELECT signal_name, session_count, running_mean FROM tb_semantic_baselines ORDER BY signal_name
+    SELECT signal_name, session_count, running_mean FROM tb_semantic_baselines WHERE subject_id = ${subjectId} ORDER BY signal_name
   `;
   console.log('\n[semantic-backfill] Final baselines:');
   for (const b of baselines) {
@@ -57,6 +62,7 @@ async function main() {
            COUNT(topic_z_score) AS with_topic_z,
            COUNT(*) FILTER (WHERE gated) AS gated_count
     FROM tb_semantic_trajectory
+    WHERE subject_id = ${subjectId}
   `;
   const s = stats[0] as { total: number; with_topic_z: number; gated_count: number };
   console.log(`\n[semantic-backfill] Trajectory: ${s.total} rows, ${s.with_topic_z} with topic z-scores, ${s.gated_count} gated`);

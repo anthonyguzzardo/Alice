@@ -12,9 +12,10 @@ import { hasNativeEngine } from '../../lib/libSignalsNative.ts';
 import { logError } from '../../lib/utlErrorLog.ts';
 
 export const GET: APIRoute = async () => {
-  // Public research page; serves owner instrument statistics (n=1 paper claims).
-  // TODO(step5): review — if subjects' data ever rolls up into a public summary,
-  // this needs a different aggregation model (separate owner stats from population stats).
+  // Owner-pinned because the research page is the owner's n=1 paper claim.
+  // If multi-subject rollup is ever wanted, build a separate endpoint
+  // (e.g. /api/population-stats); do NOT mix populations here. Mixing would
+  // silently invalidate the n=1 framing the page is anchored on.
   const subjectId = OWNER_SUBJECT_ID;
   try {
     const [counts] = await sql`

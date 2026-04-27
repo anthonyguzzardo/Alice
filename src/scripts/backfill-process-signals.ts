@@ -16,13 +16,18 @@
 
 import { sql } from '../lib/libDb.ts';
 import { computeProcessSignals } from '../lib/libSignalsNative.ts';
+import { parseSubjectIdArg } from '../lib/utlSubjectIdArg.ts';
 
 async function main() {
+  const subjectId = parseSubjectIdArg();
+
   // Find all sessions that have both event logs and existing process signals
   const sessions = await sql`
     SELECT se.question_id, se.event_log_json
     FROM tb_session_events se
     JOIN tb_process_signals ps ON se.question_id = ps.question_id
+    WHERE se.subject_id = ${subjectId}
+      AND ps.subject_id = ${subjectId}
     ORDER BY se.question_id ASC
   ` as Array<{ question_id: number; event_log_json: unknown }>;
 
@@ -51,7 +56,7 @@ async function main() {
           ,vocab_expansion_rate    = ${ps.vocabExpansionRate}
           ,phase_transition_point  = ${ps.phaseTransitionPoint}
           ,strategy_shift_count    = ${ps.strategyShiftCount}
-        WHERE question_id = ${row.question_id}
+        WHERE subject_id = ${subjectId} AND question_id = ${row.question_id}
       `;
 
       updated++;
@@ -72,6 +77,7 @@ async function main() {
       ROUND(AVG(i_burst_count)::numeric, 2) AS avg_i_burst,
       SUM(i_burst_count) AS total_i_bursts
     FROM tb_process_signals
+    WHERE subject_id = ${subjectId}
   ` as [{ total: number; non_null: number; avg_i_burst: number; total_i_bursts: number }];
 
   console.log(`  Post-backfill i_burst_count: ${stats.non_null}/${stats.total} non-null, avg=${stats.avg_i_burst}, sum=${stats.total_i_bursts}`);

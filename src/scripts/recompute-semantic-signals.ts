@@ -8,8 +8,11 @@ import 'dotenv/config';
 import sql from '../lib/libDbPool.ts';
 import { computeSemanticSignals } from '../lib/libSemanticSignals.ts';
 import { saveSemanticSignals } from '../lib/libDb.ts';
+import { parseSubjectIdArg } from '../lib/utlSubjectIdArg.ts';
 
 async function main() {
+  const subjectId = parseSubjectIdArg();
+
   // Get all journal responses with their text and paste_count
   const rows = await sql`
     SELECT r.question_id, r.text,
@@ -18,7 +21,8 @@ async function main() {
     FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
     LEFT JOIN tb_session_summaries ss ON r.question_id = ss.question_id
-    WHERE q.question_source_id != 3
+    WHERE q.subject_id = ${subjectId}
+      AND q.question_source_id != 3
     ORDER BY q.scheduled_for ASC
   ` as Array<{ question_id: number; text: string; paste_count: number; drop_count: number }>;
 
@@ -32,7 +36,7 @@ async function main() {
     }
 
     const ss = computeSemanticSignals(row.text, row.paste_count, row.drop_count);
-    await saveSemanticSignals(row.question_id, {
+    await saveSemanticSignals(subjectId, row.question_id, {
       idea_density: ss.ideaDensity,
       lexical_sophistication: ss.lexicalSophistication,
       epistemic_stance: ss.epistemicStance,
@@ -50,7 +54,7 @@ async function main() {
   }
 
   // Verify
-  const count = await sql`SELECT COUNT(*)::int AS c FROM tb_semantic_signals`;
+  const count = await sql`SELECT COUNT(*)::int AS c FROM tb_semantic_signals WHERE subject_id = ${subjectId}`;
   console.log(`\n[recompute-semantic] done: ${ok} computed, ${(count[0] as { c: number }).c} rows in tb_semantic_signals`);
 
   await sql.end();

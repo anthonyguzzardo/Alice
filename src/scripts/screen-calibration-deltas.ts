@@ -18,6 +18,7 @@
  * Run: npx tsx src/scripts/screen-calibration-deltas.ts
  */
 import sql from '../lib/libDbPool.ts';
+import { parseSubjectIdArg } from '../lib/utlSubjectIdArg.ts';
 
 // ─── Signal metadata ────────────────────────────────────────────────
 
@@ -144,7 +145,7 @@ interface MatchedPair {
   calibrationQuestionId: number;
 }
 
-async function findMatchedPairs(): Promise<MatchedPair[]> {
+async function findMatchedPairs(subjectId: number): Promise<MatchedPair[]> {
   const rows = await sql`
     SELECT
       j.scheduled_for::text AS date,
@@ -153,14 +154,16 @@ async function findMatchedPairs(): Promise<MatchedPair[]> {
         SELECT c.question_id
         FROM tb_questions c
         JOIN tb_session_summaries cs ON cs.question_id = c.question_id
-        WHERE c.question_source_id = 3
+        WHERE c.subject_id = ${subjectId}
+          AND c.question_source_id = 3
           AND c.dttm_created_utc::date = j.scheduled_for
         ORDER BY c.dttm_created_utc DESC
         LIMIT 1
       ) AS "calibrationQuestionId"
     FROM tb_questions j
     JOIN tb_session_summaries js ON js.question_id = j.question_id
-    WHERE j.question_source_id != 3
+    WHERE j.subject_id = ${subjectId}
+      AND j.question_source_id != 3
       AND j.scheduled_for IS NOT NULL
     ORDER BY j.scheduled_for ASC
   ` as { date: string; journalQuestionId: number; calibrationQuestionId: number | null }[];
@@ -177,20 +180,23 @@ interface SignalValues {
 }
 
 /** Fetch all calibration session values for a signal (for stationarity test) */
-async function fetchCalibrationSeries(sig: SignalMeta): Promise<{ date: string; value: number }[]> {
+async function fetchCalibrationSeries(subjectId: number, sig: SignalMeta): Promise<{ date: string; value: number }[]> {
   const rows = await sql.unsafe(
     `SELECT q.dttm_created_utc::date::text AS date, s.${sig.column} AS value
      FROM ${sig.table} s
      JOIN tb_questions q ON s.question_id = q.question_id
-     WHERE q.question_source_id = 3
+     WHERE q.subject_id = $1
+       AND q.question_source_id = 3
        AND s.${sig.column} IS NOT NULL
-     ORDER BY q.dttm_created_utc ASC`
+     ORDER BY q.dttm_created_utc ASC`,
+    [subjectId]
   );
   return rows as { date: string; value: number }[];
 }
 
 /** Fetch paired signal values for all matched day-pairs */
 async function fetchPairedValues(
+  subjectId: number,
   sig: SignalMeta,
   pairs: MatchedPair[],
 ): Promise<{ pair: MatchedPair; values: SignalValues }[]> {
@@ -198,12 +204,12 @@ async function fetchPairedValues(
 
   for (const pair of pairs) {
     const jRows = await sql.unsafe(
-      `SELECT ${sig.column} AS value FROM ${sig.table} WHERE question_id = $1`,
-      [pair.journalQuestionId]
+      `SELECT ${sig.column} AS value FROM ${sig.table} WHERE subject_id = $1 AND question_id = $2`,
+      [subjectId, pair.journalQuestionId]
     );
     const cRows = await sql.unsafe(
-      `SELECT ${sig.column} AS value FROM ${sig.table} WHERE question_id = $1`,
-      [pair.calibrationQuestionId]
+      `SELECT ${sig.column} AS value FROM ${sig.table} WHERE subject_id = $1 AND question_id = $2`,
+      [subjectId, pair.calibrationQuestionId]
     );
 
     if (jRows.length === 0 || cRows.length === 0) continue;
@@ -580,7 +586,8 @@ function printSectionHeader(title: string): void {
 // ─── Main ─────────────────────────────────────��─────────────────────
 
 async function main() {
-  const pairs = await findMatchedPairs();
+  const subjectId = parseSubjectIdArg();
+  const pairs = await findMatchedPairs(subjectId);
 
   console.log('╔══════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗');
   console.log('║  SIGNAL-FAMILY DELTA SCREENING REPORT                                                                         ║');
@@ -599,11 +606,11 @@ async function main() {
   for (const sig of SIGNALS) {
     process.stdout.write(`  Screening ${sig.column}...`);
 
-    const pairedData = await fetchPairedValues(sig, pairs);
+    const pairedData = await fetchPairedValues(subjectId, sig, pairs);
     const deltas = pairedData.map(d => d.values.delta);
 
     // Calibration series for stationarity + RCI
-    const calSeries = await fetchCalibrationSeries(sig);
+    const calSeries = await fetchCalibrationSeries(subjectId, sig);
     const calValues = calSeries.map(c => c.value);
 
     // 1. Sign consistency

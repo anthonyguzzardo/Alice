@@ -9,6 +9,7 @@
  * Run: npx tsx src/scripts/confound-analysis.ts
  */
 import sql from '../lib/libDbPool.ts';
+import { parseSubjectIdArg } from '../lib/utlSubjectIdArg.ts';
 import { createRequire } from 'node:module';
 
 // ─── Load Rust engine ───────────────────────────────────────────────
@@ -209,7 +210,7 @@ interface MatchedPair {
   calibrationHour: number;
 }
 
-async function findMatchedPairs(): Promise<MatchedPair[]> {
+async function findMatchedPairs(subjectId: number): Promise<MatchedPair[]> {
   const rows = await sql`
     SELECT
       j.scheduled_for::text AS date,
@@ -218,7 +219,8 @@ async function findMatchedPairs(): Promise<MatchedPair[]> {
         SELECT c.question_id
         FROM tb_questions c
         JOIN tb_session_summaries cs ON cs.question_id = c.question_id
-        WHERE c.question_source_id = 3
+        WHERE c.subject_id = ${subjectId}
+          AND c.question_source_id = 3
           AND c.dttm_created_utc::date = j.scheduled_for
         ORDER BY c.dttm_created_utc DESC
         LIMIT 1
@@ -228,14 +230,16 @@ async function findMatchedPairs(): Promise<MatchedPair[]> {
         SELECT cs.hour_of_day
         FROM tb_questions c
         JOIN tb_session_summaries cs ON cs.question_id = c.question_id
-        WHERE c.question_source_id = 3
+        WHERE c.subject_id = ${subjectId}
+          AND c.question_source_id = 3
           AND c.dttm_created_utc::date = j.scheduled_for
         ORDER BY c.dttm_created_utc DESC
         LIMIT 1
       ) AS "calibrationHour"
     FROM tb_questions j
     JOIN tb_session_summaries js ON j.question_id = js.question_id
-    WHERE j.question_source_id != 3
+    WHERE j.subject_id = ${subjectId}
+      AND j.question_source_id != 3
       AND j.scheduled_for IS NOT NULL
     ORDER BY j.scheduled_for ASC
   `;
@@ -248,11 +252,12 @@ async function findMatchedPairs(): Promise<MatchedPair[]> {
 
 interface KeystrokeEvent { c: string; d: number; u: number }
 
-async function getKeystrokeStream(questionId: number): Promise<KeystrokeEvent[] | null> {
+async function getKeystrokeStream(subjectId: number, questionId: number): Promise<KeystrokeEvent[] | null> {
   const rows = await sql`
     SELECT keystroke_stream_json
     FROM tb_session_events
-    WHERE question_id = ${questionId}
+    WHERE subject_id = ${subjectId}
+      AND question_id = ${questionId}
       AND keystroke_stream_json IS NOT NULL
   `;
   if (rows.length === 0) return null;
@@ -319,7 +324,8 @@ function extractPauses(ikis: number[], threshold: number = 2000): number[] {
 // ═══════════════════════════════════════════════════════════════════
 
 async function main() {
-  const pairs = await findMatchedPairs();
+  const subjectId = parseSubjectIdArg();
+  const pairs = await findMatchedPairs(subjectId);
 
   console.log('╔══════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗');
   console.log('║  CONFOUND ANALYSIS: Tasks A-D                                                                                  ║');
@@ -358,8 +364,8 @@ async function main() {
   const lengthMatched: LengthMatchedResult[] = [];
 
   for (const pair of pairs) {
-    const jStream = await getKeystrokeStream(pair.journalQid);
-    const cStream = await getKeystrokeStream(pair.calibrationQid);
+    const jStream = await getKeystrokeStream(subjectId, pair.journalQid);
+    const cStream = await getKeystrokeStream(subjectId, pair.calibrationQid);
     if (!jStream || !cStream) {
       console.log(`  ${pair.date}: No keystroke stream (journal=${!!jStream}, cal=${!!cStream}), skipping`);
       continue;
@@ -469,7 +475,8 @@ async function main() {
     SELECT q.scheduled_for::text AS date, ss.integrative_complexity AS value
     FROM tb_semantic_signals ss
     JOIN tb_questions q ON ss.question_id = q.question_id
-    WHERE ss.integrative_complexity IS NOT NULL
+    WHERE q.subject_id = ${subjectId}
+      AND ss.integrative_complexity IS NOT NULL
   `;
   const icByQid = new Map<string, Map<number, number>>();
   // Need journal + calibration IC values paired by date
@@ -477,13 +484,15 @@ async function main() {
     SELECT q.scheduled_for::text AS date, ss.integrative_complexity AS value, q.question_id AS "qid"
     FROM tb_semantic_signals ss
     JOIN tb_questions q ON ss.question_id = q.question_id
-    WHERE q.question_source_id != 3 AND q.scheduled_for IS NOT NULL AND ss.integrative_complexity IS NOT NULL
+    WHERE q.subject_id = ${subjectId}
+      AND q.question_source_id != 3 AND q.scheduled_for IS NOT NULL AND ss.integrative_complexity IS NOT NULL
   `;
   const icCalibration = await sql`
     SELECT q.dttm_created_utc::date::text AS date, ss.integrative_complexity AS value, q.question_id AS "qid"
     FROM tb_semantic_signals ss
     JOIN tb_questions q ON ss.question_id = q.question_id
-    WHERE q.question_source_id = 3 AND ss.integrative_complexity IS NOT NULL
+    WHERE q.subject_id = ${subjectId}
+      AND q.question_source_id = 3 AND ss.integrative_complexity IS NOT NULL
     ORDER BY q.dttm_created_utc ASC
   `;
 
@@ -568,8 +577,8 @@ async function main() {
   }[] = [];
 
   for (const pair of pairs) {
-    const jStream = await getKeystrokeStream(pair.journalQid);
-    const cStream = await getKeystrokeStream(pair.calibrationQid);
+    const jStream = await getKeystrokeStream(subjectId, pair.journalQid);
+    const cStream = await getKeystrokeStream(subjectId, pair.calibrationQid);
     if (!jStream || !cStream) continue;
 
     const truncLen = Math.min(cStream.length, jStream.length);
@@ -657,13 +666,13 @@ async function main() {
     SELECT ss.day_of_week AS "dow"
     FROM tb_questions q
     JOIN tb_session_summaries ss ON q.question_id = ss.question_id
-    WHERE q.question_source_id != 3 AND q.scheduled_for IS NOT NULL
+    WHERE q.subject_id = ${subjectId} AND q.question_source_id != 3 AND q.scheduled_for IS NOT NULL
   `;
   const allCalDOW = await sql`
     SELECT ss.day_of_week AS "dow"
     FROM tb_questions q
     JOIN tb_session_summaries ss ON q.question_id = ss.question_id
-    WHERE q.question_source_id = 3
+    WHERE q.subject_id = ${subjectId} AND q.question_source_id = 3
   `;
 
   const jDOWCounts = new Array(7).fill(0);

@@ -5,6 +5,7 @@
  * Run: npx tsx src/scripts/extract-residual-decomposition.ts
  */
 import sql from '../lib/libDbPool.ts';
+import { parseSubjectIdArg } from '../lib/utlSubjectIdArg.ts';
 
 // ─── Family definitions ──────────────────────────────────────────────
 // Maps theoretical families to signal names.
@@ -173,6 +174,8 @@ function std(vals: number[]): number {
 }
 
 async function main() {
+  const subjectId = parseSubjectIdArg();
+
   const rows = await sql`
     SELECT
       question_id,
@@ -190,7 +193,8 @@ async function main() {
       residual_ex_gaussian_tau,
       residual_tau_proportion
     FROM tb_reconstruction_residuals
-    WHERE question_source_id != 3
+    WHERE subject_id = ${subjectId}
+      AND question_source_id != 3
     ORDER BY adversary_variant_id, question_id
   ` as ResidualRow[];
 

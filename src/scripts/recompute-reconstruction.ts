@@ -7,20 +7,24 @@
 import 'dotenv/config';
 import { sql } from '../lib/libDb.ts';
 import { computeReconstructionResidual } from '../lib/libReconstruction.ts';
+import { parseSubjectIdArg } from '../lib/utlSubjectIdArg.ts';
 
 async function main() {
+  const subjectId = parseSubjectIdArg();
+
   // All journal sessions with responses, chronological order
   const rows = await sql`
     SELECT r.question_id
     FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
-    WHERE q.question_source_id != 3
+    WHERE q.subject_id = ${subjectId}
+      AND q.question_source_id != 3
     ORDER BY q.scheduled_for ASC
   ` as Array<{ question_id: number }>;
 
   console.log(`[recompute-reconstruction] ${rows.length} journal sessions to process`);
 
-  const [{ c: profileCount }] = await sql`SELECT COUNT(*)::int AS c FROM tb_personal_profile` as [{ c: number }];
+  const [{ c: profileCount }] = await sql`SELECT COUNT(*)::int AS c FROM tb_personal_profile WHERE subject_id = ${subjectId}` as [{ c: number }];
   if (profileCount === 0) {
     console.log('No personal profile found. Exiting.');
     return;
@@ -29,7 +33,7 @@ async function main() {
   let ok = 0, failed = 0;
   for (const { question_id } of rows) {
     try {
-      await computeReconstructionResidual(question_id);
+      await computeReconstructionResidual(subjectId, question_id);
       ok++;
       console.log(`  q${question_id}: done (${ok}/${rows.length})`);
     } catch (err) {
@@ -43,6 +47,7 @@ async function main() {
            COUNT(DISTINCT question_id)::int AS sessions,
            COUNT(DISTINCT adversary_variant_id)::int AS variants
     FROM tb_reconstruction_residuals
+    WHERE subject_id = ${subjectId}
   ` as [{ total: number; sessions: number; variants: number }];
 
   console.log(`\n[recompute-reconstruction] done: ${ok} sessions, ${failed} failed`);

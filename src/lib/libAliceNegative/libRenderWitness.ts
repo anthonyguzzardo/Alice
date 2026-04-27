@@ -69,7 +69,7 @@ export async function renderWitnessState(subjectId: number): Promise<void> {
   }
 
   // ── Phase 1b: Compute semantic entry states (deterministic, parallel space) ──
-  const semanticStates = await computeSemanticStates();
+  const semanticStates = await computeSemanticStates(subjectId);
   const existingSemanticCount = await getSemanticStateCount(subjectId);
   if (semanticStates.length > existingSemanticCount) {
     const newSemantic = semanticStates.slice(existingSemanticCount);

@@ -33,20 +33,23 @@ import { computeDynamics } from '../src/lib/libAliceNegative/libDynamics.ts';
 import { computeEmotionAnalysis } from '../src/lib/libAliceNegative/libEmotionProfile.ts';
 import { computeSessionMetadata } from '../src/lib/libSessionMetadata.ts';
 import { snapshotCalibrationBaselinesAfterSubmit } from '../src/lib/libCalibrationDrift.ts';
+import { parseSubjectIdArg } from '../src/lib/utlSubjectIdArg.ts';
 
 async function main() {
+  const subjectId = parseSubjectIdArg();
   console.log('Backfilling slice-3 architecture against existing history...\n');
 
   // --- 1. Behavioral 7D entry states ---
 
-  const behavioralStates = computeEntryStates();
+  const behavioralStates = await computeEntryStates(subjectId);
   console.log(`Behavioral 7D states computed: ${behavioralStates.length} entries`);
 
-  const existingBehavioral = await getEntryStateCount();
+  const existingBehavioral = await getEntryStateCount(subjectId);
   if (behavioralStates.length > existingBehavioral) {
     const newBehavioral = behavioralStates.slice(existingBehavioral);
     for (const s of newBehavioral) {
       await saveEntryState({
+        subject_id: subjectId,
         response_id: s.responseId,
         fluency: s.fluency,
         deliberation: s.deliberation,
@@ -65,14 +68,15 @@ async function main() {
 
   // --- 2. Semantic 11D entry states ---
 
-  const semanticStates = computeSemanticStates();
+  const semanticStates = await computeSemanticStates(subjectId);
   console.log(`Semantic 11D states computed: ${semanticStates.length} entries`);
 
-  const existingSemantic = await getSemanticStateCount();
+  const existingSemantic = await getSemanticStateCount(subjectId);
   if (semanticStates.length > existingSemantic) {
     const newSemantic = semanticStates.slice(existingSemantic);
     for (const s of newSemantic) {
       await saveSemanticState({
+        subject_id: subjectId,
         response_id: s.responseId,
         syntactic_complexity: s.syntactic_complexity,
         interrogation: s.interrogation,
@@ -102,6 +106,7 @@ async function main() {
   if (behavioralStates.length >= 5) {
     const behDynamics = computeDynamics(behavioralStates);
     await saveTraitDynamics(behDynamics.dimensions.map(d => ({
+      subject_id: subjectId,
       entry_count: behavioralStates.length,
       dimension: d.dimension,
       baseline: d.baseline,
@@ -113,6 +118,7 @@ async function main() {
     })));
     if (behDynamics.coupling.length > 0) {
       await saveCouplingMatrix(behDynamics.coupling.map(c => ({
+        subject_id: subjectId,
         entry_count: behavioralStates.length,
         leader: c.leader,
         follower: c.follower,
@@ -131,6 +137,7 @@ async function main() {
   if (semanticStates.length >= 5) {
     const semDynamics = computeDynamics(semanticStates, SEMANTIC_DIMENSIONS);
     await saveSemanticDynamics(semDynamics.dimensions.map(d => ({
+      subject_id: subjectId,
       entry_count: semanticStates.length,
       dimension: d.dimension,
       baseline: d.baseline,
@@ -142,6 +149,7 @@ async function main() {
     })));
     if (semDynamics.coupling.length > 0) {
       await saveSemanticCoupling(semDynamics.coupling.map(c => ({
+        subject_id: subjectId,
         entry_count: semanticStates.length,
         leader: c.leader,
         follower: c.follower,
@@ -158,9 +166,10 @@ async function main() {
   // --- 5. Emotion -> behavior coupling ---
 
   if (behavioralStates.length >= 5) {
-    const emotionAnalysis = computeEmotionAnalysis(behavioralStates);
+    const emotionAnalysis = await computeEmotionAnalysis(subjectId, behavioralStates);
     if (emotionAnalysis.emotionBehaviorCoupling.length > 0) {
       await saveEmotionBehaviorCoupling(emotionAnalysis.emotionBehaviorCoupling.map(c => ({
+        subject_id: subjectId,
         entry_count: behavioralStates.length,
         emotion_dim: c.emotionDim,
         behavior_dim: c.behaviorDim,
@@ -185,11 +194,12 @@ async function main() {
        ss.deletion_events_json as "deletionEventsJson"
     FROM tb_session_summaries ss
     JOIN tb_questions q ON ss.question_id = q.question_id
-    WHERE q.question_source_id != 3
+    WHERE q.subject_id = ${subjectId}
+      AND q.question_source_id != 3
     ORDER BY ss.session_summary_id ASC
   ` as Array<{ question_id: number; hourOfDay: number | null; totalDurationMs: number | null; deletionEventsJson: string | null }>;
 
-  const alreadyComputedMeta = await getMetadataQuestionIdsAlreadyComputed();
+  const alreadyComputedMeta = await getMetadataQuestionIdsAlreadyComputed(subjectId);
   let metadataAdded = 0;
   let metadataSkipped = 0;
 
@@ -198,7 +208,7 @@ async function main() {
       metadataSkipped++;
       continue;
     }
-    const bursts = await getBurstSequence(sess.question_id);
+    const bursts = await getBurstSequence(subjectId, sess.question_id);
     let deletionEvents: Array<{ c: number; t: number }> = [];
     if (sess.deletionEventsJson) {
       try {
@@ -213,14 +223,15 @@ async function main() {
         // ignore malformed
       }
     }
-    const meta = computeSessionMetadata({
+    const meta = await computeSessionMetadata({
+      subjectId,
       questionId: sess.question_id,
       hourOfDay: sess.hourOfDay,
       totalDurationMs: sess.totalDurationMs ?? 0,
       deletionEvents,
       bursts,
     });
-    await saveSessionMetadata(meta);
+    await saveSessionMetadata({ ...meta, subject_id: subjectId });
     metadataAdded++;
   }
 
@@ -236,11 +247,12 @@ async function main() {
     SELECT q.question_id, ss.device_type
     FROM tb_questions q
     JOIN tb_session_summaries ss ON ss.question_id = q.question_id
-    WHERE q.question_source_id = 3
+    WHERE q.subject_id = ${subjectId}
+      AND q.question_source_id = 3
     ORDER BY q.question_id ASC
   ` as Array<{ question_id: number; device_type: string | null }>;
 
-  const [calCountRow] = await sql`SELECT COUNT(*) as c FROM tb_calibration_baselines_history`;
+  const [calCountRow] = await sql`SELECT COUNT(*) as c FROM tb_calibration_baselines_history WHERE subject_id = ${subjectId}`;
   const existingCalSnapshots = (calCountRow as { c: number }).c;
 
   if (existingCalSnapshots > 0) {
@@ -259,11 +271,11 @@ async function main() {
     // by question_id ordinal. Instead, we take a single snapshot reflecting the
     // current state (drift_magnitude = 0 since there's no prior). Future
     // calibrations will produce real drift values from that anchor.
-    snapshotCalibrationBaselinesAfterSubmit(null);
+    await snapshotCalibrationBaselinesAfterSubmit(subjectId, null);
     // Also one per device that has calibrations
     const deviceTypes = new Set(calibrations.map(c => c.device_type).filter(d => d != null) as string[]);
     for (const dt of deviceTypes) {
-      snapshotCalibrationBaselinesAfterSubmit(dt);
+      await snapshotCalibrationBaselinesAfterSubmit(subjectId, dt);
     }
     console.log(`  → seeded baseline anchor (1 global + ${deviceTypes.size} per-device snapshots)`);
   }

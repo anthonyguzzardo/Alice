@@ -8,8 +8,11 @@
  */
 import 'dotenv/config';
 import { runDailyDeltaBackfill } from '../lib/libDailyDelta.ts';
+import { parseSubjectIdArg } from '../lib/utlSubjectIdArg.ts';
 
-runDailyDeltaBackfill()
+const subjectId = parseSubjectIdArg();
+
+runDailyDeltaBackfill(subjectId)
   .then((count) => {
     console.log(`Done. ${count} delta(s) computed.`);
     process.exit(0);

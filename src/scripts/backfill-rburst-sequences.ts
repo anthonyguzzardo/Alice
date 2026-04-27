@@ -15,12 +15,16 @@ import { sql, saveRburstSequence } from '../lib/libDb.ts';
 import { computeProcessSignals } from '../lib/libSignalsNative.ts';
 import { updateRburstTrajectoryShape } from '../lib/libSessionMetadata.ts';
 import { updateProfile } from '../lib/libProfile.ts';
+import { parseSubjectIdArg } from '../lib/utlSubjectIdArg.ts';
 
 async function main() {
+  const subjectId = parseSubjectIdArg();
+
   // Find all sessions with event logs
   const sessions = await sql`
     SELECT se.question_id, se.event_log_json
     FROM tb_session_events se
+    WHERE se.subject_id = ${subjectId}
     ORDER BY se.question_id ASC
   ` as Array<{ question_id: number; event_log_json: unknown }>;
 
@@ -35,7 +39,7 @@ async function main() {
     try {
       // Skip if already backfilled
       const existing = await sql`
-        SELECT 1 FROM tb_rburst_sequences WHERE question_id = ${row.question_id} LIMIT 1
+        SELECT 1 FROM tb_rburst_sequences WHERE subject_id = ${subjectId} AND question_id = ${row.question_id} LIMIT 1
       `;
       if (existing.length > 0) {
         skipped++;
@@ -52,11 +56,11 @@ async function main() {
         continue;
       }
 
-      await saveRburstSequence(row.question_id, ps.rBurstSequences);
+      await saveRburstSequence(subjectId, row.question_id, ps.rBurstSequences);
       totalRbursts += ps.rBurstSequences.length;
 
       // Compute trajectory shape if session metadata exists
-      await updateRburstTrajectoryShape(row.question_id);
+      await updateRburstTrajectoryShape(subjectId, row.question_id);
 
       inserted++;
       process.stdout.write(`\r  ${inserted} sessions, ${totalRbursts} R-bursts`);
@@ -71,12 +75,12 @@ async function main() {
 
   // Refresh profile with new R-burst aggregation
   const [lastSession] = await sql`
-    SELECT question_id FROM tb_session_summaries ORDER BY session_summary_id DESC LIMIT 1
+    SELECT question_id FROM tb_session_summaries WHERE subject_id = ${subjectId} ORDER BY session_summary_id DESC LIMIT 1
   ` as Array<{ question_id: number }>;
 
   if (lastSession) {
     console.log('Refreshing personal profile...');
-    await updateProfile(lastSession.question_id);
+    await updateProfile(subjectId, lastSession.question_id);
     console.log('Profile updated.');
   }
 
@@ -88,6 +92,7 @@ async function main() {
       ROUND(AVG(deleted_char_count)::numeric, 1) AS avg_del_size,
       ROUND(AVG(CASE WHEN is_leading_edge THEN 1 ELSE 0 END)::numeric, 3) AS leading_edge_pct
     FROM tb_rburst_sequences
+    WHERE subject_id = ${subjectId}
   ` as [{ total_rbursts: number; sessions_with_rbursts: number; avg_del_size: number; leading_edge_pct: number }];
 
   console.log(`\n  R-burst stats: ${stats.total_rbursts} total across ${stats.sessions_with_rbursts} sessions`);

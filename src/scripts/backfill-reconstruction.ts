@@ -15,26 +15,30 @@
 
 import { sql } from '../lib/libDb.ts';
 import { computeReconstructionResidual } from '../lib/libReconstruction.ts';
+import { parseSubjectIdArg } from '../lib/utlSubjectIdArg.ts';
 
 async function main() {
+  const subjectId = parseSubjectIdArg();
+
   // All question_ids with signal data + a response (required for reconstruction)
   const questionIds = await sql`
     SELECT d.question_id
     FROM tb_dynamical_signals d
     JOIN tb_responses r ON d.question_id = r.question_id
+    WHERE d.subject_id = ${subjectId}
     ORDER BY d.question_id ASC
   ` as Array<{ question_id: number }>;
 
   console.log(`Found ${questionIds.length} sessions with signal data.`);
 
   // Check prerequisites
-  const [{ c: responseCount }] = await sql`SELECT COUNT(*)::int AS c FROM tb_responses` as [{ c: number }];
+  const [{ c: responseCount }] = await sql`SELECT COUNT(*)::int AS c FROM tb_responses WHERE subject_id = ${subjectId}` as [{ c: number }];
   if (responseCount < 3) {
     console.log(`Only ${responseCount} responses in corpus (need >= 3 for Markov chain). Exiting.`);
     return;
   }
 
-  const [{ c: profileCount }] = await sql`SELECT COUNT(*)::int AS c FROM tb_personal_profile` as [{ c: number }];
+  const [{ c: profileCount }] = await sql`SELECT COUNT(*)::int AS c FROM tb_personal_profile WHERE subject_id = ${subjectId}` as [{ c: number }];
   if (profileCount === 0) {
     console.log('No personal profile found. Run backfill-profile.ts first. Exiting.');
     return;
@@ -48,14 +52,14 @@ async function main() {
     try {
       // Check if already exists (the function also checks, but we want to count skips)
       const [existing] = await sql`
-        SELECT 1 FROM tb_reconstruction_residuals WHERE question_id = ${question_id}
+        SELECT 1 FROM tb_reconstruction_residuals WHERE subject_id = ${subjectId} AND question_id = ${question_id}
       `;
       if (existing) {
         skipped++;
         continue;
       }
 
-      await computeReconstructionResidual(question_id);
+      await computeReconstructionResidual(subjectId, question_id);
       success++;
       process.stdout.write(`\r  ${success + skipped}/${questionIds.length} processed (${success} new, ${skipped} existing)`);
     } catch (err) {
@@ -68,7 +72,7 @@ async function main() {
 
   // Report final state
   const [{ c: residualCount }] = await sql`
-    SELECT COUNT(*)::int AS c FROM tb_reconstruction_residuals
+    SELECT COUNT(*)::int AS c FROM tb_reconstruction_residuals WHERE subject_id = ${subjectId}
   ` as [{ c: number }];
   const [stats] = await sql`
     SELECT
@@ -79,6 +83,7 @@ async function main() {
       ROUND(MAX(total_l2_norm)::numeric, 4) AS max_norm,
       ROUND(AVG(residual_count)::numeric, 1) AS avg_signals
     FROM tb_reconstruction_residuals
+    WHERE subject_id = ${subjectId}
   ` as [{ total: number; with_norm: number; avg_norm: string; min_norm: string; max_norm: string; avg_signals: string }];
 
   console.log(`\n  tb_reconstruction_residuals: ${residualCount} rows`);
@@ -91,7 +96,8 @@ async function main() {
     SELECT question_source_id, COUNT(*)::int AS c,
            ROUND(AVG(total_l2_norm)::numeric, 4) AS avg_norm
     FROM tb_reconstruction_residuals
-    WHERE question_source_id IS NOT NULL
+    WHERE subject_id = ${subjectId}
+      AND question_source_id IS NOT NULL
     GROUP BY question_source_id
     ORDER BY question_source_id
   ` as Array<{ question_source_id: number; c: number; avg_norm: string }>;

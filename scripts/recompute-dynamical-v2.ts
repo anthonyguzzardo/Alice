@@ -9,6 +9,7 @@
 
 import { sql } from '../src/lib/libDb.ts';
 import { computeDynamicalSignals } from '../src/lib/libSignalsNative.ts';
+import { parseSubjectIdArg } from '../src/lib/utlSubjectIdArg.ts';
 
 interface KeystrokeEvent {
   c: string;
@@ -17,13 +18,16 @@ interface KeystrokeEvent {
 }
 
 async function main() {
+  const subjectId = parseSubjectIdArg();
+
   // Create staging table (same schema as live, no constraints)
   await sql`
     DROP TABLE IF EXISTS alice.tb_dynamical_signals_v2;
   `;
   await sql`
     CREATE TABLE alice.tb_dynamical_signals_v2 (
-       question_id                  INT NOT NULL
+       subject_id                   INT NOT NULL
+      ,question_id                  INT NOT NULL
       ,iki_count                    INT
       ,hold_flight_count            INT
       ,permutation_entropy          DOUBLE PRECISION
@@ -48,7 +52,8 @@ async function main() {
     SELECT se.question_id,
            se.keystroke_stream_json
     FROM tb_session_events se
-    WHERE se.keystroke_stream_json IS NOT NULL
+    WHERE se.subject_id = ${subjectId}
+      AND se.keystroke_stream_json IS NOT NULL
     ORDER BY se.question_id ASC
   `;
 
@@ -86,13 +91,13 @@ async function main() {
 
     await sql`
       INSERT INTO tb_dynamical_signals_v2 (
-        question_id, iki_count, hold_flight_count,
+        subject_id, question_id, iki_count, hold_flight_count,
         permutation_entropy, permutation_entropy_raw, pe_spectrum,
         dfa_alpha,
         rqa_determinism, rqa_laminarity, rqa_trapping_time, rqa_recurrence_rate,
         te_hold_to_flight, te_flight_to_hold, te_dominance
       ) VALUES (
-        ${r.question_id}, ${ds.ikiCount}, ${ds.holdFlightCount},
+        ${subjectId}, ${r.question_id}, ${ds.ikiCount}, ${ds.holdFlightCount},
         ${ds.permutationEntropy}, ${ds.permutationEntropyRaw},
         ${ds.peSpectrum ? JSON.stringify(ds.peSpectrum) : null}::jsonb,
         ${ds.dfaAlpha},

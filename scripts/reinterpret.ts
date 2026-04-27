@@ -23,23 +23,26 @@ import {
   saveCouplingMatrix,
   saveEmotionBehaviorCoupling,
 } from '../src/lib/libDb.ts';
+import { parseSubjectIdArg } from '../src/lib/utlSubjectIdArg.ts';
 
 async function main() {
-  const [countRow] = await sql`SELECT COUNT(*) as count FROM tb_session_summaries`;
+  const subjectId = parseSubjectIdArg();
+
+  const [countRow] = await sql`SELECT COUNT(*) as count FROM tb_session_summaries WHERE subject_id = ${subjectId}`;
   const entryCount = (countRow as { count: number }).count;
   console.log(`\n=== Reinterpret: ${entryCount} entries ===\n`);
 
   // Clear stale data so we recompute everything fresh
-  await sql`DELETE FROM tb_entry_states`;
-  await sql`DELETE FROM tb_trait_dynamics`;
-  await sql`DELETE FROM tb_coupling_matrix`;
-  await sql`DELETE FROM tb_emotion_behavior_coupling`;
-  await sql`DELETE FROM tb_witness_states WHERE entry_count = ${entryCount}`;
+  await sql`DELETE FROM tb_entry_states WHERE subject_id = ${subjectId}`;
+  await sql`DELETE FROM tb_trait_dynamics WHERE subject_id = ${subjectId}`;
+  await sql`DELETE FROM tb_coupling_matrix WHERE subject_id = ${subjectId}`;
+  await sql`DELETE FROM tb_emotion_behavior_coupling WHERE subject_id = ${subjectId}`;
+  await sql`DELETE FROM tb_witness_states WHERE subject_id = ${subjectId} AND entry_count = ${entryCount}`;
   console.log('Cleared stale states, dynamics, coupling, emotion coupling, and witness data.\n');
 
   // -- Phase 1: 7D Entry States --
   console.log('Phase 1: Computing 7D entry states...');
-  const states = computeEntryStates();
+  const states = await computeEntryStates(subjectId);
   console.log(`  → ${states.length} entry states computed`);
 
   if (states.length < 3) {
@@ -50,6 +53,7 @@ async function main() {
   // Persist entry states
   for (const s of states) {
     await saveEntryState({
+      subject_id: subjectId,
       response_id: s.responseId,
       fluency: s.fluency,
       deliberation: s.deliberation,
@@ -104,6 +108,7 @@ async function main() {
 
   // Persist dynamics
   await saveTraitDynamics(dynamics.dimensions.map(d => ({
+    subject_id: subjectId,
     entry_count: entryCount,
     dimension: d.dimension,
     baseline: d.baseline,
@@ -127,6 +132,7 @@ async function main() {
     }
 
     await saveCouplingMatrix(dynamics.coupling.map(c => ({
+      subject_id: subjectId,
       entry_count: entryCount,
       leader: c.leader,
       follower: c.follower,
@@ -141,7 +147,7 @@ async function main() {
 
   // -- Phase 3.5: Emotion Profile + Emotion->Behavior Coupling --
   console.log('\nPhase 3.5: Computing emotion profile + cross-domain coupling...');
-  const emotionAnalysis = computeEmotionAnalysis(states);
+  const emotionAnalysis = await computeEmotionAnalysis(subjectId, states);
 
   if (emotionAnalysis.profile.current) {
     const p = emotionAnalysis.profile;
@@ -176,6 +182,7 @@ async function main() {
     }
 
     await saveEmotionBehaviorCoupling(emotionAnalysis.emotionBehaviorCoupling.map(c => ({
+      subject_id: subjectId,
       entry_count: entryCount,
       emotion_dim: c.emotionDim,
       behavior_dim: c.behaviorDim,
@@ -201,7 +208,7 @@ async function main() {
   }
   console.log('--- END RENDERER INPUT ---\n');
 
-  const traits = await renderTraits(dynamics, entryCount, emotionAnalysis);
+  const traits = await renderTraits(subjectId, dynamics, entryCount, emotionAnalysis);
   console.log('Visual traits (26D):');
   const entries = Object.entries(traits);
   const maxKeyLen = Math.max(...entries.map(([k]) => k.length));

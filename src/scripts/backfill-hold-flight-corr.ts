@@ -8,12 +8,16 @@
 
 import { sql } from '../lib/libDb.ts';
 import { computeMotorSignals } from '../lib/libSignalsNative.ts';
+import { parseSubjectIdArg } from '../lib/utlSubjectIdArg.ts';
 
 async function main() {
+  const subjectId = parseSubjectIdArg();
+
   const rows = await sql`
     SELECT se.question_id, se.keystroke_stream_json
     FROM tb_session_events se
-    WHERE se.keystroke_stream_json IS NOT NULL
+    WHERE se.subject_id = ${subjectId}
+      AND se.keystroke_stream_json IS NOT NULL
   ` as Array<{ question_id: number; keystroke_stream_json: unknown }>;
 
   console.log(`Found ${rows.length} sessions with keystroke streams.`);
@@ -41,7 +45,7 @@ async function main() {
     await sql`
       UPDATE tb_motor_signals
       SET hold_flight_rank_corr = ${motor.holdFlightRankCorr}
-      WHERE question_id = ${row.question_id}
+      WHERE subject_id = ${subjectId} AND question_id = ${row.question_id}
     `;
     updated++;
   }
@@ -50,7 +54,7 @@ async function main() {
 
   // Verify
   const [{ c }] = await sql`
-    SELECT COUNT(*)::int AS c FROM tb_motor_signals WHERE hold_flight_rank_corr IS NOT NULL
+    SELECT COUNT(*)::int AS c FROM tb_motor_signals WHERE subject_id = ${subjectId} AND hold_flight_rank_corr IS NOT NULL
   ` as [{ c: number }];
   console.log(`Motor signals with hold_flight_rank_corr: ${c}`);
 }

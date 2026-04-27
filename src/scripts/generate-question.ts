@@ -4,8 +4,11 @@
  */
 import 'dotenv/config';
 import { runGeneration } from '../lib/libGenerate.ts';
+import { parseSubjectIdArg } from '../lib/utlSubjectIdArg.ts';
 
-runGeneration()
+const subjectId = parseSubjectIdArg();
+
+runGeneration(subjectId)
   .then(() => console.log('Generation complete.'))
   .catch((err) => {
     console.error('Generation failed:', err);

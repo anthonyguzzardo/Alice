@@ -8,6 +8,7 @@
  * Run: npx tsx src/scripts/extract-calibration-deltas.ts
  */
 import sql from '../lib/libDbPool.ts';
+import { parseSubjectIdArg } from '../lib/utlSubjectIdArg.ts';
 
 // ─── Find matched pairs ─────────────────────────────────────────────
 
@@ -17,7 +18,7 @@ interface MatchedPair {
   calibrationQuestionId: number;
 }
 
-async function findMatchedPairs(): Promise<MatchedPair[]> {
+async function findMatchedPairs(subjectId: number): Promise<MatchedPair[]> {
   const rows = await sql`
     SELECT
       j.scheduled_for::text AS date,
@@ -26,14 +27,16 @@ async function findMatchedPairs(): Promise<MatchedPair[]> {
         SELECT c.question_id
         FROM tb_questions c
         JOIN tb_session_summaries cs ON cs.question_id = c.question_id
-        WHERE c.question_source_id = 3
+        WHERE c.subject_id = ${subjectId}
+          AND c.question_source_id = 3
           AND c.dttm_created_utc::date = j.scheduled_for
         ORDER BY c.dttm_created_utc DESC
         LIMIT 1
       ) AS "calibrationQuestionId"
     FROM tb_questions j
     JOIN tb_session_summaries js ON js.question_id = j.question_id
-    WHERE j.question_source_id != 3
+    WHERE j.subject_id = ${subjectId}
+      AND j.question_source_id != 3
       AND j.scheduled_for IS NOT NULL
     ORDER BY j.scheduled_for ASC
   ` as { date: string; journalQuestionId: number; calibrationQuestionId: number | null }[];
@@ -137,7 +140,8 @@ function median(vals: number[]): number {
 // ─── Main ────────────────────────────────────────────────────────────
 
 async function main() {
-  const pairs = await findMatchedPairs();
+  const subjectId = parseSubjectIdArg();
+  const pairs = await findMatchedPairs(subjectId);
 
   console.log('═══════════════════════════════════════════════════════════════');
   console.log('  CALIBRATION DELTA ANALYSIS');
@@ -159,12 +163,12 @@ async function main() {
     for (const pair of pairs) {
       const colList = def.columns.join(', ');
       const journalRows = await sql.unsafe(
-        `SELECT ${colList} FROM ${def.table} WHERE ${def.idColumn} = $1`,
-        [pair.journalQuestionId]
+        `SELECT ${colList} FROM ${def.table} WHERE subject_id = $1 AND ${def.idColumn} = $2`,
+        [subjectId, pair.journalQuestionId]
       );
       const calRows = await sql.unsafe(
-        `SELECT ${colList} FROM ${def.table} WHERE ${def.idColumn} = $1`,
-        [pair.calibrationQuestionId]
+        `SELECT ${colList} FROM ${def.table} WHERE subject_id = $1 AND ${def.idColumn} = $2`,
+        [subjectId, pair.calibrationQuestionId]
       );
 
       if (journalRows.length === 0 || calRows.length === 0) continue;

@@ -8,6 +8,7 @@
  * Run: npx tsx src/scripts/describe-session-pairs.ts
  */
 import sql from '../lib/libDbPool.ts';
+import { parseSubjectIdArg } from '../lib/utlSubjectIdArg.ts';
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -42,7 +43,7 @@ interface PairedRow {
 
 // ─── Data fetching ──────────────────────────────────────────────────
 
-async function fetchAllPairs(): Promise<PairedRow[]> {
+async function fetchAllPairs(subjectId: number): Promise<PairedRow[]> {
   // Get all journal sessions with summaries
   const journalRows = await sql`
     SELECT
@@ -68,7 +69,8 @@ async function fetchAllPairs(): Promise<PairedRow[]> {
     FROM tb_questions q
     JOIN tb_session_summaries ss ON q.question_id = ss.question_id
     LEFT JOIN tb_dynamical_signals ds ON q.question_id = ds.question_id
-    WHERE q.question_source_id != 3
+    WHERE q.subject_id = ${subjectId}
+      AND q.question_source_id != 3
       AND q.scheduled_for IS NOT NULL
     ORDER BY q.scheduled_for ASC
   `;
@@ -98,7 +100,8 @@ async function fetchAllPairs(): Promise<PairedRow[]> {
     FROM tb_questions q
     JOIN tb_session_summaries ss ON q.question_id = ss.question_id
     LEFT JOIN tb_dynamical_signals ds ON q.question_id = ds.question_id
-    WHERE q.question_source_id = 3
+    WHERE q.subject_id = ${subjectId}
+      AND q.question_source_id = 3
     ORDER BY q.dttm_created_utc ASC
   `;
 
@@ -249,7 +252,8 @@ function printMetric(m: MetricReport): void {
 // ─── Main ───────────────────────────────────────────────────────────
 
 async function main() {
-  const pairs = await fetchAllPairs();
+  const subjectId = parseSubjectIdArg();
+  const pairs = await fetchAllPairs(subjectId);
 
   console.log('╔══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗');
   console.log('║  BEHAVIORAL DESCRIPTIVE COMPARISON: Journal vs Calibration Sessions                                                                                   ║');

@@ -117,7 +117,7 @@ function questionDensityFromText(text: string): number {
   return questionCount / sentences.length;
 }
 
-export async function loadSemanticSessions(): Promise<SemanticRaw[]> {
+export async function loadSemanticSessions(subjectId: number): Promise<SemanticRaw[]> {
   const rows = await sql`
     SELECT
        r.response_id
@@ -136,7 +136,8 @@ export async function loadSemanticSessions(): Promise<SemanticRaw[]> {
     FROM tb_session_summaries ss
     JOIN tb_responses r ON ss.question_id = r.question_id
     JOIN tb_questions q ON r.question_id = q.question_id
-    WHERE q.question_source_id != 3
+    WHERE q.subject_id = ${subjectId}
+      AND q.question_source_id != 3
     ORDER BY ss.session_summary_id ASC
   ` as any[];
 
@@ -159,8 +160,8 @@ export async function loadSemanticSessions(): Promise<SemanticRaw[]> {
 
 // ─── Semantic state computation ────────────────────────────────────
 
-export async function computeSemanticStates(sessions?: SemanticRaw[]): Promise<SemanticEntryState[]> {
-  if (!sessions) sessions = await loadSemanticSessions();
+export async function computeSemanticStates(subjectId: number, sessions?: SemanticRaw[]): Promise<SemanticEntryState[]> {
+  if (!sessions) sessions = await loadSemanticSessions(subjectId);
   if (sessions.length < MIN_ENTRIES) return [];
 
   // Personal baselines for all raw densities

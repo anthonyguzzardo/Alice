@@ -5,8 +5,11 @@
  */
 import 'dotenv/config';
 import { backfillEmbeddings } from '../lib/libEmbeddings.ts';
+import { parseSubjectIdArg } from '../lib/utlSubjectIdArg.ts';
 
-backfillEmbeddings()
+const subjectId = parseSubjectIdArg();
+
+backfillEmbeddings(subjectId)
   .then(({ embedded, failed }) => {
     console.log(`\nBackfill complete. Embedded: ${embedded}, Failed: ${failed}`);
     process.exit(failed > 0 ? 1 : 0);

@@ -15,6 +15,7 @@
  */
 
 import { sql } from '../src/lib/libDb.ts';
+import { parseSubjectIdArg } from '../src/lib/utlSubjectIdArg.ts';
 
 interface KeystrokeEvent {
   c: string;
@@ -93,6 +94,7 @@ function findMisalignedEvents(stream: KeystrokeEvent[]): EventDiag[] {
 // ── Main ──
 
 async function main() {
+  const subjectId = parseSubjectIdArg();
   console.log('Diagnosing HoldFlight alignment across all sessions...\n');
 
   const rows = await sql`
@@ -108,7 +110,8 @@ async function main() {
     FROM tb_session_events se
     JOIN tb_questions q ON se.question_id = q.question_id
     LEFT JOIN tb_dynamical_signals ds ON se.question_id = ds.question_id
-    WHERE se.keystroke_stream_json IS NOT NULL
+    WHERE q.subject_id = ${subjectId}
+      AND se.keystroke_stream_json IS NOT NULL
     ORDER BY q.question_id ASC
   `;
 
