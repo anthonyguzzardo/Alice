@@ -36,6 +36,11 @@
 --   on these columns must be updated in Step 5 to use the new tuple. Sites
 --   surfaced in Step 0 write-path pass:
 --     - tb_questions          : (scheduled_for) → (subject_id, scheduled_for)
+--       Note: calibration questions have scheduled_for IS NULL by design
+--       (they have no scheduled date). UNIQUE permits multiple NULLs per
+--       Postgres semantics — a subject may have many calibration rows with
+--       (subject_id, NULL) and one journal row per calendar day. This is the
+--       same semantics the prior `UNIQUE (scheduled_for)` had.
 --     - tb_semantic_baselines : (signal_name) → (subject_id, signal_name)
 --     - tb_session_delta      : (session_date) → (subject_id, session_date)
 --     - tb_personal_profile   : new UNIQUE(subject_id) (was implicit singleton)

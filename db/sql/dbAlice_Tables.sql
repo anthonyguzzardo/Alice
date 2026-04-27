@@ -34,6 +34,19 @@
 -- KEYS: table_name_id (never just "id")
 -- FK: logical only (no physical FK constraints)
 -- FOOTER: dttm_created_utc, created_by, dttm_modified_utc, modified_by
+--
+-- MULTI-SUBJECT MODEL (post migration 030, 2026-04-26):
+--   Every behavioral table carries `subject_id INT NOT NULL` (logical FK to
+--   tb_subjects). Owner = subject_id 1; subjects are 2+. There is no implicit
+--   owner anywhere — every read scopes by subject, every write specifies
+--   subject. The denormalization is intentional: it lets the per-table lint
+--   rule mechanically enforce "every query references subject_id" instead of
+--   relying on transitive derivation through joins.
+--
+--   `created_by` is an audit column (process role: 'system' / 'user' /
+--   'client'), NOT an identity column. Subject identity lives ONLY in
+--   `subject_id`. Never put 'subject:<name>' or 'subject:<id>' into created_by.
+--
 -- ============================================================================
 
 CREATE SCHEMA IF NOT EXISTS alice;
@@ -221,28 +234,37 @@ CREATE INDEX IF NOT EXISTS ix_subject_sessions_expires_at
 
 -- --------------------------------------------------------------------------
 
--- @region core -- tb_questions, tb_question_corpus, tb_scheduled_questions, tb_subject_responses, tb_subject_session_summaries, tb_responses, tb_interaction_events, tb_reflections, tb_question_feedback
+-- @region core -- tb_questions, tb_question_corpus, tb_responses, tb_interaction_events, tb_reflections, tb_question_feedback
 -- ============================================================================
 -- CORE MUTABLE TABLES
 -- ============================================================================
 
--- PURPOSE: daily questions (seed, generated, calibration)
--- USE CASE: one row per question, scheduled_for is unique calendar date
+-- PURPOSE: daily questions (seed, generated, calibration, corpus-drawn)
+-- USE CASE: one row per (subject, question). For journal questions,
+--           scheduled_for is unique per subject per calendar date. Calibration
+--           questions have scheduled_for IS NULL (no scheduled date) — UNIQUE
+--           permits multiple NULLs per Postgres semantics, so a subject may
+--           have many calibration rows with (subject_id, NULL).
 -- MUTABILITY: insert once, rarely updated (intervention fields may be set later)
 -- REFERENCED BY: tb_responses, tb_session_summaries, tb_session_events, tb_burst_sequences, tb_rburst_sequences
 -- FOOTER: yes
 CREATE TABLE IF NOT EXISTS tb_questions (
    question_id            INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,subject_id             INT NOT NULL                                    -- logical FK to tb_subjects
   ,text                   TEXT NOT NULL
   ,question_source_id     SMALLINT NOT NULL DEFAULT 1
-  ,scheduled_for          DATE UNIQUE
+  ,scheduled_for          DATE
   ,intervention_intent_id INT
   ,intervention_rationale TEXT
   ,dttm_created_utc       TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
   ,created_by             TEXT NOT NULL DEFAULT 'system'
   ,dttm_modified_utc      TIMESTAMPTZ
   ,modified_by            TEXT
+  ,CONSTRAINT tb_questions_subject_scheduled_for_key UNIQUE (subject_id, scheduled_for)
 );
+
+CREATE INDEX IF NOT EXISTS ix_questions_subject_scheduled_for
+  ON tb_questions (subject_id, scheduled_for);
 
 -- --------------------------------------------------------------------------
 
@@ -264,12 +286,21 @@ CREATE TABLE IF NOT EXISTS tb_question_corpus (
 
 -- --------------------------------------------------------------------------
 
--- PURPOSE: per-subject daily question assignments from the corpus
--- USE CASE: one row per (subject, date). The scheduler assigns a corpus question
---           to each active subject for each day. Round-robin with no-repeat window.
--- MUTABILITY: insert once per (subject, date). Never updated or deleted.
--- REFERENCED BY: tb_subject_responses (logical FK)
--- FOOTER: created only
+-- ============================================================================
+-- LEGACY SUBJECT-VARIANT TABLES — SLATED FOR DELETION (Step 9 of unification)
+-- ============================================================================
+-- The three tables below were the Phase 6a subject-variant tables. They are
+-- ZERO-ROW on production; their data shape folds into the unified tables
+-- (tb_questions / tb_responses / tb_session_summaries) via the new subject_id
+-- column. They remain in this file until Step 9 of the unification plan
+-- executes the DROP block in migration 030, at which point they should be
+-- removed from this file as well.
+--
+-- Do not write new code that references these tables.
+-- ============================================================================
+
+-- DEPRECATED — slated for deletion in Step 9. Use tb_questions with
+-- corpus_question_id (TBD column add) instead. Empty on production.
 CREATE TABLE IF NOT EXISTS tb_scheduled_questions (
    scheduled_question_id  INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
   ,subject_id             INT NOT NULL
@@ -284,12 +315,8 @@ CREATE INDEX IF NOT EXISTS ix_scheduled_questions_subject_corpus
 
 -- --------------------------------------------------------------------------
 
--- PURPOSE: subject journal responses
--- USE CASE: one row per response, one response per scheduled question.
---           Submission is final.
--- MUTABILITY: insert once, never updated (black box, same as tb_responses)
--- REFERENCED BY: none (leaf table in v1)
--- FOOTER: created only
+-- DEPRECATED — slated for deletion in Step 9. Use tb_responses (now subject-aware
+-- via subject_id) instead. Empty on production.
 CREATE TABLE IF NOT EXISTS tb_subject_responses (
    subject_response_id    INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
   ,subject_id             INT NOT NULL
@@ -300,13 +327,10 @@ CREATE TABLE IF NOT EXISTS tb_subject_responses (
 
 -- --------------------------------------------------------------------------
 
--- PURPOSE: per-session behavioral summary for subject sessions
--- USE CASE: one row per subject session. Same behavioral columns as
---           tb_session_summaries for schema parity.
--- MUTABILITY: insert once per session, never updated
--- REFERENCED BY: none (leaf table in v1)
--- FOOTER: created only
--- SCHEMA PARITY: see db/sql/session_summary_divergence.allow
+-- DEPRECATED — slated for deletion in Step 9. Use tb_session_summaries (now
+-- subject-aware via subject_id) instead. Empty on production. The schema-
+-- parity exemption file db/sql/session_summary_divergence.allow is also
+-- slated for deletion when this table goes.
 CREATE TABLE IF NOT EXISTS tb_subject_session_summaries (
    subject_session_summary_id  INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
   ,subject_id                  INT NOT NULL
@@ -397,13 +421,19 @@ CREATE TABLE IF NOT EXISTS tb_subject_session_summaries (
 
 -- --------------------------------------------------------------------------
 
--- PURPOSE: user journal responses
--- USE CASE: one row per response, one response per question
+-- ============================================================================
+-- (END LEGACY SUBJECT-VARIANT BLOCK)
+-- ============================================================================
+
+-- PURPOSE: journal responses (one row per question, one response per question)
+-- USE CASE: subject_id identifies which person submitted; question_id stays
+--           unique because question_id is itself a globally-unique surrogate.
 -- MUTABILITY: insert once, never updated (black box)
 -- REFERENCED BY: tb_entry_states, tb_semantic_states, tb_embeddings
 -- FOOTER: yes
 CREATE TABLE IF NOT EXISTS tb_responses (
    response_id                     INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,subject_id                      INT NOT NULL                           -- logical FK to tb_subjects
   ,question_id                     INT NOT NULL UNIQUE
   ,text                            TEXT NOT NULL
   ,contamination_boundary_version  TEXT NOT NULL DEFAULT 'v1'
@@ -415,6 +445,8 @@ CREATE TABLE IF NOT EXISTS tb_responses (
   ,modified_by                     TEXT
 );
 
+CREATE INDEX IF NOT EXISTS ix_responses_subject_id ON tb_responses (subject_id);
+
 -- --------------------------------------------------------------------------
 
 -- PURPOSE: client-side interaction event log (page_open, keystroke, pause, etc.)
@@ -423,6 +455,7 @@ CREATE TABLE IF NOT EXISTS tb_responses (
 -- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_interaction_events (
    interaction_event_id       INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,subject_id                 INT      NOT NULL                           -- logical FK to tb_subjects
   ,question_id                INT      NOT NULL
   ,interaction_event_type_id  SMALLINT NOT NULL
   ,metadata                   JSONB
@@ -430,14 +463,17 @@ CREATE TABLE IF NOT EXISTS tb_interaction_events (
   ,created_by                 TEXT NOT NULL DEFAULT 'client'
 );
 
+CREATE INDEX IF NOT EXISTS ix_interaction_events_subject_id ON tb_interaction_events (subject_id);
+
 -- --------------------------------------------------------------------------
 
 -- PURPOSE: periodic AI-generated reflections over response history
--- USE CASE: weekly/monthly synthesis
+-- USE CASE: weekly/monthly synthesis (per subject)
 -- MUTABILITY: insert once, may be regenerated
 -- FOOTER: yes
 CREATE TABLE IF NOT EXISTS tb_reflections (
    reflection_id                INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,subject_id                   INT NOT NULL                              -- logical FK to tb_subjects
   ,text                         TEXT NOT NULL
   ,reflection_type_id           SMALLINT NOT NULL DEFAULT 1
   ,coverage_through_response_id INT
@@ -455,6 +491,7 @@ CREATE TABLE IF NOT EXISTS tb_reflections (
 -- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_question_feedback (
    question_feedback_id  INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,subject_id            INT     NOT NULL                                 -- logical FK to tb_subjects
   ,question_id           INT     NOT NULL UNIQUE
   ,landed                BOOLEAN NOT NULL
   ,dttm_created_utc      TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -491,6 +528,7 @@ CREATE TABLE IF NOT EXISTS tb_question_feedback (
 --   very long sessions) and saves only 2 bytes per column. Not worth the risk.
 CREATE TABLE IF NOT EXISTS tb_session_summaries (
    session_summary_id          INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,subject_id                  INT  NOT NULL                              -- logical FK to tb_subjects
   ,question_id                 INT  NOT NULL UNIQUE
   -- Behavioral core (timing: f64 microsecond-precision offsets)
   ,first_keystroke_ms          DOUBLE PRECISION
@@ -589,19 +627,23 @@ CREATE TABLE IF NOT EXISTS tb_session_summaries (
   ,user_agent                  TEXT
   ,hour_of_day                 SMALLINT CHECK (hour_of_day BETWEEN 0 AND 23)
   ,day_of_week                 SMALLINT CHECK (day_of_week BETWEEN 0 AND 6)
+  ,drop_count                  INT DEFAULT 0          -- migration 016
   -- Footer
   ,dttm_created_utc            TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
   ,created_by                  TEXT NOT NULL DEFAULT 'system'
 );
 
+CREATE INDEX IF NOT EXISTS ix_session_summaries_subject_id ON tb_session_summaries (subject_id);
+
 -- --------------------------------------------------------------------------
 
 -- PURPOSE: LLM prompt provenance for auditability
--- USE CASE: one row per LLM call (generation, observation, reflection)
+-- USE CASE: one row per LLM call (generation, observation, reflection) per subject
 -- MUTABILITY: insert only
 -- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_prompt_traces (
    prompt_trace_id        INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,subject_id             INT NOT NULL                                    -- logical FK to tb_subjects
   ,prompt_trace_type_id   SMALLINT NOT NULL
   ,output_record_id       INT
   ,recent_entry_ids       JSONB
@@ -654,6 +696,7 @@ CREATE TABLE IF NOT EXISTS tb_embedding_model_versions (
 -- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_embeddings (
    embedding_id                INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,subject_id                  INT NOT NULL                               -- logical FK to tb_subjects
   ,embedding_source_id         SMALLINT NOT NULL
   ,source_record_id            INT      NOT NULL
   ,embedded_text               TEXT NOT NULL
@@ -674,6 +717,23 @@ CREATE INDEX IF NOT EXISTS idx_embeddings_vector ON tb_embeddings
 -- ============================================================================
 -- WITNESS, STATE, DYNAMICS, COUPLING TABLES
 -- ============================================================================
+--
+-- ALICE NEGATIVE — DEPRIORITIZED, SCHEMA-FROZEN
+--   The eight tables in this region power the Alice Negative subsystem
+--   (witness rendering, PersDyn state engine, semantic dynamics, coupling
+--   matrices). Per directive (2026-04-26), this subsystem is deprioritized
+--   and the schema is frozen as-is. Migration 030 added `subject_id NOT NULL`
+--   to each table for consistency with the unified model, but no constraint
+--   surgery, no per-subject indexes, no query-shape work was performed.
+--
+--   tb_witness_states.entry_count is NOT unique in production data
+--   (entry_count=3 has two snapshots from consecutive days). The table is a
+--   snapshot log, not a state register; the original header comment "one row
+--   per observation cycle" is intent, not enforcement. No UNIQUE constraint
+--   added.
+--
+--   Do not invest further in these tables without explicit re-prioritization.
+-- ============================================================================
 
 -- PURPOSE: AI witness state snapshots (trait + signal JSON blobs)
 -- USE CASE: one row per observation cycle
@@ -681,6 +741,7 @@ CREATE INDEX IF NOT EXISTS idx_embeddings_vector ON tb_embeddings
 -- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_witness_states (
    witness_state_id    INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,subject_id          INT  NOT NULL                                      -- logical FK to tb_subjects (Alice Negative deprioritized — column-add only)
   ,entry_count         INT  NOT NULL
   ,traits_json         JSONB NOT NULL
   ,signals_json        JSONB NOT NULL
@@ -697,6 +758,7 @@ CREATE TABLE IF NOT EXISTS tb_witness_states (
 -- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_burst_sequences (
    burst_sequence_id      INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,subject_id             INT      NOT NULL                               -- logical FK to tb_subjects
   ,question_id            INT      NOT NULL
   ,burst_index            SMALLINT NOT NULL
   ,burst_char_count       INT      NOT NULL
@@ -716,6 +778,7 @@ CREATE TABLE IF NOT EXISTS tb_burst_sequences (
 -- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_rburst_sequences (
    rburst_sequence_id     INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,subject_id             INT      NOT NULL                               -- logical FK to tb_subjects
   ,question_id            INT      NOT NULL
   ,burst_index            SMALLINT NOT NULL
   ,deleted_char_count     INT      NOT NULL
@@ -735,6 +798,7 @@ CREATE TABLE IF NOT EXISTS tb_rburst_sequences (
 -- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_session_metadata (
    session_metadata_id           INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,subject_id                    INT NOT NULL                             -- logical FK to tb_subjects
   ,question_id                   INT NOT NULL UNIQUE
   ,hour_typicality               DOUBLE PRECISION
   ,deletion_curve_type           TEXT
@@ -756,6 +820,7 @@ CREATE TABLE IF NOT EXISTS tb_session_metadata (
 -- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_calibration_baselines_history (
    calibration_history_id        INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,subject_id                    INT NOT NULL                             -- logical FK to tb_subjects
   ,calibration_session_count     INT NOT NULL
   ,device_type                   TEXT
   ,avg_first_keystroke_ms        DOUBLE PRECISION
@@ -775,6 +840,8 @@ CREATE TABLE IF NOT EXISTS tb_calibration_baselines_history (
   ,created_by                    TEXT NOT NULL DEFAULT 'system'
 );
 
+CREATE INDEX IF NOT EXISTS ix_calibration_baselines_subject_id ON tb_calibration_baselines_history (subject_id);
+
 -- --------------------------------------------------------------------------
 
 -- PURPOSE: raw event log + keystroke stream per session
@@ -792,6 +859,7 @@ CREATE TABLE IF NOT EXISTS tb_calibration_baselines_history (
 --   Consumed by Rust signal engine via JSON.stringify() round-trip.
 CREATE TABLE IF NOT EXISTS tb_session_events (
    session_event_id       INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,subject_id             INT NOT NULL                                    -- logical FK to tb_subjects
   ,question_id            INT NOT NULL UNIQUE
   ,event_log_json         JSONB NOT NULL
   ,total_events           INT   NOT NULL
@@ -802,6 +870,8 @@ CREATE TABLE IF NOT EXISTS tb_session_events (
   ,dttm_created_utc       TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
   ,created_by             TEXT NOT NULL DEFAULT 'client'
 );
+
+CREATE INDEX IF NOT EXISTS ix_session_events_subject_id ON tb_session_events (subject_id);
 
 -- --------------------------------------------------------------------------
 
@@ -814,6 +884,7 @@ CREATE TABLE IF NOT EXISTS tb_session_events (
 -- Rust f64 -> JS number -> PG float8. No conversion loss.
 CREATE TABLE IF NOT EXISTS tb_entry_states (
    entry_state_id    INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,subject_id        INT NOT NULL                                         -- logical FK to tb_subjects (Alice Negative deprioritized — column-add only)
   ,response_id       INT NOT NULL UNIQUE
   ,fluency           DOUBLE PRECISION NOT NULL
   ,deliberation      DOUBLE PRECISION NOT NULL
@@ -835,6 +906,7 @@ CREATE TABLE IF NOT EXISTS tb_entry_states (
 -- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_trait_dynamics (
    trait_dynamic_id   INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,subject_id         INT      NOT NULL                                   -- logical FK to tb_subjects (Alice Negative deprioritized — column-add only)
   ,entry_count        INT      NOT NULL
   ,dimension          TEXT     NOT NULL
   ,baseline           DOUBLE PRECISION NOT NULL
@@ -855,6 +927,7 @@ CREATE TABLE IF NOT EXISTS tb_trait_dynamics (
 -- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_coupling_matrix (
    coupling_id        INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,subject_id         INT      NOT NULL                                   -- logical FK to tb_subjects (Alice Negative deprioritized — column-add only)
   ,entry_count        INT      NOT NULL
   ,leader             TEXT     NOT NULL
   ,follower           TEXT     NOT NULL
@@ -873,6 +946,7 @@ CREATE TABLE IF NOT EXISTS tb_coupling_matrix (
 -- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_emotion_behavior_coupling (
    emotion_coupling_id  INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,subject_id           INT      NOT NULL                                 -- logical FK to tb_subjects (Alice Negative deprioritized — column-add only)
   ,entry_count          INT      NOT NULL
   ,emotion_dim          TEXT     NOT NULL
   ,behavior_dim         TEXT     NOT NULL
@@ -891,6 +965,7 @@ CREATE TABLE IF NOT EXISTS tb_emotion_behavior_coupling (
 -- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_semantic_states (
    semantic_state_id     INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,subject_id            INT NOT NULL                                     -- logical FK to tb_subjects (Alice Negative deprioritized — column-add only)
   ,response_id           INT NOT NULL UNIQUE
   ,syntactic_complexity  DOUBLE PRECISION NOT NULL
   ,interrogation         DOUBLE PRECISION NOT NULL
@@ -919,6 +994,7 @@ CREATE TABLE IF NOT EXISTS tb_semantic_states (
 -- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_semantic_dynamics (
    semantic_dynamic_id  INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,subject_id           INT      NOT NULL                                 -- logical FK to tb_subjects (Alice Negative deprioritized — column-add only)
   ,entry_count          INT      NOT NULL
   ,dimension            TEXT     NOT NULL
   ,baseline             DOUBLE PRECISION NOT NULL
@@ -938,6 +1014,7 @@ CREATE TABLE IF NOT EXISTS tb_semantic_dynamics (
 -- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_semantic_coupling (
    semantic_coupling_id  INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,subject_id            INT      NOT NULL                                -- logical FK to tb_subjects (Alice Negative deprioritized — column-add only)
   ,entry_count           INT      NOT NULL
   ,leader                TEXT     NOT NULL
   ,follower              TEXT     NOT NULL
@@ -962,6 +1039,7 @@ CREATE TABLE IF NOT EXISTS tb_semantic_coupling (
 -- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_dynamical_signals (
    dynamical_signal_id          INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,subject_id                   INT NOT NULL                              -- logical FK to tb_subjects
   ,question_id                  INT NOT NULL UNIQUE
   ,iki_count                    INT
   ,hold_flight_count            INT
@@ -1028,6 +1106,7 @@ CREATE TABLE IF NOT EXISTS tb_dynamical_signals (
 -- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_motor_signals (
    motor_signal_id              INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,subject_id                   INT NOT NULL                              -- logical FK to tb_subjects
   ,question_id                  INT NOT NULL UNIQUE
   ,sample_entropy               DOUBLE PRECISION
   ,iki_autocorrelation_json     JSONB
@@ -1059,6 +1138,7 @@ CREATE TABLE IF NOT EXISTS tb_motor_signals (
 -- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_semantic_signals (
    semantic_signal_id           INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,subject_id                   INT NOT NULL                              -- logical FK to tb_subjects
   ,question_id                  INT NOT NULL UNIQUE
   ,idea_density                 DOUBLE PRECISION
   ,lexical_sophistication       DOUBLE PRECISION
@@ -1086,6 +1166,7 @@ CREATE TABLE IF NOT EXISTS tb_semantic_signals (
 -- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_process_signals (
    process_signal_id            INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,subject_id                   INT NOT NULL                              -- logical FK to tb_subjects
   ,question_id                  INT NOT NULL UNIQUE
   ,pause_within_word            INT
   ,pause_between_word           INT
@@ -1109,6 +1190,7 @@ CREATE TABLE IF NOT EXISTS tb_process_signals (
 -- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_cross_session_signals (
    cross_session_signal_id      INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,subject_id                   INT NOT NULL                              -- logical FK to tb_subjects
   ,question_id                  INT NOT NULL UNIQUE
   ,self_perplexity              DOUBLE PRECISION
   ,motor_self_perplexity        DOUBLE PRECISION
@@ -1126,6 +1208,12 @@ CREATE TABLE IF NOT EXISTS tb_cross_session_signals (
   ,created_by                   TEXT NOT NULL DEFAULT 'system'
 );
 
+CREATE INDEX IF NOT EXISTS ix_dynamical_signals_subject_id   ON tb_dynamical_signals (subject_id);
+CREATE INDEX IF NOT EXISTS ix_motor_signals_subject_id       ON tb_motor_signals (subject_id);
+CREATE INDEX IF NOT EXISTS ix_semantic_signals_subject_id    ON tb_semantic_signals (subject_id);
+CREATE INDEX IF NOT EXISTS ix_process_signals_subject_id     ON tb_process_signals (subject_id);
+CREATE INDEX IF NOT EXISTS ix_cross_session_subject_id       ON tb_cross_session_signals (subject_id);
+
 -- @region calibration -- tb_calibration_context, tb_calibration_baselines_history, tb_session_delta
 -- ============================================================================
 -- CALIBRATION & CONTEXT TABLES
@@ -1137,6 +1225,7 @@ CREATE TABLE IF NOT EXISTS tb_cross_session_signals (
 -- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_calibration_context (
    calibration_context_id  INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,subject_id              INT      NOT NULL                              -- logical FK to tb_subjects
   ,question_id             INT      NOT NULL
   ,context_dimension_id    SMALLINT NOT NULL
   ,value                   TEXT NOT NULL
@@ -1146,6 +1235,8 @@ CREATE TABLE IF NOT EXISTS tb_calibration_context (
   ,created_by              TEXT NOT NULL DEFAULT 'system'
 );
 
+CREATE INDEX IF NOT EXISTS ix_calibration_context_subject_id ON tb_calibration_context (subject_id);
+
 -- --------------------------------------------------------------------------
 
 -- PURPOSE: calibration vs journal session delta for same-day comparison
@@ -1154,7 +1245,8 @@ CREATE TABLE IF NOT EXISTS tb_calibration_context (
 -- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_session_delta (
    session_delta_id                    INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
-  ,session_date                        DATE NOT NULL UNIQUE
+  ,subject_id                          INT  NOT NULL                      -- logical FK to tb_subjects
+  ,session_date                        DATE NOT NULL
   ,calibration_question_id             INT  NOT NULL
   ,journal_question_id                 INT  NOT NULL
   -- Delta dimensions (journal - calibration, signed)
@@ -1194,6 +1286,7 @@ CREATE TABLE IF NOT EXISTS tb_session_delta (
   -- Footer
   ,dttm_created_utc                    TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
   ,created_by                          TEXT NOT NULL DEFAULT 'system'
+  ,CONSTRAINT tb_session_delta_subject_date_key UNIQUE (subject_id, session_date)
 );
 
 -- --------------------------------------------------------------------------
@@ -1215,14 +1308,16 @@ CREATE TABLE IF NOT EXISTS tb_paper_comments (
 
 -- --------------------------------------------------------------------------
 
--- PURPOSE: Rolling behavioral profile aggregated from all journal sessions.
--- USE CASE: Foundation for writing avatar / process reconstruction. Single row
---           updated in place after each session. Feeds all adversary variants.
+-- PURPOSE: Rolling behavioral profile aggregated from a subject's journal
+--          sessions. One row per subject (UNIQUE(subject_id) enforced).
+-- USE CASE: Foundation for writing avatar / process reconstruction. Updated
+--           in place after each session. Feeds all adversary variants.
 -- MUTABILITY: Updated after each journal session.
 -- REFERENCED BY: reconstruction pipeline, mediation detection.
 -- FOOTER: dttm_updated_utc only.
 CREATE TABLE IF NOT EXISTS tb_personal_profile (
    profile_id              SERIAL PRIMARY KEY
+  ,subject_id              INT NOT NULL CONSTRAINT tb_personal_profile_subject_key UNIQUE   -- logical FK to tb_subjects; one profile per subject
   ,session_count           INT NOT NULL DEFAULT 0
   ,last_question_id        INT
 
@@ -1300,6 +1395,7 @@ CREATE TABLE IF NOT EXISTS tb_personal_profile (
 -- FOOTER: created only (append-only).
 CREATE TABLE IF NOT EXISTS tb_reconstruction_residuals (
    reconstruction_residual_id   INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,subject_id                   INT NOT NULL                              -- logical FK to tb_subjects
   ,question_id                  INT NOT NULL
   ,adversary_variant_id         SMALLINT NOT NULL DEFAULT 1
   ,question_source_id           SMALLINT
@@ -1426,6 +1522,8 @@ CREATE TABLE IF NOT EXISTS tb_reconstruction_residuals (
   ,created_by                   TEXT NOT NULL DEFAULT 'system'
 );
 
+CREATE INDEX IF NOT EXISTS ix_reconstruction_residuals_subject_id ON tb_reconstruction_residuals (subject_id);
+
 -- --------------------------------------------------------------------------
 
 -- PURPOSE: per-session profile-based mediation detection
@@ -1437,6 +1535,7 @@ CREATE TABLE IF NOT EXISTS tb_reconstruction_residuals (
 -- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_session_integrity (
    session_integrity_id   INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,subject_id             INT NOT NULL                                    -- logical FK to tb_subjects
   ,question_id            INT NOT NULL UNIQUE
   ,profile_distance       DOUBLE PRECISION NOT NULL
   ,dimension_count        SMALLINT NOT NULL
@@ -1462,7 +1561,8 @@ CREATE TABLE IF NOT EXISTS tb_session_integrity (
 -- FOOTER: yes (modified)
 CREATE TABLE IF NOT EXISTS tb_semantic_baselines (
    semantic_baseline_id   INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
-  ,signal_name            TEXT NOT NULL UNIQUE
+  ,subject_id             INT NOT NULL                                    -- logical FK to tb_subjects
+  ,signal_name            TEXT NOT NULL
   ,running_mean           DOUBLE PRECISION NOT NULL DEFAULT 0
   ,running_m2             DOUBLE PRECISION NOT NULL DEFAULT 0
   ,session_count          INT NOT NULL DEFAULT 0
@@ -1471,6 +1571,7 @@ CREATE TABLE IF NOT EXISTS tb_semantic_baselines (
   ,created_by             TEXT NOT NULL DEFAULT 'system'
   ,dttm_modified_utc      TIMESTAMPTZ
   ,modified_by            TEXT
+  ,CONSTRAINT tb_semantic_baselines_subject_signal_key UNIQUE (subject_id, signal_name)
 );
 
 -- --------------------------------------------------------------------------
@@ -1486,6 +1587,7 @@ CREATE TABLE IF NOT EXISTS tb_semantic_baselines (
 -- FOOTER: created only
 CREATE TABLE IF NOT EXISTS tb_semantic_trajectory (
    semantic_trajectory_id  INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,subject_id              INT NOT NULL                                   -- logical FK to tb_subjects
   ,question_id             INT NOT NULL
   ,signal_name             TEXT NOT NULL
   ,raw_value               DOUBLE PRECISION
@@ -1553,7 +1655,7 @@ CREATE TABLE IF NOT EXISTS tb_engine_provenance (
 CREATE TABLE IF NOT EXISTS tb_signal_jobs (
    signal_job_id         INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
   ,question_id           INT NOT NULL                                   -- logical FK to tb_questions
-  ,subject_id            INT                                            -- logical FK to tb_subjects (NULL for owner)
+  ,subject_id            INT NOT NULL                                   -- logical FK to tb_subjects (post migration 030: required for every job)
   ,signal_job_kind_id    SMALLINT NOT NULL DEFAULT 1                    -- logical FK to te_signal_job_kind
   ,signal_job_status_id  SMALLINT NOT NULL DEFAULT 1                    -- logical FK to te_signal_job_status
   ,attempts              INT NOT NULL DEFAULT 0
@@ -1582,3 +1684,5 @@ CREATE INDEX IF NOT EXISTS idx_signal_jobs_claim
 CREATE UNIQUE INDEX IF NOT EXISTS uq_signal_jobs_question_kind
   ON tb_signal_jobs (question_id, signal_job_kind_id)
   WHERE signal_job_status_id <> 5;
+
+CREATE INDEX IF NOT EXISTS ix_signal_jobs_subject_id ON tb_signal_jobs (subject_id);

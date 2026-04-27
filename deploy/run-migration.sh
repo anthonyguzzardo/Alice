@@ -126,7 +126,19 @@ echo "    - row counts match the pre-migration snapshot"
 echo "    - every distinct subject_id value is exactly {1}"
 echo
 if [[ "$DRY_RUN" != "1" ]]; then
-  read -r -p "  Type 'continue' to restart alice.service, anything else to abort: " CONFIRM
+  # Read from /dev/tty directly so the pause cannot be skipped by piping the
+  # wrapper's output to a file or running under any non-interactive context.
+  # If there is no controlling terminal, fail loudly — leaving the service
+  # stopped is the safer outcome than silently restarting without review.
+  if [[ ! -r /dev/tty ]] || [[ ! -w /dev/tty ]]; then
+    echo "  ✗ ERROR: /dev/tty not available. The operator review pause requires a"
+    echo "    controlling terminal. Aborting with service still stopped."
+    echo "    Restart manually when ready:"
+    echo "      ssh -i $SSH_KEY root@$DEPLOY_HOST 'systemctl start alice.service'"
+    exit 1
+  fi
+  printf "  Type 'continue' to restart alice.service, anything else to abort: " > /dev/tty
+  read -r CONFIRM < /dev/tty
   if [[ "$CONFIRM" != "continue" ]]; then
     echo "  ✗ Aborted by operator. Service still stopped."
     echo "    Restart manually when ready: ssh -i $SSH_KEY root@$DEPLOY_HOST 'systemctl start alice.service'"
