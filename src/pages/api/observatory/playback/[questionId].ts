@@ -5,10 +5,13 @@
  * page can render the writing timeline at original tempo.
  */
 import type { APIRoute } from 'astro';
-import sql, { getSessionEvents } from '../../../../lib/libDb.ts';
+import sql, { getSessionEvents, OWNER_SUBJECT_ID } from '../../../../lib/libDb.ts';
 import { logError } from '../../../../lib/utlErrorLog.ts';
 
 export const GET: APIRoute = async ({ params }) => {
+  // Owner-only observatory endpoint.
+  // TODO(step5): review — per-subject playback if subjects ever surface here.
+  const subjectId = OWNER_SUBJECT_ID;
   try {
     const questionId = parseInt(params.questionId ?? '', 10);
     if (isNaN(questionId)) {
@@ -18,7 +21,7 @@ export const GET: APIRoute = async ({ params }) => {
       });
     }
 
-    const row = await getSessionEvents(questionId);
+    const row = await getSessionEvents(subjectId, questionId);
     if (!row) {
       return new Response(JSON.stringify({ error: 'No event log for this session' }), {
         status: 404,
@@ -51,7 +54,7 @@ export const GET: APIRoute = async ({ params }) => {
 
     // Resolve response_id so replay can link back to the correct entry
     const responseRows = await sql`
-      SELECT response_id FROM tb_responses WHERE question_id = ${questionId} ORDER BY response_id DESC LIMIT 1
+      SELECT response_id FROM tb_responses WHERE subject_id = ${subjectId} AND question_id = ${questionId} ORDER BY response_id DESC LIMIT 1
     `;
     const responseRow = responseRows[0] as { response_id: number } | undefined;
 

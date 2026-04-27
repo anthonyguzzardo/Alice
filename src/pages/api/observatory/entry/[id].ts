@@ -7,11 +7,14 @@
  * Pulls from the live PostgreSQL database.
  */
 import type { APIRoute } from 'astro';
-import sql, { getDynamicalSignals, getMotorSignals, getProcessSignals, getCrossSessionSignals, getSemanticSignals } from '../../../../lib/libDb.ts';
+import sql, { getDynamicalSignals, getMotorSignals, getProcessSignals, getCrossSessionSignals, getSemanticSignals, OWNER_SUBJECT_ID } from '../../../../lib/libDb.ts';
 import { logError } from '../../../../lib/utlErrorLog.ts';
 import { computeDynamicalSignals, type KeystrokeEvent } from '../../../../lib/libSignalsNative.ts';
 
 export const GET: APIRoute = async ({ params }) => {
+  // Owner-only observatory endpoint.
+  // TODO(step5): review — per-subject observatory if subjects ever surface here.
+  const subjectId = OWNER_SUBJECT_ID;
   try {
     const responseId = parseInt(params.id ?? '', 10);
     if (isNaN(responseId)) {
@@ -27,7 +30,7 @@ export const GET: APIRoute = async ({ params }) => {
       FROM tb_entry_states es
       JOIN tb_responses r ON es.response_id = r.response_id
       JOIN tb_questions q ON r.question_id = q.question_id
-      WHERE es.response_id = ${responseId}
+      WHERE q.subject_id = ${subjectId} AND es.response_id = ${responseId}
     `;
     const entryState = entryStateRows[0] as any;
 
@@ -47,7 +50,7 @@ export const GET: APIRoute = async ({ params }) => {
         ,sentiment, abstraction, agency_framing, temporal_orientation
         ,convergence as semantic_convergence
       FROM tb_semantic_states
-      WHERE response_id = ${responseId}
+      WHERE subject_id = ${subjectId} AND response_id = ${responseId}
     `;
     const semanticState = semanticStateRows[0] as any;
 
@@ -119,7 +122,7 @@ export const GET: APIRoute = async ({ params }) => {
         punctuation_flight_mean as "punctuationFlightMean",
         punctuation_letter_ratio as "punctuationLetterRatio"
       FROM tb_session_summaries
-      WHERE question_id = ${entryState.question_id}
+      WHERE subject_id = ${subjectId} AND question_id = ${entryState.question_id}
     `;
     const sessionSummary = sessionSummaryRows[0] as any;
 
@@ -130,7 +133,7 @@ export const GET: APIRoute = async ({ params }) => {
              inter_burst_interval_mean_ms, inter_burst_interval_std_ms,
              deletion_during_burst_count, deletion_between_burst_count
       FROM tb_session_metadata
-      WHERE question_id = ${entryState.question_id}
+      WHERE subject_id = ${subjectId} AND question_id = ${entryState.question_id}
       ORDER BY session_metadata_id DESC LIMIT 1
     `;
     const metadata = metadataRows[0] as any;
@@ -139,7 +142,7 @@ export const GET: APIRoute = async ({ params }) => {
     const burstSequence = await sql`
       SELECT burst_index, burst_char_count, burst_duration_ms, burst_start_offset_ms
       FROM tb_burst_sequences
-      WHERE question_id = ${entryState.question_id}
+      WHERE subject_id = ${subjectId} AND question_id = ${entryState.question_id}
       ORDER BY burst_index ASC
     ` as any[];
 
@@ -148,20 +151,20 @@ export const GET: APIRoute = async ({ params }) => {
       SELECT burst_index, deleted_char_count, total_char_count,
              burst_duration_ms, burst_start_offset_ms, is_leading_edge
       FROM tb_rburst_sequences
-      WHERE question_id = ${entryState.question_id}
+      WHERE subject_id = ${subjectId} AND question_id = ${entryState.question_id}
       ORDER BY burst_index ASC
     ` as any[];
 
     // Replay availability + keystroke stream
     const replayRows = await sql`
       SELECT total_events, session_duration_ms, keystroke_stream_json FROM tb_session_events
-      WHERE question_id = ${entryState.question_id} ORDER BY session_event_id DESC LIMIT 1
+      WHERE subject_id = ${subjectId} AND question_id = ${entryState.question_id} ORDER BY session_event_id DESC LIMIT 1
     `;
     const replayRow = replayRows[0] as any;
 
     // Read persisted dynamical signals; fall back to on-demand compute
     let dynamicalSignals: any = null;
-    const dsRow = await getDynamicalSignals(entryState.question_id);
+    const dsRow = await getDynamicalSignals(subjectId, entryState.question_id);
     if (dsRow) {
       // Normalize DB snake_case to camelCase for frontend
       dynamicalSignals = {
@@ -237,28 +240,30 @@ export const GET: APIRoute = async ({ params }) => {
     }
 
     // Read persisted motor signals
-    const motorSignals = await getMotorSignals(entryState.question_id);
+    const motorSignals = await getMotorSignals(subjectId, entryState.question_id);
 
     // Process signals
-    const processSignals = await getProcessSignals(entryState.question_id);
+    const processSignals = await getProcessSignals(subjectId, entryState.question_id);
 
     // Cross-session signals
-    const crossSessionSignals = await getCrossSessionSignals(entryState.question_id);
+    const crossSessionSignals = await getCrossSessionSignals(subjectId, entryState.question_id);
 
     // Semantic signals (includes discourse coherence)
-    const semanticSignals = await getSemanticSignals(entryState.question_id);
+    const semanticSignals = await getSemanticSignals(subjectId, entryState.question_id);
 
     // Navigation
     const prevRows = await sql`
       SELECT response_id FROM tb_entry_states
-      WHERE entry_state_id < (SELECT entry_state_id FROM tb_entry_states WHERE response_id = ${responseId})
+      WHERE subject_id = ${subjectId}
+        AND entry_state_id < (SELECT entry_state_id FROM tb_entry_states WHERE response_id = ${responseId})
       ORDER BY entry_state_id DESC LIMIT 1
     `;
     const prev = prevRows[0] as any;
 
     const nextRows = await sql`
       SELECT response_id FROM tb_entry_states
-      WHERE entry_state_id > (SELECT entry_state_id FROM tb_entry_states WHERE response_id = ${responseId})
+      WHERE subject_id = ${subjectId}
+        AND entry_state_id > (SELECT entry_state_id FROM tb_entry_states WHERE response_id = ${responseId})
       ORDER BY entry_state_id ASC LIMIT 1
     `;
     const next = nextRows[0] as any;

@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import sql from '../../lib/libDbPool.ts';
+import { OWNER_SUBJECT_ID } from '../../lib/libDb.ts';
 import { parseBody } from '../../lib/utlParseBody.ts';
 import { createRequire } from 'node:module';
 
@@ -22,6 +23,10 @@ try {
 }
 
 export const POST: APIRoute = async ({ request }) => {
+  // Owner-only avatar generation (Caddy basic-auth gated).
+  // TODO(step5): review.
+  const subjectId = OWNER_SUBJECT_ID;
+
   if (!nativeModule?.generateAvatar) {
     return new Response(JSON.stringify({ error: 'Rust engine not available. Run npm run build:rust.' }), {
       status: 503,
@@ -42,6 +47,7 @@ export const POST: APIRoute = async ({ request }) => {
     SELECT r.text
     FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
+    WHERE q.subject_id = ${subjectId}
     ORDER BY q.scheduled_for ASC
   ` as Array<{ text: string }>;
 
@@ -67,6 +73,7 @@ export const POST: APIRoute = async ({ request }) => {
            hold_time_mean_mean, hold_time_mean_std,
            flight_time_mean_mean, flight_time_mean_std
     FROM tb_personal_profile
+    WHERE subject_id = ${subjectId}
     LIMIT 1
   `;
 

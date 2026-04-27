@@ -6,11 +6,14 @@
  * Days after a witness state use the most recent witness at that point in time.
  */
 import type { APIRoute } from 'astro';
-import sql from '../../lib/libDb.ts';
+import sql, { OWNER_SUBJECT_ID } from '../../lib/libDb.ts';
 import { DEFAULT_WITNESS } from '../../lib/libAliceNegative/libTypes.ts';
 import { logError } from '../../lib/utlErrorLog.ts';
 
 export const GET: APIRoute = async () => {
+  // AN gallery, owner-only. Minimal-touch threading per AN deprioritization.
+  // TODO(step5): review.
+  const subjectId = OWNER_SUBJECT_ID;
   try {
   // Get distinct session days (by scheduled_for) with real responses
   const sessionDays = await sql`
@@ -18,7 +21,8 @@ export const GET: APIRoute = async () => {
            COUNT(r.response_id)::int as response_count
     FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
-    WHERE q.question_source_id != 3
+    WHERE q.subject_id = ${subjectId}
+      AND q.question_source_id != 3
     GROUP BY q.scheduled_for
     ORDER BY q.scheduled_for ASC
   ` as Array<{
@@ -31,6 +35,7 @@ export const GET: APIRoute = async () => {
   const witnesses = await sql`
     SELECT witness_state_id, entry_count, traits_json, dttm_created_utc
     FROM tb_witness_states
+    WHERE subject_id = ${subjectId}
     ORDER BY dttm_created_utc ASC
   ` as Array<{
     witness_state_id: number;

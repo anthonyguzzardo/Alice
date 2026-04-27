@@ -14,7 +14,7 @@
  * zz_archive_*_20260416 tables but not referenced here.
  */
 import type { APIRoute } from 'astro';
-import sql from '../../../lib/libDb.ts';
+import sql, { OWNER_SUBJECT_ID } from '../../../lib/libDb.ts';
 import { logError } from '../../../lib/utlErrorLog.ts';
 import {
   DIM_PLAIN, DIM_HIGH, DIM_LOW, EMO_PLAIN, TREND_VERB,
@@ -37,6 +37,9 @@ interface Arc { text: string; space: 'behavioral' | 'semantic'; dimension: strin
 interface Discovery { text: string; evidence: string; strength: 'established' | 'provisional'; source: 'behavioral' | 'semantic' | 'emotion-behavior'; }
 
 export const GET: APIRoute = async () => {
+  // Owner-only observatory endpoint.
+  // TODO(step5): review — per-subject synthesis if subjects ever surface here.
+  const subjectId = OWNER_SUBJECT_ID;
   try {
     // Behavioral states + dynamics
     const behavioralStates = await sql`
@@ -46,6 +49,7 @@ export const GET: APIRoute = async () => {
       FROM tb_entry_states es
       JOIN tb_responses r ON es.response_id = r.response_id
       JOIN tb_questions q ON r.question_id = q.question_id
+      WHERE q.subject_id = ${subjectId}
       ORDER BY es.entry_state_id ASC
     ` as any[];
 
@@ -53,7 +57,7 @@ export const GET: APIRoute = async () => {
     const behavioralDynamics = await sql`
       SELECT dimension, baseline, variability, attractor_force, current_state, deviation
       FROM tb_trait_dynamics
-      WHERE entry_count = ${behavioralCount}
+      WHERE subject_id = ${subjectId} AND entry_count = ${behavioralCount}
     ` as any[];
     const behavioralDynMap = new Map(behavioralDynamics.map((d: any) => [d.dimension, d]));
 
@@ -65,6 +69,7 @@ export const GET: APIRoute = async () => {
              nrc_anger, nrc_fear, nrc_joy, nrc_sadness, nrc_trust, nrc_anticipation,
              convergence as semantic_convergence
       FROM tb_semantic_states
+      WHERE subject_id = ${subjectId}
       ORDER BY semantic_state_id ASC
     ` as any[];
 
@@ -72,7 +77,7 @@ export const GET: APIRoute = async () => {
     const semanticDynamics = await sql`
       SELECT dimension, baseline, variability, attractor_force, current_state, deviation
       FROM tb_semantic_dynamics
-      WHERE entry_count = ${semanticCount}
+      WHERE subject_id = ${subjectId} AND entry_count = ${semanticCount}
     ` as any[];
     const semanticDynMap = new Map(semanticDynamics.map((d: any) => [d.dimension, d]));
 
@@ -80,21 +85,24 @@ export const GET: APIRoute = async () => {
     const behavioralCouplings = await sql`
       SELECT leader, follower, lag_sessions, correlation, direction
       FROM tb_coupling_matrix
-      WHERE entry_count = (SELECT MAX(entry_count) FROM tb_coupling_matrix)
+      WHERE subject_id = ${subjectId}
+        AND entry_count = (SELECT MAX(entry_count) FROM tb_coupling_matrix WHERE subject_id = ${subjectId})
       ORDER BY correlation DESC
     ` as any[];
 
     const semanticCouplings = await sql`
       SELECT leader, follower, lag_sessions, correlation, direction
       FROM tb_semantic_coupling
-      WHERE entry_count = (SELECT MAX(entry_count) FROM tb_semantic_coupling)
+      WHERE subject_id = ${subjectId}
+        AND entry_count = (SELECT MAX(entry_count) FROM tb_semantic_coupling WHERE subject_id = ${subjectId})
       ORDER BY correlation DESC
     ` as any[];
 
     const emotionCouplings = await sql`
       SELECT emotion_dim, behavior_dim, lag_sessions, correlation, direction
       FROM tb_emotion_behavior_coupling
-      WHERE entry_count = (SELECT MAX(entry_count) FROM tb_emotion_behavior_coupling)
+      WHERE subject_id = ${subjectId}
+        AND entry_count = (SELECT MAX(entry_count) FROM tb_emotion_behavior_coupling WHERE subject_id = ${subjectId})
       ORDER BY correlation DESC
     ` as any[];
 
@@ -230,7 +238,7 @@ export const GET: APIRoute = async () => {
     // provisional" and INC-008 in METHODS_PROVENANCE.md.
     let stableEmoKeys: Set<string>;
     try {
-      const stability = await computeCouplingStability();
+      const stability = await computeCouplingStability(subjectId);
       stableEmoKeys = new Set(
         stability.stablePairs.map(p => `${p.emotionDim}|${p.behaviorDim}`),
       );

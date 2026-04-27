@@ -1,9 +1,12 @@
 import type { APIRoute } from 'astro';
-import { logInteractionEvent } from '../../lib/libDb.ts';
+import { logInteractionEvent, OWNER_SUBJECT_ID } from '../../lib/libDb.ts';
 import { parseBody } from '../../lib/utlParseBody.ts';
 import { logError } from '../../lib/utlErrorLog.ts';
 
 export const POST: APIRoute = async ({ request }) => {
+  // Owner journal interaction event (Caddy basic-auth gated).
+  // TODO(step5): review.
+  const subjectId = OWNER_SUBJECT_ID;
   const body = await parseBody<{ questionId: number; eventType: string; metadata?: string | Record<string, unknown> }>(request);
   if (!body) {
     return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
@@ -21,9 +24,9 @@ export const POST: APIRoute = async ({ request }) => {
   }
 
   try {
-    await logInteractionEvent(questionId, eventType, metadata);
+    await logInteractionEvent(subjectId, questionId, eventType, metadata);
   } catch (err) {
-    logError('api.event', err, { questionId, eventType });
+    logError('api.event', err, { subjectId, questionId, eventType });
     return new Response(JSON.stringify({ error: 'Failed to log event' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },

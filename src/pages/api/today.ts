@@ -1,15 +1,18 @@
 import type { APIRoute } from 'astro';
-import { getTodaysQuestion, getTodaysResponse } from '../../lib/libDb.ts';
+import { getTodaysQuestion, getTodaysResponse, OWNER_SUBJECT_ID } from '../../lib/libDb.ts';
 import { seedUpcomingQuestions } from '../../lib/libSchedule.ts';
 import { logError } from '../../lib/utlErrorLog.ts';
 
 export const GET: APIRoute = async () => {
+  // Owner journal endpoint (Caddy basic-auth gated). Subject path is /api/subject/today.
+  // TODO(step5): review.
+  const subjectId = OWNER_SUBJECT_ID;
   try {
     // Ensure questions are seeded
-    await seedUpcomingQuestions();
+    await seedUpcomingQuestions(subjectId);
 
-    const question = await getTodaysQuestion();
-    const response = await getTodaysResponse();
+    const question = await getTodaysQuestion(subjectId);
+    const response = await getTodaysResponse(subjectId);
 
     if (!question) {
       return new Response(JSON.stringify({ error: 'No question for today' }), {

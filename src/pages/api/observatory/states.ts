@@ -7,10 +7,13 @@
  * Pulls from the live PostgreSQL database.
  */
 import type { APIRoute } from 'astro';
-import sql from '../../../lib/libDb.ts';
+import sql, { OWNER_SUBJECT_ID } from '../../../lib/libDb.ts';
 import { logError } from '../../../lib/utlErrorLog.ts';
 
 export const GET: APIRoute = async () => {
+  // Owner-only observatory endpoint.
+  // TODO(step5): review.
+  const subjectId = OWNER_SUBJECT_ID;
   try {
     // Behavioral 7D states with question + replay availability
     const states = await sql`
@@ -25,6 +28,7 @@ export const GET: APIRoute = async () => {
       FROM tb_entry_states es
       JOIN tb_responses r ON es.response_id = r.response_id
       JOIN tb_questions q ON r.question_id = q.question_id
+      WHERE q.subject_id = ${subjectId}
       ORDER BY es.entry_state_id ASC
     ` as any[];
 
@@ -37,6 +41,7 @@ export const GET: APIRoute = async () => {
         ,nrc_anger, nrc_fear, nrc_joy, nrc_sadness, nrc_trust, nrc_anticipation
         ,convergence as semantic_convergence
       FROM tb_semantic_states
+      WHERE subject_id = ${subjectId}
       ORDER BY semantic_state_id ASC
     ` as any[];
     const semanticByResponse = new Map<number, any>();
@@ -51,6 +56,7 @@ export const GET: APIRoute = async () => {
         ,inter_burst_interval_mean_ms, inter_burst_interval_std_ms
         ,deletion_during_burst_count, deletion_between_burst_count
       FROM tb_session_metadata
+      WHERE subject_id = ${subjectId}
     ` as any[];
     const metaByQuestion = new Map<number, any>();
     for (const m of metaRows) metaByQuestion.set(m.question_id, m);
@@ -63,6 +69,7 @@ export const GET: APIRoute = async () => {
         ,tau_proportion, adjacent_hold_time_cov
         ,sample_entropy, motor_jerk, lapse_rate, tempo_drift
       FROM tb_motor_signals
+      WHERE subject_id = ${subjectId}
     ` as any[];
     const motorByQuestion = new Map<number, any>();
     for (const m of motorRows) motorByQuestion.set(m.question_id, m);
@@ -75,7 +82,8 @@ export const GET: APIRoute = async () => {
         ,deletion_execution_speed_mean, postcorrection_latency_mean
         ,mean_revision_distance, punctuation_letter_ratio
       FROM tb_session_summaries
-      WHERE cursor_fidget_ratio IS NOT NULL OR punctuation_letter_ratio IS NOT NULL
+      WHERE subject_id = ${subjectId}
+        AND (cursor_fidget_ratio IS NOT NULL OR punctuation_letter_ratio IS NOT NULL)
     ` as any[];
     const phase2ByQuestion = new Map<number, any>();
     for (const p of phase2Rows) phase2ByQuestion.set(p.question_id, p);
@@ -88,6 +96,7 @@ export const GET: APIRoute = async () => {
         ,abandoned_thought_count, r_burst_count, i_burst_count
         ,vocab_expansion_rate, phase_transition_point, strategy_shift_count
       FROM tb_process_signals
+      WHERE subject_id = ${subjectId}
     ` as any[];
     const processByQuestion = new Map<number, any>();
     for (const p of processRows) processByQuestion.set(p.question_id, p);
@@ -101,6 +110,7 @@ export const GET: APIRoute = async () => {
         ,vocab_recurrence_decay, digraph_stability
         ,text_network_density, text_network_communities, bridging_ratio
       FROM tb_cross_session_signals
+      WHERE subject_id = ${subjectId}
     ` as any[];
     const crossSessionByQuestion = new Map<number, any>();
     for (const c of crossSessionRows) crossSessionByQuestion.set(c.question_id, c);
@@ -112,13 +122,14 @@ export const GET: APIRoute = async () => {
         ,discourse_global_coherence, discourse_local_coherence
         ,discourse_global_local_ratio, discourse_coherence_decay_slope
       FROM tb_semantic_signals
-      WHERE discourse_global_coherence IS NOT NULL
+      WHERE subject_id = ${subjectId}
+        AND discourse_global_coherence IS NOT NULL
     ` as any[];
     const discourseByQuestion = new Map<number, any>();
     for (const d of discourseRows) discourseByQuestion.set(d.question_id, d);
 
     // Replay availability: which question_ids have an event log
-    const replayRows = await sql`SELECT DISTINCT question_id FROM tb_session_events` as Array<{ question_id: number }>;
+    const replayRows = await sql`SELECT DISTINCT question_id FROM tb_session_events WHERE subject_id = ${subjectId}` as Array<{ question_id: number }>;
     const replayAvailable = new Set(replayRows.map(r => r.question_id));
 
     const enriched = states.map(s => ({

@@ -3,7 +3,7 @@ import sql, {
   saveResponse, getTodaysQuestion, getTodaysResponse,
   saveSessionSummary, saveBurstSequence, getResponseCount,
   updateDeletionEvents, saveSessionEvents, saveSessionMetadata, getBurstSequence,
-  enqueueSignalJob, SIGNAL_JOB_KIND,
+  enqueueSignalJob, SIGNAL_JOB_KIND, OWNER_SUBJECT_ID,
 } from '../../lib/libDb.ts';
 import { logError } from '../../lib/utlErrorLog.ts';
 import { getGitCommitHash } from '../../lib/utlGitCommit.ts';
@@ -21,6 +21,10 @@ import { ensureWorkerStarted } from '../../lib/libSignalWorker.ts';
 void ensureWorkerStarted();
 
 export const POST: APIRoute = async ({ request }) => {
+  // Owner journal write path (Caddy basic-auth gated). Subject journal flow is /api/subject/respond.
+  // TODO(step5): review — subject-aware journal under unified path lands in Step 9 cutover.
+  const subjectId = OWNER_SUBJECT_ID;
+
   const body = await parseBody<{ questionId: number; text: string; sessionSummary?: Record<string, unknown> }>(request);
   if (!body) {
     return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
@@ -37,7 +41,7 @@ export const POST: APIRoute = async ({ request }) => {
     });
   }
 
-  const question = await getTodaysQuestion();
+  const question = await getTodaysQuestion(subjectId);
   if (!question || question.question_id !== questionId) {
     return new Response(JSON.stringify({ error: 'Invalid question' }), {
       status: 400,
@@ -45,7 +49,7 @@ export const POST: APIRoute = async ({ request }) => {
     });
   }
 
-  const existing = await getTodaysResponse();
+  const existing = await getTodaysResponse(subjectId);
   if (existing) {
     return new Response(JSON.stringify({ error: 'Already responded today' }), {
       status: 409,
@@ -61,7 +65,7 @@ export const POST: APIRoute = async ({ request }) => {
   let responseId: number;
   try {
     responseId = await sql.begin(async (tx) => {
-      const responseId = await saveResponse(questionId, trimmedText, tx, {
+      const responseId = await saveResponse(subjectId, questionId, trimmedText, tx, {
         boundaryVersion: 'v1',
         codePathsRef: 'docs/contamination-boundary-v1.md',
         commitHash: getGitCommitHash(),
@@ -69,11 +73,12 @@ export const POST: APIRoute = async ({ request }) => {
 
       if (sessionSummary) {
         if (Array.isArray(sessionSummary.burstSequence) && sessionSummary.burstSequence.length > 0) {
-          await saveBurstSequence(questionId, sessionSummary.burstSequence, tx);
+          await saveBurstSequence(subjectId, questionId, sessionSummary.burstSequence, tx);
         }
 
         if (Array.isArray(sessionSummary.eventLog) && sessionSummary.eventLog.length > 0) {
           await saveSessionEvents({
+            subject_id: subjectId,
             question_id: questionId,
             event_log_json: JSON.stringify(sessionSummary.eventLog),
             total_events: sessionSummary.eventLog.length,
@@ -87,7 +92,7 @@ export const POST: APIRoute = async ({ request }) => {
         }
 
         await saveSessionSummary(
-          coerceSessionSummary(sessionSummary, sessionSummary.questionId, trimmedText),
+          coerceSessionSummary(subjectId, sessionSummary, sessionSummary.questionId as number, trimmedText),
           tx,
         );
 
@@ -98,11 +103,11 @@ export const POST: APIRoute = async ({ request }) => {
             c: Math.max(1, d.chars ?? d.c ?? 1),
             t: Math.max(0, d.time ?? d.t ?? 0),
           }));
-          await updateDeletionEvents(questionId, JSON.stringify(compact), tx);
+          await updateDeletionEvents(subjectId, questionId, JSON.stringify(compact), tx);
         }
 
         // Compute and persist slice-3 session metadata
-        const burstsForMeta = await getBurstSequence(questionId, tx);
+        const burstsForMeta = await getBurstSequence(subjectId, questionId, tx);
         const deletionEvents = Array.isArray(sessionSummary.deletionEvents)
           ? sessionSummary.deletionEvents.map((d: any) => ({
               c: Math.max(1, d.chars ?? d.c ?? 1),
@@ -110,33 +115,34 @@ export const POST: APIRoute = async ({ request }) => {
             }))
           : [];
         const meta = await computeSessionMetadata({
+          subjectId,
           questionId,
-          hourOfDay: sessionSummary.hourOfDay ?? null,
-          totalDurationMs: sessionSummary.totalDurationMs ?? 0,
+          hourOfDay: (sessionSummary.hourOfDay as number | null) ?? null,
+          totalDurationMs: (sessionSummary.totalDurationMs as number) ?? 0,
           deletionEvents,
           bursts: burstsForMeta,
         });
-        await saveSessionMetadata(meta, tx);
+        await saveSessionMetadata({ ...meta, subject_id: subjectId }, tx);
       }
 
       // Enqueue the durable signal pipeline job inside this same transaction.
       // libSignalWorker drains tb_signal_jobs and runs the response pipeline.
       await enqueueSignalJob(
-        { questionId, kindId: SIGNAL_JOB_KIND.RESPONSE_PIPELINE },
+        { subjectId, questionId, kindId: SIGNAL_JOB_KIND.RESPONSE_PIPELINE },
         tx,
       );
 
       return responseId;
     });
   } catch (err) {
-    logError('respond.transaction', err, { questionId });
+    logError('respond.transaction', err, { subjectId, questionId });
     return new Response(JSON.stringify({ error: 'Failed to save session' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });
   }
 
-  const responseCount = await getResponseCount();
+  const responseCount = await getResponseCount(subjectId);
 
   // Determine if we should ask "did it land?" (every 5th daily response)
   const askFeedback = responseCount % 5 === 0;

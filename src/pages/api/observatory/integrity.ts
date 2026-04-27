@@ -6,10 +6,13 @@
  * Never surfaces raw signal values or response text.
  */
 import type { APIRoute } from 'astro';
-import sql from '../../../lib/libDb.ts';
+import sql, { OWNER_SUBJECT_ID } from '../../../lib/libDb.ts';
 import { logError } from '../../../lib/utlErrorLog.ts';
 
 export const GET: APIRoute = async () => {
+  // Owner-only observatory endpoint.
+  // TODO(step5): review.
+  const subjectId = OWNER_SUBJECT_ID;
   try {
     const sessions = await sql`
       SELECT
@@ -24,6 +27,7 @@ export const GET: APIRoute = async () => {
         si.z_scores_json        AS "zScores"
       FROM tb_session_integrity si
       LEFT JOIN tb_questions q ON si.question_id = q.question_id
+      WHERE si.subject_id = ${subjectId}
       ORDER BY COALESCE(q.scheduled_for, si.dttm_created_utc::date) ASC
     `;
 

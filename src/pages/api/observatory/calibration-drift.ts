@@ -6,12 +6,15 @@
  * reference frame has been stable or drifting over time.
  */
 import type { APIRoute } from 'astro';
-import { getCalibrationHistory } from '../../../lib/libDb.ts';
+import { getCalibrationHistory, OWNER_SUBJECT_ID } from '../../../lib/libDb.ts';
 import { logError } from '../../../lib/utlErrorLog.ts';
 
 export const GET: APIRoute = async () => {
+  // Owner-only observatory endpoint (Caddy basic-auth gated).
+  // TODO(step5): review — per-subject drift view if subjects ever surface here.
+  const subjectId = OWNER_SUBJECT_ID;
   try {
-    const history = await getCalibrationHistory();
+    const history = await getCalibrationHistory(subjectId);
 
     // Split into global and per-device tracks
     const globalTrack = history.filter(h => h.device_type == null);

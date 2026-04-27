@@ -7,9 +7,13 @@
  */
 import type { APIRoute } from 'astro';
 import sql from '../../../lib/libDbPool.ts';
+import { OWNER_SUBJECT_ID } from '../../../lib/libDb.ts';
 import { logError } from '../../../lib/utlErrorLog.ts';
 
 export const GET: APIRoute = async () => {
+  // Owner-only observatory endpoint.
+  // TODO(step5): review.
+  const subjectId = OWNER_SUBJECT_ID;
   try {
     const sessions = await sql`
       SELECT
@@ -69,7 +73,8 @@ export const GET: APIRoute = async () => {
       FROM tb_dynamical_signals ds
       JOIN tb_questions q ON ds.question_id = q.question_id
       LEFT JOIN tb_motor_signals ms ON ds.question_id = ms.question_id
-      WHERE q.question_source_id != 3
+      WHERE q.subject_id = ${subjectId}
+        AND q.question_source_id != 3
       ORDER BY q.scheduled_for ASC
     `;
 

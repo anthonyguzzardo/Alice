@@ -10,7 +10,7 @@
  *   ?variant=1..5           - returns data for a single variant
  */
 import type { APIRoute } from 'astro';
-import sql from '../../../lib/libDb.ts';
+import sql, { OWNER_SUBJECT_ID } from '../../../lib/libDb.ts';
 import { logError } from '../../../lib/utlErrorLog.ts';
 
 const VARIANT_NAMES: Record<number, string> = {
@@ -69,6 +69,9 @@ function buildSummary(sessions: any[]) {
 }
 
 export const GET: APIRoute = async ({ request }) => {
+  // Owner-only observatory endpoint.
+  // TODO(step5): review.
+  const subjectId = OWNER_SUBJECT_ID;
   try {
     const url = new URL(request.url);
     const variantParam = url.searchParams.get('variant') ?? 'all';
@@ -121,6 +124,7 @@ export const GET: APIRoute = async ({ request }) => {
       FROM tb_reconstruction_residuals r
       LEFT JOIN tb_questions q ON r.question_id = q.question_id
       LEFT JOIN tb_cross_session_signals cs ON r.question_id = cs.question_id
+      WHERE r.subject_id = ${subjectId}
       ORDER BY COALESCE(q.scheduled_for, r.dttm_created_utc::date) ASC, r.adversary_variant_id ASC
     `;
 

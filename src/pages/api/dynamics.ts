@@ -14,10 +14,14 @@
 import type { APIRoute } from 'astro';
 import { computeEntryStates } from '../../lib/libAliceNegative/libStateEngine.ts';
 import { computeDynamics } from '../../lib/libAliceNegative/libDynamics.ts';
+import { OWNER_SUBJECT_ID } from '../../lib/libDb.ts';
 
 export const GET: APIRoute = async () => {
+  // Owner-only AN dynamics endpoint.
+  // TODO(step5): review.
+  const subjectId = OWNER_SUBJECT_ID;
   try {
-    const states = await computeEntryStates();
+    const states = await computeEntryStates(subjectId);
     const dynamics = computeDynamics(states);
 
     return new Response(JSON.stringify({

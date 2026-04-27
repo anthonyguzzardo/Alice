@@ -12,11 +12,14 @@ import type { APIRoute } from 'astro';
 import type { WitnessState } from '../../lib/libAliceNegative/libTypes.ts';
 import { DEFAULT_WITNESS } from '../../lib/libAliceNegative/libTypes.ts';
 import { loadPersistedTraits } from '../../lib/libAliceNegative/libInterpreter.ts';
-import sql from '../../lib/libDb.ts';
+import sql, { OWNER_SUBJECT_ID } from '../../lib/libDb.ts';
 
 export const GET: APIRoute = async () => {
+  // AN endpoint, owner-only. Minimal-touch threading per AN deprioritization.
+  // TODO(step5): review.
+  const subjectId = OWNER_SUBJECT_ID;
   try {
-    const traits = await loadPersistedTraits();
+    const traits = await loadPersistedTraits(subjectId);
 
     if (!traits) {
       return new Response(JSON.stringify(DEFAULT_WITNESS), {
@@ -27,11 +30,12 @@ export const GET: APIRoute = async () => {
     const [countRow] = await sql`
       SELECT COUNT(*)::int as c FROM tb_session_summaries ss
       JOIN tb_questions q ON ss.question_id = q.question_id
-      WHERE q.question_source_id != 3
+      WHERE q.subject_id = ${subjectId}
+        AND q.question_source_id != 3
     `;
     const currentCount = (countRow as { c: number }).c;
 
-    const state = await computeMetadata(currentCount, traits);
+    const state = await computeMetadata(subjectId, currentCount, traits);
 
     return new Response(JSON.stringify(state), {
       headers: { 'Content-Type': 'application/json' },
@@ -44,14 +48,15 @@ export const GET: APIRoute = async () => {
   }
 };
 
-async function computeMetadata(currentCount: number, traits: import('../../lib/libAliceNegative/libTypes.ts').WitnessTraits): Promise<WitnessState> {
+async function computeMetadata(subjectId: number, currentCount: number, traits: import('../../lib/libAliceNegative/libTypes.ts').WitnessTraits): Promise<WitnessState> {
   const mass = Math.min(1, Math.log(1 + currentCount) / Math.log(501));
 
   const lastEntryRows = await sql`
     SELECT q.scheduled_for
     FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
-    WHERE q.question_source_id != 3
+    WHERE q.subject_id = ${subjectId}
+      AND q.question_source_id != 3
     ORDER BY q.scheduled_for DESC LIMIT 1
   `;
   const lastEntry = (lastEntryRows[0] as { scheduled_for: string }) ?? null;

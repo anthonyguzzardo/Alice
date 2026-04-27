@@ -11,10 +11,14 @@
 
 import type { APIRoute } from 'astro';
 import { computeVariantTree, SIGNAL_FAMILIES } from '../../lib/libSignalFamilies.ts';
+import { OWNER_SUBJECT_ID } from '../../lib/libDb.ts';
 
 export const GET: APIRoute = async () => {
+  // Owner-only ablation endpoint.
+  // TODO(step5): review.
+  const subjectId = OWNER_SUBJECT_ID;
   try {
-    const result = await computeVariantTree();
+    const result = await computeVariantTree(subjectId);
 
     // Strip full baseline states to keep response lean — frontend only needs summaries
     const { baseline, ...rest } = result;

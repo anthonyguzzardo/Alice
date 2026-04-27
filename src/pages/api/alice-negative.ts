@@ -9,7 +9,7 @@
  *   Lexical diversity   — McCarthy & Jarvis (2010) MATTR
  */
 import type { APIRoute } from 'astro';
-import sql from '../../lib/libDb.ts';
+import sql, { OWNER_SUBJECT_ID } from '../../lib/libDb.ts';
 import type { AliceNegativeSignal, AliceNegativeSignalRaw } from '../../lib/libAliceNegative/libTypes.ts';
 import {
   avg, variance, stddev, clamp, percentileRank,
@@ -222,10 +222,14 @@ function computeOutlierFreq(all: SessionDerived[]): number {
 // ─── Main handler ───────────────────────────────────────────────────
 
 export const GET: APIRoute = async () => {
+  // AN endpoint, owner-only. Minimal-touch threading per AN deprioritization.
+  // TODO(step5): review — AN scoped to owner subject; per-subject AN deferred.
+  const subjectId = OWNER_SUBJECT_ID;
   try {
     // ── Load all session rows ─────────────────────────────────────
     const allRows = await sql`
       SELECT * FROM tb_session_summaries
+      WHERE subject_id = ${subjectId}
       ORDER BY session_summary_id ASC
     ` as any[];
 
@@ -350,6 +354,7 @@ export const GET: APIRoute = async () => {
     // Consistency: regularity of gaps
     const entryDates = await sql`
       SELECT dttm_created_utc FROM tb_session_summaries
+      WHERE subject_id = ${subjectId}
       ORDER BY session_summary_id ASC
     ` as any[];
 
@@ -376,7 +381,8 @@ export const GET: APIRoute = async () => {
     const recentTexts = await sql`
       SELECT r.text FROM tb_responses r
       JOIN tb_questions q ON r.question_id = q.question_id
-      WHERE q.question_source_id != 3
+      WHERE q.subject_id = ${subjectId}
+        AND q.question_source_id != 3
       ORDER BY q.scheduled_for DESC LIMIT 7
     ` as Array<{ text: string }>;
 
@@ -392,13 +398,15 @@ export const GET: APIRoute = async () => {
     const [feedback] = await sql`
       SELECT COUNT(*) as total, SUM(landed) as landed
       FROM tb_question_feedback
+      WHERE subject_id = ${subjectId}
     ` as any[];
 
     // ── Shape ─────────────────────────────────────────────────────
     const shapeTexts = await sql`
       SELECT r.text FROM tb_responses r
       JOIN tb_questions q ON r.question_id = q.question_id
-      WHERE q.question_source_id != 3
+      WHERE q.subject_id = ${subjectId}
+        AND q.question_source_id != 3
       ORDER BY r.response_id DESC LIMIT ${RECENT_WINDOW}
     ` as Array<{ text: string }>;
 

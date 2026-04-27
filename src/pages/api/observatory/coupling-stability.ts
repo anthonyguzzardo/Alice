@@ -11,11 +11,15 @@
  */
 import type { APIRoute } from 'astro';
 import { computeCouplingStability } from '../../../lib/libCouplingStability.ts';
+import { OWNER_SUBJECT_ID } from '../../../lib/libDb.ts';
 import { logError } from '../../../lib/utlErrorLog.ts';
 
 export const GET: APIRoute = async () => {
+  // Owner-only observatory endpoint.
+  // TODO(step5): review — per-subject coupling stability if subjects ever surface here.
+  const subjectId = OWNER_SUBJECT_ID;
   try {
-    const result = await computeCouplingStability();
+    const result = await computeCouplingStability(subjectId);
 
     // Serialize trajectories with condensed window data
     const serializePair = (t: typeof result.allPairs[number]) => ({
