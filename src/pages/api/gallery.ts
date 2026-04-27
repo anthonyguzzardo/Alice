@@ -10,13 +10,14 @@ import sql, { OWNER_SUBJECT_ID } from '../../lib/libDb.ts';
 import { DEFAULT_WITNESS } from '../../lib/libAliceNegative/libTypes.ts';
 import { logError } from '../../lib/utlErrorLog.ts';
 
-export const GET: APIRoute = async () => {
-  // AN gallery, owner-only. Minimal-touch threading per AN deprioritization.
-  // TODO(step5): review.
-  const subjectId = OWNER_SUBJECT_ID;
-  try {
-  // Get distinct session days (by scheduled_for) with real responses
-  const sessionDays = await sql`
+export interface GallerySessionDay {
+  scheduled_for: string;
+  first_response_utc: string;
+  response_count: number;
+}
+
+export async function getGallerySessionDays(subjectId: number): Promise<GallerySessionDay[]> {
+  return await sql`
     SELECT q.scheduled_for, MIN(r.dttm_created_utc) as first_response_utc,
            COUNT(r.response_id)::int as response_count
     FROM tb_responses r
@@ -25,24 +26,35 @@ export const GET: APIRoute = async () => {
       AND q.question_source_id != 3
     GROUP BY q.scheduled_for
     ORDER BY q.scheduled_for ASC
-  ` as Array<{
-    scheduled_for: string;
-    first_response_utc: string;
-    response_count: number;
-  }>;
+  ` as GallerySessionDay[];
+}
 
-  // Get all witness states ordered by creation
-  const witnesses = await sql`
+export interface GalleryWitness {
+  witness_state_id: number;
+  entry_count: number;
+  traits_json: string;
+  dttm_created_utc: string;
+}
+
+export async function getGalleryWitnesses(subjectId: number): Promise<GalleryWitness[]> {
+  return await sql`
     SELECT witness_state_id, entry_count, traits_json, dttm_created_utc
     FROM tb_witness_states
     WHERE subject_id = ${subjectId}
     ORDER BY dttm_created_utc ASC
-  ` as Array<{
-    witness_state_id: number;
-    entry_count: number;
-    traits_json: string;
-    dttm_created_utc: string;
-  }>;
+  ` as GalleryWitness[];
+}
+
+export const GET: APIRoute = async () => {
+  // AN gallery, owner-only. Minimal-touch threading per AN deprioritization.
+  // TODO(step5): review.
+  const subjectId = OWNER_SUBJECT_ID;
+  try {
+  // Get distinct session days (by scheduled_for) with real responses
+  const sessionDays = await getGallerySessionDays(subjectId);
+
+  // Get all witness states ordered by creation
+  const witnesses = await getGalleryWitnesses(subjectId);
 
   // For each session day, find the most recent witness state created on or before
   // that day's last response. If none exists, use defaults.

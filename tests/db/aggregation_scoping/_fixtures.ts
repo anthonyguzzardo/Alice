@@ -553,6 +553,7 @@ export const FIXTURE_TABLES = [
   'tb_embeddings',
   'tb_semantic_signals',
   'tb_session_delta',
+  'tb_witness_states',
   'tb_session_summaries',
   'tb_responses',
   'tb_questions',
