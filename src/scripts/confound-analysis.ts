@@ -11,6 +11,7 @@
 import sql from '../lib/libDbPool.ts';
 import { parseSubjectIdArg } from '../lib/utlSubjectIdArg.ts';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 
 // ─── Load Rust engine ───────────────────────────────────────────────
 
@@ -202,7 +203,7 @@ function mannKendall(values: number[]): { isStationary: boolean; direction: stri
 
 // ─── Matched pair finding ───────────────────────────────────────────
 
-interface MatchedPair {
+export interface MatchedPair {
   date: string;
   journalQid: number;
   calibrationQid: number;
@@ -210,7 +211,7 @@ interface MatchedPair {
   calibrationHour: number;
 }
 
-async function findMatchedPairs(subjectId: number): Promise<MatchedPair[]> {
+export async function findMatchedPairs(subjectId: number): Promise<MatchedPair[]> {
   const rows = await sql`
     SELECT
       j.scheduled_for::text AS date,
@@ -246,6 +247,63 @@ async function findMatchedPairs(subjectId: number): Promise<MatchedPair[]> {
 
   return (rows as unknown as (MatchedPair & { calibrationQid: number | null })[])
     .filter(r => r.calibrationQid != null) as MatchedPair[];
+}
+
+// ─── IC fetching (Task B helpers) ───────────────────────────────────
+
+export interface ICRow {
+  date: string;
+  value: number;
+  qid: number;
+}
+
+export async function getJournalICRows(subjectId: number): Promise<ICRow[]> {
+  const rows = await sql`
+    SELECT q.scheduled_for::text AS date, ss.integrative_complexity AS value, q.question_id AS qid
+    FROM tb_semantic_signals ss
+    JOIN tb_questions q ON ss.question_id = q.question_id
+    WHERE q.subject_id = ${subjectId}
+      AND q.question_source_id != 3 AND q.scheduled_for IS NOT NULL AND ss.integrative_complexity IS NOT NULL
+  `;
+  return rows as unknown as ICRow[];
+}
+
+export async function getCalibrationICRows(subjectId: number): Promise<ICRow[]> {
+  const rows = await sql`
+    SELECT q.dttm_created_utc::date::text AS date, ss.integrative_complexity AS value, q.question_id AS qid
+    FROM tb_semantic_signals ss
+    JOIN tb_questions q ON ss.question_id = q.question_id
+    WHERE q.subject_id = ${subjectId}
+      AND q.question_source_id = 3 AND ss.integrative_complexity IS NOT NULL
+    ORDER BY q.dttm_created_utc ASC
+  `;
+  return rows as unknown as ICRow[];
+}
+
+// ─── DOW count helpers (Task D) ─────────────────────────────────────
+
+export async function getJournalDOWCounts(subjectId: number): Promise<number[]> {
+  const rows = await sql`
+    SELECT ss.day_of_week AS dow
+    FROM tb_questions q
+    JOIN tb_session_summaries ss ON q.question_id = ss.question_id
+    WHERE q.subject_id = ${subjectId} AND q.question_source_id != 3 AND q.scheduled_for IS NOT NULL
+  `;
+  const counts = new Array(7).fill(0) as number[];
+  for (const row of rows) counts[(row as { dow: number }).dow]!++;
+  return counts;
+}
+
+export async function getCalibrationDOWCounts(subjectId: number): Promise<number[]> {
+  const rows = await sql`
+    SELECT ss.day_of_week AS dow
+    FROM tb_questions q
+    JOIN tb_session_summaries ss ON q.question_id = ss.question_id
+    WHERE q.subject_id = ${subjectId} AND q.question_source_id = 3
+  `;
+  const counts = new Array(7).fill(0) as number[];
+  for (const row of rows) counts[(row as { dow: number }).dow]!++;
+  return counts;
 }
 
 // ─── Keystroke stream fetching ──────────────────────────────────────
@@ -470,42 +528,18 @@ async function main() {
   console.log(`\n  Method: Regress signal delta against time-of-day difference (journal hour - calibration hour).`);
   console.log(`  If the relationship is significant, the provocation effect is confounded with circadian timing.\n`);
 
-  // Integrative complexity
-  const icRows = await sql`
-    SELECT q.scheduled_for::text AS date, ss.integrative_complexity AS value
-    FROM tb_semantic_signals ss
-    JOIN tb_questions q ON ss.question_id = q.question_id
-    WHERE q.subject_id = ${subjectId}
-      AND ss.integrative_complexity IS NOT NULL
-  `;
-  const icByQid = new Map<string, Map<number, number>>();
   // Need journal + calibration IC values paired by date
-  const icJournal = await sql`
-    SELECT q.scheduled_for::text AS date, ss.integrative_complexity AS value, q.question_id AS "qid"
-    FROM tb_semantic_signals ss
-    JOIN tb_questions q ON ss.question_id = q.question_id
-    WHERE q.subject_id = ${subjectId}
-      AND q.question_source_id != 3 AND q.scheduled_for IS NOT NULL AND ss.integrative_complexity IS NOT NULL
-  `;
-  const icCalibration = await sql`
-    SELECT q.dttm_created_utc::date::text AS date, ss.integrative_complexity AS value, q.question_id AS "qid"
-    FROM tb_semantic_signals ss
-    JOIN tb_questions q ON ss.question_id = q.question_id
-    WHERE q.subject_id = ${subjectId}
-      AND q.question_source_id = 3 AND ss.integrative_complexity IS NOT NULL
-    ORDER BY q.dttm_created_utc ASC
-  `;
+  const icJournal = await getJournalICRows(subjectId);
+  const icCalibration = await getCalibrationICRows(subjectId);
 
   const icCalByDate = new Map<string, number>();
-  for (const row of icCalibration) {
-    const r = row as unknown as { date: string; value: number };
-    icCalByDate.set(r.date, r.value); // last calibration wins
+  for (const r of icCalibration) {
+    icCalByDate.set(r.date, r.value); // last calibration wins (ORDER BY ASC)
   }
 
   // Build IC delta + time-of-day difference vectors
   const icData: { date: string; icDelta: number; todDiff: number }[] = [];
-  for (const row of icJournal) {
-    const r = row as unknown as { date: string; value: number };
+  for (const r of icJournal) {
     const calIC = icCalByDate.get(r.date);
     const pair = pairs.find(p => p.date === r.date);
     if (calIC == null || !pair) continue;
@@ -662,23 +696,10 @@ async function main() {
   const DOW_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
   // Fetch all sessions for DOW distribution (not just pairs)
-  const allJournalDOW = await sql`
-    SELECT ss.day_of_week AS "dow"
-    FROM tb_questions q
-    JOIN tb_session_summaries ss ON q.question_id = ss.question_id
-    WHERE q.subject_id = ${subjectId} AND q.question_source_id != 3 AND q.scheduled_for IS NOT NULL
-  `;
-  const allCalDOW = await sql`
-    SELECT ss.day_of_week AS "dow"
-    FROM tb_questions q
-    JOIN tb_session_summaries ss ON q.question_id = ss.question_id
-    WHERE q.subject_id = ${subjectId} AND q.question_source_id = 3
-  `;
-
-  const jDOWCounts = new Array(7).fill(0);
-  const cDOWCounts = new Array(7).fill(0);
-  for (const row of allJournalDOW) (jDOWCounts as number[])[(row as { dow: number }).dow]++;
-  for (const row of allCalDOW) (cDOWCounts as number[])[(row as { dow: number }).dow]++;
+  const jDOWCounts = await getJournalDOWCounts(subjectId);
+  const cDOWCounts = await getCalibrationDOWCounts(subjectId);
+  const jDOWTotal = jDOWCounts.reduce((s, n) => s + n, 0);
+  const cDOWTotal = cDOWCounts.reduce((s, n) => s + n, 0);
 
   console.log(`\n  ── DAY-OF-WEEK DISTRIBUTION ──`);
   console.log(`  ${'Day'.padEnd(5)} | ${'Journal'.padStart(8)} | ${'Calibration'.padStart(12)}`);
@@ -686,7 +707,7 @@ async function main() {
   for (let d = 0; d < 7; d++) {
     console.log(`  ${DOW_NAMES[d]!.padEnd(5)} | ${String(jDOWCounts[d]).padStart(8)} | ${String(cDOWCounts[d]).padStart(12)}`);
   }
-  console.log(`  Total | ${String((allJournalDOW as unknown[]).length).padStart(8)} | ${String((allCalDOW as unknown[]).length).padStart(12)}`);
+  console.log(`  Total | ${String(jDOWTotal).padStart(8)} | ${String(cDOWTotal).padStart(12)}`);
 
   // Within-day ordering
   console.log(`\n  ── WITHIN-DAY ORDERING ──`);
@@ -735,7 +756,13 @@ async function main() {
   await sql.end();
 }
 
-main().catch(err => {
-  console.error(err);
-  process.exit(1);
-});
+// Only invoke main() when the file is run directly (e.g.
+// `npx tsx src/scripts/confound-analysis.ts`). When imported by tests for
+// the exported helpers, main() must not run — its sql.end() would close
+// the shared connection pool and break unrelated test queries.
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  main().catch(err => {
+    console.error(err);
+    process.exit(1);
+  });
+}

@@ -276,6 +276,14 @@ interface InsertSessionOptions {
    * parses either as TIMESTAMPTZ.
    */
   dttmCreatedUtc?: string;
+  /** Override tb_session_summaries.hour_of_day (default: 12). Required by
+   *  confound-analysis matched-pair tests where calibrationHour is a
+   *  load-bearing assertion to detect inner-subquery scoping mutations. */
+  hourOfDay?: number;
+  /** Override tb_session_summaries.day_of_week (default: 3). Required by
+   *  confound-analysis DOW count tests if per-bucket distribution matters
+   *  (sum-of-counts already differs even at default). */
+  dayOfWeek?: number;
 }
 
 /**
@@ -294,6 +302,8 @@ export async function insertJournalSession(
   const sourceId = opts.questionSourceId ?? 1;
   const deviceType = opts.deviceType ?? 'test';
   const dttmCreatedUtc = opts.dttmCreatedUtc ?? null;
+  const hourOfDay = opts.hourOfDay ?? 12;
+  const dayOfWeek = opts.dayOfWeek ?? 3;
   const text = makeBodyText(profile, sessionIndex);
 
   // tb_questions. Calibration sessions (sourceId=3) have NULL scheduled_for in
@@ -357,7 +367,7 @@ export async function insertJournalSession(
       ${p.holdTimeMean}, ${p.holdTimeStd}, ${p.holdTimeCv},
       ${p.flightTimeMean}, ${p.flightTimeStd},
       ${p.mattr},
-      ${deviceType}, 12, 3
+      ${deviceType}, ${hourOfDay}, ${dayOfWeek}
     )
   `;
 
