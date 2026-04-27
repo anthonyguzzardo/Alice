@@ -8,6 +8,7 @@
  * Default: postgres://localhost/alice
  */
 
+import 'dotenv/config';
 import postgres from 'postgres';
 
 const connectionString = process.env.ALICE_PG_URL || 'postgres://localhost/alice';
