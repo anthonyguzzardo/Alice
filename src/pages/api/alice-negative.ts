@@ -19,6 +19,24 @@ import {
 
 const RECENT_WINDOW = 7;
 
+export interface QuestionFeedbackTotals {
+  total: number;
+  landed: number;
+}
+
+/** Sums tb_question_feedback rows for a subject: total feedback count
+ *  and the count of "landed" outcomes. Used by alice-negative's
+ *  relational-resonance computation; extracted for hotspot H scoping
+ *  verification (tests/db/aggregation_scoping). */
+export async function getQuestionFeedbackTotals(subjectId: number): Promise<QuestionFeedbackTotals> {
+  const [row] = await sql`
+    SELECT COUNT(*)::int as total, COALESCE(SUM(CASE WHEN landed THEN 1 ELSE 0 END), 0)::int as landed
+    FROM tb_question_feedback
+    WHERE subject_id = ${subjectId}
+  ` as Array<{ total: number; landed: number }>;
+  return row ?? { total: 0, landed: 0 };
+}
+
 // ─── Shape metrics ──────────────────────────────────────────────────
 
 function computeShapeMetrics(texts: string[]) {
@@ -395,11 +413,7 @@ export const GET: APIRoute = async () => {
         ? 1 - (uniqueWords.size / allWords.length) : 0.5;
     }
 
-    const [feedback] = await sql`
-      SELECT COUNT(*) as total, SUM(landed) as landed
-      FROM tb_question_feedback
-      WHERE subject_id = ${subjectId}
-    ` as any[];
+    const feedback = await getQuestionFeedbackTotals(subjectId);
 
     // ── Shape ─────────────────────────────────────────────────────
     const shapeTexts = await sql`
