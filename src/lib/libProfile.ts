@@ -37,14 +37,15 @@ const nn = (vals: (number | null)[]): number[] => vals.filter((v): v is number =
 
 // ─── Profile computation ──────────────────────────────────────────
 
-export async function updateProfile(questionId: number): Promise<void> {
+export async function updateProfile(subjectId: number, questionId: number): Promise<void> {
   try {
     // Calibration sessions (question_source_id = 3) are prompted neutral writing.
     // The profile models the person's natural writing process; including calibration
     // data would contaminate the ghost's motor fingerprint, digraph latencies, and
     // pause architecture via libReconstruction.ts.
     const sourceRows = await sql`
-      SELECT question_source_id FROM tb_questions WHERE question_id = ${questionId}
+      SELECT question_source_id FROM tb_questions
+      WHERE question_id = ${questionId} AND subject_id = ${subjectId}
     `;
     if (sourceRows.length === 0) return;
     if ((sourceRows[0] as { question_source_id: number }).question_source_id === 3) return;
@@ -71,7 +72,8 @@ export async function updateProfile(questionId: number): Promise<void> {
              ss.mattr
       FROM tb_session_summaries ss
       JOIN tb_questions q ON ss.question_id = q.question_id
-      WHERE q.question_source_id != 3
+      WHERE q.subject_id = ${subjectId}
+        AND q.question_source_id != 3
         AND NOT EXISTS (SELECT 1 FROM tb_semantic_signals sem WHERE sem.question_id = ss.question_id AND sem.paste_contaminated = true)
       ORDER BY ss.session_summary_id ASC
     ` as any[];
@@ -85,7 +87,8 @@ export async function updateProfile(questionId: number): Promise<void> {
              ms.hold_flight_rank_corr
       FROM tb_motor_signals ms
       JOIN tb_questions q ON ms.question_id = q.question_id
-      WHERE q.question_source_id != 3
+      WHERE q.subject_id = ${subjectId}
+        AND q.question_source_id != 3
         AND NOT EXISTS (SELECT 1 FROM tb_semantic_signals sem WHERE sem.question_id = ms.question_id AND sem.paste_contaminated = true)
     ` as any[];
 
@@ -95,7 +98,8 @@ export async function updateProfile(questionId: number): Promise<void> {
              ps.r_burst_count, ps.i_burst_count
       FROM tb_process_signals ps
       JOIN tb_questions q ON ps.question_id = q.question_id
-      WHERE q.question_source_id != 3
+      WHERE q.subject_id = ${subjectId}
+        AND q.question_source_id != 3
         AND NOT EXISTS (SELECT 1 FROM tb_semantic_signals sem WHERE sem.question_id = ps.question_id AND sem.paste_contaminated = true)
     ` as any[];
 
@@ -104,7 +108,8 @@ export async function updateProfile(questionId: number): Promise<void> {
       SELECT bs.question_id, bs.burst_index, bs.burst_char_count
       FROM tb_burst_sequences bs
       JOIN tb_questions q ON bs.question_id = q.question_id
-      WHERE q.question_source_id != 3
+      WHERE q.subject_id = ${subjectId}
+        AND q.question_source_id != 3
         AND NOT EXISTS (SELECT 1 FROM tb_semantic_signals sem WHERE sem.question_id = bs.question_id AND sem.paste_contaminated = true)
       ORDER BY bs.question_id, bs.burst_index
     ` as any[];
@@ -115,7 +120,8 @@ export async function updateProfile(questionId: number): Promise<void> {
              rs.burst_duration_ms, rs.is_leading_edge
       FROM tb_rburst_sequences rs
       JOIN tb_questions q ON rs.question_id = q.question_id
-      WHERE q.question_source_id != 3
+      WHERE q.subject_id = ${subjectId}
+        AND q.question_source_id != 3
         AND NOT EXISTS (SELECT 1 FROM tb_semantic_signals sem WHERE sem.question_id = rs.question_id AND sem.paste_contaminated = true)
       ORDER BY rs.question_id, rs.burst_index
     ` as any[];
@@ -125,7 +131,8 @@ export async function updateProfile(questionId: number): Promise<void> {
       SELECT r.text
       FROM tb_responses r
       JOIN tb_questions q ON r.question_id = q.question_id
-      WHERE q.question_source_id != 3
+      WHERE q.subject_id = ${subjectId}
+        AND q.question_source_id != 3
         AND NOT EXISTS (SELECT 1 FROM tb_semantic_signals sem WHERE sem.question_id = r.question_id AND sem.paste_contaminated = true)
       ORDER BY q.scheduled_for ASC
     ` as any[];
@@ -307,10 +314,10 @@ export async function updateProfile(questionId: number): Promise<void> {
 
     // Delete existing row and insert fresh (simpler than massive upsert)
     await sql.begin(async (tx) => {
-      await tx`DELETE FROM tb_personal_profile`;
+      await tx`DELETE FROM tb_personal_profile WHERE subject_id = ${subjectId}`;
       await tx`
         INSERT INTO tb_personal_profile (
-          session_count, last_question_id,
+          subject_id, session_count, last_question_id,
           digraph_aggregate_json,
           ex_gaussian_mu_mean, ex_gaussian_mu_std,
           ex_gaussian_sigma_mean, ex_gaussian_sigma_std,
@@ -335,7 +342,7 @@ export async function updateProfile(questionId: number): Promise<void> {
           iki_autocorrelation_lag1_mean, hold_flight_rank_correlation,
           dttm_updated_utc
         ) VALUES (
-          ${summaries.length}, ${questionId},
+          ${subjectId}, ${summaries.length}, ${questionId},
           ${digraphJson},
           ${muVals.length > 0 ? mean(muVals) : null}, ${muVals.length > 1 ? std(muVals) : null},
           ${sigmaVals.length > 0 ? mean(sigmaVals) : null}, ${sigmaVals.length > 1 ? std(sigmaVals) : null},
@@ -375,6 +382,6 @@ export async function updateProfile(questionId: number): Promise<void> {
       `;
     });
   } catch (err) {
-    logError('profile.update', err, { questionId });
+    logError('profile.update', err, { subjectId, questionId });
   }
 }
