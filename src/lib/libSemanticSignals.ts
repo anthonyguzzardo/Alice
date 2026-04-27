@@ -294,7 +294,18 @@ export async function computeDiscourseCoherence(text: string): Promise<Discourse
   if (sentences.length < 5) return none;
 
   // Dynamic import to avoid circular dependency
-  const { generateEmbeddings } = await import('./libEmbeddings.ts');
+  const { generateEmbeddings, isTeiAvailable } = await import('./libEmbeddings.ts');
+
+  // TEI pre-flight: skip cleanly when the embedder is offline (e.g. running
+  // `npm run dev` instead of `dev:full`). Without this, generateEmbeddings
+  // dumps a stack trace per sentence; with this, one line and we move on.
+  // Discourse coherence is recoverable later once TEI is up: the response
+  // text is preserved, so a backfill script can recompute these signals.
+  if (!(await isTeiAvailable())) {
+    console.log('[semantic] TEI offline — discourse coherence deferred (response text preserved for later backfill)');
+    return none;
+  }
+
   const embeddings = await generateEmbeddings(sentences);
 
   // Filter out failed embeddings
