@@ -413,7 +413,7 @@ COMMIT;
 \echo '--- 030: migration complete (subject-id columns added, backfilled, constrained) ---'
 
 -- ============================================================================
--- BLOCK 7 — DROP empty subject-variant tables (DO NOT UNCOMMENT UNTIL STEP 9)
+-- BLOCK 7 — DROP empty subject-variant tables (SUPERSEDED — see 032a/032b)
 -- ============================================================================
 --
 -- These tables have zero rows on production today. They were the original
@@ -424,22 +424,20 @@ COMMIT;
 --   tb_subject_session_summaries   → folded into tb_session_summaries
 --   tb_scheduled_questions         → folded into tb_questions (with corpus_question_id column)
 --
--- Step 9 of the unification plan is when these drops execute, AFTER:
---   - Step 4: libDb function signatures threaded with subject_id
---   - Step 5: all 47 query sites updated
---   - Step 6: 12 aggregation hotspots reworked + tested
---   - Step 7: lint rule landed
---   - Step 8: encryption uniformity applied
+-- Step 9 of the unification plan executes the cutover and the drops via
+-- migrations 032a + 032b instead of uncommenting this block:
 --
--- Reversibility note: every step before this drop block is reversible.
--- DROPs below are the point of no return. Keep commented until Step 9.
+--   032a — adds tb_questions.corpus_question_id (additive). Run BEFORE app deploy.
+--   App deploy — Step 9 cutover code (subject API → unified tables).
+--   032b — verifies zero rows in legacy tables, then DROPs them. Run AFTER app deploy.
+--
+-- The split mirrors the 031a/031b discipline: additive changes deploy ahead
+-- of code; destructive changes deploy behind code, gated on a runtime
+-- assertion. The block below is left in place as historical context — do not
+-- run it. See db/sql/migrations/030_STEP9_CUTOVER.md for the full sequence.
 --
 -- BEGIN;
 -- DROP TABLE IF EXISTS tb_subject_responses;
 -- DROP TABLE IF EXISTS tb_subject_session_summaries;
 -- DROP TABLE IF EXISTS tb_scheduled_questions;
 -- COMMIT;
---
--- After running the above in Step 9, also delete:
---   db/sql/session_summary_divergence.allow
--- (the divergence it documented dissolves under the unified schema).
