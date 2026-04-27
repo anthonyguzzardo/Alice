@@ -13,6 +13,7 @@
 import 'dotenv/config';
 import sql from '../lib/libDbPool.ts';
 import { createSubject } from '../lib/libSubjectAuth.ts';
+import { seedUpcomingQuestions } from '../lib/libSchedule.ts';
 
 async function main() {
   const [, , username, tempPassword, ianaTimezone, displayName] = process.argv;
@@ -38,7 +39,15 @@ async function main() {
     displayName: displayName ?? null,
   });
 
+  // Plant the 30 seed questions starting today. Every subject gets the same
+  // first 30 days of journey — non-negotiable. Without this they would log in
+  // and see `no_question_scheduled` from /api/subject/today and have nothing
+  // to do. seedUpcomingQuestions is idempotent, so a re-run on an existing
+  // subject is a no-op.
+  await seedUpcomingQuestions(subjectId, 30);
+
   console.log(`Created subject_id ${subjectId} (username "${username}", tz ${ianaTimezone || 'UTC'}).`);
+  console.log(`Seeded 30 starting-day questions for the next 30 days.`);
   console.log('Hand the username and temp password to the subject out-of-band.');
   console.log('They will be forced to reset the password on first login.');
 
