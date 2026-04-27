@@ -20,6 +20,24 @@ const TEI_URL = process.env.ALICE_TEI_URL ?? 'http://localhost:8090';
 const MATRYOSHKA_DIM = 512;
 const MODEL_NAME = 'Qwen3-Embedding-0.6B';
 
+/**
+ * Fast probe of the local TEI server. Used by the signal worker to skip the
+ * embed stage cleanly when running `npm run dev` (no embedder) instead of
+ * spamming ECONNREFUSED stack traces. Pending embeds are drained later via
+ * `npm run dev:full` + `npm run backfill`.
+ */
+export async function isTeiAvailable(timeoutMs = 500): Promise<boolean> {
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs);
+    const resp = await fetch(`${TEI_URL}/health`, { signal: ctrl.signal });
+    clearTimeout(t);
+    return resp.ok;
+  } catch {
+    return false;
+  }
+}
+
 const SOURCE_IDS = {
   response: 1,
 } as const;

@@ -28,8 +28,7 @@ import sql, {
 import { computeAndPersistDerivedSignals } from './libSignalPipeline.ts';
 import { computePriorDayDelta } from './libDailyDelta.ts';
 import { runGeneration } from './libGenerate.ts';
-import { renderWitnessState } from './libAliceNegative/libRenderWitness.ts';
-import { embedResponse } from './libEmbeddings.ts';
+import { embedResponse, isTeiAvailable } from './libEmbeddings.ts';
 import { runCalibrationExtraction } from './libCalibrationExtract.ts';
 import { snapshotCalibrationBaselinesAfterSubmit } from './libCalibrationDrift.ts';
 import { getEngineProvenanceId } from './libEngineProvenance.ts';
@@ -223,28 +222,30 @@ async function runResponsePipeline(job: SignalJobRow): Promise<void> {
   try { await runGeneration(job.subject_id); }
   catch (err) { logError('worker.generation', err, ctx); }
 
-  try { await renderWitnessState(job.subject_id); }
-  catch (err) { logError('worker.witness', err, ctx); }
-
-  // Embed: look up response + question text by question_id.
-  // The semantic baseline updater inside computeAndPersistDerivedSignals
-  // queries tb_embeddings via HNSW for topic-matched z-scores, so the
-  // embedding must exist before derived signals run.
+  // Embed: defer cleanly if TEI is offline (e.g. running `npm run dev` instead
+  // of `npm run dev:full`). The submission's response is preserved; the embed
+  // gets backfilled later via `npm run backfill`. We skip without throwing so
+  // the job completes and other stages aren't blocked.
   try {
-    const rows = await sql`
-      SELECT r.response_id AS "responseId",
-             r.text AS "responseText",
-             q.text AS "questionText",
-             q.scheduled_for AS "scheduledFor"
-      FROM tb_responses r
-      JOIN tb_questions q ON r.question_id = q.question_id
-      WHERE q.subject_id = ${job.subject_id} AND q.question_id = ${job.question_id}
-      LIMIT 1
-    `;
-    const r = rows[0] as { responseId: number; responseText: string; questionText: string; scheduledFor: string | null } | undefined;
-    if (r) {
-      const dateStr = r.scheduledFor ?? localDateStr();
-      await embedResponse(job.subject_id, r.responseId, r.questionText, r.responseText, dateStr);
+    if (!(await isTeiAvailable())) {
+      console.log(
+        `[embed] TEI offline — embedding deferred for response on q${job.question_id}. ` +
+        `Run \`npm run dev:full\` (or start TEI separately) and then \`npm run backfill\` to drain pending embeds.`
+      );
+    } else {
+      const qInfo = await getQuestionTextById(job.subject_id, job.question_id);
+      const responseText = await getResponseText(job.subject_id, job.question_id);
+      const [meta] = await sql`
+        SELECT response_id AS "responseId", scheduled_for AS "scheduledFor"
+        FROM tb_responses r
+        JOIN tb_questions q ON r.question_id = q.question_id
+        WHERE q.subject_id = ${job.subject_id} AND q.question_id = ${job.question_id}
+        LIMIT 1
+      ` as [{ responseId: number; scheduledFor: string | null }];
+      if (qInfo && responseText !== null && meta) {
+        const dateStr = meta.scheduledFor ?? localDateStr();
+        await embedResponse(job.subject_id, meta.responseId, qInfo.text, responseText, dateStr);
+      }
     }
   } catch (err) {
     logError('worker.embed', err, ctx);
