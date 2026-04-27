@@ -257,6 +257,7 @@ interface InsertSessionOptions {
   scheduledFor: string; // 'YYYY-MM-DD'
   sessionIndex: number; // 0-based; used for distinguishing texts
   questionSourceId?: number; // default 1 (journal); 3 = calibration
+  deviceType?: string;       // default 'test'; calibration baselines bin by this
 }
 
 /**
@@ -273,9 +274,13 @@ export async function insertJournalSession(
 ): Promise<number> {
   const { subjectId, profile, scheduledFor, sessionIndex } = opts;
   const sourceId = opts.questionSourceId ?? 1;
+  const deviceType = opts.deviceType ?? 'test';
   const text = makeBodyText(profile, sessionIndex);
 
-  // tb_questions
+  // tb_questions. Calibration sessions (sourceId=3) have NULL scheduled_for in
+  // production (they're triggered, not scheduled); we still pass scheduledFor
+  // here for fixture predictability — the libCalibrationDrift baseline reads
+  // tb_session_summaries directly and doesn't gate on scheduled_for.
   const [qRow] = await sql`
     INSERT INTO tb_questions (subject_id, text, question_source_id, scheduled_for)
     VALUES (${subjectId}, ${`q for ${profile.signatureWord} session ${sessionIndex}`}, ${sourceId}, ${scheduledFor})
@@ -325,7 +330,7 @@ export async function insertJournalSession(
       ${p.holdTimeMean}, ${p.holdTimeStd}, ${p.holdTimeCv},
       ${p.flightTimeMean}, ${p.flightTimeStd},
       ${p.mattr},
-      'test', 12, 3
+      ${deviceType}, 12, 3
     )
   `;
 
@@ -398,6 +403,46 @@ export interface TwoSubjectFixture {
   ownerLatestQuestionId: number;
 }
 
+interface InsertCalibrationOptions {
+  subjectId: number;
+  profile: ProfileFixture;
+  count: number;            // how many calibration sessions to insert
+  startIndex?: number;      // for distinct dates across multiple calls
+  deviceType?: string;      // default 'test'
+  startDate?: string;       // 'YYYY-MM-DD'; default '2026-02-01'
+}
+
+/**
+ * Insert N calibration sessions for a subject. Calibration shares the same
+ * row shape as journal (tb_session_summaries fields) — what distinguishes
+ * them in the schema is question_source_id = 3.
+ *
+ * Returns the inserted question IDs.
+ */
+export async function insertCalibrationSessions(
+  sql: Sql,
+  opts: InsertCalibrationOptions,
+): Promise<number[]> {
+  const startIndex = opts.startIndex ?? 0;
+  const deviceType = opts.deviceType ?? 'test';
+  const startDate = opts.startDate ?? '2026-02-01';
+  const startDay = parseInt(startDate.slice(8, 10), 10);
+  const month = startDate.slice(0, 7);
+  const ids: number[] = [];
+  for (let i = 0; i < opts.count; i++) {
+    const date = `${month}-${String(startDay + startIndex + i).padStart(2, '0')}`;
+    ids.push(await insertJournalSession(sql, {
+      subjectId: opts.subjectId,
+      profile: opts.profile,
+      scheduledFor: date,
+      sessionIndex: startIndex + i,
+      questionSourceId: 3,
+      deviceType,
+    }));
+  }
+  return ids;
+}
+
 /**
  * Seed both subjects + insert N journal sessions per subject, alternating
  * dates so neither subject's "most recent session" is ambiguous. Returns
@@ -459,6 +504,7 @@ export async function seedTwoSubjectFingerprintFixture(
  */
 export const FIXTURE_TABLES = [
   'tb_reconstruction_residuals',
+  'tb_calibration_baselines_history',
   'tb_personal_profile',
   'tb_rburst_sequences',
   'tb_burst_sequences',
