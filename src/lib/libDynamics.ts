@@ -29,7 +29,7 @@
  *   This is the Ornstein-Uhlenbeck mean-reversion parameter estimate.
  */
 
-import { avg, stddev } from './libHelpers.ts';
+import { avg, stddev } from './libBehavioralHelpers.ts';
 import { STATE_DIMENSIONS } from './libStateEngine.ts';
 
 // ─── Types ──────────────────────────────────────────────────────────

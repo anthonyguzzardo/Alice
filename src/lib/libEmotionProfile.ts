@@ -20,8 +20,8 @@
  *   Cross-domain coupling — extends Critcher (Berkeley xLab) causal trait theories
  */
 
-import sql from '../libDb.ts';
-import { avg, stddev, percentileRank } from './libHelpers.ts';
+import sql from './libDb.ts';
+import { avg, stddev, percentileRank } from './libBehavioralHelpers.ts';
 import { type EntryState, STATE_DIMENSIONS, type StateDimension } from './libStateEngine.ts';
 
 // ─── Types ──────────────────────────────────────────────────────────

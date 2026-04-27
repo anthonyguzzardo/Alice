@@ -11,8 +11,8 @@
  * before the pipeline grows further.
  */
 
-import { loadSessions, computeEntryStates, STATE_DIMENSIONS, type EntryState } from './libAliceNegative/libStateEngine.ts';
-import { avg } from './libAliceNegative/libHelpers.ts';
+import { loadSessions, computeEntryStates, STATE_DIMENSIONS, type EntryState } from './libStateEngine.ts';
+import { avg } from './libBehavioralHelpers.ts';
 
 // ─── Signal Family Definitions ─────────────────────────────────────
 

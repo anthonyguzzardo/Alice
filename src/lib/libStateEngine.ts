@@ -27,8 +27,8 @@
  *   Normalized to [0, 1]. High convergence = multiple dimensions moved together.
  */
 
-import sql from '../libDb.ts';
-import { avg, stddev } from './libHelpers.ts';
+import sql from './libDb.ts';
+import { avg, stddev } from './libBehavioralHelpers.ts';
 
 // ─── Types ──────────────────────────────────────────────────────────
 

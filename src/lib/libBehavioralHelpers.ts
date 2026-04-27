@@ -1,6 +1,8 @@
 /**
  * Shared math utilities for behavioral signal computation.
- * Used by alice-negative.ts (signal pipeline) and signals.ts (formatting).
+ * Stats helpers (avg, stddev, percentileRank), MATTR, and the lexicon
+ * sets (COGNITIVE_WORDS, HEDGING_WORDS, FIRST_PERSON) used by libSignals,
+ * libLinguistic, libGenerate, etc.
  *
  * Research basis:
  *   MATTR — McCarthy & Jarvis (2010), validated for short texts

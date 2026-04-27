@@ -16,12 +16,12 @@ import sql, { OWNER_SUBJECT_ID } from '../../lib/libDb.ts';
 import { localDateStr } from '../../lib/utlDate.ts';
 import { readRecentErrors } from '../../lib/utlErrorLog.ts';
 import { hasNativeEngine } from '../../lib/libSignalsNative.ts';
+import { isTeiAvailable } from '../../lib/libEmbeddings.ts';
 import { decrypt } from '../../lib/libCrypto.ts';
 
 interface PipelineCoverage {
   embedded: boolean;
   entryState: boolean;
-  witnessRendered: boolean;
 }
 
 interface LastSessionStatus {
@@ -52,6 +52,10 @@ interface HealthResponse {
     sessionsMissingSummary: number;
     recentErrorCount: number;
     recentErrorJobs: string[];
+  };
+  pendingWork: {
+    embeds: number;
+    teiAvailable: boolean;
   };
   rustEngine: boolean;
   overall: 'green' | 'yellow' | 'red';
@@ -100,24 +104,17 @@ export const GET: APIRoute = async () => {
     const coverageRows = await sql`
       SELECT
         (SELECT 1 FROM tb_embeddings WHERE subject_id = ${subjectId} AND source_record_id = ${lastSession.response_id} AND embedding_source_id = 1 LIMIT 1) AS embedded,
-        (SELECT 1 FROM tb_entry_states WHERE subject_id = ${subjectId} AND response_id = ${lastSession.response_id} LIMIT 1) AS entry_state,
-        (SELECT 1 FROM tb_trait_dynamics WHERE subject_id = ${subjectId} AND entry_count = (
-           SELECT COUNT(*)::int FROM tb_session_summaries ss
-           JOIN tb_questions q ON ss.question_id = q.question_id
-           WHERE q.subject_id = ${subjectId} AND q.question_source_id != 3
-         ) LIMIT 1) AS witness_rendered
+        (SELECT 1 FROM tb_entry_states WHERE subject_id = ${subjectId} AND response_id = ${lastSession.response_id} LIMIT 1) AS entry_state
     `;
-    const coverage = coverageRows[0] as { embedded: number | null; entry_state: number | null; witness_rendered: number | null };
+    const coverage = coverageRows[0] as { embedded: number | null; entry_state: number | null };
 
     const pipeline: PipelineCoverage = {
       embedded: !!coverage.embedded,
       entryState: !!coverage.entry_state,
-      witnessRendered: !!coverage.witness_rendered,
     };
     const missing: string[] = [];
     if (!pipeline.embedded) missing.push('embedding');
     if (!pipeline.entryState) missing.push('entry_state');
-    if (!pipeline.witnessRendered) missing.push('witness');
 
     lastSessionStatus = {
       date: lastSession.day,
@@ -201,12 +198,33 @@ export const GET: APIRoute = async () => {
   }
   const uniqueErrorJobs = Array.from(new Set(recentErrorJobs));
 
+  // --- PENDING WORK --------------------------------------------------------
+  // Count responses that don't have an active embedding (excluding calibration).
+  // When TEI is offline (running `npm run dev` instead of `dev:full`) embeds
+  // accumulate here and the operator drains them via `npm run backfill`.
+  const [pendingEmbedsRow] = await sql`
+    SELECT COUNT(*)::int AS c
+    FROM tb_responses r
+    JOIN tb_questions q ON r.question_id = q.question_id
+    WHERE q.subject_id = ${subjectId}
+      AND q.question_source_id != 3
+      AND NOT EXISTS (
+        SELECT 1 FROM tb_embeddings e
+        WHERE e.embedding_source_id = 1
+          AND e.source_record_id = r.response_id
+          AND e.invalidated_at IS NULL
+      )
+  `;
+  const pendingEmbeds = (pendingEmbedsRow as { c: number }).c;
+  const teiAvailable = await isTeiAvailable();
+
   // --- OVERALL -------------------------------------------------------------
   let overall: 'green' | 'yellow' | 'red' = 'green';
   if (lastSessionStatus && !lastSessionStatus.fullyProcessed) overall = 'red';
   else if (recentErrors.length > 0) overall = 'red';
   else if (!todayQuestion || !tomorrowQuestion) overall = 'yellow';
   else if (duplicateScheduledQuestions > 0 || sessionsMissingSummary > 0) overall = 'yellow';
+  else if (pendingEmbeds > 0) overall = 'yellow';
 
   const body: HealthResponse = {
     today: {
@@ -227,6 +245,10 @@ export const GET: APIRoute = async () => {
       sessionsMissingSummary,
       recentErrorCount: recentErrors.length,
       recentErrorJobs: uniqueErrorJobs,
+    },
+    pendingWork: {
+      embeds: pendingEmbeds,
+      teiAvailable,
     },
     rustEngine: hasNativeEngine,
     overall,

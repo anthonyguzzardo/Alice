@@ -9,7 +9,6 @@
  * ============================================================================
  * This handler must NEVER trigger:
  *   - runGeneration()          — LLM call, owner-only
- *   - renderWitnessState()     — LLM call, owner-only
  *   - runCalibrationExtraction() — LLM call, owner-only
  *   - embedResponse()          — writes to owner RAG corpus, owner-only
  *   - computeAndPersistDerivedSignals() — writes to owner signal tables, owner-only
@@ -25,9 +24,9 @@
  *
  * NO background tasks. NO fire-and-forget. NO LLM calls. NO signal writes.
  * No `enqueueSignalJob` call: subject sessions deliberately do not produce
- * derived signals, witness states, embeddings, or daily deltas. If you are
- * adding code after the transaction commit, you are probably violating this
- * boundary. Stop and verify.
+ * derived signals, embeddings, or daily deltas. If you are adding code after
+ * the transaction commit, you are probably violating this boundary. Stop and
+ * verify.
  *
  * Storage (post migration 032): writes hit unified `tb_responses` and
  * `tb_session_summaries` tables (each carrying `subject_id NOT NULL` from

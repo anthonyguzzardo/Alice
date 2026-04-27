@@ -14,8 +14,8 @@
 
 import type { SessionSummaryInput } from './libDb.ts';
 import { getCalibrationSessionsWithText, getBurstSequence } from './libDb.ts';
-import type { DynamicsAnalysis } from './libAliceNegative/libDynamics.ts';
-import { avg, stddev, percentileRank, computeMATTR, COGNITIVE_WORDS } from './libAliceNegative/libHelpers.ts';
+import type { DynamicsAnalysis } from './libDynamics.ts';
+import { avg, stddev, percentileRank, computeMATTR, COGNITIVE_WORDS } from './libBehavioralHelpers.ts';
 
 // ─── Internal helpers ──────────────────────────────────────────────
 

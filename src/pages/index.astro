@@ -352,6 +352,28 @@
       .health-dot[data-status="yellow"] .pip { background: #c9a55e; }
       .health-dot[data-status="red"]    .pip { background: #b5603f; }
 
+      /* Pending-work badge: count of unembedded responses awaiting TEI/backfill. */
+      .pending-badge {
+        position: absolute;
+        top: -4px;
+        right: -4px;
+        min-width: 14px;
+        height: 14px;
+        padding: 0 4px;
+        font-family: 'SF Mono', 'Menlo', monospace;
+        font-size: 9px;
+        font-weight: 600;
+        line-height: 14px;
+        text-align: center;
+        color: #1a1a1a;
+        background: #c9a55e;
+        border-radius: 7px;
+        letter-spacing: 0;
+        box-shadow: 0 0 0 1px var(--bg);
+      }
+      .pending-badge[hidden] { display: none; }
+      .pending-badge.tei-on { background: #6b8e6b; color: #f5f2ed; }
+
       .health-panel {
         position: absolute;
         top: calc(100% + 0.6rem);
@@ -409,6 +431,15 @@
       .health-panel .stage.ok  { color: #6b8e6b; border-color: #6b8e6b55; }
       .health-panel .stage.bad { color: #b5603f; border-color: #b5603f55; }
       .health-panel .empty { font-style: italic; color: var(--text-faint); font-size: 0.85rem; }
+      .health-panel code {
+        font-family: 'SF Mono', 'Menlo', monospace;
+        font-size: 0.78rem;
+        background: var(--bg-pre);
+        color: var(--text-muted);
+        padding: 0.1rem 0.35rem;
+        border-radius: 3px;
+        font-style: normal;
+      }
 
       .nav-menu {
         position: relative;
@@ -491,7 +522,6 @@
           <a href="/landing">Public Alice</a>
           <a href="/papers">Papers</a>
           <div class="nav-divider"></div>
-          <a href="/alice-negative">Alice Negative</a>
           <a href="/observatory">Observatory</a>
           <div class="nav-divider"></div>
           <a href="/dev/signals">Signal Sandbox</a>
@@ -500,6 +530,7 @@
       <div class="health-wrap">
         <button class="health-dot" id="health-dot" aria-label="Pipeline health" title="Pipeline health">
           <span class="pip"></span>
+          <span class="pending-badge" id="pending-badge" hidden>0</span>
         </button>
         <div class="health-panel" id="health-panel" role="dialog" aria-label="Pipeline status"></div>
       </div>
@@ -595,6 +626,7 @@
       // no signal values). The panel renders counts + booleans only.
       const healthDot = document.getElementById('health-dot')!;
       const healthPanel = document.getElementById('health-panel')!;
+      const pendingBadge = document.getElementById('pending-badge')!;
 
       healthDot.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -605,6 +637,24 @@
 
       function renderHealth(h: any) {
         healthDot.setAttribute('data-status', h.overall);
+
+        // Pending-work badge: count of embeds waiting on TEI/backfill. Yellow
+        // background when TEI is offline (action needed), green when online
+        // (next backfill drains automatically).
+        const pw = h.pendingWork;
+        if (pw && pw.embeds > 0) {
+          pendingBadge.textContent = String(pw.embeds);
+          pendingBadge.classList.toggle('tei-on', !!pw.teiAvailable);
+          pendingBadge.removeAttribute('hidden');
+          healthDot.setAttribute('aria-label',
+            `Pipeline health — ${pw.embeds} embed${pw.embeds === 1 ? '' : 's'} pending` +
+            (pw.teiAvailable ? '' : ', TEI offline')
+          );
+        } else {
+          pendingBadge.setAttribute('hidden', '');
+          pendingBadge.classList.remove('tei-on');
+          healthDot.setAttribute('aria-label', 'Pipeline health');
+        }
         const row = (label: string, val: string, cls = '') =>
           `<div class="row ${cls}"><span>${label}</span><span class="val">${val}</span></div>`;
 
@@ -633,7 +683,6 @@
             stage('state', 'entryState') +
             stage('observe', 'observed') +
             stage('suppress', 'suppressedQuestion') +
-            stage('witness', 'witnessRendered') +
             '</div>';
         }
 
@@ -663,6 +712,22 @@
           }
           if (a.sessionsMissingSummary > 0) {
             html += row('Sessions missing summary', String(a.sessionsMissingSummary), 'warn');
+          }
+        }
+
+        // PENDING WORK
+        if (pw) {
+          html += '<div class="section">Pending work</div>';
+          if (pw.embeds === 0) {
+            html += '<div class="empty">none</div>';
+          } else {
+            const teiLabel = pw.teiAvailable ? 'TEI online' : 'TEI offline';
+            const teiCls   = pw.teiAvailable ? '' : 'warn';
+            html += row(`Embeds pending`, String(pw.embeds), 'warn');
+            html += row(`Embedder`, teiLabel, teiCls);
+            if (!pw.teiAvailable) {
+              html += '<div class="empty" style="margin-top:0.4rem;">Run <code>npm run dev:full</code>, then <code>npm run backfill</code> to drain.</div>';
+            }
           }
         }
 

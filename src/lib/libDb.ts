@@ -1596,37 +1596,7 @@ export async function savePromptTrace(trace: PromptTraceInput): Promise<void> {
 }
 
 // ----------------------------------------------------------------------------
-// @region state -- saveWitnessState, getLatestWitnessState, EntryStateRow, saveEntryState, getAllEntryStates, getEntryStateCount, SemanticStateRow, saveSemanticState, saveSemanticDynamics, saveSemanticCoupling, TraitDynamicRow, saveTraitDynamics, getLatestTraitDynamics, saveCouplingMatrix, getLatestCouplingMatrix, saveEmotionBehaviorCoupling, getLatestEmotionBehaviorCoupling
-// WITNESS STATE
-// ----------------------------------------------------------------------------
-
-export async function saveWitnessState(subjectId: number, entryCount: number, traitsJson: string, signalsJson: string, modelName = 'claude-sonnet-4-20250514'): Promise<number> {
-  const [row] = await sql`
-    INSERT INTO tb_witness_states (subject_id, entry_count, traits_json, signals_json, model_name)
-    VALUES (${subjectId}, ${entryCount}, ${traitsJson}, ${signalsJson}, ${modelName})
-    RETURNING witness_state_id
-  `;
-  return row.witness_state_id;
-}
-
-export async function getLatestWitnessState(subjectId: number): Promise<{ witness_state_id: number; entry_count: number; traits_json: string; signals_json: string } | null> {
-  const rows = await sql`
-    SELECT witness_state_id, entry_count, traits_json, signals_json
-    FROM tb_witness_states
-    WHERE subject_id = ${subjectId}
-    ORDER BY witness_state_id DESC LIMIT 1
-  `;
-  if (!rows[0]) return null;
-  const row = rows[0] as Record<string, unknown>;
-  // JSONB columns auto-parsed by postgres driver; callers expect strings
-  return {
-    witness_state_id: row.witness_state_id as number,
-    entry_count: row.entry_count as number,
-    traits_json: typeof row.traits_json === 'object' ? JSON.stringify(row.traits_json) : row.traits_json as string,
-    signals_json: typeof row.signals_json === 'object' ? JSON.stringify(row.signals_json) : row.signals_json as string,
-  };
-}
-
+// @region state -- EntryStateRow, saveEntryState, getAllEntryStates, getEntryStateCount, SemanticStateRow, saveSemanticState, saveSemanticDynamics, saveSemanticCoupling, TraitDynamicRow, saveTraitDynamics, getLatestTraitDynamics, saveCouplingMatrix, getLatestCouplingMatrix, saveEmotionBehaviorCoupling, getLatestEmotionBehaviorCoupling
 // ----------------------------------------------------------------------------
 // ENTRY STATES (7D deterministic behavioral state vectors)
 // ----------------------------------------------------------------------------

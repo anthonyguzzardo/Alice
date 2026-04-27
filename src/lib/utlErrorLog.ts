@@ -2,8 +2,8 @@
  * Persistent error log for background/fire-and-forget jobs.
  *
  * Problem this solves: every background job in respond.ts (embed, observe,
- * generate, reflect, renderWitnessState) runs detached from the HTTP response
- * and uses .catch(err => console.error(...)). Those errors go to the dev
+ * generate, reflect) runs detached from the HTTP response and uses
+ * .catch(err => console.error(...)). Those errors go to the dev
  * server stdout and vanish when the terminal scrolls or the process restarts.
  * Result: silent pipeline failures (observations not written, entry_states
  * stuck, duplicate questions) that only surface when the user queries the

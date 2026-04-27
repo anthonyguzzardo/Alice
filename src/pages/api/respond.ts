@@ -12,8 +12,8 @@ import { coerceSessionSummary } from '../../lib/utlSessionSummary.ts';
 import { computeSessionMetadata } from '../../lib/libSessionMetadata.ts';
 import { ensureWorkerStarted } from '../../lib/libSignalWorker.ts';
 
-// Background pipeline (prior-day delta, generation, witness, embed, derived
-// signals) is enqueued as a durable job in tb_signal_jobs and executed by
+// Background pipeline (prior-day delta, generation, embed, derived signals)
+// is enqueued as a durable job in tb_signal_jobs and executed by
 // libSignalWorker. Pre-2026-04-25 this ran as a fire-and-forget async IIFE
 // after the HTTP response, which silently lost signals on process crash.
 // See GOTCHAS.md historical entry.

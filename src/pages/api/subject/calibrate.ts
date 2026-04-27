@@ -7,7 +7,6 @@
  * ============================================================================
  * This handler must NEVER trigger:
  *   - runGeneration()                        — LLM, owner-only
- *   - renderWitnessState()                   — LLM, owner-only
  *   - runCalibrationExtraction()             — LLM, owner-only
  *   - embedResponse()                        — TEI/Qwen, owner-only (local-mode draining)
  *   - computeAndPersistDerivedSignals()      — Rust pipeline, owner-only on prod

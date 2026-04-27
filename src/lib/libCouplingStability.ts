@@ -22,16 +22,16 @@ import {
   EMOTION_DIMENSIONS,
   type EmotionDimension,
   type EmotionEntry,
-} from './libAliceNegative/libEmotionProfile.ts';
+} from './libEmotionProfile.ts';
 import {
   computeEntryStates,
-} from './libAliceNegative/libStateEngine.ts';
+} from './libStateEngine.ts';
 import { computeBatchCorrelations as rustBatchCorrelations } from './libSignalsNative.ts';
 import {
   STATE_DIMENSIONS,
   type StateDimension,
   type EntryState,
-} from './libAliceNegative/libStateEngine.ts';
+} from './libStateEngine.ts';
 
 // ─── Configuration ──────────────────────────────────────────────────
 

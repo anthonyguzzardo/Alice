@@ -33,3 +33,5 @@ src-rs/*.node
 
 # large media
 *.mov
+
+marketplace-CLAUDE.md

@@ -11,7 +11,7 @@
  */
 import type { SessionSummaryInput } from './libDb.ts';
 import { computeLinguisticDensities } from './libLinguistic.ts';
-import { computeMATTR } from './libAliceNegative/libHelpers.ts';
+import { computeMATTR } from './libBehavioralHelpers.ts';
 
 /**
  * Coerce a raw client sessionSummary into a typed SessionSummaryInput.

@@ -24,9 +24,9 @@ import { retrieveSimilarMulti, retrieveContrarian } from './libRag.ts';
 import {
   formatCompactSignals, formatDynamicsContext,
 } from './libSignals.ts';
-import { computeEntryStates } from './libAliceNegative/libStateEngine.ts';
-import { computeDynamics } from './libAliceNegative/libDynamics.ts';
-import { computeMATTR } from './libAliceNegative/libHelpers.ts';
+import { computeEntryStates } from './libStateEngine.ts';
+import { computeDynamics } from './libDynamics.ts';
+import { computeMATTR } from './libBehavioralHelpers.ts';
 import { formatCompactDelta } from './libDailyDelta.ts';
 
 const SEED_DAYS = 30;

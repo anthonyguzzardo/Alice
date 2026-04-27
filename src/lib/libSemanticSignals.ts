@@ -16,7 +16,7 @@
  */
 
 import { gzipSync } from 'node:zlib';
-import { NRC_CATEGORIES } from './libAliceNegative/libNrcEmotions.ts';
+import { NRC_CATEGORIES } from './libNrcEmotions.ts';
 import {
   LEXICON_VERSION,
   BOOSTER_WORDS,
@@ -32,7 +32,7 @@ import {
   COMMON_CONJUNCTIONS,
   STOPWORDS,
 } from './utlWordLists.ts';
-import { HEDGING_WORDS } from './libAliceNegative/libHelpers.ts';
+import { HEDGING_WORDS } from './libBehavioralHelpers.ts';
 
 // ─── Types ──────────────────────────────────────────────────────────
 
