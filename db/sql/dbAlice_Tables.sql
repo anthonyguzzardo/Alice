@@ -604,44 +604,22 @@ CREATE TABLE IF NOT EXISTS tb_embeddings (
 CREATE INDEX IF NOT EXISTS idx_embeddings_vector ON tb_embeddings
   USING hnsw (embedding vector_l2_ops) WITH (m = 16, ef_construction = 64);
 
--- @region state -- tb_witness_states, tb_entry_states, tb_semantic_states, tb_trait_dynamics, tb_coupling_matrix, tb_emotion_behavior_coupling, tb_semantic_dynamics, tb_semantic_coupling
+-- @region state -- tb_entry_states, tb_semantic_states, tb_trait_dynamics, tb_coupling_matrix, tb_emotion_behavior_coupling, tb_semantic_dynamics, tb_semantic_coupling
 -- ============================================================================
--- WITNESS, STATE, DYNAMICS, COUPLING TABLES
+-- STATE, DYNAMICS, COUPLING TABLES
 -- ============================================================================
 --
--- ALICE NEGATIVE — DEPRIORITIZED, SCHEMA-FROZEN
---   The eight tables in this region power the Alice Negative subsystem
---   (witness rendering, PersDyn state engine, semantic dynamics, coupling
---   matrices). Per directive (2026-04-26), this subsystem is deprioritized
---   and the schema is frozen as-is. Migration 030 added `subject_id NOT NULL`
---   to each table for consistency with the unified model, but no constraint
---   surgery, no per-subject indexes, no query-shape work was performed.
+-- ALICE NEGATIVE WITNESS RENDERER — REMOVED 2026-04-27
+--   The witness rendering subsystem (LLM-powered visual trait extraction)
+--   was fully deprecated. Application code is gone (see METHODS_PROVENANCE.md
+--   INC-014). Its dedicated table `tb_witness_states` was archived to
+--   `zz_archive_tb_witness_states` via migration 033.
 --
---   tb_witness_states.entry_count is NOT unique in production data
---   (entry_count=3 has two snapshots from consecutive days). The table is a
---   snapshot log, not a state register; the original header comment "one row
---   per observation cycle" is intent, not enforcement. No UNIQUE constraint
---   added.
---
---   Do not invest further in these tables without explicit re-prioritization.
+--   The seven tables remaining in this region power general-purpose state /
+--   dynamics / coupling computation (PersDyn 7D state engine, semantic 11D
+--   space, emotion-behavior coupling). They are NOT witness-specific and
+--   stay in active use.
 -- ============================================================================
-
--- PURPOSE: AI witness state snapshots (trait + signal JSON blobs)
--- USE CASE: one row per observation cycle
--- MUTABILITY: insert only
--- FOOTER: created only
-CREATE TABLE IF NOT EXISTS tb_witness_states (
-   witness_state_id    INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
-  ,subject_id          INT  NOT NULL                                      -- logical FK to tb_subjects (Alice Negative deprioritized — column-add only)
-  ,entry_count         INT  NOT NULL
-  ,traits_json         JSONB NOT NULL
-  ,signals_json        JSONB NOT NULL
-  ,model_name          TEXT NOT NULL DEFAULT 'claude-sonnet-4-20250514'
-  ,dttm_created_utc    TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-  ,created_by          TEXT NOT NULL DEFAULT 'system'
-);
-
--- --------------------------------------------------------------------------
 
 -- PURPOSE: P-burst sequences per session
 -- USE CASE: ordered burst-level decomposition of writing flow

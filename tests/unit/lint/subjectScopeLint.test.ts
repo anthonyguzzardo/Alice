@@ -385,8 +385,17 @@ function formatViolation(v: Violation): string {
 // If a future migration adds a behavioral table to the unified set but the
 // engineer forgets to update the lint, this test fails loudly.
 
+// Tables that migration 030 touched but have since been archived to
+// zz_archive_* via a later migration. The lint does NOT cover these because
+// no application code should be querying them anymore. When a new table is
+// archived, drop it from SUBJECT_BEARING_TABLES and add it here in the same
+// commit as the archive migration.
+const ARCHIVED_SINCE_030 = new Set<string>([
+  'tb_witness_states',  // archived via migration 033 (2026-04-27, INC-014)
+]);
+
 describe('subjectScopeLint — migration drift', () => {
-  it('SUBJECT_BEARING_TABLES covers every BLOCK 1 table in migration 030', () => {
+  it('SUBJECT_BEARING_TABLES covers every BLOCK 1 table in migration 030 (excluding archived)', () => {
     const migrationPath = resolve(REPO_ROOT, 'db', 'sql', 'migrations', '030_unify_subject_id.sql');
     const sql = readFileSync(migrationPath, 'utf-8');
 
@@ -405,6 +414,7 @@ describe('subjectScopeLint — migration drift', () => {
     expect(block1Tables.length).toBeGreaterThan(0);
 
     for (const t of block1Tables) {
+      if (ARCHIVED_SINCE_030.has(t)) continue;
       expect(
         SUBJECT_BEARING_TABLES.has(t),
         `migration 030 adds subject_id to ${t} but the lint does not check it`,

@@ -639,22 +639,27 @@
         healthDot.setAttribute('data-status', h.overall);
 
         // Pending-work badge: combined count of attention items —
-        // embeds awaiting TEI/backfill + subjects with ≤5 seeds remaining
-        // (corpus-refresh trigger). Badge stays yellow when TEI is offline
-        // (action needed); flips green when only embeds are pending and TEI
-        // is online (will drain on next backfill).
+        // embeds awaiting TEI/backfill + calibration extractions awaiting
+        // Anthropic + subjects with ≤5 seeds remaining (corpus-refresh
+        // trigger). Badge stays yellow when any LLM/TEI service is offline
+        // (action needed); flips green when everything is auto-drainable.
         const pw = h.pendingWork;
         const seedAlerts = (pw && pw.seedAlerts) || [];
-        const totalPending = (pw ? pw.embeds : 0) + seedAlerts.length;
+        const totalPending = (pw ? pw.embeds + pw.extractions : 0) + seedAlerts.length;
         if (totalPending > 0) {
           pendingBadge.textContent = String(totalPending);
-          // Green only when nothing requires manual action (TEI is up AND no seed alerts).
-          const autoDrainable = !!(pw && pw.teiAvailable) && seedAlerts.length === 0;
+          // Green only when everything is fully auto-drainable.
+          const teiOk = !!(pw && pw.teiAvailable);
+          const anthropicOk = !!(pw && pw.anthropicAvailable);
+          const autoDrainable = teiOk && anthropicOk && seedAlerts.length === 0;
           pendingBadge.classList.toggle('tei-on', autoDrainable);
           pendingBadge.removeAttribute('hidden');
           const labelParts: string[] = [];
           if (pw && pw.embeds > 0) {
-            labelParts.push(`${pw.embeds} embed${pw.embeds === 1 ? '' : 's'} pending` + (pw.teiAvailable ? '' : ', TEI offline'));
+            labelParts.push(`${pw.embeds} embed${pw.embeds === 1 ? '' : 's'} pending` + (teiOk ? '' : ', TEI offline'));
+          }
+          if (pw && pw.extractions > 0) {
+            labelParts.push(`${pw.extractions} calibration extraction${pw.extractions === 1 ? '' : 's'} pending` + (anthropicOk ? '' : ', no API key'));
           }
           if (seedAlerts.length > 0) {
             labelParts.push(`${seedAlerts.length} subject${seedAlerts.length === 1 ? '' : 's'} low on seeds`);
@@ -728,7 +733,7 @@
         // PENDING WORK
         if (pw) {
           html += '<div class="section">Pending work</div>';
-          if (pw.embeds === 0 && seedAlerts.length === 0) {
+          if (pw.embeds === 0 && pw.extractions === 0 && seedAlerts.length === 0) {
             html += '<div class="empty">none</div>';
           } else {
             // Embed pending — total + per-subject breakdown.
@@ -747,6 +752,22 @@
                 html += '<div class="empty" style="margin-top:0.4rem;">Run <code>npm run dev:full</code>, then <code>npm run backfill</code> to drain.</div>';
               }
             }
+            // Calibration extractions pending — Anthropic LLM call.
+            if (pw.extractions > 0) {
+              const anthropicLabel = pw.anthropicAvailable ? 'Anthropic API loaded' : 'Anthropic API key missing';
+              const anthropicCls   = pw.anthropicAvailable ? '' : 'warn';
+              html += row(`Extractions pending`, String(pw.extractions), 'warn');
+              html += row(`LLM`, anthropicLabel, anthropicCls);
+              const bySubj = (pw.extractionsBySubject || []) as Array<{ subject_id: number; username: string; count: number }>;
+              if (bySubj.length > 0) {
+                html += '<div class="stage-list">' +
+                  bySubj.map(s => `<span class="stage warn">${s.username}: ${s.count}</span>`).join('') +
+                  '</div>';
+              }
+              if (!pw.anthropicAvailable) {
+                html += '<div class="empty" style="margin-top:0.4rem;">Source <code>.env</code> with <code>ANTHROPIC_API_KEY</code> set, then re-run extraction (rescue script TBD — see followup queue).</div>';
+              }
+            }
             // Seed alerts — subjects whose personal queue is about to run dry.
             if (seedAlerts.length > 0) {
               const sa = seedAlerts as Array<{ subject_id: number; username: string; remaining: number }>;
@@ -754,7 +775,7 @@
               html += '<div class="stage-list">' +
                 sa.map(s => `<span class="stage warn">${s.username}: ${s.remaining} left</span>`).join('') +
                 '</div>';
-              html += '<div class="empty" style="margin-top:0.4rem;">Refresh <code>tb_question_corpus</code> with a fresh batch of 30 unique questions (additive — never overwrites personal queues).</div>';
+              html += '<div class="empty" style="margin-top:0.4rem;">Run <code>npm run corpus:refresh</code> (writes 30 candidates to <code>data/corpus-candidates-YYYY-MM-DD.md</code>), review, then <code>npm run corpus:approve data/&lt;file&gt;.md</code>. Additive — never overwrites a subject\'s personal queue.</div>';
             }
           }
         }

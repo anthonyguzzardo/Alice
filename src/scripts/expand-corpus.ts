@@ -14,7 +14,7 @@ import { resolve } from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
 import { getCorpusQuestions } from '../lib/libDb.ts';
 
-const DEFAULT_COUNT = 10;
+const DEFAULT_COUNT = 30;
 
 function parseCount(): number {
   const idx = process.argv.indexOf('--count');

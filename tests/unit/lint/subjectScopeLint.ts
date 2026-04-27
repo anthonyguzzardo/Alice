@@ -96,7 +96,6 @@ export const SUBJECT_BEARING_TABLES: ReadonlySet<string> = new Set([
   'tb_calibration_context',
   'tb_calibration_baselines_history',
   'tb_entry_states',
-  'tb_witness_states',
   'tb_semantic_states',
   'tb_question_feedback',
   'tb_interaction_events',
