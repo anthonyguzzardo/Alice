@@ -8,6 +8,7 @@
  */
 import type { APIRoute } from 'astro';
 import sql, { OWNER_SUBJECT_ID } from '../../../lib/libDb.ts';
+import { decrypt } from '../../../lib/libCrypto.ts';
 import { logError } from '../../../lib/utlErrorLog.ts';
 
 export const GET: APIRoute = async () => {
@@ -15,13 +16,17 @@ export const GET: APIRoute = async () => {
   // TODO(step5): review.
   const subjectId = OWNER_SUBJECT_ID;
   try {
-    // Behavioral 7D states with question + replay availability
-    const states = await sql`
+    // Behavioral 7D states with question + replay availability.
+    // Migration 031: question text is encrypted at rest (text_ciphertext +
+    // text_nonce). Bulk-select the ciphertext columns and decrypt in JS so
+    // we don't fan out to N libDb getQuestionTextById calls.
+    const stateRows = await sql`
       SELECT
          es.response_id
         ,r.question_id
         ,q.scheduled_for as date
-        ,q.text as question
+        ,q.text_ciphertext as "qCt"
+        ,q.text_nonce as "qNonce"
         ,es.fluency, es.deliberation, es.revision
         ,es.commitment, es.volatility, es.thermal, es.presence
         ,es.convergence
@@ -30,7 +35,11 @@ export const GET: APIRoute = async () => {
       JOIN tb_questions q ON r.question_id = q.question_id
       WHERE q.subject_id = ${subjectId}
       ORDER BY es.entry_state_id ASC
-    ` as any[];
+    ` as Array<Record<string, unknown> & { qCt: string; qNonce: string }>;
+    const states = stateRows.map(({ qCt, qNonce, ...rest }) => ({
+      ...rest,
+      question: decrypt(qCt, qNonce),
+    })) as any[];
 
     // Semantic 11D states keyed by response_id
     const semanticRows = await sql`
