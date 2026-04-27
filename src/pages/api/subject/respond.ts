@@ -18,7 +18,13 @@
  *   2. Validate scheduled question (must be this subject's corpus draw for today)
  *   3. Save text to tb_responses (subject_id-scoped, encrypted at rest)
  *   4. Save session summary to tb_session_summaries
- *   5. Return success
+ *   5. Save raw event log + keystroke stream to tb_session_events (encrypted)
+ *   6. Return success
+ *
+ * Step 5 is a pure write. It captures the raw input so signal recomputation
+ * is possible later from local-mode owner draining (no LLM, no embed, no
+ * pipeline trigger). Without it, subject journals would be forever
+ * derived-only — every formula change would lose the past.
  *
  * NO background tasks. NO fire-and-forget. NO LLM calls. NO signal writes.
  * No `enqueueSignalJob` call: subject sessions deliberately do not produce
@@ -40,6 +46,7 @@ import { getScheduledQuestion } from '../../../lib/libScheduler.ts';
 import {
   saveResponse,
   saveSessionSummary,
+  saveSessionEvents,
   getResponseText,
 } from '../../../lib/libDb.ts';
 import { localDateStr } from '../../../lib/utlDate.ts';
@@ -112,6 +119,32 @@ export const POST: APIRoute = async ({ request, locals }) => {
           coerceSessionSummary(subject.subject_id, sessionSummary, question_id, trimmedText),
           tx,
         );
+
+        // Persist raw measurement input (event log + keystroke stream,
+        // encrypted at rest via libDb). Mirrors the owner journal path
+        // (`api/respond.ts`) and the subject calibration path
+        // (`subject/calibrate.ts`). Without this, subject journals would be
+        // forever derived-only — no way to recompute signals offline if a
+        // formula changes. Pure write, no pipeline trigger; contamination
+        // boundary unaffected.
+        const eventLog = (sessionSummary as Record<string, unknown>).eventLog;
+        const keystrokeStream = (sessionSummary as Record<string, unknown>).keystrokeStream;
+        const totalDurationMs = (sessionSummary as Record<string, unknown>).totalDurationMs;
+        const eventLogTotalInputs = (sessionSummary as Record<string, unknown>).eventLogTotalInputs;
+        if (Array.isArray(eventLog) && eventLog.length > 0) {
+          await saveSessionEvents({
+            subject_id: subject.subject_id,
+            question_id,
+            event_log_json: JSON.stringify(eventLog),
+            total_events: eventLog.length,
+            session_duration_ms: typeof totalDurationMs === 'number' ? totalDurationMs : 0,
+            keystroke_stream_json: Array.isArray(keystrokeStream) && keystrokeStream.length > 0
+              ? JSON.stringify(keystrokeStream)
+              : null,
+            total_input_events: typeof eventLogTotalInputs === 'number' ? eventLogTotalInputs : null,
+            decimation_count: 0,
+          }, tx);
+        }
       }
 
       return rid;

@@ -1,8 +1,8 @@
 /**
  * Observatory States API
  *
- * Returns per-entry behavioral 7D + semantic 11D state vectors plus session
- * metadata, joined to question text and date. Designer-facing only.
+ * Returns per-entry behavioral 7D state vectors plus session metadata,
+ * joined to question text and date. Designer-facing only.
  *
  * Pulls from the live PostgreSQL database.
  */
@@ -40,21 +40,6 @@ export const GET: APIRoute = async () => {
       ...rest,
       question: decrypt(qCt, qNonce),
     })) as any[];
-
-    // Semantic 11D states keyed by response_id
-    const semanticRows = await sql`
-      SELECT
-         response_id
-        ,syntactic_complexity, interrogation, self_focus, uncertainty
-        ,cognitive_processing
-        ,nrc_anger, nrc_fear, nrc_joy, nrc_sadness, nrc_trust, nrc_anticipation
-        ,convergence as semantic_convergence
-      FROM tb_semantic_states
-      WHERE subject_id = ${subjectId}
-      ORDER BY semantic_state_id ASC
-    ` as any[];
-    const semanticByResponse = new Map<number, any>();
-    for (const s of semanticRows) semanticByResponse.set(s.response_id, s);
 
     // Session metadata (slice-3 follow-ups) keyed by question_id
     const metaRows = await sql`
@@ -143,7 +128,6 @@ export const GET: APIRoute = async () => {
 
     const enriched = states.map(s => ({
       ...s,
-      semantic: semanticByResponse.get(s.response_id) ?? null,
       metadata: metaByQuestion.get(s.question_id) ?? null,
       motor: motorByQuestion.get(s.question_id) ?? null,
       phase2: phase2ByQuestion.get(s.question_id) ?? null,

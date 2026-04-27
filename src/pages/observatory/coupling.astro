@@ -2,8 +2,9 @@
 /**
  * Observatory · Coupling
  *
- * Behavioral 7D + semantic 11D dynamics + couplings, plus the cross-domain
- * emotion → behavior coupling layer. Designer-facing only.
+ * Emotion-behavior coupling stability analysis: rolling-window convergence
+ * test for whether emotion → behavior couplings are a stable within-person
+ * characteristic. Computed live from raw signals, not from frozen tables.
  */
 import '../../styles/styObservatory.css';
 ---
@@ -32,9 +33,6 @@ import '../../styles/styObservatory.css';
         });
       })();
     </script>
-    <style is:global>
-      /* page-specific overrides go here */
-    </style>
   </head>
   <body>
     <div class="frame">
@@ -51,37 +49,6 @@ import '../../styles/styObservatory.css';
         </nav>
       </header>
 
-      <div class="meta-row">
-        <span id="counts">loading…</span>
-      </div>
-
-      <div class="grid-two">
-        <section class="panel">
-          <h2>Behavioral dynamics (7D PersDyn) · latest</h2>
-          <div id="beh-dyn"></div>
-        </section>
-        <section class="panel">
-          <h2>Semantic dynamics (11D PersDyn) · latest</h2>
-          <div id="sem-dyn"></div>
-        </section>
-      </div>
-
-      <div class="grid-two">
-        <section class="panel">
-          <h2>Behavioral coupling · 7D pairs</h2>
-          <div id="beh-coupling"></div>
-        </section>
-        <section class="panel">
-          <h2>Semantic coupling · 11D pairs</h2>
-          <div id="sem-coupling"></div>
-        </section>
-      </div>
-
-      <section class="panel">
-        <h2>Emotion → behavior · cross-domain coupling</h2>
-        <div id="emo-coupling"></div>
-      </section>
-
       <section class="panel" id="stability-section">
         <h2>Coupling stability · within-person convergence</h2>
         <div id="stability-content">loading…</div>
@@ -89,100 +56,6 @@ import '../../styles/styObservatory.css';
     </div>
 
     <script type="module">
-      function fmtZ(v) {
-        if (v == null) return '—';
-        const sign = v >= 0 ? '+' : '';
-        return sign + Number(v).toFixed(2);
-      }
-
-      function attractorBar(v) {
-        if (v == null) return '—';
-        const pct = Math.round(Math.min(1, Math.max(0, v)) * 100);
-        return `<span style="display:inline-flex;align-items:center;gap:6px;">${Number(v).toFixed(2)}<span style="display:inline-block;width:40px;height:4px;background:var(--border);border-radius:2px;position:relative;"><span style="position:absolute;left:0;top:0;height:100%;width:${pct}%;background:var(--text-muted);border-radius:2px;"></span></span></span>`;
-      }
-
-      function renderDynamicsTable(dynamics, container) {
-        if (!dynamics || dynamics.length === 0) {
-          container.innerHTML = '<div class="empty">no dynamics yet (need ≥5 entries)</div>';
-          return;
-        }
-        const rows = dynamics.map(d => `
-          <tr>
-            <td>${d.dimension}</td>
-            <td class="num">${fmtZ(d.baseline)}</td>
-            <td class="num">${Number(d.variability).toFixed(2)}</td>
-            <td class="num">${attractorBar(d.attractor_force)}</td>
-            <td class="num">${fmtZ(d.current_state)}</td>
-            <td class="num">${fmtZ(d.deviation)}σ</td>
-          </tr>
-        `).join('');
-        container.innerHTML = `<table>
-          <thead><tr><th>dim</th><th>baseline</th><th>variab</th><th>attractor</th><th>current</th><th>dev</th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>`;
-      }
-
-      function renderCouplingTable(couplings, container) {
-        if (!couplings || couplings.length === 0) {
-          container.innerHTML = '<div class="empty">no couplings yet (need ≥10 entries)</div>';
-          return;
-        }
-        const rows = couplings.map(c => {
-          const r = Number(c.correlation);
-          const sign = c.direction > 0 ? '+' : '−';
-          const cls = c.direction > 0 ? 'sign-pos' : 'sign-neg';
-          const lag = c.lag_sessions === 0 ? 'concurrent' : `lag ${c.lag_sessions}`;
-          return `<tr>
-            <td>${c.leader}</td>
-            <td>→</td>
-            <td>${c.follower}</td>
-            <td class="num ${cls}">${sign}${r.toFixed(2)}</td>
-            <td>${lag}</td>
-          </tr>`;
-        }).join('');
-        container.innerHTML = `<table>
-          <thead><tr><th>leader</th><th></th><th>follower</th><th>r</th><th>lag</th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>`;
-      }
-
-      function renderEmotionCoupling(rows, container) {
-        if (!rows || rows.length === 0) {
-          container.innerHTML = '<div class="empty">no emotion → behavior couplings yet (need ≥10 entries)</div>';
-          return;
-        }
-        const tableRows = rows.map(c => {
-          const r = Number(c.correlation);
-          const sign = c.direction > 0 ? '+' : '−';
-          const cls = c.direction > 0 ? 'sign-pos' : 'sign-neg';
-          const lag = c.lag_sessions === 0 ? 'concurrent' : `lag ${c.lag_sessions}`;
-          return `<tr>
-            <td>${c.emotion_dim}</td>
-            <td>→</td>
-            <td>${c.behavior_dim}</td>
-            <td class="num ${cls}">${sign}${r.toFixed(2)}</td>
-            <td>${lag}</td>
-          </tr>`;
-        }).join('');
-        container.innerHTML = `<table>
-          <thead><tr><th>emotion</th><th></th><th>behavior dim</th><th>r</th><th>lag</th></tr></thead>
-          <tbody>${tableRows}</tbody>
-        </table>`;
-      }
-
-      fetch('/api/observatory/coupling').then(r => r.json()).then(data => {
-        document.getElementById('counts').textContent =
-          `${data.behavioralCount} behavioral · ${data.semanticCount} semantic`;
-        renderDynamicsTable(data.behavioralDynamics, document.getElementById('beh-dyn'));
-        renderDynamicsTable(data.semanticDynamics, document.getElementById('sem-dyn'));
-        renderCouplingTable(data.behavioralCouplings, document.getElementById('beh-coupling'));
-        renderCouplingTable(data.semanticCouplings, document.getElementById('sem-coupling'));
-        renderEmotionCoupling(data.emotionCouplings, document.getElementById('emo-coupling'));
-      }).catch(err => {
-        document.querySelector('.frame').innerHTML += `<div class="panel" style="border-color:var(--negative);color:var(--negative);">load failed: ${err?.message ?? err}</div>`;
-      });
-
-      // ── Coupling stability analysis ─────────────────────────────────
       function resolveCssVar(el, v) {
         return getComputedStyle(el).getPropertyValue(v.replace('var(', '').replace(')', '').trim()) || v;
       }
@@ -204,7 +77,6 @@ import '../../styles/styObservatory.css';
         const padL = 44, padR = 12, padT = 12, padB = 24;
         const chartW = w - padL - padR, chartH = h - padT - padB;
 
-        // Gather all values
         const allR = trajectories.flatMap(t => t.trajectory.map(p => Math.abs(p.r)));
         const allN = trajectories.flatMap(t => t.trajectory.map(p => p.n));
         if (allR.length === 0) return;
@@ -215,7 +87,6 @@ import '../../styles/styObservatory.css';
         const xMin = Math.min(...allN), xMax = Math.max(...allN);
         const xRange = xMax - xMin || 1;
 
-        // Threshold line at 0.3
         const threshY = padT + chartH * (1 - (0.3 - yMin) / yRange);
         ctx.strokeStyle = colBorder;
         ctx.lineWidth = 0.5;
@@ -226,7 +97,6 @@ import '../../styles/styObservatory.css';
         ctx.stroke();
         ctx.setLineDash([]);
 
-        // Y-axis
         ctx.fillStyle = colFaint;
         ctx.font = '9px SF Mono, Menlo, monospace';
         ctx.textAlign = 'right';
@@ -234,14 +104,12 @@ import '../../styles/styObservatory.css';
         ctx.fillText(yMax.toFixed(2), padL - 4, padT);
         ctx.fillText(yMin.toFixed(2), padL - 4, padT + chartH);
 
-        // X-axis
         ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
         ctx.fillText('n=' + xMin, padL, padT + chartH + 4);
         ctx.textAlign = 'right';
         ctx.fillText('n=' + xMax, padL + chartW, padT + chartH + 4);
 
-        // Color palette for lines
         const colors = [
           '#b5603f', '#c9a55e', '#7a5a44', '#6b8e6b', '#7a5a7a',
           '#5a7a8e', '#8e6b5a', '#5a8e6b', '#8e5a7a', '#6b5a8e',
@@ -268,7 +136,6 @@ import '../../styles/styObservatory.css';
           }
           ctx.stroke();
 
-          // Dot at final point
           const last = pts[pts.length - 1];
           ctx.beginPath();
           ctx.arc(last.x, last.y, t.isStable ? 3 : 2, 0, Math.PI * 2);
@@ -297,7 +164,6 @@ import '../../styles/styObservatory.css';
 
         let html = '';
 
-        // KPI strip
         html += `
           <div class="kpi-row" style="margin-bottom: 1rem;">
             <div class="kpi">
@@ -319,7 +185,6 @@ import '../../styles/styObservatory.css';
           </div>
         `;
 
-        // Convergence chart
         const allTrajectories = [...(data.stable || []), ...(data.unstable || [])];
         html += `
           <div style="margin-bottom: 1rem;">
@@ -330,7 +195,6 @@ import '../../styles/styObservatory.css';
           </div>
         `;
 
-        // Stable pairs table
         if (data.stable && data.stable.length > 0) {
           const rows = data.stable.map(p => {
             const sign = p.finalDirection > 0 ? '+' : '\u2212';
@@ -355,7 +219,6 @@ import '../../styles/styObservatory.css';
           `;
         }
 
-        // Unstable pairs table
         if (data.unstable && data.unstable.length > 0) {
           const rows = data.unstable.map(p => {
             const sign = p.finalDirection > 0 ? '+' : '\u2212';
@@ -382,14 +245,15 @@ import '../../styles/styObservatory.css';
 
         el.innerHTML = html;
 
-        // Draw convergence chart
         if (allTrajectories.length > 0) {
           drawConvergenceChart(
             document.getElementById('chart-convergence-coupling'),
             allTrajectories
           );
         }
-      }).catch(() => {});
+      }).catch(err => {
+        document.getElementById('stability-content').innerHTML = `<div class="empty">load failed: ${err?.message ?? err}</div>`;
+      });
     </script>
   </body>
 </html>

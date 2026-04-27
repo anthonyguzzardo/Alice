@@ -2,10 +2,8 @@
 /**
  * Observatory · Designer-facing instrument view.
  *
- * Lists all entries with their behavioral 7D + semantic 11D state vectors,
- * sustained trends, top couplings, calibration drift, and per-entry replay
- * links. No prediction scoreboard, no theory tables, no suppressed-question
- * panel — those layers were removed 2026-04-16.
+ * Lists all entries with their behavioral 7D state vectors, calibration
+ * drift, and per-entry replay links.
  *
  * No user surfaces. The /observatory/* tree is for the designer only.
  */
@@ -60,22 +58,6 @@ import '../../styles/styObservatory.css';
       </div>
 
       <section class="panel">
-        <h2>Right now — latest entry</h2>
-        <div class="insights" id="right-now"></div>
-      </section>
-
-      <div class="grid-two">
-        <section class="panel">
-          <h2>Sustained trends</h2>
-          <div id="arcs"></div>
-        </section>
-        <section class="panel">
-          <h2>Discoveries · empirical couplings</h2>
-          <div id="discoveries"></div>
-        </section>
-      </div>
-
-      <section class="panel">
         <h2>Calibration drift · designer-facing health metric</h2>
         <div id="cal-drift"></div>
       </section>
@@ -108,43 +90,6 @@ import '../../styles/styObservatory.css';
         return s.getPropertyValue('--negative').trim() || '#b5603f';
       }
 
-      function renderInsights(insights, container) {
-        container.innerHTML = insights.map(i => {
-          const src = i.space ? `<span class="src">[${i.space}]</span>` : '';
-          return `<p>${src}${i.text}</p>`;
-        }).join('');
-      }
-
-      function renderArcs(arcs, container, lowNNotice) {
-        if (lowNNotice) {
-          container.innerHTML = `<div class="empty">${lowNNotice}</div>`;
-          return;
-        }
-        if (!arcs.length) {
-          container.innerHTML = '<div class="empty">no sustained trends detected in recent sessions</div>';
-          return;
-        }
-        container.innerHTML = arcs.map(a => `
-          <div class="arc">
-            <span class="src">[${a.space}]</span>
-            ${a.text}
-          </div>
-        `).join('');
-      }
-
-      function renderDiscoveries(discoveries, container) {
-        if (!discoveries.length) {
-          container.innerHTML = '<div class="empty">no couplings discovered yet (need ≥10 entries)</div>';
-          return;
-        }
-        container.innerHTML = discoveries.map(d => `
-          <div class="discovery">
-            <div>${d.text}</div>
-            <div class="ev">${d.evidence} · <span class="pill ${d.strength === 'established' ? 'high' : 'mod'}">${d.strength}</span> · <span class="src">${d.source}</span></div>
-          </div>
-        `).join('');
-      }
-
       function sparkline(values, color = null) {
         if (!color) color = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#7a5a44';
         const n = values.length;
@@ -167,10 +112,9 @@ import '../../styles/styObservatory.css';
           return;
         }
 
-        const cols = ['date', 'flu', 'del', 'rev', 'com', 'vol', 'thm', 'prs', 'sem-conv', 'meta', 'replay'];
+        const cols = ['date', 'flu', 'del', 'rev', 'com', 'vol', 'thm', 'prs', 'meta', 'replay'];
         const head = `<thead><tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr></thead>`;
         const rows = states.map(s => {
-          const semConv = s.semantic ? fmtZ(s.semantic.semantic_convergence) : '—';
           const metaParts = [];
           if (s.metadata?.deletion_curve_type && s.metadata.deletion_curve_type !== 'none')
             metaParts.push(`del:${s.metadata.deletion_curve_type}`);
@@ -189,7 +133,6 @@ import '../../styles/styObservatory.css';
           return `<tr>
             <td>${link(s.date)}</td>
             ${behLinked}
-            <td class="num">${link(semConv)}</td>
             <td class="meta">${link(meta)}</td>
             <td>${replay}</td>
           </tr>`;
@@ -295,19 +238,16 @@ import '../../styles/styObservatory.css';
       }
 
       Promise.all([
-        fetch('/api/observatory/synthesis').then(r => r.json()),
         fetch('/api/observatory/states').then(r => r.json()),
         fetch('/api/observatory/calibration-drift').then(r => r.json()),
         fetch('/api/observatory/integrity').then(r => r.json()),
-      ]).then(([syn, st, cd, integ]) => {
+      ]).then(([st, cd, integ]) => {
+        const states = st.states ?? [];
         document.getElementById('counts').textContent =
-          `${syn.behavioralCount} behavioral · ${syn.semanticCount} semantic · ${cd.totalSnapshots ?? 0} calibration snapshots${syn.latestDate ? ' · latest ' + syn.latestDate : ''}`;
-        renderInsights(syn.rightNow ?? [], document.getElementById('right-now'));
-        renderArcs(syn.arcs ?? [], document.getElementById('arcs'), syn.arcsLowN);
-        renderDiscoveries(syn.discoveries ?? [], document.getElementById('discoveries'));
+          `${states.length} entries · ${cd.totalSnapshots ?? 0} calibration snapshots`;
         renderCalDrift(cd, document.getElementById('cal-drift'));
         renderIntegrity(integ, document.getElementById('integrity'));
-        renderEntries(st.states ?? [], document.getElementById('entries-table'));
+        renderEntries(states, document.getElementById('entries-table'));
       }).catch(err => {
         document.querySelector('.frame').innerHTML += `<div class="panel" style="border-color:var(--negative);color:var(--negative);">load failed: ${err?.message ?? err}</div>`;
       });

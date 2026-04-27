@@ -125,23 +125,6 @@ import '../../styles/styObservatory.css';
         { key: 'presence', label: 'Presence', color: 'var(--accent)' },
       ];
 
-      const SEMANTIC_DIMS = [
-        { key: 'syntactic_complexity', label: 'Syntactic complexity', color: 'var(--semantic)' },
-        { key: 'self_focus', label: 'Self focus', color: 'var(--semantic)' },
-        { key: 'uncertainty', label: 'Uncertainty', color: 'var(--semantic)' },
-        { key: 'cognitive_processing', label: 'Cognitive processing', color: 'var(--semantic)' },
-        { key: 'interrogation', label: 'Interrogation', color: 'var(--semantic)' },
-      ];
-
-      const EMOTION_DIMS = [
-        { key: 'nrc_anger', label: 'Anger', color: 'var(--negative)' },
-        { key: 'nrc_fear', label: 'Fear', color: 'var(--negative)' },
-        { key: 'nrc_joy', label: 'Joy', color: 'var(--positive)' },
-        { key: 'nrc_sadness', label: 'Sadness', color: 'var(--semantic)' },
-        { key: 'nrc_trust', label: 'Trust', color: 'var(--positive)' },
-        { key: 'nrc_anticipation', label: 'Anticipation', color: 'var(--warn)' },
-      ];
-
       const MOTOR_DIMS = [
         { key: 'ex_gaussian_tau', label: 'Ex-Gaussian tau', color: 'var(--accent)', unit: 'ms' },
         { key: 'tau_proportion', label: 'Tau proportion', color: 'var(--accent)', unit: '%' },
@@ -386,7 +369,6 @@ import '../../styles/styObservatory.css';
         }
 
         const dates = states.map(s => s.date);
-        const hasSemantic = states.some(s => s.semantic != null);
 
         let html = '';
         html += renderSection(
@@ -396,24 +378,8 @@ import '../../styles/styObservatory.css';
           (s, key) => s[key]
         );
 
-        if (hasSemantic) {
-          html += renderSection(
-            'Semantic · linguistic dimensions',
-            SEMANTIC_DIMS,
-            states,
-            (s, key) => s.semantic?.[key] ?? null
-          );
-          html += renderSection(
-            'Semantic · emotion densities',
-            EMOTION_DIMS,
-            states,
-            (s, key) => s.semantic?.[key] ?? null
-          );
-        }
-
         // Convergence overlay
         const behConv = states.map(s => s.convergence);
-        const semConv = states.map(s => s.semantic?.semantic_convergence ?? null);
         html += `
           <div class="section-label">Convergence · dimensional agreement</div>
           <div class="chart-row">
@@ -422,13 +388,6 @@ import '../../styles/styObservatory.css';
               <canvas class="trajectory-chart" data-dim="convergence" data-color="var(--accent)"></canvas>
               <div class="latest-reading">latest: <span class="val">${fmtZ(behConv[behConv.length - 1])}</span></div>
             </div>
-            ${hasSemantic ? `
-            <div class="chart-panel">
-              <h3>Semantic convergence</h3>
-              <canvas class="trajectory-chart" data-dim="sem_convergence" data-color="var(--semantic)"></canvas>
-              <div class="latest-reading">latest: <span class="val">${fmtZ(semConv[semConv.length - 1])}</span></div>
-            </div>
-            ` : ''}
           </div>
         `;
 
@@ -494,15 +453,7 @@ import '../../styles/styObservatory.css';
         for (const dim of BEHAVIORAL_DIMS) {
           allValues[dim.key] = { values: states.map(s => s[dim.key]), color: dim.color };
         }
-        if (hasSemantic) {
-          for (const dim of [...SEMANTIC_DIMS, ...EMOTION_DIMS]) {
-            allValues[dim.key] = { values: states.map(s => s.semantic?.[dim.key] ?? null), color: dim.color };
-          }
-        }
         allValues['convergence'] = { values: behConv, color: 'var(--accent)' };
-        if (hasSemantic) {
-          allValues['sem_convergence'] = { values: semConv, color: 'var(--semantic)' };
-        }
         if (hasMotor) {
           for (const dim of MOTOR_DIMS) {
             allValues[dim.key] = { values: states.map(s => s.motor?.[dim.key] ?? null), color: dim.color };

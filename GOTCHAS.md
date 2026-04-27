@@ -103,6 +103,8 @@ When you fix a bug that previously had a rationalizing entry, rewrite the entry 
 
 - **`updateDeletionEvents` is an UPDATE, not an INSERT.** It modifies the session summary row that `saveSessionSummary` just created. Must run AFTER saveSessionSummary within the same transaction. If you reorder the transaction block, this silently updates zero rows.
 
+- **Pre-2026-04-27, subject journal submissions did NOT save raw event log or keystroke stream.** `subject/respond.ts` only wrote `tb_responses` + `tb_session_summaries`, while `subject/calibrate.ts`, `api/respond.ts`, and `api/calibrate.ts` all wrote `tb_session_events` too. The asymmetry was latent (zero subject journal entries existed at the time of the fix) but would have made every subject journal forever derived-only — no way to recompute signals when a formula changes. Fixed by mirroring the calibration path's event-save block inside the same transaction. The contamination boundary is unaffected: writing raw input is a pure DB write, no LLM/embed/signal job triggered. **If you see a session-summary-only save with no companion `saveSessionEvents` call in any submission path, that is a regression** — the four submission paths must remain symmetric on raw-input capture.
+
 - **Linguistic densities and MATTR are computed server-side, not from the client summary.** The `respond` and `calibrate` endpoints compute NRC densities, cognitive/hedging/first-person densities, MATTR, and sentence metrics from the response text on the server. The client sends raw `sessionSummary` fields for keystroke/timing data only. Don't look for these in the client payload.
 
 ## Embeddings

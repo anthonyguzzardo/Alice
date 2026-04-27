@@ -95,7 +95,6 @@ export const SUBJECT_BEARING_TABLES: ReadonlySet<string> = new Set([
   'tb_cross_session_signals',
   'tb_calibration_baselines_history',
   'tb_entry_states',
-  'tb_semantic_states',
   'tb_question_feedback',
   'tb_interaction_events',
   'tb_personal_profile',
@@ -108,11 +107,6 @@ export const SUBJECT_BEARING_TABLES: ReadonlySet<string> = new Set([
   'tb_embeddings',
   'tb_prompt_traces',
   'tb_reflections',
-  'tb_semantic_dynamics',
-  'tb_semantic_coupling',
-  'tb_trait_dynamics',
-  'tb_coupling_matrix',
-  'tb_emotion_behavior_coupling',
 ]);
 
 // ----------------------------------------------------------------------------
