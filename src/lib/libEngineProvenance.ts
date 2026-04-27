@@ -25,7 +25,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { upsertEngineProvenance, type EngineProvenanceInput } from './libDb.ts';
-import { BINARY_PATH } from './libSignalsNative.ts';
+import { BINARY_ABSOLUTE } from './libSignalsNative.ts';
 import { logError } from './utlErrorLog.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -34,12 +34,13 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
  * Absolute path to the .node binary that libSignalsNative actually loaded.
  * The provenance row records SHA-256 of *this* file, so the hash must match
  * the binary the engine is running with — not whichever .node happens to
- * live next to it on disk. If BINARY_PATH is null (unsupported platform),
- * provenance lookup will fail loudly when collectProvenance runs.
+ * live next to it on disk. `BINARY_ABSOLUTE` is sourced from the same
+ * resolution that the loader used, so dev / bundled / systemd-cwd layouts
+ * all converge on the right file. Null means the binary couldn't be located,
+ * and provenance lookup will skip cleanly (returns null) rather than block
+ * a measurement.
  */
-const NODE_BINARY_PATH = BINARY_PATH
-  ? resolve(__dirname, '..', '..', 'src-rs', BINARY_PATH)
-  : null;
+const NODE_BINARY_PATH = BINARY_ABSOLUTE;
 
 let cachedId: number | null = null;
 let inflight: Promise<number | null> | null = null;

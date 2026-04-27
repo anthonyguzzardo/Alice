@@ -8,6 +8,9 @@
  */
 
 import { createRequire } from 'node:module';
+import { existsSync, statSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { logError } from './utlErrorLog.ts';
 import type * as Native from '../../src-rs/index.d.ts';
 
@@ -88,28 +91,67 @@ function resolveBinaryFilename(platform: NodeJS.Platform, arch: NodeJS.Architect
   throw new Error(`Unsupported platform/arch combination: ${platform}/${arch}`);
 }
 
-export const BINARY_PATH = (() => {
-  try {
-    return resolveBinaryFilename(process.platform, process.arch);
-  } catch {
-    return null;
-  }
+const BINARY_FILENAME: string | null = (() => {
+  try { return resolveBinaryFilename(process.platform, process.arch); }
+  catch { return null; }
 })();
+
+// Resolve the absolute path to the binary. In dev (`src/lib/...`) the binary
+// sits two levels up at `src-rs/<file>`. In the bundled Astro production build
+// the source moves to `dist/server/chunks/`, so the relative `../../src-rs/`
+// math points at `dist/src-rs/` which doesn't exist. Try a sequence of
+// candidate locations and pick the first that exists. `process.cwd()` is the
+// most reliable anchor in production because the systemd unit pins
+// `WorkingDirectory=/opt/alice`, where `src-rs/<binary>` always lives.
+function resolveBinaryAbsolute(filename: string): string | null {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    resolve(here, '..', '..', 'src-rs', filename),                  // dev: src/lib/.. → repo root
+    resolve(here, '..', '..', '..', 'src-rs', filename),            // bundled (one extra level)
+    resolve(here, '..', '..', '..', '..', 'src-rs', filename),      // bundled (deeper)
+    resolve(process.cwd(), 'src-rs', filename),                     // systemd cwd anchor
+  ];
+  for (const c of candidates) {
+    try { if (statSync(c).isFile()) return c; } catch { /* continue */ }
+  }
+  return null;
+}
+
+const BINARY_ABSOLUTE_PATH: string | null = BINARY_FILENAME
+  ? resolveBinaryAbsolute(BINARY_FILENAME)
+  : null;
 
 let native: NativeModule | null = null;
 
-if (BINARY_PATH) {
+if (BINARY_FILENAME && BINARY_ABSOLUTE_PATH) {
   try {
     const require = createRequire(import.meta.url);
-    native = require(`../../src-rs/${BINARY_PATH}`) as NativeModule;
-    console.log(`[signals] Rust engine loaded (${BINARY_PATH})`);
+    native = require(BINARY_ABSOLUTE_PATH) as NativeModule;
+    console.log(`[signals] Rust engine loaded (${BINARY_ABSOLUTE_PATH})`);
   } catch (err) {
-    console.warn(`[signals] Rust engine unavailable (${BINARY_PATH}) — signal computation disabled`);
+    console.warn(`[signals] Rust engine unavailable (${BINARY_ABSOLUTE_PATH}) — signal computation disabled`);
     if (process.env.ALICE_DEBUG_NATIVE) console.warn(err);
+  }
+} else if (BINARY_FILENAME) {
+  console.warn(`[signals] Rust engine binary ${BINARY_FILENAME} not found in any candidate location — signal computation disabled`);
+  if (process.env.ALICE_DEBUG_NATIVE) {
+    console.warn(`[signals]   tried (in order):`);
+    const here = dirname(fileURLToPath(import.meta.url));
+    for (const c of [
+      resolve(here, '..', '..', 'src-rs', BINARY_FILENAME),
+      resolve(here, '..', '..', '..', 'src-rs', BINARY_FILENAME),
+      resolve(here, '..', '..', '..', '..', 'src-rs', BINARY_FILENAME),
+      resolve(process.cwd(), 'src-rs', BINARY_FILENAME),
+    ]) console.warn(`[signals]     ${c} ${existsSync(c) ? '(exists)' : '(missing)'}`);
   }
 } else {
   console.warn(`[signals] no .node mapping for ${process.platform}/${process.arch} — signal computation disabled`);
 }
+
+/** Filename only (e.g. `alice-signals.linux-x64-gnu.node`). Null on unsupported platforms. */
+export const BINARY_PATH = BINARY_FILENAME;
+/** Absolute path to the loaded binary, or null if it couldn't be located/loaded. Used by libEngineProvenance to hash the EXACT file the engine ran. */
+export const BINARY_ABSOLUTE = BINARY_ABSOLUTE_PATH;
 
 export const hasNativeEngine = native !== null;
 

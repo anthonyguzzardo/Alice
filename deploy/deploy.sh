@@ -31,7 +31,16 @@ set -euo pipefail
 : "${ALICE_DEPLOY_HOST:?ALICE_DEPLOY_HOST not set}"
 REMOTE_USER="${ALICE_DEPLOY_USER:-alice}"
 REMOTE_PATH="${ALICE_DEPLOY_PATH:-/opt/alice}"
+ALICE_SSH_KEY="${ALICE_SSH_KEY:-$HOME/.ssh/alice_hetzner}"
 LOCAL_NODE_BINARY="${LOCAL_NODE_BINARY:-${1:-}}"
+
+if [[ ! -f "$ALICE_SSH_KEY" ]]; then
+  echo "ERROR: SSH key not found at $ALICE_SSH_KEY" >&2
+  echo "Override with ALICE_SSH_KEY=/path/to/key" >&2
+  exit 2
+fi
+
+SSH_OPTS=(-i "$ALICE_SSH_KEY" -o IdentitiesOnly=yes)
 
 if [[ -z "$LOCAL_NODE_BINARY" ]]; then
   echo "ERROR: LOCAL_NODE_BINARY not provided." >&2
@@ -52,20 +61,20 @@ fi
 REMOTE="$REMOTE_USER@$ALICE_DEPLOY_HOST"
 
 echo "==> [1/4] Pulling latest main on $REMOTE..."
-ssh "$REMOTE" "cd $REMOTE_PATH && git fetch origin && git checkout main && git reset --hard origin/main"
+ssh "${SSH_OPTS[@]}" "$REMOTE" "cd $REMOTE_PATH && git fetch origin && git checkout main && git reset --hard origin/main"
 
 echo "==> [2/4] Installing npm deps + uploading .node binary..."
-ssh "$REMOTE" "cd $REMOTE_PATH && npm ci"
-scp "$LOCAL_NODE_BINARY" "$REMOTE:$REMOTE_PATH/src-rs/alice-signals.linux-x64-gnu.node"
+ssh "${SSH_OPTS[@]}" "$REMOTE" "cd $REMOTE_PATH && npm ci"
+scp "${SSH_OPTS[@]}" "$LOCAL_NODE_BINARY" "$REMOTE:$REMOTE_PATH/src-rs/alice-signals.linux-x64-gnu.node"
 
 echo "==> [3/4] Building Astro server..."
 # Skip the Rust build step (it would try to recompile and overwrite the
 # uploaded .node with a host-built one). Astro build alone is sufficient.
-ssh "$REMOTE" "cd $REMOTE_PATH && npx astro build"
+ssh "${SSH_OPTS[@]}" "$REMOTE" "cd $REMOTE_PATH && npx astro build"
 
 echo "==> [4/4] Restarting alice.service..."
-ssh "$REMOTE" "sudo systemctl restart alice.service"
-ssh "$REMOTE" "systemctl --no-pager status alice.service | head -20"
+ssh "${SSH_OPTS[@]}" "$REMOTE" "sudo systemctl restart alice.service"
+ssh "${SSH_OPTS[@]}" "$REMOTE" "systemctl --no-pager status alice.service | head -20"
 
 echo ""
 echo "Deploy complete. Check the journal at https://fweeo.com/"
