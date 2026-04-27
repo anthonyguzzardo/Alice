@@ -20,6 +20,8 @@ import sql, {
   markSignalJobFailed,
   sweepStaleSignalJobs,
   stampEngineProvenance,
+  getQuestionTextById,
+  getResponseText,
   SIGNAL_JOB_KIND,
   type SignalJobRow,
 } from './libDb.ts';
@@ -259,16 +261,12 @@ async function runCalibrationPipeline(job: SignalJobRow): Promise<void> {
   const ctx = { signal_job_id: job.signal_job_id, subject_id: job.subject_id, question_id: job.question_id };
 
   try {
-    const rows = await sql`
-      SELECT q.text AS prompt, r.text AS response_text
-      FROM tb_questions q
-      JOIN tb_responses r ON r.question_id = q.question_id
-      WHERE q.subject_id = ${job.subject_id} AND q.question_id = ${job.question_id}
-      LIMIT 1
-    `;
-    const r = rows[0] as { prompt: string; response_text: string } | undefined;
-    if (r) {
-      await runCalibrationExtraction(job.subject_id, job.question_id, r.response_text, r.prompt);
+    // Plaintext for both prompt and response come back through libDb's
+    // decryption boundary.
+    const qInfo = await getQuestionTextById(job.subject_id, job.question_id);
+    const responseText = await getResponseText(job.subject_id, job.question_id);
+    if (qInfo && responseText !== null) {
+      await runCalibrationExtraction(job.subject_id, job.question_id, responseText, qInfo.text);
     }
   } catch (err) {
     logError('worker.calibration-extraction', err, ctx);

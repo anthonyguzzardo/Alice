@@ -11,7 +11,7 @@
  * Run: npx tsx src/scripts/backfill-rburst-sequences.ts
  */
 
-import { sql, saveRburstSequence } from '../lib/libDb.ts';
+import { sql, saveRburstSequence, listEventLogJson } from '../lib/libDb.ts';
 import { computeProcessSignals } from '../lib/libSignalsNative.ts';
 import { updateRburstTrajectoryShape } from '../lib/libSessionMetadata.ts';
 import { updateProfile } from '../lib/libProfile.ts';
@@ -20,13 +20,8 @@ import { parseSubjectIdArg } from '../lib/utlSubjectIdArg.ts';
 async function main() {
   const subjectId = parseSubjectIdArg();
 
-  // Find all sessions with event logs
-  const sessions = await sql`
-    SELECT se.question_id, se.event_log_json
-    FROM tb_session_events se
-    WHERE se.subject_id = ${subjectId}
-    ORDER BY se.question_id ASC
-  ` as Array<{ question_id: number; event_log_json: unknown }>;
+  // Plaintext event logs come back through libDb's decryption boundary.
+  const sessions = await listEventLogJson(subjectId);
 
   console.log(`Found ${sessions.length} sessions with event logs.`);
 
@@ -46,9 +41,7 @@ async function main() {
         continue;
       }
 
-      const eventLogJson = typeof row.event_log_json === 'string'
-        ? row.event_log_json
-        : JSON.stringify(row.event_log_json);
+      const eventLogJson = row.event_log_json;
 
       const ps = computeProcessSignals(eventLogJson);
       if (!ps || ps.rBurstSequences.length === 0) {

@@ -23,6 +23,9 @@ import sql, {
   getSemanticSignals,
   getProcessSignals,
   getCrossSessionSignals,
+  getResponseText as dbGetResponseText,
+  getEventLogJson as dbGetEventLogJson,
+  getKeystrokeStreamJson as dbGetKeystrokeStreamJson,
 } from './libDb.ts';
 import {
   computeDynamicalSignals,
@@ -41,33 +44,21 @@ import { updateSemanticBaselines } from './libSemanticBaseline.ts';
 import { logError } from './utlErrorLog.ts';
 
 async function getKeystrokeStream(subjectId: number, questionId: number): Promise<KeystrokeEvent[] | null> {
-  const rows = await sql`SELECT keystroke_stream_json FROM tb_session_events WHERE subject_id = ${subjectId} AND question_id = ${questionId}`;
-  const row = rows[0] as { keystroke_stream_json: unknown } | undefined;
-
-  if (!row?.keystroke_stream_json) return null;
-  // JSONB auto-parsed by postgres driver; handle both parsed and string forms
-  if (Array.isArray(row.keystroke_stream_json)) return row.keystroke_stream_json as KeystrokeEvent[];
+  const json = await dbGetKeystrokeStreamJson(subjectId, questionId);
+  if (!json) return null;
   try {
-    return JSON.parse(row.keystroke_stream_json as string) as KeystrokeEvent[];
+    return JSON.parse(json) as KeystrokeEvent[];
   } catch {
     return null;
   }
 }
 
 async function getEventLogJson(subjectId: number, questionId: number): Promise<string | null> {
-  const rows = await sql`SELECT event_log_json FROM tb_session_events WHERE subject_id = ${subjectId} AND question_id = ${questionId}`;
-  const row = rows[0] as { event_log_json: unknown } | undefined;
-  if (!row?.event_log_json) return null;
-  // JSONB auto-parsed by postgres driver; re-stringify for signal functions
-  return typeof row.event_log_json === 'string'
-    ? row.event_log_json
-    : JSON.stringify(row.event_log_json);
+  return dbGetEventLogJson(subjectId, questionId);
 }
 
 async function getResponseText(subjectId: number, questionId: number): Promise<string | null> {
-  const rows = await sql`SELECT text FROM tb_responses WHERE subject_id = ${subjectId} AND question_id = ${questionId}`;
-  const row = rows[0] as { text: string | null } | undefined;
-  return row?.text ?? null;
+  return dbGetResponseText(subjectId, questionId);
 }
 
 async function getSessionInfo(subjectId: number, questionId: number): Promise<{ totalDurationMs: number; pasteCount: number; dropCount: number }> {

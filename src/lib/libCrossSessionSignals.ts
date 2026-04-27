@@ -15,7 +15,10 @@
  */
 
 import { gzipSync } from 'node:zlib';
-import sql from './libDb.ts';
+import sql, {
+  listKeystrokeStreams,
+  listResponseTextsExcludingCalibration,
+} from './libDb.ts';
 import { STOPWORDS } from './utlWordLists.ts';
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -45,38 +48,27 @@ function contentWords(text: string): Set<string> {
 }
 
 async function getPriorTexts(subjectId: number, currentQuestionId: number): Promise<Array<{ text: string; daysAgo: number }>> {
-  const rows = await sql`
-    SELECT r.text as text,
-           q.scheduled_for::text as scheduled_for
-    FROM tb_responses r
-    JOIN tb_questions q ON r.question_id = q.question_id
-    WHERE q.subject_id = ${subjectId}
-      AND r.question_id != ${currentQuestionId}
-      AND q.question_source_id != 3
-    ORDER BY q.scheduled_for DESC
-  ` as Array<{ text: string; scheduled_for: string }>;
+  // Plaintext response texts come back through libDb's decryption boundary.
+  const priorRows = await listResponseTextsExcludingCalibration(subjectId, {
+    excludeQuestionId: currentQuestionId,
+    orderBy: 'scheduled_for_desc',
+  });
+  if (priorRows.length === 0) return [];
 
-  if (rows.length === 0) return [];
-
-  // Get current entry's date
+  // scheduled_for is NOT in scope for encryption; direct SELECT is fine here.
   const currentRows = await sql`
     SELECT q.scheduled_for::text as scheduled_for
     FROM tb_questions q
     WHERE q.question_id = ${currentQuestionId} AND q.subject_id = ${subjectId}
   `;
   const currentRow = currentRows[0] as { scheduled_for: string } | undefined;
-
   if (!currentRow) return [];
 
   const currentDate = new Date(currentRow.scheduled_for + 'T00:00:00');
-
-  return rows.map(r => {
-    const entryDate = new Date(r.scheduled_for + 'T00:00:00');
+  return priorRows.map(r => {
+    const entryDate = new Date(r.date + 'T00:00:00');
     const daysAgo = Math.round((currentDate.getTime() - entryDate.getTime()) / (1000 * 60 * 60 * 24));
-    return {
-      text: r.text,
-      daysAgo,
-    };
+    return { text: r.text, daysAgo };
   });
 }
 
@@ -138,36 +130,27 @@ function selfPerplexity(currentText: string, priorTexts: string[]): number | nul
 // Per-person longitudinal autoregressive framing is novel.
 
 async function motorSelfPerplexity(subjectId: number, questionId: number): Promise<number | null> {
-  // Get IKI sequences from prior non-calibration sessions
-  const priorRows = await sql`
-    SELECT se.keystroke_stream_json
-    FROM tb_session_events se
-    JOIN tb_questions q ON se.question_id = q.question_id
-    WHERE q.subject_id = ${subjectId}
-      AND q.question_source_id != 3
-      AND se.question_id < ${questionId}
-      AND se.keystroke_stream_json IS NOT NULL
-    ORDER BY se.question_id DESC
-    LIMIT 50
-  ` as Array<{ keystroke_stream_json: unknown }>;
+  // Plaintext keystroke streams come back through libDb's decryption boundary.
+  const priorRows = await listKeystrokeStreams(subjectId, {
+    excludeCalibration: true,
+    beforeQuestionId: questionId,
+    limit: 50,
+  });
 
   if (priorRows.length < 5) return null; // need corpus
 
-  // Get current session IKIs
-  const currentRows = await sql`
-    SELECT se.keystroke_stream_json
-    FROM tb_session_events se
-    WHERE se.subject_id = ${subjectId}
-      AND se.question_id = ${questionId}
-      AND se.keystroke_stream_json IS NOT NULL
-  ` as Array<{ keystroke_stream_json: unknown }>;
+  const currentRows = await listKeystrokeStreams(subjectId, { questionId });
 
   if (currentRows.length === 0) return null;
 
   // Extract IKI sequences from keystroke streams
-  const extractIkis = (streamJson: unknown): number[] => {
-    const stream = (typeof streamJson === 'string' ? JSON.parse(streamJson) : streamJson) as
-      Array<{ d: number }>;
+  const extractIkis = (streamJson: string): number[] => {
+    let stream: Array<{ d: number }>;
+    try {
+      stream = JSON.parse(streamJson) as Array<{ d: number }>;
+    } catch {
+      return [];
+    }
     if (!Array.isArray(stream) || stream.length < 2) return [];
     const ikis: number[] = [];
     for (let i = 1; i < stream.length; i++) {

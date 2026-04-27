@@ -104,9 +104,11 @@ describe('hotspot N3 — libGenerate runGeneration subjectId threading', () => {
     // returns immediately. With the threading mutation (hardcoded subj=1),
     // hasQuestionForDate(1, tomorrow) returns false, the function proceeds,
     // and the getResponseCount tripwire throws.
+    const { encrypt } = await import('../../../src/lib/libCrypto.ts');
+    const seedEnc = encrypt('pre-seeded for N3 test');
     await sql`
-      INSERT INTO tb_questions (subject_id, scheduled_for, text, question_source_id)
-      VALUES (${OWNER_ID}, ${tomorrowStr}::date, 'pre-seeded for N3 test', 2)
+      INSERT INTO tb_questions (subject_id, scheduled_for, text_ciphertext, text_nonce, question_source_id)
+      VALUES (${OWNER_ID}, ${tomorrowStr}::date, ${seedEnc.ciphertext}, ${seedEnc.nonce}, 2)
     `;
 
     // Proper threading: returns silently. Mutation: throws via tripwire.

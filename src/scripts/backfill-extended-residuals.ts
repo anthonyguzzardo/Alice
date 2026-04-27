@@ -13,7 +13,7 @@
  * Run: npx tsx src/scripts/backfill-extended-residuals.ts
  */
 
-import sql, { getDynamicalSignals, getMotorSignals } from '../lib/libDb.ts';
+import sql, { getDynamicalSignals, getMotorSignals, listResponseTextsExcludingCalibration } from '../lib/libDb.ts';
 import { parseSubjectIdArg } from '../lib/utlSubjectIdArg.ts';
 import {
   computeDynamicalSignals,
@@ -87,15 +87,12 @@ async function main() {
 
   console.log(`Found ${rows.length} residual rows to backfill.`);
 
-  // Build corpus once (shared across all rows)
-  const textRows = await sql`
-    SELECT r.text
-    FROM tb_responses r
-    JOIN tb_questions q ON r.question_id = q.question_id
-    WHERE q.subject_id = ${subjectId}
-      AND q.question_source_id != 3
-    ORDER BY q.scheduled_for ASC
-  ` as Array<{ text: string }>;
+  // Build corpus once (shared across all rows). Plaintext through libDb's
+  // decryption boundary.
+  const corpusRows = await listResponseTextsExcludingCalibration(subjectId, {
+    orderBy: 'scheduled_for_asc',
+  });
+  const textRows = corpusRows.map(r => ({ text: r.text }));
 
   const corpusJson = JSON.stringify(textRows.map(r => r.text));
   const corpusSha256 = createHash('sha256').update(corpusJson).digest('hex');

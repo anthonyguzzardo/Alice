@@ -1,10 +1,36 @@
 import sql from './libDbPool.ts';
 import type { TxSql } from './libDbPool.ts';
 import { localDateStr } from './utlDate.ts';
+import { encrypt, decrypt } from './libCrypto.ts';
 
 // Re-export sql for callers that import it directly
 export { default as sql } from './libDbPool.ts';
 export type { TxSql } from './libDbPool.ts';
+
+// ----------------------------------------------------------------------------
+// AT-REST ENCRYPTION (migration 031)
+// ----------------------------------------------------------------------------
+// Every subject-bearing text/JSONB column listed in the encrypted-columns
+// inventory is stored as a (`<col>_ciphertext`, `<col>_nonce`) pair instead of
+// raw plaintext. Read helpers below return plaintext; writes accept plaintext.
+// The encryption boundary lives here in libDb — application code above this
+// module never sees ciphertext. Direct SELECTs against encrypted columns are
+// forbidden; the `subject-scope` lint already enforces that all queries reach
+// this module's helpers via the lint exemption pattern.
+//
+// `encryptString` / `decryptString` operate on a (string | null) value pair.
+// JSONB content is JSON.stringified before encryption and JSON.parsed after
+// decryption by callers that need the parsed shape.
+function encryptString(plaintext: string | null): { ciphertext: string | null; nonce: string | null } {
+  if (plaintext == null) return { ciphertext: null, nonce: null };
+  const enc = encrypt(plaintext);
+  return { ciphertext: enc.ciphertext, nonce: enc.nonce };
+}
+
+function decryptString(ciphertext: string | null | undefined, nonce: string | null | undefined): string | null {
+  if (ciphertext == null || nonce == null) return null;
+  return decrypt(ciphertext, nonce);
+}
 
 // ----------------------------------------------------------------------------
 // OWNER_SUBJECT_ID — temporary scaffolding for the unification rollout
@@ -59,19 +85,27 @@ function nowStr(): string {
 
 export async function getTodaysQuestion(subjectId: number): Promise<{ question_id: number; text: string } | null> {
   const today = localDateStr();
-  const rows = await sql`SELECT question_id, text FROM tb_questions WHERE subject_id = ${subjectId} AND scheduled_for = ${today}`;
-  return (rows[0] as { question_id: number; text: string }) ?? null;
+  const rows = await sql`
+    SELECT question_id, text_ciphertext, text_nonce
+    FROM tb_questions
+    WHERE subject_id = ${subjectId} AND scheduled_for = ${today}
+  `;
+  const row = rows[0] as { question_id: number; text_ciphertext: string; text_nonce: string } | undefined;
+  if (!row) return null;
+  return { question_id: row.question_id, text: decrypt(row.text_ciphertext, row.text_nonce) };
 }
 
 export async function getTodaysResponse(subjectId: number): Promise<{ response_id: number; text: string } | null> {
   const today = localDateStr();
   const rows = await sql`
-    SELECT r.response_id, r.text
+    SELECT r.response_id, r.text_ciphertext, r.text_nonce
     FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
     WHERE q.subject_id = ${subjectId} AND q.scheduled_for = ${today}
   `;
-  return (rows[0] as { response_id: number; text: string }) ?? null;
+  const row = rows[0] as { response_id: number; text_ciphertext: string; text_nonce: string } | undefined;
+  if (!row) return null;
+  return { response_id: row.response_id, text: decrypt(row.text_ciphertext, row.text_nonce) };
 }
 
 export async function saveResponse(
@@ -85,9 +119,10 @@ export async function saveResponse(
   const bv = attestation?.boundaryVersion ?? 'v1';
   const ref = attestation?.codePathsRef ?? 'docs/contamination-boundary-v1.md';
   const hash = attestation?.commitHash ?? 'pre-attestation';
+  const enc = encryptString(text);
   const [row] = await q`
-    INSERT INTO tb_responses (subject_id, question_id, text, contamination_boundary_version, audited_code_paths_ref, code_commit_hash, dttm_created_utc)
-    VALUES (${subjectId}, ${questionId}, ${text}, ${bv}, ${ref}, ${hash}, ${nowStr()})
+    INSERT INTO tb_responses (subject_id, question_id, text_ciphertext, text_nonce, contamination_boundary_version, audited_code_paths_ref, code_commit_hash, dttm_created_utc)
+    VALUES (${subjectId}, ${questionId}, ${enc.ciphertext}, ${enc.nonce}, ${bv}, ${ref}, ${hash}, ${nowStr()})
     RETURNING response_id
   `;
   return row.response_id;
@@ -95,38 +130,49 @@ export async function saveResponse(
 
 export async function scheduleQuestion(subjectId: number, text: string, date: string, source: 'seed' | 'generated' | 'calibration' = 'seed'): Promise<void> {
   const sourceId = source === 'generated' ? 2 : source === 'calibration' ? 3 : 1;
+  const enc = encryptString(text);
   // CONFLICT TARGET CHANGED (migration 030): (scheduled_for) → (subject_id, scheduled_for)
   await sql`
-    INSERT INTO tb_questions (subject_id, text, question_source_id, scheduled_for)
-    VALUES (${subjectId}, ${text}, ${sourceId}, ${date})
+    INSERT INTO tb_questions (subject_id, text_ciphertext, text_nonce, question_source_id, scheduled_for)
+    VALUES (${subjectId}, ${enc.ciphertext}, ${enc.nonce}, ${sourceId}, ${date})
     ON CONFLICT (subject_id, scheduled_for) DO NOTHING
   `;
 }
 
 export async function getAllResponses(subjectId: number): Promise<Array<{ question: string; response: string; date: string }>> {
-  return await sql`
-    SELECT q.text AS question, r.text AS response, q.scheduled_for AS date
+  const rows = await sql`
+    SELECT q.text_ciphertext AS "qCt", q.text_nonce AS "qNonce",
+           r.text_ciphertext AS "rCt", r.text_nonce AS "rNonce",
+           q.scheduled_for AS date
     FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
     WHERE q.subject_id = ${subjectId}
     ORDER BY q.scheduled_for ASC
-  ` as Array<{ question: string; response: string; date: string }>;
+  ` as Array<{ qCt: string; qNonce: string; rCt: string; rNonce: string; date: string }>;
+  return rows.map(r => ({
+    question: decrypt(r.qCt, r.qNonce),
+    response: decrypt(r.rCt, r.rNonce),
+    date: r.date,
+  }));
 }
 
 export async function getLatestReflection(subjectId: number): Promise<{ text: string; dttm_created_utc: string } | null> {
   const rows = await sql`
-    SELECT text, dttm_created_utc FROM tb_reflections
+    SELECT text_ciphertext, text_nonce, dttm_created_utc FROM tb_reflections
     WHERE subject_id = ${subjectId}
     ORDER BY dttm_created_utc DESC LIMIT 1
   `;
-  return (rows[0] as { text: string; dttm_created_utc: string }) ?? null;
+  const row = rows[0] as { text_ciphertext: string; text_nonce: string; dttm_created_utc: string } | undefined;
+  if (!row) return null;
+  return { text: decrypt(row.text_ciphertext, row.text_nonce), dttm_created_utc: row.dttm_created_utc };
 }
 
 export async function saveReflection(subjectId: number, text: string, type: 'weekly' | 'monthly' = 'weekly', coverageThroughResponseId?: number): Promise<number> {
   const typeId = type === 'monthly' ? 2 : 1;
+  const enc = encryptString(text);
   const [row] = await sql`
-    INSERT INTO tb_reflections (subject_id, text, reflection_type_id, coverage_through_response_id, dttm_created_utc)
-    VALUES (${subjectId}, ${text}, ${typeId}, ${coverageThroughResponseId ?? null}, ${nowStr()})
+    INSERT INTO tb_reflections (subject_id, text_ciphertext, text_nonce, reflection_type_id, coverage_through_response_id, dttm_created_utc)
+    VALUES (${subjectId}, ${enc.ciphertext}, ${enc.nonce}, ${typeId}, ${coverageThroughResponseId ?? null}, ${nowStr()})
     RETURNING reflection_id
   `;
   return row.reflection_id;
@@ -156,6 +202,184 @@ export async function countScheduledSeedQuestions(subjectId: number): Promise<nu
   `;
   return (row as { c: number }).c;
 }
+
+// @region encrypted-reads -- getResponseText, getQuestionTextById, getEventLogJson, getKeystrokeStreamJson, listEventLogJson, listKeystrokeStreams, listResponseTextsExcludingCalibration
+// ----------------------------------------------------------------------------
+// IN-SCOPE READ HELPERS (migration 031)
+// ----------------------------------------------------------------------------
+// These centralize the read paths for encrypted columns. Every direct SELECT
+// against an encrypted column outside libDb was refactored to call one of
+// these helpers — application code never sees ciphertext.
+
+/** Single response text by (subject, question). Returns plaintext or null. */
+export async function getResponseText(subjectId: number, questionId: number): Promise<string | null> {
+  const rows = await sql`
+    SELECT text_ciphertext, text_nonce
+    FROM tb_responses
+    WHERE subject_id = ${subjectId} AND question_id = ${questionId}
+  `;
+  const row = rows[0] as { text_ciphertext: string; text_nonce: string } | undefined;
+  return row ? decrypt(row.text_ciphertext, row.text_nonce) : null;
+}
+
+/** Single question by id, scoped to subject. Returns plaintext text + source id, or null. */
+export async function getQuestionTextById(subjectId: number, questionId: number): Promise<{ text: string; question_source_id: number } | null> {
+  const rows = await sql`
+    SELECT text_ciphertext, text_nonce, question_source_id
+    FROM tb_questions
+    WHERE question_id = ${questionId} AND subject_id = ${subjectId}
+  `;
+  const row = rows[0] as { text_ciphertext: string; text_nonce: string; question_source_id: number } | undefined;
+  if (!row) return null;
+  return { text: decrypt(row.text_ciphertext, row.text_nonce), question_source_id: row.question_source_id };
+}
+
+/** Decrypted event log JSON for a session. Returns the JSON string (caller JSON.parses if needed). */
+export async function getEventLogJson(subjectId: number, questionId: number): Promise<string | null> {
+  const rows = await sql`
+    SELECT event_log_ciphertext, event_log_nonce
+    FROM tb_session_events
+    WHERE subject_id = ${subjectId} AND question_id = ${questionId}
+  `;
+  const row = rows[0] as { event_log_ciphertext: string; event_log_nonce: string } | undefined;
+  return row ? decrypt(row.event_log_ciphertext, row.event_log_nonce) : null;
+}
+
+/** Decrypted keystroke stream JSON for a session. Returns JSON string or null. */
+export async function getKeystrokeStreamJson(subjectId: number, questionId: number): Promise<string | null> {
+  const rows = await sql`
+    SELECT keystroke_stream_ciphertext, keystroke_stream_nonce
+    FROM tb_session_events
+    WHERE subject_id = ${subjectId} AND question_id = ${questionId}
+  `;
+  const row = rows[0] as { keystroke_stream_ciphertext: string | null; keystroke_stream_nonce: string | null } | undefined;
+  if (!row) return null;
+  return decryptString(row.keystroke_stream_ciphertext, row.keystroke_stream_nonce);
+}
+
+/** All session event logs for a subject. Used by backfill scripts that re-derive signals. */
+export async function listEventLogJson(subjectId: number): Promise<Array<{ question_id: number; event_log_json: string }>> {
+  const rows = await sql`
+    SELECT question_id, event_log_ciphertext, event_log_nonce
+    FROM tb_session_events
+    WHERE subject_id = ${subjectId}
+    ORDER BY question_id ASC
+  ` as Array<{ question_id: number; event_log_ciphertext: string; event_log_nonce: string }>;
+  return rows.map(r => ({
+    question_id: r.question_id,
+    event_log_json: decrypt(r.event_log_ciphertext, r.event_log_nonce),
+  }));
+}
+
+export interface ListKeystrokeStreamsOptions {
+  /** When true, exclude calibration sessions (question_source_id = 3). */
+  excludeCalibration?: boolean;
+  /** Only return rows where question_id < this value. */
+  beforeQuestionId?: number;
+  /** Only return rows where question_id = this value. */
+  questionId?: number;
+  /** Limit the number of rows returned (most recent question_id first when limit set). */
+  limit?: number;
+  /** Skip rows whose keystroke stream is NULL (default: true). */
+  nonNullOnly?: boolean;
+}
+
+/** Keystroke streams for a subject under flexible filters. Decrypts each row. */
+export async function listKeystrokeStreams(
+  subjectId: number,
+  options: ListKeystrokeStreamsOptions = {},
+): Promise<Array<{ question_id: number; keystroke_stream_json: string }>> {
+  const { excludeCalibration, beforeQuestionId, questionId, limit, nonNullOnly = true } = options;
+  // Compose dynamically. Subject scope is always present; lint sees it.
+  const rows = await sql`
+    SELECT se.question_id,
+           se.keystroke_stream_ciphertext,
+           se.keystroke_stream_nonce
+    FROM tb_session_events se
+    JOIN tb_questions q ON se.question_id = q.question_id
+    WHERE se.subject_id = ${subjectId}
+      AND q.subject_id = ${subjectId}
+      ${excludeCalibration ? sql`AND q.question_source_id != 3` : sql``}
+      ${beforeQuestionId !== undefined ? sql`AND se.question_id < ${beforeQuestionId}` : sql``}
+      ${questionId !== undefined ? sql`AND se.question_id = ${questionId}` : sql``}
+      ${nonNullOnly ? sql`AND se.keystroke_stream_ciphertext IS NOT NULL` : sql``}
+    ORDER BY se.question_id DESC
+    ${limit !== undefined ? sql`LIMIT ${limit}` : sql``}
+  ` as Array<{ question_id: number; keystroke_stream_ciphertext: string | null; keystroke_stream_nonce: string | null }>;
+  return rows
+    .map(r => ({
+      question_id: r.question_id,
+      keystroke_stream_json: decryptString(r.keystroke_stream_ciphertext, r.keystroke_stream_nonce),
+    }))
+    .filter((r): r is { question_id: number; keystroke_stream_json: string } => r.keystroke_stream_json != null);
+}
+
+export type ResponseTextOrder = 'response_id_desc' | 'scheduled_for_asc' | 'scheduled_for_desc';
+
+export interface ListResponseTextsOptions {
+  /** Default true: exclude calibration (question_source_id = 3). */
+  excludeCalibration?: boolean;
+  /** Default false: exclude rows whose tb_semantic_signals.paste_contaminated = true. */
+  excludePasteContaminated?: boolean;
+  /** Order: 'response_id_desc', 'scheduled_for_asc', 'scheduled_for_desc'. */
+  orderBy?: ResponseTextOrder;
+  /** Limit row count. */
+  limit?: number;
+  /** Exclude this question_id from results. */
+  excludeQuestionId?: number;
+}
+
+/** Plaintext response texts for a subject under flexible filters. Returns
+ *  rows scoped to the subject, with text decrypted via the libDb boundary.
+ *  Calibration sessions are excluded by default; `excludeCalibration: false`
+ *  includes them (e.g. avatar corpus that mixes journal + calibration). */
+export async function listResponseTexts(
+  subjectId: number,
+  options: ListResponseTextsOptions = {},
+): Promise<Array<{ response_id: number; question_id: number; text: string; date: string | null }>> {
+  const {
+    excludeCalibration = true,
+    excludePasteContaminated = false,
+    orderBy = 'scheduled_for_desc',
+    limit,
+    excludeQuestionId,
+  } = options;
+  const orderClause =
+    orderBy === 'response_id_desc' ? sql`ORDER BY r.response_id DESC` :
+    orderBy === 'scheduled_for_asc' ? sql`ORDER BY q.scheduled_for ASC` :
+    sql`ORDER BY q.scheduled_for DESC`;
+  const rows = await sql`
+    SELECT r.response_id,
+           r.question_id,
+           r.text_ciphertext,
+           r.text_nonce,
+           q.scheduled_for::text AS date
+    FROM tb_responses r
+    JOIN tb_questions q ON r.question_id = q.question_id
+    WHERE q.subject_id = ${subjectId}
+      ${excludeCalibration ? sql`AND q.question_source_id != 3` : sql``}
+      ${excludeQuestionId !== undefined ? sql`AND r.question_id != ${excludeQuestionId}` : sql``}
+      ${excludePasteContaminated ? sql`
+        AND NOT EXISTS (
+          SELECT 1 FROM tb_semantic_signals sem
+          WHERE sem.subject_id = ${subjectId}
+            AND sem.question_id = r.question_id
+            AND sem.paste_contaminated = true
+        )` : sql``}
+    ${orderClause}
+    ${limit !== undefined ? sql`LIMIT ${limit}` : sql``}
+  ` as Array<{ response_id: number; question_id: number; text_ciphertext: string; text_nonce: string; date: string | null }>;
+  return rows.map(r => ({
+    response_id: r.response_id,
+    question_id: r.question_id,
+    text: decrypt(r.text_ciphertext, r.text_nonce),
+    date: r.date,
+  }));
+}
+
+/** Backwards-compatible alias used by callers wanting the default (exclude
+ *  calibration) behavior. New code should call `listResponseTexts` directly. */
+export const listResponseTextsExcludingCalibration = listResponseTexts;
 
 // @region sessions -- SessionSummaryInput, saveSessionSummary, getSessionSummary, getAllSessionSummaries, getSessionSummariesForQuestions, saveSessionEvents, getSessionEvents, updateDeletionEvents, saveSessionMetadata, getSessionMetadata, getAllSessionMetadata, getMetadataQuestionIdsAlreadyComputed
 // ----------------------------------------------------------------------------
@@ -568,9 +792,23 @@ export interface SessionEventsRow {
 
 export async function saveSessionEvents(row: Omit<SessionEventsRow, 'session_event_id'>, tx?: TxSql): Promise<number> {
   const q = tx ?? sql;
+  const eventLogEnc = encryptString(row.event_log_json);
+  const ksEnc = encryptString(row.keystroke_stream_json ?? null);
   const [result] = await q`
-    INSERT INTO tb_session_events (subject_id, question_id, event_log_json, total_events, session_duration_ms, keystroke_stream_json, total_input_events, decimation_count)
-    VALUES (${row.subject_id}, ${row.question_id}, ${row.event_log_json}, ${row.total_events}, ${row.session_duration_ms}, ${row.keystroke_stream_json ?? null}, ${row.total_input_events ?? null}, ${row.decimation_count ?? null})
+    INSERT INTO tb_session_events (
+       subject_id, question_id,
+       event_log_ciphertext, event_log_nonce,
+       total_events, session_duration_ms,
+       keystroke_stream_ciphertext, keystroke_stream_nonce,
+       total_input_events, decimation_count
+    )
+    VALUES (
+      ${row.subject_id}, ${row.question_id},
+      ${eventLogEnc.ciphertext}, ${eventLogEnc.nonce},
+      ${row.total_events}, ${row.session_duration_ms},
+      ${ksEnc.ciphertext}, ${ksEnc.nonce},
+      ${row.total_input_events ?? null}, ${row.decimation_count ?? null}
+    )
     RETURNING session_event_id
   `;
   return result.session_event_id;
@@ -578,21 +816,33 @@ export async function saveSessionEvents(row: Omit<SessionEventsRow, 'session_eve
 
 export async function getSessionEvents(subjectId: number, questionId: number): Promise<SessionEventsRow | null> {
   const rows = await sql`
-    SELECT * FROM tb_session_events WHERE subject_id = ${subjectId} AND question_id = ${questionId} ORDER BY session_event_id DESC LIMIT 1
+    SELECT session_event_id, subject_id, question_id,
+           event_log_ciphertext, event_log_nonce,
+           total_events, session_duration_ms,
+           keystroke_stream_ciphertext, keystroke_stream_nonce,
+           total_input_events, decimation_count
+    FROM tb_session_events
+    WHERE subject_id = ${subjectId} AND question_id = ${questionId}
+    ORDER BY session_event_id DESC LIMIT 1
   `;
   if (!rows[0]) return null;
-  const row = rows[0] as Record<string, unknown>;
-  // JSONB columns auto-parsed by postgres driver; callers expect strings
+  const row = rows[0] as {
+    session_event_id: number; subject_id: number; question_id: number;
+    event_log_ciphertext: string; event_log_nonce: string;
+    total_events: number; session_duration_ms: number;
+    keystroke_stream_ciphertext: string | null; keystroke_stream_nonce: string | null;
+    total_input_events: number | null; decimation_count: number | null;
+  };
   return {
-    session_event_id: row.session_event_id as number,
-    subject_id: row.subject_id as number,
-    question_id: row.question_id as number,
-    event_log_json: typeof row.event_log_json === 'object' ? JSON.stringify(row.event_log_json) : row.event_log_json as string,
-    total_events: row.total_events as number,
-    session_duration_ms: row.session_duration_ms as number,
-    keystroke_stream_json: row.keystroke_stream_json == null ? null : (typeof row.keystroke_stream_json === 'object' ? JSON.stringify(row.keystroke_stream_json) : row.keystroke_stream_json as string),
-    total_input_events: row.total_input_events as number | null,
-    decimation_count: row.decimation_count as number | null,
+    session_event_id: row.session_event_id,
+    subject_id: row.subject_id,
+    question_id: row.question_id,
+    event_log_json: decrypt(row.event_log_ciphertext, row.event_log_nonce),
+    total_events: row.total_events,
+    session_duration_ms: row.session_duration_ms,
+    keystroke_stream_json: decryptString(row.keystroke_stream_ciphertext, row.keystroke_stream_nonce),
+    total_input_events: row.total_input_events,
+    decimation_count: row.decimation_count,
   };
 }
 
@@ -691,8 +941,9 @@ export async function getAllSessionSummaries(subjectId: number): Promise<Array<S
 // @region calibration -- getCalibrationSessionsWithText, isCalibrationQuestion, saveCalibrationSession, getUsedCalibrationPrompts, getCalibrationPromptsByRecency, saveCalibrationBaselineSnapshot, getCalibrationHistory, getLatestCalibrationSnapshot, saveQuestionFeedback, getAllQuestionFeedback
 
 export async function getCalibrationSessionsWithText(subjectId: number): Promise<Array<SessionSummaryInput & { date: string; responseText: string }>> {
-  return await sql.unsafe(
-    `SELECT ${SESSION_SUMMARY_COLS}, q.scheduled_for AS date, r.text AS "responseText"
+  const rows = await sql.unsafe(
+    `SELECT ${SESSION_SUMMARY_COLS}, q.scheduled_for AS date,
+            r.text_ciphertext AS "rCt", r.text_nonce AS "rNonce"
     FROM tb_session_summaries s
     JOIN tb_questions q ON s.question_id = q.question_id
     JOIN tb_responses r ON q.question_id = r.question_id
@@ -701,7 +952,11 @@ export async function getCalibrationSessionsWithText(subjectId: number): Promise
       AND s.word_count >= 10
     ORDER BY q.question_id ASC`,
     [subjectId]
-  ) as Array<SessionSummaryInput & { date: string; responseText: string }>;
+  ) as Array<SessionSummaryInput & { date: string; rCt: string; rNonce: string }>;
+  return rows.map(r => {
+    const { rCt, rNonce, ...rest } = r;
+    return { ...rest, responseText: decrypt(rCt, rNonce) };
+  });
 }
 
 export async function isCalibrationQuestion(questionId: number): Promise<boolean> {
@@ -720,22 +975,36 @@ export async function getResponseCount(subjectId: number): Promise<number> {
 }
 
 export async function getUsedCalibrationPrompts(subjectId: number): Promise<string[]> {
-  const rows = await sql`SELECT text FROM tb_questions WHERE subject_id = ${subjectId} AND question_source_id = 3` as Array<{ text: string }>;
-  return rows.map(r => r.text);
+  const rows = await sql`
+    SELECT text_ciphertext, text_nonce
+    FROM tb_questions
+    WHERE subject_id = ${subjectId} AND question_source_id = 3
+  ` as Array<{ text_ciphertext: string; text_nonce: string }>;
+  return rows.map(r => decrypt(r.text_ciphertext, r.text_nonce));
 }
 
-/** Return calibration prompt texts ordered by last use, oldest first. */
+/** Return distinct calibration prompt texts ordered by last use, oldest first.
+ *  Migration 031: text is encrypted with a fresh nonce per row, so identical
+ *  plaintexts yield distinct ciphertexts. SQL `GROUP BY text` no longer
+ *  collapses duplicates. We decrypt every row, then dedupe by plaintext in JS,
+ *  keeping the most recent dttm per distinct plaintext. */
 export async function getCalibrationPromptsByRecency(subjectId: number): Promise<string[]> {
   const rows = await sql`
-    SELECT sub.text FROM (
-      SELECT text, MAX(dttm_created_utc) AS last_used
-      FROM tb_questions
-      WHERE subject_id = ${subjectId} AND question_source_id = 3
-      GROUP BY text
-    ) sub
-    ORDER BY sub.last_used ASC
-  ` as Array<{ text: string }>;
-  return rows.map(r => r.text);
+    SELECT text_ciphertext, text_nonce, dttm_created_utc
+    FROM tb_questions
+    WHERE subject_id = ${subjectId} AND question_source_id = 3
+  ` as Array<{ text_ciphertext: string; text_nonce: string; dttm_created_utc: string }>;
+  const lastUseByText = new Map<string, string>();
+  for (const r of rows) {
+    const plaintext = decrypt(r.text_ciphertext, r.text_nonce);
+    const existing = lastUseByText.get(plaintext);
+    if (!existing || r.dttm_created_utc > existing) {
+      lastUseByText.set(plaintext, r.dttm_created_utc);
+    }
+  }
+  return Array.from(lastUseByText.entries())
+    .sort((a, b) => a[1].localeCompare(b[1]))
+    .map(([text]) => text);
 }
 
 export interface SaveCalibrationSessionOptions {
@@ -756,16 +1025,18 @@ export async function saveCalibrationSession(
   const ref = options?.attestation?.codePathsRef ?? 'docs/contamination-boundary-v1.md';
   const hash = options?.attestation?.commitHash ?? 'pre-attestation';
   return await sql.begin(async (tx) => {
+    const promptEnc = encryptString(promptText);
+    const responseEnc = encryptString(responseText);
     const [qRow] = await tx`
-      INSERT INTO tb_questions (subject_id, text, question_source_id)
-      VALUES (${subjectId}, ${promptText}, 3)
+      INSERT INTO tb_questions (subject_id, text_ciphertext, text_nonce, question_source_id)
+      VALUES (${subjectId}, ${promptEnc.ciphertext}, ${promptEnc.nonce}, 3)
       RETURNING question_id
     `;
     const questionId = qRow.question_id as number;
 
     await tx`
-      INSERT INTO tb_responses (subject_id, question_id, text, contamination_boundary_version, audited_code_paths_ref, code_commit_hash)
-      VALUES (${subjectId}, ${questionId}, ${responseText}, ${bv}, ${ref}, ${hash})
+      INSERT INTO tb_responses (subject_id, question_id, text_ciphertext, text_nonce, contamination_boundary_version, audited_code_paths_ref, code_commit_hash)
+      VALUES (${subjectId}, ${questionId}, ${responseEnc.ciphertext}, ${responseEnc.nonce}, ${bv}, ${ref}, ${hash})
     `;
 
     await saveSessionSummary({ ...summary, subjectId, questionId }, tx);
@@ -833,59 +1104,98 @@ export async function getAllQuestionFeedback(subjectId: number): Promise<Array<{
 export async function getRecentResponses(subjectId: number, limit: number): Promise<Array<{
   response_id: number; question_id: number; question: string; response: string; date: string;
 }>> {
-  return await sql`
-    SELECT r.response_id, q.question_id, q.text AS question, r.text AS response, q.scheduled_for AS date
+  const rows = await sql`
+    SELECT r.response_id, q.question_id,
+           q.text_ciphertext AS "qCt", q.text_nonce AS "qNonce",
+           r.text_ciphertext AS "rCt", r.text_nonce AS "rNonce",
+           q.scheduled_for AS date
     FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
     WHERE q.subject_id = ${subjectId}
     ORDER BY q.scheduled_for DESC
     LIMIT ${limit}
   ` as Array<{
-    response_id: number; question_id: number; question: string; response: string; date: string;
+    response_id: number; question_id: number;
+    qCt: string; qNonce: string; rCt: string; rNonce: string; date: string;
   }>;
+  return rows.map(r => ({
+    response_id: r.response_id,
+    question_id: r.question_id,
+    question: decrypt(r.qCt, r.qNonce),
+    response: decrypt(r.rCt, r.rNonce),
+    date: r.date,
+  }));
 }
 
 export async function getResponsesSince(subjectId: number, sinceDate: string): Promise<Array<{
   response_id: number; question_id: number; question: string; response: string; date: string;
 }>> {
-  return await sql`
-    SELECT r.response_id, q.question_id, q.text AS question, r.text AS response, q.scheduled_for AS date
+  const rows = await sql`
+    SELECT r.response_id, q.question_id,
+           q.text_ciphertext AS "qCt", q.text_nonce AS "qNonce",
+           r.text_ciphertext AS "rCt", r.text_nonce AS "rNonce",
+           q.scheduled_for AS date
     FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
     WHERE q.subject_id = ${subjectId} AND q.scheduled_for > ${sinceDate}
     ORDER BY q.scheduled_for ASC
   ` as Array<{
-    response_id: number; question_id: number; question: string; response: string; date: string;
+    response_id: number; question_id: number;
+    qCt: string; qNonce: string; rCt: string; rNonce: string; date: string;
   }>;
+  return rows.map(r => ({
+    response_id: r.response_id,
+    question_id: r.question_id,
+    question: decrypt(r.qCt, r.qNonce),
+    response: decrypt(r.rCt, r.rNonce),
+    date: r.date,
+  }));
 }
 
 export async function getResponsesSinceId(subjectId: number, sinceResponseId: number): Promise<Array<{
   response_id: number; question_id: number; question: string; response: string; date: string;
 }>> {
-  return await sql`
-    SELECT r.response_id, q.question_id, q.text AS question, r.text AS response, q.scheduled_for AS date
+  const rows = await sql`
+    SELECT r.response_id, q.question_id,
+           q.text_ciphertext AS "qCt", q.text_nonce AS "qNonce",
+           r.text_ciphertext AS "rCt", r.text_nonce AS "rNonce",
+           q.scheduled_for AS date
     FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
     WHERE q.subject_id = ${subjectId} AND r.response_id > ${sinceResponseId}
     ORDER BY q.scheduled_for ASC
   ` as Array<{
-    response_id: number; question_id: number; question: string; response: string; date: string;
+    response_id: number; question_id: number;
+    qCt: string; qNonce: string; rCt: string; rNonce: string; date: string;
   }>;
+  return rows.map(r => ({
+    response_id: r.response_id,
+    question_id: r.question_id,
+    question: decrypt(r.qCt, r.qNonce),
+    response: decrypt(r.rCt, r.rNonce),
+    date: r.date,
+  }));
 }
 
 export async function getAllReflections(subjectId: number): Promise<Array<{
   reflection_id: number; text: string; coverage_through_response_id: number | null;
   dttm_created_utc: string;
 }>> {
-  return await sql`
-    SELECT reflection_id, text, coverage_through_response_id, dttm_created_utc
+  const rows = await sql`
+    SELECT reflection_id, text_ciphertext, text_nonce, coverage_through_response_id, dttm_created_utc
     FROM tb_reflections
     WHERE subject_id = ${subjectId}
     ORDER BY dttm_created_utc ASC
   ` as Array<{
-    reflection_id: number; text: string; coverage_through_response_id: number | null;
-    dttm_created_utc: string;
+    reflection_id: number; text_ciphertext: string; text_nonce: string;
+    coverage_through_response_id: number | null; dttm_created_utc: string;
   }>;
+  return rows.map(r => ({
+    reflection_id: r.reflection_id,
+    text: decrypt(r.text_ciphertext, r.text_nonce),
+    coverage_through_response_id: r.coverage_through_response_id,
+    dttm_created_utc: r.dttm_created_utc,
+  }));
 }
 
 export async function getLatestReflectionWithCoverage(subjectId: number): Promise<{
@@ -894,17 +1204,23 @@ export async function getLatestReflectionWithCoverage(subjectId: number): Promis
   dttm_created_utc: string;
 } | null> {
   const rows = await sql`
-    SELECT reflection_id, text, coverage_through_response_id, dttm_created_utc
+    SELECT reflection_id, text_ciphertext, text_nonce, coverage_through_response_id, dttm_created_utc
     FROM tb_reflections
     WHERE subject_id = ${subjectId}
     ORDER BY dttm_created_utc DESC
     LIMIT 1
   `;
-  return (rows[0] as {
-    reflection_id: number; text: string;
-    coverage_through_response_id: number | null;
-    dttm_created_utc: string;
-  }) ?? null;
+  const row = rows[0] as {
+    reflection_id: number; text_ciphertext: string; text_nonce: string;
+    coverage_through_response_id: number | null; dttm_created_utc: string;
+  } | undefined;
+  if (!row) return null;
+  return {
+    reflection_id: row.reflection_id,
+    text: decrypt(row.text_ciphertext, row.text_nonce),
+    coverage_through_response_id: row.coverage_through_response_id,
+    dttm_created_utc: row.dttm_created_utc,
+  };
 }
 
 export async function getRecentFeedback(subjectId: number, limit: number): Promise<Array<{ date: string; landed: boolean }>> {
@@ -950,19 +1266,20 @@ export async function insertEmbeddingMeta(
   embedding?: number[],
   embeddingModelVersionId?: number,
 ): Promise<number> {
+  const enc = encryptString(embeddedText);
   if (embedding) {
     const vectorString = `[${embedding.join(',')}]`;
     const [row] = await sql`
-      INSERT INTO tb_embeddings (subject_id, embedding_source_id, source_record_id, embedded_text, source_date, model_name, embedding, embedding_model_version_id)
-      VALUES (${subjectId}, ${embeddingSourceId}, ${sourceRecordId}, ${embeddedText}, ${sourceDate}, ${modelName}, ${vectorString}::vector, ${embeddingModelVersionId ?? null})
+      INSERT INTO tb_embeddings (subject_id, embedding_source_id, source_record_id, embedded_text_ciphertext, embedded_text_nonce, source_date, model_name, embedding, embedding_model_version_id)
+      VALUES (${subjectId}, ${embeddingSourceId}, ${sourceRecordId}, ${enc.ciphertext}, ${enc.nonce}, ${sourceDate}, ${modelName}, ${vectorString}::vector, ${embeddingModelVersionId ?? null})
       ON CONFLICT (embedding_source_id, source_record_id, embedding_model_version_id) DO NOTHING
       RETURNING embedding_id
     `;
     return row?.embedding_id ?? 0;
   }
   const [row] = await sql`
-    INSERT INTO tb_embeddings (subject_id, embedding_source_id, source_record_id, embedded_text, source_date, model_name, embedding_model_version_id)
-    VALUES (${subjectId}, ${embeddingSourceId}, ${sourceRecordId}, ${embeddedText}, ${sourceDate}, ${modelName}, ${embeddingModelVersionId ?? null})
+    INSERT INTO tb_embeddings (subject_id, embedding_source_id, source_record_id, embedded_text_ciphertext, embedded_text_nonce, source_date, model_name, embedding_model_version_id)
+    VALUES (${subjectId}, ${embeddingSourceId}, ${sourceRecordId}, ${enc.ciphertext}, ${enc.nonce}, ${sourceDate}, ${modelName}, ${embeddingModelVersionId ?? null})
     ON CONFLICT (embedding_source_id, source_record_id, embedding_model_version_id) DO NOTHING
     RETURNING embedding_id
   `;
@@ -992,8 +1309,11 @@ export async function isRecordEmbedded(embeddingSourceId: number, sourceRecordId
 export async function getUnembeddedResponses(subjectId: number, embeddingModelVersionId?: number): Promise<Array<{
   response_id: number; question: string; response: string; date: string;
 }>> {
-  return await sql`
-    SELECT r.response_id, q.text AS question, r.text AS response, q.scheduled_for AS date
+  const rows = await sql`
+    SELECT r.response_id,
+           q.text_ciphertext AS "qCt", q.text_nonce AS "qNonce",
+           r.text_ciphertext AS "rCt", r.text_nonce AS "rNonce",
+           q.scheduled_for AS date
     FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
     WHERE q.subject_id = ${subjectId}
@@ -1007,8 +1327,14 @@ export async function getUnembeddedResponses(subjectId: number, embeddingModelVe
       )
     ORDER BY q.scheduled_for ASC
   ` as Array<{
-    response_id: number; question: string; response: string; date: string;
+    response_id: number; qCt: string; qNonce: string; rCt: string; rNonce: string; date: string;
   }>;
+  return rows.map(r => ({
+    response_id: r.response_id,
+    question: decrypt(r.qCt, r.qNonce),
+    response: decrypt(r.rCt, r.rNonce),
+    date: r.date,
+  }));
 }
 
 
@@ -1018,9 +1344,9 @@ export async function searchVecEmbeddings(subjectId: number, queryVector: number
 }>> {
   try {
     const vectorString = `[${queryVector.join(',')}]`;
-    return await sql`
+    const rows = await sql`
       SELECT e.embedding_id, e.embedding_source_id, e.source_record_id,
-             e.embedded_text, e.source_date,
+             e.embedded_text_ciphertext, e.embedded_text_nonce, e.source_date,
              (e.embedding <-> ${vectorString}::vector) AS distance
       FROM tb_embeddings e
       WHERE e.subject_id = ${subjectId}
@@ -1030,8 +1356,17 @@ export async function searchVecEmbeddings(subjectId: number, queryVector: number
       LIMIT ${k}
     ` as Array<{
       embedding_id: number; distance: number; embedding_source_id: number;
-      source_record_id: number; embedded_text: string; source_date: string | null;
+      source_record_id: number; embedded_text_ciphertext: string; embedded_text_nonce: string;
+      source_date: string | null;
     }>;
+    return rows.map(r => ({
+      embedding_id: r.embedding_id,
+      distance: r.distance,
+      embedding_source_id: r.embedding_source_id,
+      source_record_id: r.source_record_id,
+      embedded_text: decrypt(r.embedded_text_ciphertext, r.embedded_text_nonce),
+      source_date: r.source_date,
+    }));
   } catch (err) {
     console.error('[searchVecEmbeddings] Vector search failed, returning empty:', (err as Error).message);
     return [];
@@ -1419,11 +1754,19 @@ export async function saveCalibrationContext(subjectId: number, questionId: numb
     for (const tag of tags) {
       const dimId = DIMENSION_ID_MAP[tag.dimension];
       if (!dimId) continue;
+      const valueEnc = encryptString(tag.value);
+      const detailEnc = encryptString(tag.detail);
       await sql`
         INSERT INTO tb_calibration_context (
-           subject_id, question_id, context_dimension_id, value, detail, confidence
+           subject_id, question_id, context_dimension_id,
+           value_ciphertext, value_nonce,
+           detail_ciphertext, detail_nonce,
+           confidence
         ) VALUES (
-          ${subjectId}, ${questionId}, ${dimId}, ${tag.value}, ${tag.detail}, ${tag.confidence}
+          ${subjectId}, ${questionId}, ${dimId},
+          ${valueEnc.ciphertext}, ${valueEnc.nonce},
+          ${detailEnc.ciphertext}, ${detailEnc.nonce},
+          ${tag.confidence}
         )
       `;
     }
@@ -1431,17 +1774,29 @@ export async function saveCalibrationContext(subjectId: number, questionId: numb
 }
 
 export async function getCalibrationContextForQuestion(subjectId: number, questionId: number): Promise<Array<CalibrationContextTag & { questionId: number }>> {
-  return await sql`
+  const rows = await sql`
     SELECT cc.question_id AS "questionId",
            d.enum_code AS dimension,
-           cc.value,
-           cc.detail,
+           cc.value_ciphertext AS "valueCt", cc.value_nonce AS "valueNonce",
+           cc.detail_ciphertext AS "detailCt", cc.detail_nonce AS "detailNonce",
            cc.confidence
     FROM tb_calibration_context cc
     JOIN te_context_dimension d ON cc.context_dimension_id = d.context_dimension_id
     WHERE cc.subject_id = ${subjectId} AND cc.question_id = ${questionId}
     ORDER BY cc.context_dimension_id ASC
-  ` as Array<CalibrationContextTag & { questionId: number }>;
+  ` as Array<{
+    questionId: number; dimension: CalibrationContextTag['dimension'];
+    valueCt: string; valueNonce: string;
+    detailCt: string | null; detailNonce: string | null;
+    confidence: number;
+  }>;
+  return rows.map(r => ({
+    questionId: r.questionId,
+    dimension: r.dimension,
+    value: decrypt(r.valueCt, r.valueNonce),
+    detail: decryptString(r.detailCt, r.detailNonce),
+    confidence: r.confidence,
+  }));
 }
 
 export async function getRecentCalibrationContext(subjectId: number, limit: number = 10): Promise<Array<{
@@ -1453,13 +1808,13 @@ export async function getRecentCalibrationContext(subjectId: number, limit: numb
   detail: string | null;
   confidence: number;
 }>> {
-  return await sql`
+  const rows = await sql`
     SELECT cc.question_id AS "questionId",
-           q.text AS "promptText",
+           q.text_ciphertext AS "qCt", q.text_nonce AS "qNonce",
            q.dttm_created_utc AS "sessionDate",
            d.enum_code AS dimension,
-           cc.value,
-           cc.detail,
+           cc.value_ciphertext AS "valueCt", cc.value_nonce AS "valueNonce",
+           cc.detail_ciphertext AS "detailCt", cc.detail_nonce AS "detailNonce",
            cc.confidence
     FROM tb_calibration_context cc
     JOIN te_context_dimension d ON cc.context_dimension_id = d.context_dimension_id
@@ -1469,13 +1824,21 @@ export async function getRecentCalibrationContext(subjectId: number, limit: numb
     LIMIT ${limit}
   ` as Array<{
     questionId: number;
-    promptText: string;
-    sessionDate: string;
-    dimension: string;
-    value: string;
-    detail: string | null;
+    qCt: string; qNonce: string;
+    sessionDate: string; dimension: string;
+    valueCt: string; valueNonce: string;
+    detailCt: string | null; detailNonce: string | null;
     confidence: number;
   }>;
+  return rows.map(r => ({
+    questionId: r.questionId,
+    promptText: decrypt(r.qCt, r.qNonce),
+    sessionDate: r.sessionDate,
+    dimension: r.dimension,
+    value: decrypt(r.valueCt, r.valueNonce),
+    detail: decryptString(r.detailCt, r.detailNonce),
+    confidence: r.confidence,
+  }));
 }
 
 export async function getCalibrationContextNearDate(subjectId: number, targetDate: string, windowDays: number = 1): Promise<Array<{
@@ -1486,12 +1849,12 @@ export async function getCalibrationContextNearDate(subjectId: number, targetDat
   detail: string | null;
   confidence: number;
 }>> {
-  return await sql`
+  const rows = await sql`
     SELECT cc.question_id AS "questionId",
            q.dttm_created_utc AS "sessionDate",
            d.enum_code AS dimension,
-           cc.value,
-           cc.detail,
+           cc.value_ciphertext AS "valueCt", cc.value_nonce AS "valueNonce",
+           cc.detail_ciphertext AS "detailCt", cc.detail_nonce AS "detailNonce",
            cc.confidence
     FROM tb_calibration_context cc
     JOIN te_context_dimension d ON cc.context_dimension_id = d.context_dimension_id
@@ -1500,13 +1863,19 @@ export async function getCalibrationContextNearDate(subjectId: number, targetDat
       AND ABS(EXTRACT(EPOCH FROM (q.dttm_created_utc - ${targetDate}::timestamptz)) / 86400) <= ${windowDays}
     ORDER BY ABS(EXTRACT(EPOCH FROM (q.dttm_created_utc - ${targetDate}::timestamptz)) / 86400) ASC, cc.context_dimension_id ASC
   ` as Array<{
-    questionId: number;
-    sessionDate: string;
-    dimension: string;
-    value: string;
-    detail: string | null;
+    questionId: number; sessionDate: string; dimension: string;
+    valueCt: string; valueNonce: string;
+    detailCt: string | null; detailNonce: string | null;
     confidence: number;
   }>;
+  return rows.map(r => ({
+    questionId: r.questionId,
+    sessionDate: r.sessionDate,
+    dimension: r.dimension,
+    value: decrypt(r.valueCt, r.valueNonce),
+    detail: decryptString(r.detailCt, r.detailNonce),
+    confidence: r.confidence,
+  }));
 }
 
 // ----------------------------------------------------------------------------
@@ -1748,15 +2117,19 @@ export async function getEntryStateByResponseId(subjectId: number, responseId: n
   date: string; question_id: number; question_text: string;
 }) | null> {
   const rows = await sql`
-    SELECT es.*, q.scheduled_for AS date, q.question_id, q.text AS question_text
+    SELECT es.*, q.scheduled_for AS date, q.question_id,
+           q.text_ciphertext, q.text_nonce
     FROM tb_entry_states es
     JOIN tb_responses r ON es.response_id = r.response_id
     JOIN tb_questions q ON r.question_id = q.question_id
     WHERE es.subject_id = ${subjectId} AND es.response_id = ${responseId}
   `;
-  return (rows[0] as (EntryStateRow & {
-    date: string; question_id: number; question_text: string;
-  })) ?? null;
+  const row = rows[0] as (EntryStateRow & {
+    date: string; question_id: number; text_ciphertext: string; text_nonce: string;
+  }) | undefined;
+  if (!row) return null;
+  const { text_ciphertext, text_nonce, ...rest } = row;
+  return { ...rest, question_text: decrypt(text_ciphertext, text_nonce) };
 }
 
 // ===================================================================

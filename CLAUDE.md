@@ -117,7 +117,7 @@ Without the `tx` parameter, each function uses the module-level connection pool 
 - **Enum tables** get explicit INSERT with fixed IDs
 - Do NOT use ALTER TABLE **in the schema file** (`db/sql/dbAlice_Tables.sql`) -- rewrite the CREATE TABLE so the schema always reads as a complete, intact script. Incremental changes belong in migration files under `db/sql/migrations/`.
 - Do NOT hard-code proper nouns into column names
-- **JSONB columns**: event_log_json, keystroke_stream_json, traits_json, signals_json, deletion_events_json, iki_autocorrelation_json, digraph_latency_json, pe_spectrum, prompt trace ID arrays
+- **JSONB columns**: traits_json, signals_json, deletion_events_json, iki_autocorrelation_json, digraph_latency_json, pe_spectrum, prompt trace ID arrays. (Migration 031: `event_log_json` and `keystroke_stream_json` were converted to encrypted ciphertext+nonce TEXT columns; the application JSON.stringifys before encrypting and JSON.parses after decrypting.)
 - **Embeddings**: stored as `vector(512)` on `tb_embeddings` via pgvector with HNSW index
 
 ---
@@ -368,12 +368,14 @@ password if needed).
 
 ---
 
-## At-rest Encryption (`libCrypto.ts`)
+## At-rest Encryption (`libCrypto.ts` + migration 031)
 
-Subject journal text is encrypted before being written to Supabase via
-AES-256-GCM. Key sourced from `ALICE_ENCRYPTION_KEY` (base64-encoded 32 bytes,
-loaded from systemd `EnvironmentFile`). GCM's auth tag is appended to the
-ciphertext for storage; decrypt splits it back apart and throws on tampering.
+Every subject-bearing text and JSONB column is encrypted before being written
+to Supabase via AES-256-GCM. Migration 031 (Step 8 of the unification plan,
+2026-04-27) extended the v1 primitive to a uniform schema-level discipline.
+Key sourced from `ALICE_ENCRYPTION_KEY` (base64-encoded 32 bytes, loaded from
+systemd `EnvironmentFile`). GCM's auth tag is appended to the ciphertext for
+storage; decrypt splits it back apart and throws on tampering.
 
 ```ts
 import { encrypt, decrypt } from './libCrypto.ts';
@@ -381,11 +383,27 @@ const { ciphertext, nonce } = encrypt(plaintext);  // both base64
 const original = decrypt(ciphertext, nonce);       // throws on tamper
 ```
 
+**Encrypted columns** (post-031): `tb_responses.text`, `tb_questions.text`,
+`tb_reflections.text`, `tb_calibration_context.value`+`detail`,
+`tb_embeddings.embedded_text`, `tb_session_events.event_log_json`+
+`keystroke_stream_json`. Each becomes a `<col>_ciphertext`+`<col>_nonce` pair
+of TEXT columns. See `db/sql/migrations/030_STEP8_ENCRYPTION.md` for the full
+inventory and rationale.
+
+**Boundary discipline**: every read of an encrypted column lives inside
+`src/lib/libDb.ts`. Application code above libDb sees plaintext on the way
+in and plaintext on the way out — never ciphertext. Direct SELECTs of
+encrypted columns outside libDb are forbidden by convention. New helpers in
+`@region encrypted-reads` (`getResponseText`, `getQuestionTextById`,
+`getEventLogJson`, `getKeystrokeStreamJson`, `listEventLogJson`,
+`listKeystrokeStreams`, `listResponseTexts`) cover the consolidation patterns.
+
 **Key facts:**
-- `ALICE_ENCRYPTION_KEY` is permanent. Lose it = lose every encrypted row. Backed up in operator's password manager AND in `/etc/alice/secrets.env`.
+- `ALICE_ENCRYPTION_KEY` is permanent. Lose it = lose every encrypted row across all in-scope tables. Backed up in operator's password manager AND in `/etc/alice/secrets.env`.
 - Each `encrypt()` generates a fresh 12-byte random nonce — same plaintext yields different ciphertext.
 - `decrypt()` throws on tampered ciphertext, tampered nonce, or wrong key. Never returns garbage.
 - No key rotation in v1.
+- SQL operators (`GROUP BY`, `DISTINCT`, `=`) on encrypted columns no longer collapse identical plaintexts (random nonces yield distinct ciphertexts). Two existing operators were migrated to decrypt-then-dedupe-in-JS: `libDb.getCalibrationPromptsByRecency` and `health.ts:166` duplicate-question anomaly check. New code that needs equality on encrypted columns must follow the same pattern.
 
 ---
 

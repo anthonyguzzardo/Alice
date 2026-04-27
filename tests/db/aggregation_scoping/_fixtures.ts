@@ -22,6 +22,15 @@
  */
 
 import type { Sql } from 'postgres';
+import { encrypt } from '../../../src/lib/libCrypto.ts';
+
+/** Tag a plaintext value as ciphertext + nonce columns for a fixture insert.
+ *  Migration 031 replaced TEXT/JSONB plaintext columns with ciphertext+nonce
+ *  pairs. Fixtures that previously inserted plaintext directly call this
+ *  helper to produce the encrypted pair. */
+function enc(plaintext: string): { ciphertext: string; nonce: string } {
+  return encrypt(plaintext);
+}
 
 // ----------------------------------------------------------------------------
 // Identity constants
@@ -312,11 +321,13 @@ export async function insertJournalSession(
   // CURRENT_TIMESTAMP unless overridden via dttmCreatedUtc — which the
   // libDailyDelta hotspots require because their EXISTS subqueries gate on
   // dttm_created_utc::date matching the journal's scheduled_for.
+  const qEnc = enc(`q for ${profile.signatureWord} session ${sessionIndex}`);
   const [qRow] = await sql`
-    INSERT INTO tb_questions (subject_id, text, question_source_id, scheduled_for, dttm_created_utc)
+    INSERT INTO tb_questions (subject_id, text_ciphertext, text_nonce, question_source_id, scheduled_for, dttm_created_utc)
     VALUES (
       ${subjectId},
-      ${`q for ${profile.signatureWord} session ${sessionIndex}`},
+      ${qEnc.ciphertext},
+      ${qEnc.nonce},
       ${sourceId},
       ${scheduledFor},
       COALESCE(${dttmCreatedUtc}::timestamptz, CURRENT_TIMESTAMP)
@@ -326,9 +337,10 @@ export async function insertJournalSession(
   const questionId = (qRow as { question_id: number }).question_id;
 
   // tb_responses
+  const rEnc = enc(text);
   await sql`
-    INSERT INTO tb_responses (subject_id, question_id, text)
-    VALUES (${subjectId}, ${questionId}, ${text})
+    INSERT INTO tb_responses (subject_id, question_id, text_ciphertext, text_nonce)
+    VALUES (${subjectId}, ${questionId}, ${rEnc.ciphertext}, ${rEnc.nonce})
   `;
 
   // tb_session_summaries
@@ -707,15 +719,17 @@ export async function insertEmbeddingRow(
   const padded = [...vectorPrefix];
   while (padded.length < 512) padded.push(0);
   const vectorString = `[${padded.join(',')}]`;
+  const tEnc = enc(options.embeddedText ?? 'fixture');
   await sql`
     INSERT INTO tb_embeddings (
-      subject_id, embedding_source_id, source_record_id, embedded_text,
+      subject_id, embedding_source_id, source_record_id,
+      embedded_text_ciphertext, embedded_text_nonce,
       source_date, model_name, embedding
     ) VALUES (
       ${subjectId},
       ${options.embeddingSourceId ?? 1},
       ${sourceRecordId},
-      ${options.embeddedText ?? 'fixture'},
+      ${tEnc.ciphertext}, ${tEnc.nonce},
       ${options.sourceDate ?? null},
       ${options.modelName ?? 'fixture-model'},
       ${vectorString}::vector

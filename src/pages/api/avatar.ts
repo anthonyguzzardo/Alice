@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import sql from '../../lib/libDbPool.ts';
-import { OWNER_SUBJECT_ID } from '../../lib/libDb.ts';
+import { OWNER_SUBJECT_ID, listResponseTexts } from '../../lib/libDb.ts';
 import { parseBody } from '../../lib/utlParseBody.ts';
 import { BINARY_PATH } from '../../lib/libSignalsNative.ts';
 import { createRequire } from 'node:module';
@@ -47,14 +47,12 @@ export const POST: APIRoute = async ({ request }) => {
     });
   }
 
-  // Fetch all response texts (journal + calibration)
-  const textRows = await sql`
-    SELECT r.text
-    FROM tb_responses r
-    JOIN tb_questions q ON r.question_id = q.question_id
-    WHERE q.subject_id = ${subjectId}
-    ORDER BY q.scheduled_for ASC
-  ` as Array<{ text: string }>;
+  // Fetch all response texts (journal + calibration). Plaintext returns
+  // through libDb's decryption boundary.
+  const textRows = await listResponseTexts(subjectId, {
+    excludeCalibration: false,
+    orderBy: 'scheduled_for_asc',
+  });
 
   if (textRows.length < 3) {
     return new Response(JSON.stringify({ error: 'Not enough data yet. Need at least 3 journal entries.' }), {

@@ -9,7 +9,10 @@
  *   Lexical diversity   — McCarthy & Jarvis (2010) MATTR
  */
 import type { APIRoute } from 'astro';
-import sql, { OWNER_SUBJECT_ID } from '../../lib/libDb.ts';
+import sql, {
+  OWNER_SUBJECT_ID,
+  listResponseTextsExcludingCalibration,
+} from '../../lib/libDb.ts';
 import type { AliceNegativeSignal, AliceNegativeSignalRaw } from '../../lib/libAliceNegative/libTypes.ts';
 import {
   avg, variance, stddev, clamp, percentileRank,
@@ -396,13 +399,11 @@ export const GET: APIRoute = async () => {
     }
 
     // ── Patterns ──────────────────────────────────────────────────
-    const recentTexts = await sql`
-      SELECT r.text FROM tb_responses r
-      JOIN tb_questions q ON r.question_id = q.question_id
-      WHERE q.subject_id = ${subjectId}
-        AND q.question_source_id != 3
-      ORDER BY q.scheduled_for DESC LIMIT 7
-    ` as Array<{ text: string }>;
+    // Plaintext returns through libDb's decryption boundary.
+    const recentTexts = await listResponseTextsExcludingCalibration(subjectId, {
+      orderBy: 'scheduled_for_desc',
+      limit: 7,
+    });
 
     let thematicDensity = 0.5;
     if (recentTexts.length >= 2) {
@@ -416,13 +417,10 @@ export const GET: APIRoute = async () => {
     const feedback = await getQuestionFeedbackTotals(subjectId);
 
     // ── Shape ─────────────────────────────────────────────────────
-    const shapeTexts = await sql`
-      SELECT r.text FROM tb_responses r
-      JOIN tb_questions q ON r.question_id = q.question_id
-      WHERE q.subject_id = ${subjectId}
-        AND q.question_source_id != 3
-      ORDER BY r.response_id DESC LIMIT ${RECENT_WINDOW}
-    ` as Array<{ text: string }>;
+    const shapeTexts = await listResponseTextsExcludingCalibration(subjectId, {
+      orderBy: 'response_id_desc',
+      limit: RECENT_WINDOW,
+    });
 
     const shape = computeShapeMetrics(shapeTexts.map(r => r.text));
 

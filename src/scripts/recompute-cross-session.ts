@@ -7,20 +7,15 @@
 import 'dotenv/config';
 import sql from '../lib/libDbPool.ts';
 import { computeCrossSessionSignals } from '../lib/libCrossSessionSignals.ts';
-import { saveCrossSessionSignals } from '../lib/libDb.ts';
+import { saveCrossSessionSignals, listResponseTexts } from '../lib/libDb.ts';
 import { parseSubjectIdArg } from '../lib/utlSubjectIdArg.ts';
 
 async function main() {
   const subjectId = parseSubjectIdArg();
 
-  const rows = await sql`
-    SELECT r.question_id, r.text
-    FROM tb_responses r
-    JOIN tb_questions q ON r.question_id = q.question_id
-    WHERE q.subject_id = ${subjectId}
-      AND q.question_source_id != 3
-    ORDER BY q.scheduled_for ASC
-  ` as Array<{ question_id: number; text: string }>;
+  // Plaintext through libDb's decryption boundary.
+  const rows = (await listResponseTexts(subjectId, { orderBy: 'scheduled_for_asc' }))
+    .map(r => ({ question_id: r.question_id, text: r.text }));
 
   console.log(`[recompute-cross-session] ${rows.length} journal sessions to process`);
 

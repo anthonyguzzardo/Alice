@@ -99,6 +99,8 @@ describe('hotspot E — libCrossSessionSignals getPriorTexts scoping', () => {
 
     // Helper: insert a journal session for subjectId at the given date,
     // then overwrite the response text with the supplied custom text.
+    // Migration 031: text is encrypted; UPDATE writes ciphertext + nonce.
+    const { encrypt } = await import('../../../src/lib/libCrypto.ts');
     const insertWithText = async (
       subjectId: number,
       profile: typeof OWNER_PROFILE,
@@ -112,7 +114,8 @@ describe('hotspot E — libCrossSessionSignals getPriorTexts scoping', () => {
         scheduledFor,
         sessionIndex,
       });
-      await sql`UPDATE tb_responses SET text = ${customText} WHERE question_id = ${qid}`;
+      const enc = encrypt(customText);
+      await sql`UPDATE tb_responses SET text_ciphertext = ${enc.ciphertext}, text_nonce = ${enc.nonce} WHERE question_id = ${qid}`;
       return qid;
     };
 

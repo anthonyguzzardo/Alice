@@ -14,22 +14,21 @@
  * Run: npx tsx src/scripts/backfill-process-signals.ts
  */
 
-import { sql } from '../lib/libDb.ts';
+import { sql, listEventLogJson } from '../lib/libDb.ts';
 import { computeProcessSignals } from '../lib/libSignalsNative.ts';
 import { parseSubjectIdArg } from '../lib/utlSubjectIdArg.ts';
 
 async function main() {
   const subjectId = parseSubjectIdArg();
 
-  // Find all sessions that have both event logs and existing process signals
-  const sessions = await sql`
-    SELECT se.question_id, se.event_log_json
-    FROM tb_session_events se
-    JOIN tb_process_signals ps ON se.question_id = ps.question_id
-    WHERE se.subject_id = ${subjectId}
-      AND ps.subject_id = ${subjectId}
-    ORDER BY se.question_id ASC
-  ` as Array<{ question_id: number; event_log_json: unknown }>;
+  // Plaintext event logs come back through libDb's decryption boundary.
+  // Filter to sessions that already have process signals (recompute target).
+  const allEventLogs = await listEventLogJson(subjectId);
+  const havingProcess = await sql`
+    SELECT question_id FROM tb_process_signals WHERE subject_id = ${subjectId}
+  ` as Array<{ question_id: number }>;
+  const havingSet = new Set(havingProcess.map(r => r.question_id));
+  const sessions = allEventLogs.filter(r => havingSet.has(r.question_id));
 
   console.log(`Found ${sessions.length} sessions to recompute.`);
 
@@ -39,9 +38,7 @@ async function main() {
 
   for (const row of sessions) {
     try {
-      const eventLogJson = typeof row.event_log_json === 'string'
-        ? row.event_log_json
-        : JSON.stringify(row.event_log_json);
+      const eventLogJson = row.event_log_json;
 
       const ps = computeProcessSignals(eventLogJson);
 

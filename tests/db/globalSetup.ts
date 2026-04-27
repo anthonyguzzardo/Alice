@@ -23,6 +23,7 @@ import postgres from 'postgres';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { randomBytes } from 'node:crypto';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SCHEMA_PATH = resolve(__dirname, '..', '..', 'db', 'sql', 'dbAlice_Tables.sql');
@@ -49,6 +50,14 @@ export async function setup(): Promise<void> {
   // Hand the connection URI to the test process so libDbPool picks it up
   // when libDb is imported from a test.
   process.env.ALICE_PG_URL = url;
+
+  // Migration 031: every libDb call that touches an encrypted column needs a
+  // valid encryption key. Tests don't share the production key — they use a
+  // fresh one per run, generated here. Do NOT overwrite an externally-set key
+  // (lets a developer pin a known key for debugging).
+  if (!process.env.ALICE_ENCRYPTION_KEY) {
+    process.env.ALICE_ENCRYPTION_KEY = randomBytes(32).toString('base64');
+  }
 }
 
 export async function teardown(): Promise<void> {

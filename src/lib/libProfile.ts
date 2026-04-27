@@ -11,6 +11,7 @@
  */
 
 import sql from './libDbPool.ts';
+import { listResponseTexts } from './libDb.ts';
 import { logError } from './utlErrorLog.ts';
 
 // ─── Helpers ──────────────────────────────────────────────────────
@@ -128,15 +129,12 @@ export async function updateProfile(subjectId: number, questionId: number): Prom
     ` as any[];
 
     // ── Response texts for trigram model + vocab ──
-    const textRows = await sql`
-      SELECT r.text
-      FROM tb_responses r
-      JOIN tb_questions q ON r.question_id = q.question_id
-      WHERE q.subject_id = ${subjectId}
-        AND q.question_source_id != 3
-        AND NOT EXISTS (SELECT 1 FROM tb_semantic_signals sem WHERE sem.question_id = r.question_id AND sem.paste_contaminated = true)
-      ORDER BY q.scheduled_for ASC
-    ` as any[];
+    // Plaintext through libDb's decryption boundary; both filters (calibration,
+    // paste-contaminated) are honored by listResponseTexts options.
+    const textRows = await listResponseTexts(subjectId, {
+      excludePasteContaminated: true,
+      orderBy: 'scheduled_for_asc',
+    }) as any[];
 
     // ── Compute motor fingerprint ──
     const muVals = nn(motorRows.map((r: any) => r.ex_gaussian_mu));

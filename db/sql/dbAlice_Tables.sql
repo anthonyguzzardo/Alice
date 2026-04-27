@@ -251,7 +251,10 @@ CREATE INDEX IF NOT EXISTS ix_subject_sessions_expires_at
 CREATE TABLE IF NOT EXISTS tb_questions (
    question_id            INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
   ,subject_id             INT NOT NULL                                    -- logical FK to tb_subjects
-  ,text                   TEXT NOT NULL
+  -- text encrypted at rest (migration 031). Plaintext column removed; both
+  -- ciphertext + nonce produced by libCrypto.encrypt() are required.
+  ,text_ciphertext        TEXT NOT NULL
+  ,text_nonce             TEXT NOT NULL
   ,question_source_id     SMALLINT NOT NULL DEFAULT 1
   ,scheduled_for          DATE
   ,intervention_intent_id INT
@@ -435,7 +438,9 @@ CREATE TABLE IF NOT EXISTS tb_responses (
    response_id                     INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
   ,subject_id                      INT NOT NULL                           -- logical FK to tb_subjects
   ,question_id                     INT NOT NULL UNIQUE
-  ,text                            TEXT NOT NULL
+  -- text encrypted at rest (migration 031). Plaintext column removed.
+  ,text_ciphertext                 TEXT NOT NULL
+  ,text_nonce                      TEXT NOT NULL
   ,contamination_boundary_version  TEXT NOT NULL DEFAULT 'v1'
   ,audited_code_paths_ref          TEXT NOT NULL DEFAULT 'docs/contamination-boundary-v1.md'
   ,code_commit_hash                TEXT NOT NULL DEFAULT 'pre-attestation'
@@ -474,7 +479,9 @@ CREATE INDEX IF NOT EXISTS ix_interaction_events_subject_id ON tb_interaction_ev
 CREATE TABLE IF NOT EXISTS tb_reflections (
    reflection_id                INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
   ,subject_id                   INT NOT NULL                              -- logical FK to tb_subjects
-  ,text                         TEXT NOT NULL
+  -- text encrypted at rest (migration 031). Plaintext column removed.
+  ,text_ciphertext              TEXT NOT NULL
+  ,text_nonce                   TEXT NOT NULL
   ,reflection_type_id           SMALLINT NOT NULL DEFAULT 1
   ,coverage_through_response_id INT
   ,dttm_created_utc             TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -699,7 +706,11 @@ CREATE TABLE IF NOT EXISTS tb_embeddings (
   ,subject_id                  INT NOT NULL                               -- logical FK to tb_subjects
   ,embedding_source_id         SMALLINT NOT NULL
   ,source_record_id            INT      NOT NULL
-  ,embedded_text               TEXT NOT NULL
+  -- embedded_text encrypted at rest (migration 031). For response embeddings
+  -- the plaintext equals tb_responses.text — leaving it plaintext while
+  -- encrypting tb_responses.text would have been a bypass.
+  ,embedded_text_ciphertext    TEXT NOT NULL
+  ,embedded_text_nonce         TEXT NOT NULL
   ,source_date                 DATE
   ,model_name                  TEXT NOT NULL DEFAULT 'Qwen3-Embedding-0.6B'
   ,embedding_model_version_id  INT
@@ -849,26 +860,36 @@ CREATE INDEX IF NOT EXISTS ix_calibration_baselines_subject_id ON tb_calibration
 -- MUTABILITY: insert once per session
 -- FOOTER: created only
 --
--- event_log_json: JSONB array of [offsetMs, cursorPos, deletedCount, insertedText]
---   offsetMs is DOUBLE PRECISION in the JSON (microsecond-precision from performance.now())
---   JSONB stores numbers as numeric internally; no float precision loss on storage.
---   postgres.js auto-parses JSONB on read; signal functions must accept parsed arrays.
+-- ENCRYPTION: both payloads (event_log + keystroke_stream) are encrypted at
+--   rest (migration 031). The application JSON.stringifys the array, encrypts
+--   via libCrypto.encrypt(), and stores ciphertext + nonce in the columns
+--   below. On read libDb.getSessionEvents (and friends) decrypt and return
+--   the JSON string; callers JSON.parse as needed. The shape definitions
+--   below describe the PLAINTEXT — the columns themselves are ciphertext.
 --
--- keystroke_stream_json: JSONB array of {c: keyCode, d: keydownOffset, u: keyupOffset}
+-- event_log (plaintext): JSON array of [offsetMs, cursorPos, deletedCount, insertedText]
+--   offsetMs is microsecond-precision from performance.now() (DOUBLE PRECISION).
+--
+-- keystroke_stream (plaintext): JSON array of {c: character, d: keydownOffset, u: keyupOffset}
 --   d and u are DOUBLE PRECISION offsets from page open (microsecond-precision).
 --   Consumed by Rust signal engine via JSON.stringify() round-trip.
 CREATE TABLE IF NOT EXISTS tb_session_events (
-   session_event_id       INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
-  ,subject_id             INT NOT NULL                                    -- logical FK to tb_subjects
-  ,question_id            INT NOT NULL UNIQUE
-  ,event_log_json         JSONB NOT NULL
-  ,total_events           INT   NOT NULL
-  ,session_duration_ms    DOUBLE PRECISION NOT NULL
-  ,keystroke_stream_json  JSONB
-  ,total_input_events     INT
-  ,decimation_count       INT
-  ,dttm_created_utc       TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-  ,created_by             TEXT NOT NULL DEFAULT 'client'
+   session_event_id              INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,subject_id                    INT NOT NULL                             -- logical FK to tb_subjects
+  ,question_id                   INT NOT NULL UNIQUE
+  -- event_log + keystroke_stream encrypted at rest (migration 031). The
+  -- application JSON.stringifys the JSONB array before encrypting and
+  -- JSON.parses on read. Plaintext JSONB columns removed.
+  ,event_log_ciphertext          TEXT NOT NULL
+  ,event_log_nonce               TEXT NOT NULL
+  ,total_events                  INT  NOT NULL
+  ,session_duration_ms           DOUBLE PRECISION NOT NULL
+  ,keystroke_stream_ciphertext   TEXT
+  ,keystroke_stream_nonce        TEXT
+  ,total_input_events            INT
+  ,decimation_count              INT
+  ,dttm_created_utc              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ,created_by                    TEXT NOT NULL DEFAULT 'client'
 );
 
 CREATE INDEX IF NOT EXISTS ix_session_events_subject_id ON tb_session_events (subject_id);
@@ -1228,8 +1249,11 @@ CREATE TABLE IF NOT EXISTS tb_calibration_context (
   ,subject_id              INT      NOT NULL                              -- logical FK to tb_subjects
   ,question_id             INT      NOT NULL
   ,context_dimension_id    SMALLINT NOT NULL
-  ,value                   TEXT NOT NULL
-  ,detail                  TEXT
+  -- value + detail encrypted at rest (migration 031). Plaintext columns removed.
+  ,value_ciphertext        TEXT NOT NULL
+  ,value_nonce             TEXT NOT NULL
+  ,detail_ciphertext       TEXT
+  ,detail_nonce            TEXT
   ,confidence              DOUBLE PRECISION NOT NULL DEFAULT 1.0
   ,dttm_created_utc        TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
   ,created_by              TEXT NOT NULL DEFAULT 'system'

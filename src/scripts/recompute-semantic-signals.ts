@@ -7,24 +7,27 @@
 import 'dotenv/config';
 import sql from '../lib/libDbPool.ts';
 import { computeSemanticSignals } from '../lib/libSemanticSignals.ts';
-import { saveSemanticSignals } from '../lib/libDb.ts';
+import { saveSemanticSignals, listResponseTexts } from '../lib/libDb.ts';
 import { parseSubjectIdArg } from '../lib/utlSubjectIdArg.ts';
 
 async function main() {
   const subjectId = parseSubjectIdArg();
 
-  // Get all journal responses with their text and paste_count
-  const rows = await sql`
-    SELECT r.question_id, r.text,
-           COALESCE(ss.paste_count, 0)::int AS paste_count,
-           COALESCE(ss.drop_count, 0)::int AS drop_count
-    FROM tb_responses r
-    JOIN tb_questions q ON r.question_id = q.question_id
-    LEFT JOIN tb_session_summaries ss ON r.question_id = ss.question_id
-    WHERE q.subject_id = ${subjectId}
-      AND q.question_source_id != 3
-    ORDER BY q.scheduled_for ASC
-  ` as Array<{ question_id: number; text: string; paste_count: number; drop_count: number }>;
+  // Get all journal responses with text (decrypted) and paste/drop counts.
+  const texts = await listResponseTexts(subjectId, { orderBy: 'scheduled_for_asc' });
+  const summaryRows = await sql`
+    SELECT question_id, COALESCE(paste_count, 0)::int AS paste_count,
+           COALESCE(drop_count, 0)::int AS drop_count
+    FROM tb_session_summaries
+    WHERE subject_id = ${subjectId}
+  ` as Array<{ question_id: number; paste_count: number; drop_count: number }>;
+  const counts = new Map(summaryRows.map(r => [r.question_id, r]));
+  const rows = texts.map(t => ({
+    question_id: t.question_id,
+    text: t.text,
+    paste_count: counts.get(t.question_id)?.paste_count ?? 0,
+    drop_count: counts.get(t.question_id)?.drop_count ?? 0,
+  }));
 
   console.log(`[recompute-semantic] ${rows.length} journal responses to process`);
 

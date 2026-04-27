@@ -9,6 +9,7 @@
  * Run: npx tsx src/scripts/confound-analysis.ts
  */
 import sql from '../lib/libDbPool.ts';
+import { getKeystrokeStreamJson } from '../lib/libDb.ts';
 import { parseSubjectIdArg } from '../lib/utlSubjectIdArg.ts';
 import { BINARY_PATH } from '../lib/libSignalsNative.ts';
 import { createRequire } from 'node:module';
@@ -321,20 +322,15 @@ export async function getCalibrationDOWCounts(subjectId: number): Promise<number
 interface KeystrokeEvent { c: string; d: number; u: number }
 
 async function getKeystrokeStream(subjectId: number, questionId: number): Promise<KeystrokeEvent[] | null> {
-  const rows = await sql`
-    SELECT keystroke_stream_json
-    FROM tb_session_events
-    WHERE subject_id = ${subjectId}
-      AND question_id = ${questionId}
-      AND keystroke_stream_json IS NOT NULL
-  `;
-  if (rows.length === 0) return null;
-  const raw = (rows[0] as { keystroke_stream_json: unknown }).keystroke_stream_json;
-  if (!raw) return null;
-  // postgres.js may return JSONB as string or parsed object depending on driver config
-  const stream = typeof raw === 'string' ? JSON.parse(raw) as unknown : raw;
-  if (!Array.isArray(stream)) return null;
-  return stream as KeystrokeEvent[];
+  // Plaintext keystroke stream comes back through libDb's decryption boundary.
+  const json = await getKeystrokeStreamJson(subjectId, questionId);
+  if (!json) return null;
+  try {
+    const parsed = JSON.parse(json) as unknown;
+    return Array.isArray(parsed) ? parsed as KeystrokeEvent[] : null;
+  } catch {
+    return null;
+  }
 }
 
 // ─── IKI extraction (mirrors Rust types.rs logic) ───────────────────

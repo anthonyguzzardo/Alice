@@ -16,6 +16,7 @@ import sql, { OWNER_SUBJECT_ID } from '../../lib/libDb.ts';
 import { localDateStr } from '../../lib/utlDate.ts';
 import { readRecentErrors } from '../../lib/utlErrorLog.ts';
 import { hasNativeEngine } from '../../lib/libSignalsNative.ts';
+import { decrypt } from '../../lib/libCrypto.ts';
 
 interface PipelineCoverage {
   embedded: boolean;
@@ -159,14 +160,22 @@ export const GET: APIRoute = async () => {
   const tomorrowQuestion = tomorrowQuestionRows[0];
 
   // --- ANOMALIES -----------------------------------------------------------
-  const [dupRow] = await sql`
-    SELECT COUNT(*)::int AS c FROM (
-      SELECT text FROM tb_questions
-      WHERE subject_id = ${subjectId} AND scheduled_for >= ${today}
-      GROUP BY text HAVING COUNT(*) > 1
-    ) sub
-  `;
-  const duplicateScheduledQuestions = (dupRow as { c: number }).c;
+  // Migration 031: text is encrypted with a fresh nonce per row, so SQL
+  // `GROUP BY text` no longer collapses identical plaintexts. Decrypt the
+  // upcoming-window questions and count duplicates by plaintext in JS. The
+  // window (scheduled_for >= today) is small in practice (< 30 rows).
+  const upcomingRows = await sql`
+    SELECT text_ciphertext, text_nonce
+    FROM tb_questions
+    WHERE subject_id = ${subjectId} AND scheduled_for >= ${today}
+  ` as Array<{ text_ciphertext: string; text_nonce: string }>;
+  const counts = new Map<string, number>();
+  for (const r of upcomingRows) {
+    const t = decrypt(r.text_ciphertext, r.text_nonce);
+    counts.set(t, (counts.get(t) ?? 0) + 1);
+  }
+  let duplicateScheduledQuestions = 0;
+  for (const c of counts.values()) if (c > 1) duplicateScheduledQuestions++;
 
   // Note: this intentionally excludes calibration sessions (source_id = 3).
   // Three early calibration sessions (question_ids 42, 63, 64) have responses

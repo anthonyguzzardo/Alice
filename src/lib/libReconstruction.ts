@@ -44,6 +44,9 @@ import sql, {
   getSemanticSignals,
   saveReconstructionResidual,
   getReconstructionResidual,
+  getQuestionTextById,
+  getResponseText,
+  listResponseTextsExcludingCalibration,
   type ReconstructionResidualInput,
 } from './libDb.ts';
 import {
@@ -390,37 +393,33 @@ export async function computeReconstructionResidual(subjectId: number, questionI
   `;
   if ((sourceRows[0] as { question_source_id: number }).question_source_id === 3) return;
 
-  // Fetch corpus (shared across all variants).
+  // Fetch corpus (shared across all variants) via libDb's decryption boundary.
   // Exclude calibration responses (question_source_id = 3): calibrations are
   // prompted neutral writing that would corrupt the Markov/PPM language model.
-  const textRows = await sql`
-    SELECT r.text
-    FROM tb_responses r
-    JOIN tb_questions q ON r.question_id = q.question_id
-    WHERE q.subject_id = ${subjectId}
-      AND q.question_source_id != 3
-    ORDER BY q.scheduled_for ASC
-  ` as Array<{ text: string }>;
+  const corpusRows = await listResponseTextsExcludingCalibration(subjectId, {
+    orderBy: 'scheduled_for_asc',
+  });
+  const textRows = corpusRows.map(r => ({ text: r.text }));
 
   if (textRows.length < 3) return;
 
   // Fetch question text + source
-  const qRows = await sql`SELECT text, question_source_id FROM tb_questions WHERE question_id = ${questionId} AND subject_id = ${subjectId}`;
-  const qRow = qRows[0] as { text: string; question_source_id: number } | undefined;
-  const questionText = qRow?.text;
-  if (!questionText) return;
-  const questionSourceId = qRow.question_source_id;
+  const qInfo = await getQuestionTextById(subjectId, questionId);
+  if (!qInfo) return;
+  const questionText = qInfo.text;
+  const questionSourceId = qInfo.question_source_id;
 
-  // Fetch real response text + word count
+  // Fetch real response text + word count.
+  // word_count is on tb_session_summaries (not encrypted); response text comes
+  // through libDb's decryption boundary.
   const summaryRows = await sql`
-    SELECT s.word_count, r.text AS response_text
+    SELECT s.word_count
     FROM tb_session_summaries s
-    JOIN tb_responses r ON s.question_id = r.question_id
     WHERE s.question_id = ${questionId}
       AND s.subject_id = ${subjectId}
-  ` as Array<{ word_count: number | null; response_text: string }>;
+  ` as Array<{ word_count: number | null }>;
   const realWordCount = summaryRows[0]?.word_count ?? 150;
-  const realText = summaryRows[0]?.response_text;
+  const realText = await getResponseText(subjectId, questionId);
   if (!realText) return;
 
   // Fetch personal profile (extended with variant-specific fields)
@@ -546,15 +545,12 @@ export async function verifyResidual(
   const topic = row.avatar_topic as string | null;
   if (!seed || !profileJson) return null;
 
-  // 2. Reconstruct corpus (must match computation-time filter)
-  const textRows = await sql`
-    SELECT r.text
-    FROM tb_responses r
-    JOIN tb_questions q ON r.question_id = q.question_id
-    WHERE q.subject_id = ${subjectId}
-      AND q.question_source_id != 3
-    ORDER BY q.scheduled_for ASC
-  ` as Array<{ text: string }>;
+  // 2. Reconstruct corpus (must match computation-time filter). Plaintext
+  // returns through libDb's decryption boundary.
+  const corpusRows = await listResponseTextsExcludingCalibration(subjectId, {
+    orderBy: 'scheduled_for_asc',
+  });
+  const textRows = corpusRows.map(r => ({ text: r.text }));
 
   const corpusJson = JSON.stringify(textRows.map(r => r.text));
 

@@ -7,7 +7,16 @@
  * Pulls from the live PostgreSQL database.
  */
 import type { APIRoute } from 'astro';
-import sql, { getDynamicalSignals, getMotorSignals, getProcessSignals, getCrossSessionSignals, getSemanticSignals, OWNER_SUBJECT_ID } from '../../../../lib/libDb.ts';
+import sql, {
+  getDynamicalSignals,
+  getMotorSignals,
+  getProcessSignals,
+  getCrossSessionSignals,
+  getSemanticSignals,
+  getQuestionTextById,
+  getSessionEvents,
+  OWNER_SUBJECT_ID,
+} from '../../../../lib/libDb.ts';
 import { logError } from '../../../../lib/utlErrorLog.ts';
 import { computeDynamicalSignals, type KeystrokeEvent } from '../../../../lib/libSignalsNative.ts';
 
@@ -24,9 +33,10 @@ export const GET: APIRoute = async ({ params }) => {
       });
     }
 
-    // Behavioral state + question context
+    // Behavioral state + question context. Question text is encrypted at rest;
+    // fetch via libDb's decryption boundary after we know the question_id.
     const entryStateRows = await sql`
-      SELECT es.*, q.scheduled_for as date, q.question_id, q.text as question_text
+      SELECT es.*, q.scheduled_for as date, q.question_id
       FROM tb_entry_states es
       JOIN tb_responses r ON es.response_id = r.response_id
       JOIN tb_questions q ON r.question_id = q.question_id
@@ -40,6 +50,9 @@ export const GET: APIRoute = async ({ params }) => {
         headers: { 'Content-Type': 'application/json' },
       });
     }
+
+    const qInfo = await getQuestionTextById(subjectId, entryState.question_id);
+    entryState.question_text = qInfo?.text ?? '';
 
     // Semantic state
     const semanticStateRows = await sql`
@@ -155,12 +168,16 @@ export const GET: APIRoute = async ({ params }) => {
       ORDER BY burst_index ASC
     ` as any[];
 
-    // Replay availability + keystroke stream
-    const replayRows = await sql`
-      SELECT total_events, session_duration_ms, keystroke_stream_json FROM tb_session_events
-      WHERE subject_id = ${subjectId} AND question_id = ${entryState.question_id} ORDER BY session_event_id DESC LIMIT 1
-    `;
-    const replayRow = replayRows[0] as any;
+    // Replay availability + keystroke stream — through libDb's decryption boundary.
+    const sessionEventsRow = await getSessionEvents(subjectId, entryState.question_id);
+    const replayRow: { total_events: number; session_duration_ms: number; keystroke_stream_json: string | null } | null =
+      sessionEventsRow
+        ? {
+            total_events: sessionEventsRow.total_events,
+            session_duration_ms: sessionEventsRow.session_duration_ms,
+            keystroke_stream_json: sessionEventsRow.keystroke_stream_json ?? null,
+          }
+        : null;
 
     // Read persisted dynamical signals; fall back to on-demand compute
     let dynamicalSignals: any = null;

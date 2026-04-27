@@ -6,19 +6,15 @@
  * Run: npx tsx src/scripts/backfill-hold-flight-corr.ts
  */
 
-import { sql } from '../lib/libDb.ts';
+import { sql, listKeystrokeStreams } from '../lib/libDb.ts';
 import { computeMotorSignals } from '../lib/libSignalsNative.ts';
 import { parseSubjectIdArg } from '../lib/utlSubjectIdArg.ts';
 
 async function main() {
   const subjectId = parseSubjectIdArg();
 
-  const rows = await sql`
-    SELECT se.question_id, se.keystroke_stream_json
-    FROM tb_session_events se
-    WHERE se.subject_id = ${subjectId}
-      AND se.keystroke_stream_json IS NOT NULL
-  ` as Array<{ question_id: number; keystroke_stream_json: unknown }>;
+  // Plaintext keystroke streams come back through libDb's decryption boundary.
+  const rows = await listKeystrokeStreams(subjectId, { nonNullOnly: true });
 
   console.log(`Found ${rows.length} sessions with keystroke streams.`);
 
@@ -26,11 +22,13 @@ async function main() {
   let skipped = 0;
 
   for (const row of rows) {
-    const streamStr = typeof row.keystroke_stream_json === 'string'
-      ? row.keystroke_stream_json
-      : JSON.stringify(row.keystroke_stream_json);
-
-    const parsed = JSON.parse(streamStr);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(row.keystroke_stream_json);
+    } catch {
+      skipped++;
+      continue;
+    }
     if (!Array.isArray(parsed) || parsed.length < 30) {
       skipped++;
       continue;
