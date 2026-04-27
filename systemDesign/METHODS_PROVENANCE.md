@@ -204,8 +204,8 @@ Surfaced during a separate task (the alice-negative full deprecation), when the 
 
 ### Still on the followup queue
 
-- **Extraction rescue script.** A standalone `npm run rescue-extractions` (or similar) that finds calibrations with no `tb_calibration_context` row, decrypts the response text via libDb, and re-runs `runCalibrationExtraction` directly (bypassing the dead-lettered `tb_signal_jobs` rows). Same pattern as `npm run backfill` for embeddings. Not built tonight; the alert is the precursor.
-- **`scripts/archive/retrigger-background.ts`** still references `libGenerate` (removed tonight). Pre-broken before this session — the archive directory has had broken imports for weeks. Either delete the file or accept the TS noise; either way it doesn't affect runtime.
+- ~~**Extraction rescue script.**~~ Moot — the entire calibration extraction pipeline was deprecated in INC-015 the same day. No rescue path is needed for a pipeline that no longer exists.
+- ~~**`scripts/archive/retrigger-background.ts`**~~ deleted 2026-04-27 (it referenced the removed `libGenerate`).
 
 ### Verification
 
