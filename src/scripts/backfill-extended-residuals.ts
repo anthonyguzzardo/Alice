@@ -237,6 +237,7 @@ async function main() {
     const residualCount = allResiduals.filter(isFiniteNum).length;
 
     // UPDATE the row
+    // alice-lint-disable-next-query subject-scope -- PK update on reconstruction_residual_id; the row was selected via a subject-scoped SELECT above
     await sql`
       UPDATE tb_reconstruction_residuals SET
         extended_residuals_json = ${extendedJson},

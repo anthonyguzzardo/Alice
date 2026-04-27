@@ -707,6 +707,7 @@ export async function getCalibrationSessionsWithText(subjectId: number): Promise
 export async function isCalibrationQuestion(questionId: number): Promise<boolean> {
   // No subject scoping needed — question_id is globally unique and we're only
   // identifying the question's source_id, not reading subject-private data.
+  // alice-lint-disable-next-query subject-scope -- PK lookup; question_id is globally unique
   const rows = await sql`
     SELECT 1 FROM tb_questions WHERE question_id = ${questionId} AND question_source_id = 3
   `;
@@ -969,6 +970,7 @@ export async function insertEmbeddingMeta(
 }
 
 export async function isRecordEmbedded(embeddingSourceId: number, sourceRecordId: number, embeddingModelVersionId?: number): Promise<boolean> {
+  // alice-lint-disable subject-scope -- composite key (embedding_source_id, source_record_id [, embedding_model_version_id]) is globally unique
   const rows = embeddingModelVersionId
     ? await sql`
         SELECT 1 FROM tb_embeddings
@@ -983,6 +985,7 @@ export async function isRecordEmbedded(embeddingSourceId: number, sourceRecordId
           AND source_record_id = ${sourceRecordId}
           AND invalidated_at IS NULL
       `;
+  // alice-lint-enable subject-scope
   return rows.length > 0;
 }
 
@@ -2670,6 +2673,7 @@ export async function enqueueSignalJob(
  * observe the same job in QUEUED state.
  */
 export async function claimNextSignalJob(): Promise<SignalJobRow | null> {
+  // alice-lint-disable-next-query subject-scope -- worker queue is population-agnostic; claims any subject's next job in PK/status order
   const rows = await sql`
     UPDATE tb_signal_jobs
     SET signal_job_status_id = 2,
@@ -2694,6 +2698,7 @@ export async function claimNextSignalJob(): Promise<SignalJobRow | null> {
  * Mark a job completed. Used by the worker after a successful pipeline run.
  */
 export async function markSignalJobCompleted(signalJobId: number): Promise<void> {
+  // alice-lint-disable-next-query subject-scope -- worker queue PK update; signal_job_id is globally unique
   await sql`
     UPDATE tb_signal_jobs
     SET signal_job_status_id = 3,
@@ -2717,6 +2722,7 @@ export async function markSignalJobFailed(
   error: string,
   backoffMs: number,
 ): Promise<void> {
+  // alice-lint-disable-next-query subject-scope -- worker queue PK update; signal_job_id is globally unique
   await sql`
     UPDATE tb_signal_jobs
     SET signal_job_status_id = CASE
@@ -2743,6 +2749,7 @@ export async function markSignalJobFailed(
  * Returns the count of jobs re-queued.
  */
 export async function sweepStaleSignalJobs(staleAfterMs: number): Promise<number> {
+  // alice-lint-disable-next-query subject-scope -- boot-time recovery is population-agnostic; sweeps stale RUNNING jobs across all subjects
   const rows = await sql`
     UPDATE tb_signal_jobs
     SET signal_job_status_id = 1,
@@ -2758,11 +2765,13 @@ export async function sweepStaleSignalJobs(staleAfterMs: number): Promise<number
 }
 
 export async function getSignalJobById(signalJobId: number): Promise<SignalJobRow | null> {
+  // alice-lint-disable-next-query subject-scope -- worker queue PK lookup; signal_job_id is globally unique
   const rows = await sql`SELECT * FROM tb_signal_jobs WHERE signal_job_id = ${signalJobId}`;
   return (rows[0] as SignalJobRow | undefined) ?? null;
 }
 
 export async function getDeadLetterSignalJobs(): Promise<SignalJobRow[]> {
+  // alice-lint-disable-next-query subject-scope -- admin/observability listing of all dead-lettered jobs across subjects
   return await sql`
     SELECT * FROM tb_signal_jobs
     WHERE signal_job_status_id = 5
@@ -2771,6 +2780,7 @@ export async function getDeadLetterSignalJobs(): Promise<SignalJobRow[]> {
 }
 
 export async function countOpenSignalJobs(): Promise<number> {
+  // alice-lint-disable-next-query subject-scope -- queue health metric is global by design; counts in-flight work across all subjects
   const rows = await sql`
     SELECT COUNT(*)::int AS n
     FROM tb_signal_jobs

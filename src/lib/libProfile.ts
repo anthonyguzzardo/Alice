@@ -51,6 +51,7 @@ export async function updateProfile(subjectId: number, questionId: number): Prom
     if ((sourceRows[0] as { question_source_id: number }).question_source_id === 3) return;
 
     // Skip if the triggering session has external input contamination (paste/drop).
+    // alice-lint-disable-next-query subject-scope -- PK lookup; question_id is globally unique and the gate above already verified (questionId, subjectId) match
     const contaminationRows = await sql`
       SELECT paste_contaminated FROM tb_semantic_signals WHERE question_id = ${questionId}
     `;

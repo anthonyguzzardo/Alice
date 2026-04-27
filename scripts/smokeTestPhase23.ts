@@ -8,6 +8,8 @@
  * Run: npx tsx scripts/smokeTestPhase23.ts
  */
 
+// alice-lint-disable-file subject-scope -- script operates exclusively on a single test question_id (globally unique); raw SQL is teardown by question_id and post-pipeline assertions on the same id
+
 import 'dotenv/config';
 import sql, {
   saveResponse,
