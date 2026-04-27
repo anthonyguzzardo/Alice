@@ -9,16 +9,17 @@
  */
 import sql from '../lib/libDbPool.ts';
 import { parseSubjectIdArg } from '../lib/utlSubjectIdArg.ts';
+import { fileURLToPath } from 'node:url';
 
 // ─── Find matched pairs ─────────────────────────────────────────────
 
-interface MatchedPair {
+export interface MatchedPair {
   date: string;
   journalQuestionId: number;
   calibrationQuestionId: number;
 }
 
-async function findMatchedPairs(subjectId: number): Promise<MatchedPair[]> {
+export async function findMatchedPairs(subjectId: number): Promise<MatchedPair[]> {
   const rows = await sql`
     SELECT
       j.scheduled_for::text AS date,
@@ -234,7 +235,12 @@ async function main() {
   await sql.end();
 }
 
-main().catch(err => {
-  console.error(err);
-  process.exit(1);
-});
+// Only invoke main() when run directly. When imported by tests for the
+// exported helpers, main() must not run — its sql.end() would close the
+// shared connection pool and break unrelated test queries.
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  main().catch(err => {
+    console.error(err);
+    process.exit(1);
+  });
+}
