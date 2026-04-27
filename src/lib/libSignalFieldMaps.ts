@@ -165,4 +165,5 @@ export const STRUCTURAL_COLUMNS = new Set<string>([
   'session_integrity_id',
   'reconstruction_residual_id',
   'question_id',
+  'subject_id',  // migration 030: denormalized FK to tb_subjects on every signal table
 ]);

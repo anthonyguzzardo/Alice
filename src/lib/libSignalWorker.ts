@@ -171,7 +171,7 @@ function sleep(ms: number): Promise<void> {
 // ─── Job dispatch ──────────────────────────────────────────────────────────
 
 async function runJob(job: SignalJobRow): Promise<void> {
-  const ctx = { signal_job_id: job.signal_job_id, question_id: job.question_id };
+  const ctx = { signal_job_id: job.signal_job_id, subject_id: job.subject_id, question_id: job.question_id };
   try {
     if (job.signal_job_kind_id === SIGNAL_JOB_KIND.RESPONSE_PIPELINE) {
       await runResponsePipeline(job);
@@ -191,7 +191,7 @@ async function runJob(job: SignalJobRow): Promise<void> {
     try {
       const provenanceId = await getEngineProvenanceId();
       if (provenanceId !== null) {
-        await stampEngineProvenance(job.question_id, provenanceId);
+        await stampEngineProvenance(job.subject_id, job.question_id, provenanceId);
       }
     } catch (err) {
       logError('worker.stampProvenance', err, ctx);
@@ -213,15 +213,15 @@ async function runJob(job: SignalJobRow): Promise<void> {
  * out of this function and trigger a retry.
  */
 async function runResponsePipeline(job: SignalJobRow): Promise<void> {
-  const ctx = { signal_job_id: job.signal_job_id, question_id: job.question_id };
+  const ctx = { signal_job_id: job.signal_job_id, subject_id: job.subject_id, question_id: job.question_id };
 
-  try { await computePriorDayDelta(localDateStr()); }
+  try { await computePriorDayDelta(job.subject_id, localDateStr()); }
   catch (err) { logError('worker.daily-delta', err, ctx); }
 
-  try { await runGeneration(); }
+  try { await runGeneration(job.subject_id); }
   catch (err) { logError('worker.generation', err, ctx); }
 
-  try { await renderWitnessState(); }
+  try { await renderWitnessState(job.subject_id); }
   catch (err) { logError('worker.witness', err, ctx); }
 
   // Embed: look up response + question text by question_id.
@@ -236,19 +236,19 @@ async function runResponsePipeline(job: SignalJobRow): Promise<void> {
              q.scheduled_for AS "scheduledFor"
       FROM tb_responses r
       JOIN tb_questions q ON r.question_id = q.question_id
-      WHERE q.question_id = ${job.question_id}
+      WHERE q.subject_id = ${job.subject_id} AND q.question_id = ${job.question_id}
       LIMIT 1
     `;
     const r = rows[0] as { responseId: number; responseText: string; questionText: string; scheduledFor: string | null } | undefined;
     if (r) {
       const dateStr = r.scheduledFor ?? localDateStr();
-      await embedResponse(r.responseId, r.questionText, r.responseText, dateStr);
+      await embedResponse(job.subject_id, r.responseId, r.questionText, r.responseText, dateStr);
     }
   } catch (err) {
     logError('worker.embed', err, ctx);
   }
 
-  await computeAndPersistDerivedSignals(job.question_id);
+  await computeAndPersistDerivedSignals(job.subject_id, job.question_id);
 }
 
 /**
@@ -256,33 +256,33 @@ async function runResponsePipeline(job: SignalJobRow): Promise<void> {
  * extract life-context tags, compute derived signals, snapshot drift baseline.
  */
 async function runCalibrationPipeline(job: SignalJobRow): Promise<void> {
-  const ctx = { signal_job_id: job.signal_job_id, question_id: job.question_id };
+  const ctx = { signal_job_id: job.signal_job_id, subject_id: job.subject_id, question_id: job.question_id };
 
   try {
     const rows = await sql`
       SELECT q.text AS prompt, r.text AS response_text
       FROM tb_questions q
       JOIN tb_responses r ON r.question_id = q.question_id
-      WHERE q.question_id = ${job.question_id}
+      WHERE q.subject_id = ${job.subject_id} AND q.question_id = ${job.question_id}
       LIMIT 1
     `;
     const r = rows[0] as { prompt: string; response_text: string } | undefined;
     if (r) {
-      await runCalibrationExtraction(job.question_id, r.response_text, r.prompt);
+      await runCalibrationExtraction(job.subject_id, job.question_id, r.response_text, r.prompt);
     }
   } catch (err) {
     logError('worker.calibration-extraction', err, ctx);
   }
 
   try {
-    await computeAndPersistDerivedSignals(job.question_id);
+    await computeAndPersistDerivedSignals(job.subject_id, job.question_id);
   } catch (err) {
     logError('worker.calibration-derived-signals', err, ctx);
   }
 
   try {
     const deviceType = (job.params_json?.deviceType as string | null | undefined) ?? null;
-    await snapshotCalibrationBaselinesAfterSubmit(deviceType);
+    await snapshotCalibrationBaselinesAfterSubmit(job.subject_id, deviceType);
   } catch (err) {
     logError('worker.calibration-drift', err, ctx);
   }

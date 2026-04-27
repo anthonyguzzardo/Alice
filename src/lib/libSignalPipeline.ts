@@ -40,8 +40,8 @@ import { updateRburstTrajectoryShape } from './libSessionMetadata.ts';
 import { updateSemanticBaselines } from './libSemanticBaseline.ts';
 import { logError } from './utlErrorLog.ts';
 
-async function getKeystrokeStream(questionId: number): Promise<KeystrokeEvent[] | null> {
-  const rows = await sql`SELECT keystroke_stream_json FROM tb_session_events WHERE question_id = ${questionId}`;
+async function getKeystrokeStream(subjectId: number, questionId: number): Promise<KeystrokeEvent[] | null> {
+  const rows = await sql`SELECT keystroke_stream_json FROM tb_session_events WHERE subject_id = ${subjectId} AND question_id = ${questionId}`;
   const row = rows[0] as { keystroke_stream_json: unknown } | undefined;
 
   if (!row?.keystroke_stream_json) return null;
@@ -54,8 +54,8 @@ async function getKeystrokeStream(questionId: number): Promise<KeystrokeEvent[] 
   }
 }
 
-async function getEventLogJson(questionId: number): Promise<string | null> {
-  const rows = await sql`SELECT event_log_json FROM tb_session_events WHERE question_id = ${questionId}`;
+async function getEventLogJson(subjectId: number, questionId: number): Promise<string | null> {
+  const rows = await sql`SELECT event_log_json FROM tb_session_events WHERE subject_id = ${subjectId} AND question_id = ${questionId}`;
   const row = rows[0] as { event_log_json: unknown } | undefined;
   if (!row?.event_log_json) return null;
   // JSONB auto-parsed by postgres driver; re-stringify for signal functions
@@ -64,14 +64,14 @@ async function getEventLogJson(questionId: number): Promise<string | null> {
     : JSON.stringify(row.event_log_json);
 }
 
-async function getResponseText(questionId: number): Promise<string | null> {
-  const rows = await sql`SELECT text FROM tb_responses WHERE question_id = ${questionId}`;
+async function getResponseText(subjectId: number, questionId: number): Promise<string | null> {
+  const rows = await sql`SELECT text FROM tb_responses WHERE subject_id = ${subjectId} AND question_id = ${questionId}`;
   const row = rows[0] as { text: string | null } | undefined;
   return row?.text ?? null;
 }
 
-async function getSessionInfo(questionId: number): Promise<{ totalDurationMs: number; pasteCount: number; dropCount: number }> {
-  const rows = await sql`SELECT total_duration_ms, paste_count, drop_count FROM tb_session_summaries WHERE question_id = ${questionId}`;
+async function getSessionInfo(subjectId: number, questionId: number): Promise<{ totalDurationMs: number; pasteCount: number; dropCount: number }> {
+  const rows = await sql`SELECT total_duration_ms, paste_count, drop_count FROM tb_session_summaries WHERE subject_id = ${subjectId} AND question_id = ${questionId}`;
   const row = rows[0] as { total_duration_ms: number | null; paste_count: number | null; drop_count: number | null } | undefined;
 
   return {
@@ -81,15 +81,15 @@ async function getSessionInfo(questionId: number): Promise<{ totalDurationMs: nu
   };
 }
 
-export async function computeAndPersistDerivedSignals(questionId: number): Promise<void> {
-  const stream = await getKeystrokeStream(questionId);
+export async function computeAndPersistDerivedSignals(subjectId: number, questionId: number): Promise<void> {
+  const stream = await getKeystrokeStream(subjectId, questionId);
 
   // ── Dynamical signals (previously on-demand) ──
-  if (stream && stream.length >= 10 && !(await getDynamicalSignals(questionId))) {
+  if (stream && stream.length >= 10 && !(await getDynamicalSignals(subjectId, questionId))) {
     try {
       const ds = computeDynamicalSignals(stream);
       if (ds) {
-        await saveDynamicalSignals(questionId, {
+        await saveDynamicalSignals(subjectId, questionId, {
           iki_count: ds.ikiCount ?? null,
           hold_flight_count: ds.holdFlightCount ?? null,
           permutation_entropy: ds.permutationEntropy ?? null,
@@ -146,12 +146,12 @@ export async function computeAndPersistDerivedSignals(questionId: number): Promi
   }
 
   // ── Motor signals ──
-  if (stream && stream.length >= 10 && !(await getMotorSignals(questionId))) {
+  if (stream && stream.length >= 10 && !(await getMotorSignals(subjectId, questionId))) {
     try {
-      const { totalDurationMs } = await getSessionInfo(questionId);
+      const { totalDurationMs } = await getSessionInfo(subjectId, questionId);
       const ms = computeMotorSignals(stream, totalDurationMs);
       if (ms) {
-        await saveMotorSignals(questionId, {
+        await saveMotorSignals(subjectId, questionId, {
           sample_entropy: ms.sampleEntropy ?? null,
           mse_series: ms.mseSeries ? JSON.stringify(ms.mseSeries) : null,
           complexity_index: ms.complexityIndex ?? null,
@@ -183,14 +183,14 @@ export async function computeAndPersistDerivedSignals(questionId: number): Promi
   }
 
   // ── Semantic signals ──
-  if (!(await getSemanticSignals(questionId))) {
+  if (!(await getSemanticSignals(subjectId, questionId))) {
     try {
-      const text = await getResponseText(questionId);
+      const text = await getResponseText(subjectId, questionId);
       if (text && text.length >= 20) {
-        const { pasteCount, dropCount } = await getSessionInfo(questionId);
+        const { pasteCount, dropCount } = await getSessionInfo(subjectId, questionId);
         const ss = computeSemanticSignals(text, pasteCount, dropCount);
         const dc = await computeDiscourseCoherence(text);
-        await saveSemanticSignals(questionId, {
+        await saveSemanticSignals(subjectId, questionId, {
           idea_density: ss.ideaDensity,
           lexical_sophistication: ss.lexicalSophistication,
           epistemic_stance: ss.epistemicStance,
@@ -214,19 +214,19 @@ export async function computeAndPersistDerivedSignals(questionId: number): Promi
 
   // ── Semantic baselines (longitudinal z-scores, runs after semantic signals) ──
   try {
-    await updateSemanticBaselines(questionId);
+    await updateSemanticBaselines(subjectId, questionId);
   } catch (err) {
     logError('signal-pipeline.semantic-baseline', err, { questionId });
   }
 
   // ── Process signals ──
-  if (!(await getProcessSignals(questionId))) {
+  if (!(await getProcessSignals(subjectId, questionId))) {
     try {
-      const eventLogJson = await getEventLogJson(questionId);
+      const eventLogJson = await getEventLogJson(subjectId, questionId);
       if (eventLogJson) {
         const ps = computeProcessSignals(eventLogJson);
         if (ps) {
-          await saveProcessSignals(questionId, {
+          await saveProcessSignals(subjectId, questionId, {
             pause_within_word: ps.pauseWithinWord,
             pause_between_word: ps.pauseBetweenWord,
             pause_between_sentence: ps.pauseBetweenSentence,
@@ -240,8 +240,8 @@ export async function computeAndPersistDerivedSignals(questionId: number): Promi
 
           // Persist per-R-burst sequences and compute trajectory shape
           if (ps.rBurstSequences.length > 0) {
-            await saveRburstSequence(questionId, ps.rBurstSequences);
-            await updateRburstTrajectoryShape(questionId);
+            await saveRburstSequence(subjectId, questionId, ps.rBurstSequences);
+            await updateRburstTrajectoryShape(subjectId, questionId);
           }
         }
       }
@@ -251,13 +251,13 @@ export async function computeAndPersistDerivedSignals(questionId: number): Promi
   }
 
   // ── Cross-session signals (depends on motor signals being persisted first) ──
-  if (!(await getCrossSessionSignals(questionId))) {
+  if (!(await getCrossSessionSignals(subjectId, questionId))) {
     try {
-      const text = await getResponseText(questionId);
+      const text = await getResponseText(subjectId, questionId);
       if (text && text.length >= 20) {
-        const cs = await computeCrossSessionSignals(questionId, text);
+        const cs = await computeCrossSessionSignals(subjectId, questionId, text);
         if (cs) {
-          await saveCrossSessionSignals(questionId, {
+          await saveCrossSessionSignals(subjectId, questionId, {
             self_perplexity: cs.selfPerplexity ?? null,
             motor_self_perplexity: cs.motorSelfPerplexity ?? null,
             ncd_lag_1: cs.ncdLag1 ?? null,
@@ -278,11 +278,12 @@ export async function computeAndPersistDerivedSignals(questionId: number): Promi
   }
 
   // ── Session integrity (BEFORE profile update — compares against prior profile) ──
-  if (!(await getSessionIntegrity(questionId))) {
+  if (!(await getSessionIntegrity(subjectId, questionId))) {
     try {
-      const integrity = await computeSessionIntegrity(questionId);
+      const integrity = await computeSessionIntegrity(subjectId, questionId);
       if (integrity) {
         await saveSessionIntegrity({
+          subjectId,
           questionId: integrity.questionId,
           profileDistance: integrity.profileDistance,
           dimensionCount: integrity.dimensionCount,
@@ -293,21 +294,21 @@ export async function computeAndPersistDerivedSignals(questionId: number): Promi
         });
       }
     } catch (err) {
-      logError('signal-pipeline.integrity', err, { questionId });
+      logError('signal-pipeline.integrity', err, { subjectId, questionId });
     }
   }
 
   // ── Personal profile (rolling aggregate, depends on all signals above) ──
   try {
-    await updateProfile(questionId);
+    await updateProfile(subjectId, questionId);
   } catch (err) {
-    logError('signal-pipeline.profile', err, { questionId });
+    logError('signal-pipeline.profile', err, { subjectId, questionId });
   }
 
   // ── Reconstruction residual (depends on profile being current) ──
   try {
-    await computeReconstructionResidual(questionId);
+    await computeReconstructionResidual(subjectId, questionId);
   } catch (err) {
-    logError('signal-pipeline.reconstruction', err, { questionId });
+    logError('signal-pipeline.reconstruction', err, { subjectId, questionId });
   }
 }
