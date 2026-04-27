@@ -41,10 +41,10 @@
       }
 
       [data-theme="dark"] {
-        --bg: #141210;
+        --bg: #0f0e0c;
         --bg-pre: #050505;
         --bg-input: #161514;
-        --text: #ffffff;
+        --text: #d4d0c8;
         --text-pre: #6a6560;
         --text-muted: #b0aba5;
         --text-faint: #888178;
@@ -52,7 +52,7 @@
         --border-focus: #666;
         --btn-bg: #222;
         --btn-hover: #444;
-        --btn-text: #ffffff;
+        --btn-text: #d4d0c8;
         --done-text: #8a8580;
         --loading: #888178;
       }
@@ -107,6 +107,15 @@
         margin-bottom: 1.4rem;
         font-style: italic;
         transition: color 2.5s ease, opacity 3s ease;
+      }
+
+      /* Dark theme: hairline italic at 300 doesn't survive on dark — bump to 400 for body, dim color for prompt feel. */
+      [data-theme="dark"] .question {
+        color: #8a857c;
+        font-weight: 400;
+      }
+      [data-theme="dark"] .date {
+        color: #6b6660;
       }
 
       body.pre-arrival .question { color: var(--text-pre); }

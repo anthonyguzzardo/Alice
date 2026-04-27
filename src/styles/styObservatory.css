@@ -26,10 +26,10 @@
 }
 
 [data-theme="dark"] {
-  --bg: #141210;
+  --bg: #0f0e0c;
   --bg-panel: #1a1816;
   --bg-panel-hover: #201d1a;
-  --text: #ffffff;
+  --text: #d4d0c8;
   --text-muted: #b0aba5;
   --text-faint: #888178;
   --border: #333;
