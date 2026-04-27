@@ -19,6 +19,7 @@ import { getRburstSequence } from './libDb.ts';
 import type { RBurstEntry } from './libDb.ts';
 
 export interface SessionMetadataInputs {
+  subjectId: number;
   questionId: number;
   hourOfDay: number | null;
   totalDurationMs: number;
@@ -63,12 +64,14 @@ function buildHourDensity(hours: number[]): number[] {
   return smoothed.map(v => v / total);
 }
 
-async function computeHourTypicality(hour: number | null): Promise<number | null> {
+async function computeHourTypicality(subjectId: number, hour: number | null): Promise<number | null> {
   if (hour == null) return null;
   const rows = await sql`
     SELECT ss.hour_of_day FROM tb_session_summaries ss
     JOIN tb_questions q ON ss.question_id = q.question_id
-    WHERE q.question_source_id != 3 AND ss.hour_of_day IS NOT NULL
+    WHERE q.subject_id = ${subjectId}
+      AND q.question_source_id != 3
+      AND ss.hour_of_day IS NOT NULL
   ` as Array<{ hour_of_day: number }>;
 
   if (rows.length < 5) return null; // need a reasonable history first
@@ -235,7 +238,7 @@ function classifyRburstShape(rbursts: Array<{ deletedCharCount: number }>): stri
 // ─── Public API ─────────────────────────────────────────────────────
 
 export async function computeSessionMetadata(inputs: SessionMetadataInputs): Promise<SessionMetadataResult> {
-  const hour_typicality = await computeHourTypicality(inputs.hourOfDay);
+  const hour_typicality = await computeHourTypicality(inputs.subjectId, inputs.hourOfDay);
   const deletion_curve_type = classifyDeletionCurve(inputs.deletionEvents, inputs.totalDurationMs);
   const burst_trajectory_shape = classifyBurstShape(inputs.bursts);
   const ibi = computeInterBurstInterval(inputs.bursts);
@@ -258,12 +261,12 @@ export async function computeSessionMetadata(inputs: SessionMetadataInputs): Pro
  * Compute and persist R-burst trajectory shape for a session.
  * Called from the signal pipeline after R-burst sequences have been saved.
  */
-export async function updateRburstTrajectoryShape(questionId: number): Promise<void> {
-  const rbursts = await getRburstSequence(questionId);
+export async function updateRburstTrajectoryShape(subjectId: number, questionId: number): Promise<void> {
+  const rbursts = await getRburstSequence(subjectId, questionId);
   const shape = classifyRburstShape(rbursts);
   await sql`
     UPDATE tb_session_metadata
     SET rburst_trajectory_shape = ${shape}
-    WHERE question_id = ${questionId}
+    WHERE subject_id = ${subjectId} AND question_id = ${questionId}
   `;
 }

@@ -43,6 +43,7 @@ function daysBetween(dateStr: string, now: Date): number {
 }
 
 export async function retrieveSimilar(
+  subjectId: number,
   queryText: string,
   options?: RetrievalOptions
 ): Promise<RetrievedEntry[]> {
@@ -64,7 +65,7 @@ export async function retrieveSimilar(
     : null;
   const excludeDateSet = new Set(excludeDates);
 
-  const candidates = await searchVecEmbeddings(embedding, candidateK);
+  const candidates = await searchVecEmbeddings(subjectId, embedding, candidateK);
 
   const now = new Date();
   const scored: RetrievedEntry[] = [];
@@ -101,6 +102,7 @@ export async function retrieveSimilar(
 }
 
 export async function retrieveSimilarMulti(
+  subjectId: number,
   queryTexts: string[],
   options?: RetrievalOptions
 ): Promise<RetrievedEntry[]> {
@@ -109,7 +111,7 @@ export async function retrieveSimilarMulti(
   const allResults: Map<number, RetrievedEntry> = new Map();
 
   for (const text of queryTexts) {
-    const results = await retrieveSimilar(text, {
+    const results = await retrieveSimilar(subjectId, text, {
       ...options,
       topK: (options?.topK ?? 10) * 2, // over-fetch per query, dedupe later
     });
@@ -133,6 +135,7 @@ export async function retrieveSimilarMulti(
  * from the current cluster.
  */
 export async function retrieveContrarian(
+  subjectId: number,
   queryTexts: string[],
   options?: RetrievalOptions
 ): Promise<RetrievedEntry[]> {
@@ -169,7 +172,7 @@ export async function retrieveContrarian(
     : null;
   const excludeDateSet = new Set(excludeDates);
 
-  const candidates = await searchVecEmbeddings(center, candidateK);
+  const candidates = await searchVecEmbeddings(subjectId, center, candidateK);
 
   // Filter and take the MOST distant (last entries, since results are sorted by distance ASC)
   const filtered: RetrievedEntry[] = [];

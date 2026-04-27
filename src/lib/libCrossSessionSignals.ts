@@ -44,13 +44,14 @@ function contentWords(text: string): Set<string> {
   return new Set(tokenize(text).filter(w => !STOPWORDS.has(w) && w.length > 2));
 }
 
-async function getPriorTexts(currentQuestionId: number): Promise<Array<{ text: string; daysAgo: number }>> {
+async function getPriorTexts(subjectId: number, currentQuestionId: number): Promise<Array<{ text: string; daysAgo: number }>> {
   const rows = await sql`
     SELECT r.text as text,
            q.scheduled_for::text as scheduled_for
     FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
-    WHERE r.question_id != ${currentQuestionId}
+    WHERE q.subject_id = ${subjectId}
+      AND r.question_id != ${currentQuestionId}
       AND q.question_source_id != 3
     ORDER BY q.scheduled_for DESC
   ` as Array<{ text: string; scheduled_for: string }>;
@@ -60,7 +61,8 @@ async function getPriorTexts(currentQuestionId: number): Promise<Array<{ text: s
   // Get current entry's date
   const currentRows = await sql`
     SELECT q.scheduled_for::text as scheduled_for
-    FROM tb_questions q WHERE q.question_id = ${currentQuestionId}
+    FROM tb_questions q
+    WHERE q.question_id = ${currentQuestionId} AND q.subject_id = ${subjectId}
   `;
   const currentRow = currentRows[0] as { scheduled_for: string } | undefined;
 
@@ -135,13 +137,14 @@ function selfPerplexity(currentText: string, priorTexts: string[]): number | nul
 // Adans-Dester et al. 2024 (self-supervised typing pretraining for PD).
 // Per-person longitudinal autoregressive framing is novel.
 
-async function motorSelfPerplexity(questionId: number): Promise<number | null> {
+async function motorSelfPerplexity(subjectId: number, questionId: number): Promise<number | null> {
   // Get IKI sequences from prior non-calibration sessions
   const priorRows = await sql`
     SELECT se.keystroke_stream_json
     FROM tb_session_events se
     JOIN tb_questions q ON se.question_id = q.question_id
-    WHERE q.question_source_id != 3
+    WHERE q.subject_id = ${subjectId}
+      AND q.question_source_id != 3
       AND se.question_id < ${questionId}
       AND se.keystroke_stream_json IS NOT NULL
     ORDER BY se.question_id DESC
@@ -154,7 +157,8 @@ async function motorSelfPerplexity(questionId: number): Promise<number | null> {
   const currentRows = await sql`
     SELECT se.keystroke_stream_json
     FROM tb_session_events se
-    WHERE se.question_id = ${questionId}
+    WHERE se.subject_id = ${subjectId}
+      AND se.question_id = ${questionId}
       AND se.keystroke_stream_json IS NOT NULL
   ` as Array<{ keystroke_stream_json: unknown }>;
 
@@ -324,9 +328,12 @@ function vocabRecurrenceDecay(
 // ─── Digraph Stability ──────────────────────────────────────────────
 // Cosine similarity of today's digraph profile to rolling baseline.
 
-async function digraphStability(questionId: number): Promise<number | null> {
+async function digraphStability(subjectId: number, questionId: number): Promise<number | null> {
   // Get current session's digraph profile
-  const currentRows = await sql`SELECT digraph_latency_json FROM tb_motor_signals WHERE question_id = ${questionId}`;
+  const currentRows = await sql`
+    SELECT digraph_latency_json FROM tb_motor_signals
+    WHERE subject_id = ${subjectId} AND question_id = ${questionId}
+  `;
   const currentRow = currentRows[0] as { digraph_latency_json: string | null } | undefined;
 
   if (!currentRow?.digraph_latency_json) return null;
@@ -335,7 +342,8 @@ async function digraphStability(questionId: number): Promise<number | null> {
   const priorRows = await sql`
     SELECT ms.digraph_latency_json FROM tb_motor_signals ms
     JOIN tb_questions q ON ms.question_id = q.question_id
-    WHERE ms.question_id != ${questionId}
+    WHERE q.subject_id = ${subjectId}
+      AND ms.question_id != ${questionId}
       AND q.question_source_id != 3
       AND ms.digraph_latency_json IS NOT NULL
     ORDER BY ms.motor_signal_id DESC LIMIT 5
@@ -452,6 +460,7 @@ function textNetworkAnalysis(text: string): GraphResult {
 // ─── Public API ─────────────────────────────────────────────────────
 
 export async function computeCrossSessionSignals(
+  subjectId: number,
   questionId: number,
   currentText: string,
 ): Promise<CrossSessionSignals | null> {
@@ -459,25 +468,26 @@ export async function computeCrossSessionSignals(
   // Cross-session comparisons between prompted and reflective writing produce
   // meaningless deltas driven by the task difference, not cognitive trajectory.
   const sourceRows = await sql`
-    SELECT question_source_id FROM tb_questions WHERE question_id = ${questionId}
+    SELECT question_source_id FROM tb_questions
+    WHERE question_id = ${questionId} AND subject_id = ${subjectId}
   `;
   if (sourceRows.length === 0) return null;
   if ((sourceRows[0] as { question_source_id: number }).question_source_id === 3) return null;
 
-  const priorTexts = await getPriorTexts(questionId);
+  const priorTexts = await getPriorTexts(subjectId, questionId);
   const priorTextStrings = priorTexts.map(p => p.text);
 
   const network = textNetworkAnalysis(currentText);
 
   return {
     selfPerplexity: selfPerplexity(currentText, priorTextStrings),
-    motorSelfPerplexity: await motorSelfPerplexity(questionId),
+    motorSelfPerplexity: await motorSelfPerplexity(subjectId, questionId),
     ncdLag1: ncdAtLag(currentText, priorTexts, 1),
     ncdLag3: ncdAtLag(currentText, priorTexts, 3),
     ncdLag7: ncdAtLag(currentText, priorTexts, 7),
     ncdLag30: ncdAtLag(currentText, priorTexts, 30),
     vocabRecurrenceDecay: vocabRecurrenceDecay(currentText, priorTexts),
-    digraphStability: await digraphStability(questionId),
+    digraphStability: await digraphStability(subjectId, questionId),
     textNetworkDensity: network.density,
     textNetworkCommunities: network.communities,
     bridgingRatio: network.bridgingRatio,

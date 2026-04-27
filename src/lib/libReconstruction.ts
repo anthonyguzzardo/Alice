@@ -105,6 +105,7 @@ function l2(values: (number | null)[]): number | null {
 // ─── Per-variant computation ───────────────────────────────────────
 
 async function computeForVariant(
+  subjectId: number,
   questionId: number,
   variantId: number,
   corpusJson: string,
@@ -121,7 +122,7 @@ async function computeForVariant(
   realSem: Awaited<ReturnType<typeof getSemanticSignals>>,
 ): Promise<void> {
   // Gate: idempotent per variant
-  if (await getReconstructionResidual(questionId, variantId)) return;
+  if (await getReconstructionResidual(subjectId, questionId, variantId)) return;
 
   // Generate avatar for this variant. Inputs cross the napi boundary as typed
   // values (Vec<String> corpus, AvatarProfileInput profile). corpusJson and
@@ -371,20 +372,21 @@ async function computeForVariant(
   };
 
   try {
-    await saveReconstructionResidual(questionId, row);
+    await saveReconstructionResidual(subjectId, questionId, row);
   } catch (err) {
-    logError('reconstruction.save', err, { questionId, variantId });
+    logError('reconstruction.save', err, { subjectId, questionId, variantId });
   }
 }
 
 // ─── Main ──────────────────────────────────────────────────────────
 
-export async function computeReconstructionResidual(questionId: number): Promise<void> {
+export async function computeReconstructionResidual(subjectId: number, questionId: number): Promise<void> {
   // Calibration sessions (question_source_id = 3) are prompted neutral writing.
   // Ghost comparison is journal-only; calibration reconstruction requires a
   // parallel calibration engine (see systemDesign/CALIBRATION_ENGINE.md).
   const sourceRows = await sql`
-    SELECT question_source_id FROM tb_questions WHERE question_id = ${questionId}
+    SELECT question_source_id FROM tb_questions
+    WHERE question_id = ${questionId} AND subject_id = ${subjectId}
   `;
   if ((sourceRows[0] as { question_source_id: number }).question_source_id === 3) return;
 
@@ -395,14 +397,15 @@ export async function computeReconstructionResidual(questionId: number): Promise
     SELECT r.text
     FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
-    WHERE q.question_source_id != 3
+    WHERE q.subject_id = ${subjectId}
+      AND q.question_source_id != 3
     ORDER BY q.scheduled_for ASC
   ` as Array<{ text: string }>;
 
   if (textRows.length < 3) return;
 
   // Fetch question text + source
-  const qRows = await sql`SELECT text, question_source_id FROM tb_questions WHERE question_id = ${questionId}`;
+  const qRows = await sql`SELECT text, question_source_id FROM tb_questions WHERE question_id = ${questionId} AND subject_id = ${subjectId}`;
   const qRow = qRows[0] as { text: string; question_source_id: number } | undefined;
   const questionText = qRow?.text;
   if (!questionText) return;
@@ -414,6 +417,7 @@ export async function computeReconstructionResidual(questionId: number): Promise
     FROM tb_session_summaries s
     JOIN tb_responses r ON s.question_id = r.question_id
     WHERE s.question_id = ${questionId}
+      AND s.subject_id = ${subjectId}
   ` as Array<{ word_count: number | null; response_text: string }>;
   const realWordCount = summaryRows[0]?.word_count ?? 150;
   const realText = summaryRows[0]?.response_text;
@@ -435,6 +439,7 @@ export async function computeReconstructionResidual(questionId: number): Promise
            hold_time_mean_mean, hold_time_mean_std,
            flight_time_mean_mean, flight_time_mean_std
     FROM tb_personal_profile
+    WHERE subject_id = ${subjectId}
     LIMIT 1
   `;
   const p = profileRows[0] as Record<string, unknown> | undefined;
@@ -471,9 +476,9 @@ export async function computeReconstructionResidual(questionId: number): Promise
   });
 
   // Fetch real signals ONCE (shared across all variants)
-  const realDyn = await getDynamicalSignals(questionId);
-  const realMot = await getMotorSignals(questionId);
-  const realSem = await getSemanticSignals(questionId);
+  const realDyn = await getDynamicalSignals(subjectId, questionId);
+  const realMot = await getMotorSignals(subjectId, questionId);
+  const realSem = await getSemanticSignals(subjectId, questionId);
 
   const corpusSize = textRows.length;
   const sessionCount = (p.session_count as number) ?? 0;
@@ -485,12 +490,12 @@ export async function computeReconstructionResidual(questionId: number): Promise
   for (const variantId of ALL_VARIANTS) {
     try {
       await computeForVariant(
-        questionId, variantId, corpusJson, questionText, questionSourceId,
+        subjectId, questionId, variantId, corpusJson, questionText, questionSourceId,
         realWordCount, realText, profileJson, corpusSize, sessionCount,
         corpusSha256, realDyn, realMot, realSem,
       );
     } catch (err) {
-      logError('reconstruction.variant', err, { questionId, variantId });
+      logError('reconstruction.variant', err, { subjectId, questionId, variantId });
     }
   }
 }
@@ -525,11 +530,12 @@ export interface VerificationResult {
  * or if the corpus has changed since computation.
  */
 export async function verifyResidual(
+  subjectId: number,
   questionId: number,
   variantId: number,
 ): Promise<VerificationResult | null> {
   // 1. Load stored residual
-  const stored = await getReconstructionResidual(questionId, variantId);
+  const stored = await getReconstructionResidual(subjectId, questionId, variantId);
   if (!stored) return null;
 
   // Gate: must be post-reproducibility-era
@@ -545,7 +551,8 @@ export async function verifyResidual(
     SELECT r.text
     FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
-    WHERE q.question_source_id != 3
+    WHERE q.subject_id = ${subjectId}
+      AND q.question_source_id != 3
     ORDER BY q.scheduled_for ASC
   ` as Array<{ text: string }>;
 

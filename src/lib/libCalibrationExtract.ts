@@ -184,6 +184,7 @@ export async function extractCalibrationContext(
  * the calibration submission.
  */
 export async function runCalibrationExtraction(
+  subjectId: number,
   questionId: number,
   responseText: string,
   promptText: string,
@@ -191,12 +192,12 @@ export async function runCalibrationExtraction(
   try {
     const tags = await extractCalibrationContext(responseText, promptText);
     if (tags.length > 0) {
-      await saveCalibrationContext(questionId, tags);
+      await saveCalibrationContext(subjectId, questionId, tags);
       console.log(`[calibration-extract] Extracted ${tags.length} context tags for question ${questionId}`);
     } else {
       console.log(`[calibration-extract] No context tags found for question ${questionId}`);
     }
   } catch (err) {
-    logError('calibrationExtract', err, { questionId });
+    logError('calibrationExtract', err, { subjectId, questionId });
   }
 }

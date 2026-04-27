@@ -114,22 +114,23 @@ function zScore(value: number, mean: number, stdDev: number): number | null {
 
 // ─── Database Operations ───────────────────────────────────────────
 
-async function getBaseline(signalName: string): Promise<WelfordState & { lastQuestionId: number | null }> {
+async function getBaseline(subjectId: number, signalName: string): Promise<WelfordState & { lastQuestionId: number | null }> {
   const rows = await sql`
     SELECT running_mean, running_m2, session_count, last_question_id
     FROM tb_semantic_baselines
-    WHERE signal_name = ${signalName}
+    WHERE subject_id = ${subjectId} AND signal_name = ${signalName}
   `;
   const row = rows[0] as { running_mean: number; running_m2: number; session_count: number; last_question_id: number | null } | undefined;
   if (!row) return { mean: 0, m2: 0, n: 0, lastQuestionId: null };
   return { mean: row.running_mean, m2: row.running_m2, n: row.session_count, lastQuestionId: row.last_question_id };
 }
 
-async function upsertBaseline(signalName: string, state: WelfordState, questionId: number): Promise<void> {
+async function upsertBaseline(subjectId: number, signalName: string, state: WelfordState, questionId: number): Promise<void> {
+  // CONFLICT TARGET CHANGED (migration 030): (signal_name) → (subject_id, signal_name)
   await sql`
-    INSERT INTO tb_semantic_baselines (signal_name, running_mean, running_m2, session_count, last_question_id, dttm_modified_utc, modified_by)
-    VALUES (${signalName}, ${state.mean}, ${state.m2}, ${state.n}, ${questionId}, CURRENT_TIMESTAMP, 'system')
-    ON CONFLICT (signal_name) DO UPDATE SET
+    INSERT INTO tb_semantic_baselines (subject_id, signal_name, running_mean, running_m2, session_count, last_question_id, dttm_modified_utc, modified_by)
+    VALUES (${subjectId}, ${signalName}, ${state.mean}, ${state.m2}, ${state.n}, ${questionId}, CURRENT_TIMESTAMP, 'system')
+    ON CONFLICT (subject_id, signal_name) DO UPDATE SET
       running_mean = ${state.mean},
       running_m2 = ${state.m2},
       session_count = ${state.n},
@@ -140,6 +141,7 @@ async function upsertBaseline(signalName: string, state: WelfordState, questionI
 }
 
 async function saveTrajectoryPoint(
+  subjectId: number,
   questionId: number,
   signalName: string,
   rawValue: number | null,
@@ -151,10 +153,10 @@ async function saveTrajectoryPoint(
 ): Promise<void> {
   await sql`
     INSERT INTO tb_semantic_trajectory (
-      question_id, signal_name, raw_value, global_z_score, topic_z_score,
+      subject_id, question_id, signal_name, raw_value, global_z_score, topic_z_score,
       topic_match_count, baseline_n, gated
     ) VALUES (
-      ${questionId}, ${signalName}, ${rawValue}, ${globalZ}, ${topicZ},
+      ${subjectId}, ${questionId}, ${signalName}, ${rawValue}, ${globalZ}, ${topicZ},
       ${topicMatchCount}, ${baselineN}, ${gated}
     )
     ON CONFLICT (question_id, signal_name) DO NOTHING
@@ -169,6 +171,7 @@ async function saveTrajectoryPoint(
  * for a given signal.
  */
 async function getTopicMatchedValues(
+  subjectId: number,
   questionId: number,
   signalName: string,
   k: number,
@@ -178,7 +181,8 @@ async function getTopicMatchedValues(
     SELECT e.embedding
     FROM tb_embeddings e
     JOIN tb_responses r ON e.source_record_id = r.response_id
-    WHERE e.embedding_source_id = 1
+    WHERE e.subject_id = ${subjectId}
+      AND e.embedding_source_id = 1
       AND r.question_id = ${questionId}
       AND e.embedding IS NOT NULL
       AND e.invalidated_at IS NULL
@@ -195,7 +199,9 @@ async function getTopicMatchedValues(
     JOIN tb_responses r ON e.source_record_id = r.response_id
     JOIN tb_questions q ON r.question_id = q.question_id
     JOIN tb_semantic_signals ss ON r.question_id = ss.question_id
-    WHERE e.embedding_source_id = 1
+    WHERE e.subject_id = ${subjectId}
+      AND q.subject_id = ${subjectId}
+      AND e.embedding_source_id = 1
       AND e.embedding IS NOT NULL
       AND e.invalidated_at IS NULL
       AND r.question_id != ${questionId}
@@ -229,17 +235,18 @@ function distributionStats(values: number[]): { mean: number; stdDev: number } |
  * Called AFTER semantic signals are saved in the signal pipeline.
  * Idempotent: skips signals already present in tb_semantic_trajectory.
  */
-export async function updateSemanticBaselines(questionId: number): Promise<void> {
+export async function updateSemanticBaselines(subjectId: number, questionId: number): Promise<void> {
   // Calibration sessions (question_source_id = 3) are prompted neutral writing,
   // fundamentally different from reflective journal sessions. Including them
   // would shift the within-person baseline mean and inflate variance.
   const sourceRows = await sql`
-    SELECT question_source_id FROM tb_questions WHERE question_id = ${questionId}
+    SELECT question_source_id FROM tb_questions
+    WHERE question_id = ${questionId} AND subject_id = ${subjectId}
   `;
   if (sourceRows.length === 0) return;
   if ((sourceRows[0] as { question_source_id: number }).question_source_id === 3) return;
 
-  const sem = await getSemanticSignals(questionId);
+  const sem = await getSemanticSignals(subjectId, questionId);
   if (!sem) return;
 
   // Sessions with external input contamination (paste or drag-and-drop) should
@@ -266,12 +273,12 @@ export async function updateSemanticBaselines(questionId: number): Promise<void>
       // Check idempotency
       const existing = await sql`
         SELECT 1 FROM tb_semantic_trajectory
-        WHERE question_id = ${questionId} AND signal_name = ${signalName}
+        WHERE subject_id = ${subjectId} AND question_id = ${questionId} AND signal_name = ${signalName}
       `;
       if (existing.length > 0) continue;
 
       // Load current baseline state
-      const baseline = await getBaseline(signalName);
+      const baseline = await getBaseline(subjectId, signalName);
 
       // Guard against processing the same question twice
       if (baseline.lastQuestionId === questionId) continue;
@@ -287,7 +294,7 @@ export async function updateSemanticBaselines(questionId: number): Promise<void>
       let topicZ: number | null = null;
       let topicMatchCount: number | null = null;
       try {
-        const matched = await getTopicMatchedValues(questionId, signalName, TOPIC_MATCH_K);
+        const matched = await getTopicMatchedValues(subjectId, questionId, signalName, TOPIC_MATCH_K);
         topicMatchCount = matched.matchCount;
         if (matched.values.length >= 3) {
           const stats = distributionStats(matched.values);
@@ -296,7 +303,7 @@ export async function updateSemanticBaselines(questionId: number): Promise<void>
           }
         }
       } catch (err) {
-        logError('semantic-baseline.topic-match', err, { questionId, signalName });
+        logError('semantic-baseline.topic-match', err, { subjectId, questionId, signalName });
       }
 
       // Gate: is the baseline deep enough for reliable z-scores?
@@ -304,16 +311,16 @@ export async function updateSemanticBaselines(questionId: number): Promise<void>
 
       // Save trajectory point
       await saveTrajectoryPoint(
-        questionId, signalName, value,
+        subjectId, questionId, signalName, value,
         globalZ, topicZ, topicMatchCount,
         baseline.n, gated,
       );
 
       // Update baseline with new value (Welford's step)
       const updated = welfordUpdate(baseline, value);
-      await upsertBaseline(signalName, updated, questionId);
+      await upsertBaseline(subjectId, signalName, updated, questionId);
     } catch (err) {
-      logError('semantic-baseline.update', err, { questionId, signalName });
+      logError('semantic-baseline.update', err, { subjectId, questionId, signalName });
     }
   }
 }

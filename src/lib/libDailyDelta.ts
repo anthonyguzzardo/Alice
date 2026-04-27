@@ -211,12 +211,14 @@ function safeDelta(a: number | null | undefined, b: number | null | undefined): 
 }
 
 export function computeSessionDelta(
+  subjectId: number,
   calibration: SessionSummaryInput,
   journal: SessionSummaryInput,
   date: string,
 ): SessionDeltaRow {
   const delta: SessionDeltaRow = {
     sessionDeltaId: 0, // assigned by DB
+    subjectId,
     sessionDate: date,
     calibrationQuestionId: calibration.questionId,
     journalQuestionId: journal.questionId,
@@ -402,23 +404,26 @@ export function formatCompactDelta(deltas: SessionDeltaRow[]): string {
  * Self-healing: if a prior delta save failed, the next journal submission
  * finds that date as the most recent eligible and retries it.
  */
-export async function computePriorDayDelta(currentDate: string): Promise<string | null> {
+export async function computePriorDayDelta(subjectId: number, currentDate: string): Promise<string | null> {
   const rows = await sql`
     SELECT j.scheduled_for::text AS date, j.question_id AS "journalQuestionId"
     FROM tb_questions j
     JOIN tb_session_summaries js ON j.question_id = js.question_id
-    WHERE j.question_source_id != 3
+    WHERE j.subject_id = ${subjectId}
+      AND j.question_source_id != 3
       AND j.scheduled_for IS NOT NULL
       AND j.scheduled_for < ${currentDate}::date
       AND EXISTS (
         SELECT 1 FROM tb_questions c
         JOIN tb_session_summaries cs ON c.question_id = cs.question_id
-        WHERE c.question_source_id = 3
+        WHERE c.subject_id = ${subjectId}
+          AND c.question_source_id = 3
           AND c.dttm_created_utc::date = j.scheduled_for
       )
       AND NOT EXISTS (
         SELECT 1 FROM tb_session_delta d
-        WHERE d.session_date::date = j.scheduled_for
+        WHERE d.subject_id = ${subjectId}
+          AND d.session_date::date = j.scheduled_for
       )
     ORDER BY j.scheduled_for DESC
     LIMIT 1
@@ -428,14 +433,14 @@ export async function computePriorDayDelta(currentDate: string): Promise<string 
 
   const { date, journalQuestionId } = rows[0] as unknown as { date: string; journalQuestionId: number };
 
-  const calibrationSummary = await getSameDayCalibrationSummary(date);
+  const calibrationSummary = await getSameDayCalibrationSummary(subjectId, date);
   if (!calibrationSummary) return null;
 
-  const journalSummary = await getSessionSummary(journalQuestionId);
+  const journalSummary = await getSessionSummary(subjectId, journalQuestionId);
   if (!journalSummary) return null;
 
-  const history = await getRecentSessionDeltas(30);
-  const delta = computeSessionDelta(calibrationSummary, journalSummary, date);
+  const history = await getRecentSessionDeltas(subjectId, 30);
+  const delta = computeSessionDelta(subjectId, calibrationSummary, journalSummary, date);
   delta.deltaMagnitude = computeDeltaMagnitude(delta, history);
   await saveSessionDelta(delta);
 
@@ -453,22 +458,25 @@ export async function computePriorDayDelta(currentDate: string): Promise<string 
  * Find all dates where both a journal session and at least one calibration
  * session exist, but no delta row has been computed yet.
  */
-async function getEligibleDatesWithoutDelta(): Promise<Array<{ date: string; journalQuestionId: number }>> {
+async function getEligibleDatesWithoutDelta(subjectId: number): Promise<Array<{ date: string; journalQuestionId: number }>> {
   const rows = await sql`
     SELECT j.scheduled_for::text AS date, j.question_id AS "journalQuestionId"
     FROM tb_questions j
     JOIN tb_session_summaries js ON j.question_id = js.question_id
-    WHERE j.question_source_id != 3
+    WHERE j.subject_id = ${subjectId}
+      AND j.question_source_id != 3
       AND j.scheduled_for IS NOT NULL
       AND EXISTS (
         SELECT 1 FROM tb_questions c
         JOIN tb_session_summaries cs ON c.question_id = cs.question_id
-        WHERE c.question_source_id = 3
+        WHERE c.subject_id = ${subjectId}
+          AND c.question_source_id = 3
           AND c.dttm_created_utc::date = j.scheduled_for
       )
       AND NOT EXISTS (
         SELECT 1 FROM tb_session_delta d
-        WHERE d.session_date::date = j.scheduled_for
+        WHERE d.subject_id = ${subjectId}
+          AND d.session_date::date = j.scheduled_for
       )
     ORDER BY j.scheduled_for ASC
   `;
@@ -485,8 +493,8 @@ async function getEligibleDatesWithoutDelta(): Promise<Array<{ date: string; jou
  * Called from the nightly runGeneration flow before question generation,
  * and from the standalone backfill script.
  */
-export async function runDailyDeltaBackfill(): Promise<number> {
-  const eligible = await getEligibleDatesWithoutDelta();
+export async function runDailyDeltaBackfill(subjectId: number): Promise<number> {
+  const eligible = await getEligibleDatesWithoutDelta(subjectId);
   if (eligible.length === 0) {
     console.log('[daily-delta] No new day-pairs to process.');
     return 0;
@@ -499,14 +507,14 @@ export async function runDailyDeltaBackfill(): Promise<number> {
     try {
       // getSameDayCalibrationSummary already returns the LAST calibration
       // of the day (ORDER BY dttm_created_utc DESC LIMIT 1)
-      const calibrationSummary = await getSameDayCalibrationSummary(date);
+      const calibrationSummary = await getSameDayCalibrationSummary(subjectId, date);
       if (!calibrationSummary) continue; // shouldn't happen given the EXISTS check
 
-      const journalSummary = await getSessionSummary(journalQuestionId);
+      const journalSummary = await getSessionSummary(subjectId, journalQuestionId);
       if (!journalSummary) continue;
 
-      const history = await getRecentSessionDeltas(30);
-      const delta = computeSessionDelta(calibrationSummary, journalSummary, date);
+      const history = await getRecentSessionDeltas(subjectId, 30);
+      const delta = computeSessionDelta(subjectId, calibrationSummary, journalSummary, date);
       delta.deltaMagnitude = computeDeltaMagnitude(delta, history);
       await saveSessionDelta(delta);
 

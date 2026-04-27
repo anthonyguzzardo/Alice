@@ -81,7 +81,7 @@ interface BaselineRowInput {
   avg_flight_time_mean: number | null;
 }
 
-async function computeBaselineSnapshot(deviceType: string | null): Promise<BaselineRowInput & { calibration_session_count: number }> {
+async function computeBaselineSnapshot(subjectId: number, deviceType: string | null): Promise<BaselineRowInput & { calibration_session_count: number }> {
   let rows;
   if (deviceType) {
     rows = await sql`
@@ -101,7 +101,9 @@ async function computeBaselineSnapshot(deviceType: string | null): Promise<Basel
         ,COUNT(*)                          as calibration_session_count
       FROM tb_session_summaries s
       JOIN tb_questions q ON s.question_id = q.question_id
-      WHERE q.question_source_id = 3 AND s.device_type = ${deviceType}
+      WHERE q.subject_id = ${subjectId}
+        AND q.question_source_id = 3
+        AND s.device_type = ${deviceType}
     `;
   } else {
     rows = await sql`
@@ -121,7 +123,8 @@ async function computeBaselineSnapshot(deviceType: string | null): Promise<Basel
         ,COUNT(*)                          as calibration_session_count
       FROM tb_session_summaries s
       JOIN tb_questions q ON s.question_id = q.question_id
-      WHERE q.question_source_id = 3
+      WHERE q.subject_id = ${subjectId}
+        AND q.question_source_id = 3
     `;
   }
 
@@ -144,7 +147,7 @@ const BASELINE_TO_COLUMN: Record<string, string> = {
   avg_flight_time_mean: 'flight_time_mean',
 };
 
-async function getJournalDispersion(field: keyof BaselineRowInput): Promise<number | null> {
+async function getJournalDispersion(subjectId: number, field: keyof BaselineRowInput): Promise<number | null> {
   // Per-person dispersion across journal sessions for the source field.
   // Used as the scaling denominator when computing per-dimension drift.
   const sourceCol = BASELINE_TO_COLUMN[field];
@@ -156,7 +159,8 @@ async function getJournalDispersion(field: keyof BaselineRowInput): Promise<numb
     `SELECT s.${sourceCol} as v
      FROM tb_session_summaries s
      JOIN tb_questions q ON s.question_id = q.question_id
-     WHERE q.question_source_id != 3 AND s.${sourceCol} IS NOT NULL`
+     WHERE q.subject_id = $1 AND q.question_source_id != 3 AND s.${sourceCol} IS NOT NULL`,
+    [subjectId]
   ) as Array<{ v: number }>;
 
   if (rows.length < 3) return null;
@@ -167,6 +171,7 @@ async function getJournalDispersion(field: keyof BaselineRowInput): Promise<numb
 }
 
 async function computeDriftMagnitude(
+  subjectId: number,
   current: BaselineRowInput,
   previous: CalibrationHistoryRow | null,
 ): Promise<number | null> {
@@ -179,7 +184,7 @@ async function computeDriftMagnitude(
     const prev = previous[dim] as number | null;
     if (cur == null || prev == null) continue;
 
-    const dispersion = await getJournalDispersion(dim as keyof BaselineRowInput);
+    const dispersion = await getJournalDispersion(subjectId, dim as keyof BaselineRowInput);
     if (dispersion == null || dispersion < 1e-10) continue;
 
     const z = (cur - prev) / dispersion;
@@ -200,13 +205,14 @@ async function computeDriftMagnitude(
  * Two snapshots are taken: one global (deviceType=null) and one for the
  * device of the calibration session that just ran (when available).
  */
-export async function snapshotCalibrationBaselinesAfterSubmit(deviceType: string | null): Promise<void> {
+export async function snapshotCalibrationBaselinesAfterSubmit(subjectId: number, deviceType: string | null): Promise<void> {
   // Global snapshot
-  const globalSnap = await computeBaselineSnapshot(null);
+  const globalSnap = await computeBaselineSnapshot(subjectId, null);
   if (globalSnap.calibration_session_count > 0) {
-    const prevGlobal = await getLatestCalibrationSnapshot(null);
-    const driftGlobal = await computeDriftMagnitude(globalSnap, prevGlobal);
+    const prevGlobal = await getLatestCalibrationSnapshot(subjectId, null);
+    const driftGlobal = await computeDriftMagnitude(subjectId, globalSnap, prevGlobal);
     await saveCalibrationBaselineSnapshot({
+      subject_id: subjectId,
       calibration_session_count: globalSnap.calibration_session_count,
       device_type: null,
       avg_first_keystroke_ms: globalSnap.avg_first_keystroke_ms,
@@ -227,11 +233,12 @@ export async function snapshotCalibrationBaselinesAfterSubmit(deviceType: string
 
   // Device-specific snapshot
   if (deviceType) {
-    const deviceSnap = await computeBaselineSnapshot(deviceType);
+    const deviceSnap = await computeBaselineSnapshot(subjectId, deviceType);
     if (deviceSnap.calibration_session_count > 0) {
-      const prevDevice = await getLatestCalibrationSnapshot(deviceType);
-      const driftDevice = await computeDriftMagnitude(deviceSnap, prevDevice);
+      const prevDevice = await getLatestCalibrationSnapshot(subjectId, deviceType);
+      const driftDevice = await computeDriftMagnitude(subjectId, deviceSnap, prevDevice);
       await saveCalibrationBaselineSnapshot({
+        subject_id: subjectId,
         calibration_session_count: deviceSnap.calibration_session_count,
         device_type: deviceType,
         avg_first_keystroke_ms: deviceSnap.avg_first_keystroke_ms,
