@@ -548,6 +548,8 @@ export const FIXTURE_TABLES = [
   'tb_burst_sequences',
   'tb_process_signals',
   'tb_motor_signals',
+  'tb_dynamical_signals',
+  'tb_cross_session_signals',
   'tb_semantic_trajectory',
   'tb_semantic_baselines',
   'tb_embeddings',
