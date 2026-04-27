@@ -25,7 +25,9 @@
  *      behavioral/linguistic signals.
  *      Measures: what the reflective question provoked beyond neutral writing.
  *      Granularity: one row per day, retrospective batch.
- *      Consumers: question generation prompts (formatCompactDelta).
+ *      Consumers: per-subject signal aggregation; previously also fed the
+ *      legacy `runGeneration` prompt builder (removed 2026-04-27, see
+ *      METHODS_PROVENANCE.md INC-014).
  *
  * These are complementary, not redundant. They measure different constructs
  * at different granularities using different comparison methods.
@@ -337,54 +339,6 @@ function getTrend(history: SessionDeltaRow[], dim: DeltaDimension): 'rising' | '
   return 'stable';
 }
 
-export function formatCompactDelta(deltas: SessionDeltaRow[]): string {
-  if (deltas.length === 0) return '';
-
-  const lines: string[] = [];
-  lines.push('=== DAILY DELTA TRENDS (calibration vs journal shifts) ===');
-
-  const toShow = deltas.slice(0, 14);
-  for (const d of toShow) {
-    const parts: string[] = [];
-    for (const dim of DELTA_DIMENSIONS) {
-      const val = d[dim];
-      if (val == null) continue;
-
-      const stats = getDeltaStats(deltas, dim);
-      if (stats && stats.std > 1e-10) {
-        const sigma = (val - stats.mean) / stats.std;
-        if (Math.abs(sigma) > 1) {
-          const meta = DIMENSION_META[dim];
-          parts.push(`${meta.label}:${sigma >= 0 ? '+' : ''}${sigma.toFixed(1)}s`);
-        }
-      }
-    }
-    const magStr = d.deltaMagnitude != null ? ` mag=${d.deltaMagnitude.toFixed(1)}` : '';
-    const notable = parts.length > 0 ? ` [${parts.join(', ')}]` : ' [within typical]';
-    lines.push(`[${d.sessionDate}]${magStr}${notable}`);
-  }
-
-  if (deltas.length >= MIN_HISTORY_FOR_TREND) {
-    const trends: string[] = [];
-    for (const dim of DELTA_DIMENSIONS) {
-      // Only report trends for ergodicity-safe dimensions (weight 1.0).
-      // Non-ergodic dimensions (IKI/hold/flight means) produce unreliable
-      // trend lines for N=1 longitudinal tracking.
-      if (ERGODICITY_WEIGHT[dim] < 1.0) continue;
-      const trend = getTrend(deltas, dim);
-      if (trend && trend !== 'stable') {
-        const meta = DIMENSION_META[dim];
-        trends.push(`${meta.label} ${trend}`);
-      }
-    }
-    if (trends.length > 0) {
-      lines.push(`7-day trends: ${trends.join(', ')}`);
-    }
-  }
-
-  return lines.join('\n');
-}
-
 // ----------------------------------------------------------------------------
 // REGULAR FLOW: Compute prior day's delta on journal submission
 // ----------------------------------------------------------------------------
@@ -490,8 +444,9 @@ async function getEligibleDatesWithoutDelta(subjectId: number): Promise<Array<{ 
  * Idempotent: days with existing delta rows are skipped. Uses ON CONFLICT
  * DO UPDATE as a secondary safety net. Safe to re-run after interruption.
  *
- * Called from the nightly runGeneration flow before question generation,
- * and from the standalone backfill script.
+ * Called from the standalone backfill script. (Pre-2026-04-27 this also ran
+ * inside the legacy `runGeneration` flow, which was removed when the corpus
+ * pivot landed — see METHODS_PROVENANCE.md INC-014.)
  */
 export async function runDailyDeltaBackfill(subjectId: number): Promise<number> {
   const eligible = await getEligibleDatesWithoutDelta(subjectId);

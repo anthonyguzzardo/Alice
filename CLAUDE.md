@@ -21,8 +21,7 @@ A personal, monastic daily thinking journal. One question per day. No gamificati
 - Schema managed by `db/sql/dbAlice_Tables.sql`, seed data in `db/sql/dbAlice_Seed.sql`
 - Connection pool in `src/lib/libDbPool.ts` (porsager/postgres.js)
 - All db functions are async (return Promise)
-- Seed questions in `src/lib/libSeeds.ts`
-- Nightly script (`npm run generate`) generates tomorrow's question from past responses
+- Seed questions in `src/lib/libSeeds.ts`. Each subject gets 30 personal seeds at account creation; once those run out they pull from the shared `tb_question_corpus`. When any subject has ≤5 unanswered seeds remaining the owner is alerted (navbar pending-work badge) and manually runs an LLM to append fresh questions to the corpus. There is no per-submission auto-generation — the legacy `runGeneration` path was removed 2026-04-27 (see METHODS_PROVENANCE.md INC-014).
 - Rust signal engine in `src-rs/` built via `npm run build:rust`
 - Signal pipeline (`src/lib/libSignalsNative.ts`) loads Rust via napi-rs. No TS fallback; if Rust is unavailable, signals are null for that session
 - `npm run build` runs Rust build before Astro build
@@ -139,7 +138,7 @@ All folders and files follow consistent conventions by layer.
 | `src/styles/` | `sty` | PascalCase `.css` | `styObservatory.css` |
 | `src/pages/` | none | kebab-case `.astro` | `alice-negative.astro`, `landing.astro` |
 | `src/pages/api/` | none | kebab-case `.ts` | `calibration-drift.ts`, `signal-variants.ts` |
-| `src/scripts/` | none | kebab-case `.ts` | `generate-question.ts`, `backfill-embeddings.ts` |
+| `src/scripts/` | none | kebab-case `.ts` | `backfill-embeddings.ts`, `create-subject.ts` |
 | `src-rs/src/` | none | snake_case `.rs` | `dynamical.rs`, `motor.rs` |
 | `db/sql/` | `dbAlice_` | PascalCase `.sql` | `dbAlice_Tables.sql`, `dbAlice_Seed.sql` |
 

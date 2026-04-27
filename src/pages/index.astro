@@ -638,18 +638,28 @@
       function renderHealth(h: any) {
         healthDot.setAttribute('data-status', h.overall);
 
-        // Pending-work badge: count of embeds waiting on TEI/backfill. Yellow
-        // background when TEI is offline (action needed), green when online
-        // (next backfill drains automatically).
+        // Pending-work badge: combined count of attention items —
+        // embeds awaiting TEI/backfill + subjects with ≤5 seeds remaining
+        // (corpus-refresh trigger). Badge stays yellow when TEI is offline
+        // (action needed); flips green when only embeds are pending and TEI
+        // is online (will drain on next backfill).
         const pw = h.pendingWork;
-        if (pw && pw.embeds > 0) {
-          pendingBadge.textContent = String(pw.embeds);
-          pendingBadge.classList.toggle('tei-on', !!pw.teiAvailable);
+        const seedAlerts = (pw && pw.seedAlerts) || [];
+        const totalPending = (pw ? pw.embeds : 0) + seedAlerts.length;
+        if (totalPending > 0) {
+          pendingBadge.textContent = String(totalPending);
+          // Green only when nothing requires manual action (TEI is up AND no seed alerts).
+          const autoDrainable = !!(pw && pw.teiAvailable) && seedAlerts.length === 0;
+          pendingBadge.classList.toggle('tei-on', autoDrainable);
           pendingBadge.removeAttribute('hidden');
-          healthDot.setAttribute('aria-label',
-            `Pipeline health — ${pw.embeds} embed${pw.embeds === 1 ? '' : 's'} pending` +
-            (pw.teiAvailable ? '' : ', TEI offline')
-          );
+          const labelParts: string[] = [];
+          if (pw && pw.embeds > 0) {
+            labelParts.push(`${pw.embeds} embed${pw.embeds === 1 ? '' : 's'} pending` + (pw.teiAvailable ? '' : ', TEI offline'));
+          }
+          if (seedAlerts.length > 0) {
+            labelParts.push(`${seedAlerts.length} subject${seedAlerts.length === 1 ? '' : 's'} low on seeds`);
+          }
+          healthDot.setAttribute('aria-label', `Pipeline health — ${labelParts.join('; ')}`);
         } else {
           pendingBadge.setAttribute('hidden', '');
           pendingBadge.classList.remove('tei-on');
@@ -718,15 +728,33 @@
         // PENDING WORK
         if (pw) {
           html += '<div class="section">Pending work</div>';
-          if (pw.embeds === 0) {
+          if (pw.embeds === 0 && seedAlerts.length === 0) {
             html += '<div class="empty">none</div>';
           } else {
-            const teiLabel = pw.teiAvailable ? 'TEI online' : 'TEI offline';
-            const teiCls   = pw.teiAvailable ? '' : 'warn';
-            html += row(`Embeds pending`, String(pw.embeds), 'warn');
-            html += row(`Embedder`, teiLabel, teiCls);
-            if (!pw.teiAvailable) {
-              html += '<div class="empty" style="margin-top:0.4rem;">Run <code>npm run dev:full</code>, then <code>npm run backfill</code> to drain.</div>';
+            // Embed pending — total + per-subject breakdown.
+            if (pw.embeds > 0) {
+              const teiLabel = pw.teiAvailable ? 'TEI online' : 'TEI offline';
+              const teiCls   = pw.teiAvailable ? '' : 'warn';
+              html += row(`Embeds pending`, String(pw.embeds), 'warn');
+              html += row(`Embedder`, teiLabel, teiCls);
+              const bySubj = (pw.embedsBySubject || []) as Array<{ subject_id: number; username: string; count: number }>;
+              if (bySubj.length > 0) {
+                html += '<div class="stage-list">' +
+                  bySubj.map(s => `<span class="stage warn">${s.username}: ${s.count}</span>`).join('') +
+                  '</div>';
+              }
+              if (!pw.teiAvailable) {
+                html += '<div class="empty" style="margin-top:0.4rem;">Run <code>npm run dev:full</code>, then <code>npm run backfill</code> to drain.</div>';
+              }
+            }
+            // Seed alerts — subjects whose personal queue is about to run dry.
+            if (seedAlerts.length > 0) {
+              const sa = seedAlerts as Array<{ subject_id: number; username: string; remaining: number }>;
+              html += row(`Seeds running low`, String(sa.length), 'warn');
+              html += '<div class="stage-list">' +
+                sa.map(s => `<span class="stage warn">${s.username}: ${s.remaining} left</span>`).join('') +
+                '</div>';
+              html += '<div class="empty" style="margin-top:0.4rem;">Refresh <code>tb_question_corpus</code> with a fresh batch of 30 unique questions (additive — never overwrites personal queues).</div>';
             }
           }
         }

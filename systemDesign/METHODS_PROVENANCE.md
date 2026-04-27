@@ -8,7 +8,75 @@ Newest first.
 
 ---
 
-## INC-013: Signal pipeline boundary failure, extended ghost residuals, calibration guard
+## INC-014: Legacy per-submission question generation removed, corpus-refresh model documented
+
+**Date:** 2026-04-27
+**Type:** Architectural correction (legacy code persisted across an undocumented methodological pivot) + new operator-facing alert
+
+### What was wrong
+
+The codebase carried a per-submission auto-generation path (`runGeneration` in `src/lib/libGenerate.ts`, called from `src/lib/libSignalWorker.ts:222`) that predates the corpus-refresh pivot and was never removed when the pivot landed.
+
+`runGeneration` would, after every owner journal submission past day 30: query past responses, run RAG retrieval (`libRag.ts`), build a context-loaded prompt, call Anthropic, and schedule a generated question for tomorrow into `tb_questions` with `question_source_id = 2`. A standalone manual-trigger script (`src/scripts/generate-question.ts`, exposed as `npm run generate`) wrapped the same function. The previous documentation in CLAUDE.md (line 25) described it as a "Nightly script," which compounded the confusion — there was no scheduler; the script was either invoked manually or fired implicitly via the post-submission worker pipeline.
+
+The actual current methodological model — confirmed by the operator on 2026-04-27 — is:
+
+- Each subject receives **30 personal seed questions** at account creation, pre-scheduled into `tb_questions` (`question_source_id = 1`). These are sacred and never overwritten.
+- A **shared corpus** lives in `tb_question_corpus` (`question_source_id = 4`) that subjects pull from once their personal queue runs dry, or for variety alongside.
+- When **any subject's unanswered seeds drop to ≤ 5**, an alert fires in the owner's navbar pending-work badge.
+- The owner then **manually invokes an LLM** to take in past responses + existing corpus rows and generate a fresh batch of ~30 unique questions, which are **appended** (not replacing) to `tb_question_corpus`. Subjects whose personal queues are still partly populated are unaffected; the new corpus rows are extra inventory available to any subject.
+- There is no per-submission auto-generation. The `runGeneration` path was a leftover from the previous design and had been silently failing on prod (no `ANTHROPIC_API_KEY` in the systemd EnvironmentFile by design — see `project_prod_is_signal_store_only.md`) since the pivot landed; failures were caught by the worker's per-stage try/catch and logged to `data/errors.log` with no operator-facing surface.
+
+This pivot was never recorded in METHODS_PROVENANCE.md, which was the gap that allowed the legacy path to persist for weeks past its end-of-life.
+
+### Discovery method
+
+Surfaced during a separate task (the alice-negative full deprecation), when the assistant proposed extending the new pending-work navbar badge to include "pending question generation" as a deferred-work category. The operator caught the mismatch immediately: "what nightly question generation? what is going on here? am i lost? the only question generation that happens is a brand new seeding of 30 questions." Code review of `libSignalWorker.ts:222` and `libGenerate.ts:51-60` confirmed the legacy `runGeneration` invocation was still wired in and would attempt an Anthropic call after every owner submission. Cross-check against METHODS_PROVENANCE.md confirmed the corpus-refresh pivot had no entry.
+
+### Resolution
+
+**Code removed (per CLAUDE.md "archival means removal" discipline):**
+
+- `src/lib/libGenerate.ts` — entire file (the `runGeneration` function, supporting types, and the RAG-context prompt builder)
+- `src/lib/libRag.ts` — entire file (only consumer was libGenerate; `retrieveSimilarMulti` and `retrieveContrarian` had no other callers)
+- `src/scripts/generate-question.ts` — entire file (manual trigger wrapping `runGeneration`)
+- `tests/db/aggregation_scoping/libGenerate_threading_scoping.test.ts` — entire file (hotspot test for `runGeneration`)
+- `package.json` — `"generate": "npx tsx src/scripts/generate-question.ts"` script entry
+- `src/lib/libSignalWorker.ts` — import line 30 (`runGeneration`) and the post-submission `try { await runGeneration(...) }` block at line 222–223
+- Stale references in contamination-boundary docstrings (`src/pages/api/subject/respond.ts:11`, `src/pages/api/subject/calibrate.ts:9`) and in `src/lib/libDailyDelta.ts:493` updated to reflect that the daily-delta backfill is now standalone
+- `CLAUDE.md` line 25 ("Nightly script (`npm run generate`)…") replaced with an accurate description of the seed-30 + corpus-refresh model and a pointer to this entry
+
+**Operator-facing alert built:**
+
+- `/api/health` `pendingWork` payload extended with:
+  - `embeds: number` and `embedsBySubject: Array<{ subject_id, username, count }>` — embed counter is now cross-subject (was: owner-only). Mirrors the operator's stated intent that they need visibility into pending embeds for any subject, not just their own.
+  - `seedAlerts: Array<{ subject_id, username, remaining }>` — surfaces every subject with `0 < unanswered_seeds ≤ 5`, ordered by `remaining` ascending. The 0 case is intentionally excluded (perpetual once seeds are exhausted; signal value drops).
+- `overall` health status flips to `yellow` whenever `pendingEmbeds > 0 || seedAlerts.length > 0`.
+- Owner journal page (`/`) renders a numeric badge on the existing `health-dot`. The badge text is `pendingEmbeds + seedAlerts.length` (combined attention items). Color is green only when the entire pending set is auto-drainable (TEI online AND no seed alerts); otherwise yellow.
+- Expanded health panel renders a "Pending work" section with a per-subject breakdown of pending embeds and a per-subject breakdown of low-seed alerts, plus action hints (`npm run dev:full` + `npm run backfill` for embeds; manual corpus refresh for seed alerts).
+
+### What was NOT built tonight
+
+- The actual **LLM corpus-refresh script** (the operator-invoked tool that takes past responses + existing corpus and produces 30 new unique questions). The operator stated explicitly: "i pull an llm to take in old ones and re-create a new 30." This is a separate session because it requires designing the prompt, choosing the model, deciding what RAG context to pull, and validating dedupe / quality on the output. The alert exists; the action is still manual. When that script lands, it earns its own INC entry.
+- An **archive migration for `tb_witness_states`** (and any other residual alice-negative tables) to `zz_archive_*`. The application code is gone (see the alice-negative scrub also dated 2026-04-27); the DB tables remain pending a separate migration commit.
+
+### Verification
+
+| System | Pre-fix | Post-fix |
+|---|---|---|
+| `runGeneration` invocations on submission | 1 (per owner submit, post-day-30) | 0 |
+| Files referencing `runGeneration` (excluding archive/) | 8 | 0 |
+| `npm run generate` script | present | removed |
+| Cross-subject embed counter | owner-only | aggregates over all subjects |
+| Seed-low alert surface | none | navbar badge + per-subject breakdown |
+| `tb_questions` rows with `question_source_id = 2` | historical (no new writes; existing rows preserved) | same — no new writes after this commit |
+| TS check on touched files (`libSignalWorker`, `libDailyDelta`, `libEmbeddings`, `health.ts`, `index.astro` script) | clean | clean |
+
+The legacy method is now removed, the active method is documented, and the operator-facing trigger that drives the active method is wired into the navbar.
+
+---
+
+
 
 **Date:** 2026-04-24
 **Type:** Code bug (silent field stripping) + methods expansion (ghost comparison surface) + architectural correction (missing calibration guard)

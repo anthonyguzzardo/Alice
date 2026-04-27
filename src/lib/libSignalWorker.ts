@@ -27,7 +27,6 @@ import sql, {
 } from './libDb.ts';
 import { computeAndPersistDerivedSignals } from './libSignalPipeline.ts';
 import { computePriorDayDelta } from './libDailyDelta.ts';
-import { runGeneration } from './libGenerate.ts';
 import { embedResponse, isTeiAvailable } from './libEmbeddings.ts';
 import { runCalibrationExtraction } from './libCalibrationExtract.ts';
 import { snapshotCalibrationBaselinesAfterSubmit } from './libCalibrationDrift.ts';
@@ -218,9 +217,6 @@ async function runResponsePipeline(job: SignalJobRow): Promise<void> {
 
   try { await computePriorDayDelta(job.subject_id, localDateStr()); }
   catch (err) { logError('worker.daily-delta', err, ctx); }
-
-  try { await runGeneration(job.subject_id); }
-  catch (err) { logError('worker.generation', err, ctx); }
 
   // Embed: defer cleanly if TEI is offline (e.g. running `npm run dev` instead
   // of `npm run dev:full`). The submission's response is preserved; the embed

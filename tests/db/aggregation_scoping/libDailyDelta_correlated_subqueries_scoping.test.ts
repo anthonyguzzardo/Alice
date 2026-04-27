@@ -41,12 +41,14 @@
  *   deltas reflects only OWNER's eligible day-pairs.
  *
  * Silent-corruption failure mode (what this test guards against):
- *   The daily delta feeds question-generation prompts (formatCompactDelta)
- *   which see ~14 days of history. A scoping bug inserts cross-subject
- *   deltas into that window — the prompt is then assembled against a
- *   chimera of writing patterns rather than the requesting subject's
- *   actual provocation history. Because the function self-heals (next
- *   submission retries any unfilled dates), a corrupted delta row could
+ *   The daily delta is per-subject session telemetry; cross-subject leakage
+ *   would mix one subject's provocation history into another's signal
+ *   stream. (Pre-2026-04-27 the deltas also fed the legacy `runGeneration`
+ *   prompt builder; that path was removed alongside the corpus-refresh
+ *   pivot — see METHODS_PROVENANCE.md INC-014. The scoping discipline still
+ *   matters because the deltas continue to feed per-subject aggregations.)
+ *   Because the function self-heals (next submission retries any unfilled
+ *   dates), a corrupted delta row could
  *   linger silently for many sessions before being noticed.
  *
  *   For runDailyDeltaBackfill, a NOT EXISTS scoping bug causes silent

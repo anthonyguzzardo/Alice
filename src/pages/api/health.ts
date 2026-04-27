@@ -55,6 +55,8 @@ interface HealthResponse {
   };
   pendingWork: {
     embeds: number;
+    embedsBySubject: Array<{ subject_id: number; username: string; count: number }>;
+    seedAlerts: Array<{ subject_id: number; username: string; remaining: number }>;
     teiAvailable: boolean;
   };
   rustEngine: boolean;
@@ -199,24 +201,53 @@ export const GET: APIRoute = async () => {
   const uniqueErrorJobs = Array.from(new Set(recentErrorJobs));
 
   // --- PENDING WORK --------------------------------------------------------
-  // Count responses that don't have an active embedding (excluding calibration).
-  // When TEI is offline (running `npm run dev` instead of `dev:full`) embeds
-  // accumulate here and the operator drains them via `npm run backfill`.
-  const [pendingEmbedsRow] = await sql`
-    SELECT COUNT(*)::int AS c
-    FROM tb_responses r
+  // Embed work pending across ALL subjects (owner + subjects). When TEI is
+  // offline (running `npm run dev` instead of `dev:full`) embeds accumulate
+  // here and the operator drains them via `npm run backfill`.
+  const embedRows = await sql`
+    SELECT s.subject_id AS "subjectId", s.username, COUNT(*)::int AS cnt
+    FROM tb_subjects s
+    JOIN tb_responses r ON r.subject_id = s.subject_id
     JOIN tb_questions q ON r.question_id = q.question_id
-    WHERE q.subject_id = ${subjectId}
-      AND q.question_source_id != 3
+    WHERE q.question_source_id != 3
       AND NOT EXISTS (
         SELECT 1 FROM tb_embeddings e
         WHERE e.embedding_source_id = 1
           AND e.source_record_id = r.response_id
           AND e.invalidated_at IS NULL
       )
-  `;
-  const pendingEmbeds = (pendingEmbedsRow as { c: number }).c;
+    GROUP BY s.subject_id, s.username
+    HAVING COUNT(*) > 0
+    ORDER BY cnt DESC
+  ` as Array<{ subjectId: number; username: string; cnt: number }>;
+  const embedsBySubject = embedRows.map(r => ({
+    subject_id: r.subjectId, username: r.username, count: r.cnt,
+  }));
+  const pendingEmbeds = embedsBySubject.reduce((sum, r) => sum + r.count, 0);
   const teiAvailable = await isTeiAvailable();
+
+  // Seed alerts — any subject with 0 < unanswered_seeds ≤ 5. Triggers the
+  // owner to manually run an LLM corpus refresh (additive to tb_question_corpus,
+  // never overwrites a subject's personal queue). See METHODS_PROVENANCE.md
+  // INC-014 for the corpus-refresh pivot rationale.
+  const seedAlertRows = await sql`
+    SELECT subject_id AS "subjectId", username, remaining
+    FROM (
+      SELECT s.subject_id, s.username,
+        COUNT(q.question_id) FILTER (
+          WHERE q.question_source_id = 1
+            AND NOT EXISTS (SELECT 1 FROM tb_responses r WHERE r.question_id = q.question_id)
+        )::int AS remaining
+      FROM tb_subjects s
+      LEFT JOIN tb_questions q ON q.subject_id = s.subject_id
+      GROUP BY s.subject_id, s.username
+    ) t
+    WHERE remaining > 0 AND remaining <= 5
+    ORDER BY remaining ASC
+  ` as Array<{ subjectId: number; username: string; remaining: number }>;
+  const seedAlerts = seedAlertRows.map(r => ({
+    subject_id: r.subjectId, username: r.username, remaining: r.remaining,
+  }));
 
   // --- OVERALL -------------------------------------------------------------
   let overall: 'green' | 'yellow' | 'red' = 'green';
@@ -224,7 +255,7 @@ export const GET: APIRoute = async () => {
   else if (recentErrors.length > 0) overall = 'red';
   else if (!todayQuestion || !tomorrowQuestion) overall = 'yellow';
   else if (duplicateScheduledQuestions > 0 || sessionsMissingSummary > 0) overall = 'yellow';
-  else if (pendingEmbeds > 0) overall = 'yellow';
+  else if (pendingEmbeds > 0 || seedAlerts.length > 0) overall = 'yellow';
 
   const body: HealthResponse = {
     today: {
@@ -248,6 +279,8 @@ export const GET: APIRoute = async () => {
     },
     pendingWork: {
       embeds: pendingEmbeds,
+      embedsBySubject,
+      seedAlerts,
       teiAvailable,
     },
     rustEngine: hasNativeEngine,
