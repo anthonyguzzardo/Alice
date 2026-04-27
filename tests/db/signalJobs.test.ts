@@ -7,6 +7,7 @@ import sql, {
   sweepStaleSignalJobs,
   getSignalJobById,
   countOpenSignalJobs,
+  OWNER_SUBJECT_ID,
   SIGNAL_JOB_KIND,
   SIGNAL_JOB_STATUS,
 } from '../../src/lib/libDb.ts';
@@ -56,6 +57,7 @@ afterAll(async () => {
 describe('enqueueSignalJob', () => {
   it('inserts a queued job and returns its id', async () => {
     const id = await enqueueSignalJob({
+      subjectId: OWNER_SUBJECT_ID,
       questionId: SOME_QUESTION_ID,
       kindId: SIGNAL_JOB_KIND.RESPONSE_PIPELINE,
     });
@@ -72,10 +74,12 @@ describe('enqueueSignalJob', () => {
 
   it('is idempotent for (question_id, kind) — duplicate enqueue returns same id', async () => {
     const a = await enqueueSignalJob({
+      subjectId: OWNER_SUBJECT_ID,
       questionId: SOME_QUESTION_ID,
       kindId: SIGNAL_JOB_KIND.RESPONSE_PIPELINE,
     });
     const b = await enqueueSignalJob({
+      subjectId: OWNER_SUBJECT_ID,
       questionId: SOME_QUESTION_ID,
       kindId: SIGNAL_JOB_KIND.RESPONSE_PIPELINE,
     });
@@ -87,10 +91,12 @@ describe('enqueueSignalJob', () => {
 
   it('allows different kinds for the same question', async () => {
     const a = await enqueueSignalJob({
+      subjectId: OWNER_SUBJECT_ID,
       questionId: SOME_QUESTION_ID,
       kindId: SIGNAL_JOB_KIND.RESPONSE_PIPELINE,
     });
     const b = await enqueueSignalJob({
+      subjectId: OWNER_SUBJECT_ID,
       questionId: SOME_QUESTION_ID,
       kindId: SIGNAL_JOB_KIND.CALIBRATION_PIPELINE,
     });
@@ -99,6 +105,7 @@ describe('enqueueSignalJob', () => {
 
   it('persists params_json verbatim', async () => {
     const id = await enqueueSignalJob({
+      subjectId: OWNER_SUBJECT_ID,
       questionId: SOME_QUESTION_ID,
       kindId: SIGNAL_JOB_KIND.CALIBRATION_PIPELINE,
       params: { deviceType: 'macbook' },
@@ -116,6 +123,7 @@ describe('claimNextSignalJob', () => {
 
   it('claims the only queued job, marks it RUNNING, increments attempts', async () => {
     const id = await enqueueSignalJob({
+      subjectId: OWNER_SUBJECT_ID,
       questionId: SOME_QUESTION_ID,
       kindId: SIGNAL_JOB_KIND.RESPONSE_PIPELINE,
     });
@@ -129,6 +137,7 @@ describe('claimNextSignalJob', () => {
 
   it('does not claim jobs whose next_run_at is in the future', async () => {
     const id = await enqueueSignalJob({
+      subjectId: OWNER_SUBJECT_ID,
       questionId: SOME_QUESTION_ID,
       kindId: SIGNAL_JOB_KIND.RESPONSE_PIPELINE,
     });
@@ -144,10 +153,12 @@ describe('claimNextSignalJob', () => {
 
   it('processes jobs in FIFO order by next_run_at', async () => {
     const a = await enqueueSignalJob({
+      subjectId: OWNER_SUBJECT_ID,
       questionId: SOME_QUESTION_ID,
       kindId: SIGNAL_JOB_KIND.RESPONSE_PIPELINE,
     });
     const b = await enqueueSignalJob({
+      subjectId: OWNER_SUBJECT_ID,
       questionId: ANOTHER_QUESTION_ID,
       kindId: SIGNAL_JOB_KIND.RESPONSE_PIPELINE,
     });
@@ -168,10 +179,12 @@ describe('claimNextSignalJob', () => {
     // will fight for row 1 and one will get nothing or both will see the
     // same job. The contract is: each call returns a distinct row.
     const a = await enqueueSignalJob({
+      subjectId: OWNER_SUBJECT_ID,
       questionId: SOME_QUESTION_ID,
       kindId: SIGNAL_JOB_KIND.RESPONSE_PIPELINE,
     });
     const b = await enqueueSignalJob({
+      subjectId: OWNER_SUBJECT_ID,
       questionId: ANOTHER_QUESTION_ID,
       kindId: SIGNAL_JOB_KIND.RESPONSE_PIPELINE,
     });
@@ -187,10 +200,12 @@ describe('claimNextSignalJob', () => {
 
   it('a third concurrent claim returns null when only 2 jobs exist', async () => {
     await enqueueSignalJob({
+      subjectId: OWNER_SUBJECT_ID,
       questionId: SOME_QUESTION_ID,
       kindId: SIGNAL_JOB_KIND.RESPONSE_PIPELINE,
     });
     await enqueueSignalJob({
+      subjectId: OWNER_SUBJECT_ID,
       questionId: ANOTHER_QUESTION_ID,
       kindId: SIGNAL_JOB_KIND.RESPONSE_PIPELINE,
     });
@@ -210,6 +225,7 @@ describe('claimNextSignalJob', () => {
 describe('markSignalJobCompleted', () => {
   it('flips status to COMPLETED and stamps completed_at', async () => {
     const id = await enqueueSignalJob({
+      subjectId: OWNER_SUBJECT_ID,
       questionId: SOME_QUESTION_ID,
       kindId: SIGNAL_JOB_KIND.RESPONSE_PIPELINE,
     });
@@ -226,6 +242,7 @@ describe('markSignalJobCompleted', () => {
 describe('markSignalJobFailed', () => {
   it('reschedules with backoff when attempts < max_attempts', async () => {
     const id = await enqueueSignalJob({
+      subjectId: OWNER_SUBJECT_ID,
       questionId: SOME_QUESTION_ID,
       kindId: SIGNAL_JOB_KIND.RESPONSE_PIPELINE,
       maxAttempts: 3,
@@ -242,6 +259,7 @@ describe('markSignalJobFailed', () => {
 
   it('dead-letters when attempts >= max_attempts', async () => {
     const id = await enqueueSignalJob({
+      subjectId: OWNER_SUBJECT_ID,
       questionId: SOME_QUESTION_ID,
       kindId: SIGNAL_JOB_KIND.RESPONSE_PIPELINE,
       maxAttempts: 1,
@@ -258,6 +276,7 @@ describe('markSignalJobFailed', () => {
     // Partial unique index excludes dead_letter so admin can re-enqueue
     // after manual investigation.
     const a = await enqueueSignalJob({
+      subjectId: OWNER_SUBJECT_ID,
       questionId: SOME_QUESTION_ID,
       kindId: SIGNAL_JOB_KIND.RESPONSE_PIPELINE,
       maxAttempts: 1,
@@ -266,6 +285,7 @@ describe('markSignalJobFailed', () => {
     await markSignalJobFailed(a, 'fatal', 5000);
 
     const b = await enqueueSignalJob({
+      subjectId: OWNER_SUBJECT_ID,
       questionId: SOME_QUESTION_ID,
       kindId: SIGNAL_JOB_KIND.RESPONSE_PIPELINE,
     });
@@ -278,6 +298,7 @@ describe('markSignalJobFailed', () => {
 describe('sweepStaleSignalJobs', () => {
   it('re-queues RUNNING jobs older than the stale threshold', async () => {
     const id = await enqueueSignalJob({
+      subjectId: OWNER_SUBJECT_ID,
       questionId: SOME_QUESTION_ID,
       kindId: SIGNAL_JOB_KIND.RESPONSE_PIPELINE,
     });
@@ -298,6 +319,7 @@ describe('sweepStaleSignalJobs', () => {
 
   it('does not re-queue RUNNING jobs whose claim is fresh', async () => {
     await enqueueSignalJob({
+      subjectId: OWNER_SUBJECT_ID,
       questionId: SOME_QUESTION_ID,
       kindId: SIGNAL_JOB_KIND.RESPONSE_PIPELINE,
     });
@@ -308,6 +330,7 @@ describe('sweepStaleSignalJobs', () => {
 
   it('does not touch COMPLETED or DEAD_LETTER jobs', async () => {
     const a = await enqueueSignalJob({
+      subjectId: OWNER_SUBJECT_ID,
       questionId: SOME_QUESTION_ID,
       kindId: SIGNAL_JOB_KIND.RESPONSE_PIPELINE,
     });
@@ -315,6 +338,7 @@ describe('sweepStaleSignalJobs', () => {
     await markSignalJobCompleted(a);
 
     const b = await enqueueSignalJob({
+      subjectId: OWNER_SUBJECT_ID,
       questionId: ANOTHER_QUESTION_ID,
       kindId: SIGNAL_JOB_KIND.RESPONSE_PIPELINE,
       maxAttempts: 1,

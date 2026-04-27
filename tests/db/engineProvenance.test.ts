@@ -3,6 +3,7 @@ import sql, {
   upsertEngineProvenance,
   getEngineProvenanceById,
   stampEngineProvenance,
+  OWNER_SUBJECT_ID,
 } from '../../src/lib/libDb.ts';
 
 const SAMPLE_HASH = 'a'.repeat(64);
@@ -84,17 +85,17 @@ describe('upsertEngineProvenance', () => {
 describe('stampEngineProvenance', () => {
   async function insertDynamicalSignalRow(qid: number): Promise<void> {
     await sql`
-      INSERT INTO tb_dynamical_signals (question_id, iki_count) VALUES (${qid}, 100)
+      INSERT INTO tb_dynamical_signals (subject_id, question_id, iki_count) VALUES (${OWNER_SUBJECT_ID}, ${qid}, 100)
     `;
   }
 
   async function insertSessionIntegrityRow(qid: number): Promise<void> {
     await sql`
       INSERT INTO tb_session_integrity (
-         question_id, profile_distance, dimension_count, z_scores_json,
+         subject_id, question_id, profile_distance, dimension_count, z_scores_json,
          is_flagged, threshold_used, profile_session_count
       ) VALUES (
-        ${qid}, 1.0, 10, '[]'::jsonb, false, 3.5, 50
+        ${OWNER_SUBJECT_ID}, ${qid}, 1.0, 10, '[]'::jsonb, false, 3.5, 50
       )
     `;
   }
@@ -119,7 +120,7 @@ describe('stampEngineProvenance', () => {
     expect(await getDynamicalProvenance(QUESTION_ID)).toBeNull();
     expect(await getIntegrityProvenance(QUESTION_ID)).toBeNull();
 
-    await stampEngineProvenance(QUESTION_ID, provenanceId);
+    await stampEngineProvenance(OWNER_SUBJECT_ID, QUESTION_ID, provenanceId);
 
     expect(await getDynamicalProvenance(QUESTION_ID)).toBe(provenanceId);
     expect(await getIntegrityProvenance(QUESTION_ID)).toBe(provenanceId);
@@ -128,8 +129,8 @@ describe('stampEngineProvenance', () => {
   it('is idempotent — re-stamping the same provenance is a no-op', async () => {
     const provenanceId = await upsertEngineProvenance(sampleInput());
     await insertDynamicalSignalRow(QUESTION_ID);
-    await stampEngineProvenance(QUESTION_ID, provenanceId);
-    await stampEngineProvenance(QUESTION_ID, provenanceId);
+    await stampEngineProvenance(OWNER_SUBJECT_ID, QUESTION_ID, provenanceId);
+    await stampEngineProvenance(OWNER_SUBJECT_ID, QUESTION_ID, provenanceId);
     expect(await getDynamicalProvenance(QUESTION_ID)).toBe(provenanceId);
   });
 
@@ -142,8 +143,8 @@ describe('stampEngineProvenance', () => {
     expect(a).not.toBe(b);
 
     await insertDynamicalSignalRow(QUESTION_ID);
-    await stampEngineProvenance(QUESTION_ID, a);
-    await stampEngineProvenance(QUESTION_ID, b); // attempt to overwrite
+    await stampEngineProvenance(OWNER_SUBJECT_ID, QUESTION_ID, a);
+    await stampEngineProvenance(OWNER_SUBJECT_ID, QUESTION_ID, b); // attempt to overwrite
     expect(await getDynamicalProvenance(QUESTION_ID)).toBe(a);
   });
 
@@ -151,7 +152,7 @@ describe('stampEngineProvenance', () => {
     const provenanceId = await upsertEngineProvenance(sampleInput());
     await insertDynamicalSignalRow(QUESTION_ID);
     await insertDynamicalSignalRow(QUESTION_ID + 1);
-    await stampEngineProvenance(QUESTION_ID, provenanceId);
+    await stampEngineProvenance(OWNER_SUBJECT_ID, QUESTION_ID, provenanceId);
     expect(await getDynamicalProvenance(QUESTION_ID)).toBe(provenanceId);
     expect(await getDynamicalProvenance(QUESTION_ID + 1)).toBeNull();
   });
