@@ -200,6 +200,34 @@
         margin-top: 1rem;
       }
 
+      /* Calibration affordance — same look as owner's "free write" button. */
+      .free-write-link {
+        display: inline-block;
+        margin-top: 3rem;
+        color: var(--text-muted);
+        font-size: 1.25rem;
+        letter-spacing: 0.1em;
+        text-transform: lowercase;
+        cursor: pointer;
+        border: 1px solid var(--border);
+        background: none;
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-style: italic;
+        font-weight: 300;
+        text-decoration: none;
+        padding: 0.6rem 1.8rem;
+        border-radius: 4px;
+        transition: all 0.4s ease;
+      }
+      .free-write-link:hover {
+        color: var(--text);
+        border-color: var(--border-focus);
+        background: rgba(0, 0, 0, 0.03);
+      }
+      [data-theme="dark"] .free-write-link:hover {
+        background: rgba(255, 255, 255, 0.04);
+      }
+
       /* Top-right controls — theme toggle + logout (subject's only nav). */
       .top-controls {
         position: fixed;
@@ -333,6 +361,27 @@
         return messages[Math.floor(Math.random() * messages.length)];
       }
 
+      type WritingMode = 'journal' | 'calibration';
+
+      function showDoneMessageWithFreeWrite() {
+        questionEl.textContent = '';
+        inputArea.innerHTML = `
+          <div class="done-message">${getDoneMessage()}</div>
+          <button class="free-write-link" id="free-write-btn">free write</button>
+        `;
+        document.getElementById('free-write-btn')!.addEventListener('click', startFreeWrite);
+      }
+
+      async function startFreeWrite() {
+        const res = await fetch('/api/subject/calibrate');
+        if (!res.ok) return;
+        const data = await res.json();
+        // Calibration is a deliberate click — presence is already established;
+        // skip pre-arrival fade so the surface starts lit.
+        document.body.classList.remove('pre-arrival', 'deepening-1', 'deepening-2', 'deepening-3');
+        await runWritingFlow('calibration', { prompt: data.prompt as string });
+      }
+
       async function load() {
         const res = await fetch('/api/subject/today');
 
@@ -344,7 +393,11 @@
         if (res.status === 404) {
           questionEl.textContent = '';
           questionEl.classList.remove('loading');
-          inputArea.innerHTML = '<div class="no-question">No question today. Check back tomorrow.</div>';
+          inputArea.innerHTML = `
+            <div class="no-question">No question today. Check back tomorrow.</div>
+            <button class="free-write-link" id="free-write-btn">free write</button>
+          `;
+          document.getElementById('free-write-btn')!.addEventListener('click', startFreeWrite);
           return;
         }
 
@@ -359,14 +412,26 @@
         questionEl.classList.remove('loading');
 
         if (data.existing_response_text) {
-          questionEl.textContent = '';
-          inputArea.innerHTML = `<div class="done-message">${getDoneMessage()}</div>`;
+          showDoneMessageWithFreeWrite();
           return;
         }
 
-        const questionId = data.question_id;
+        await runWritingFlow('journal', { questionId: data.question_id as number });
+      }
+
+      async function runWritingFlow(
+        mode: WritingMode,
+        ctx: { questionId?: number; prompt?: string },
+      ) {
+        if (mode === 'calibration') {
+          questionEl.textContent = ctx.prompt!;
+          questionEl.classList.remove('loading');
+        }
         const pageOpenTime = performance.now();
 
+        // Calibration is a deliberate click — show submit immediately.
+        // Journal keeps the 90s + 20-char friction gate (Hallnäs & Redström 2001).
+        const initialSubmitClass = mode === 'calibration' ? 'visible' : 'hidden';
         inputArea.innerHTML = `
           <textarea
             class="response-area"
@@ -376,7 +441,7 @@
             autocapitalize="off"
             spellcheck="false"
           ></textarea>
-          <div class="submit-row hidden" id="submit-row">
+          <div class="submit-row ${initialSubmitClass}" id="submit-row">
             <button class="submit-btn" id="submit" disabled>done</button>
           </div>
         `;
@@ -388,7 +453,7 @@
         textarea.focus();
         const writingOpenedAt = performance.now();
 
-        setTimeout(maybeShowSubmit, 90000);
+        if (mode === 'journal') setTimeout(maybeShowSubmit, 90000);
 
         function maybeShowSubmit() {
           const timeOk = performance.now() - writingOpenedAt >= 90000;
@@ -836,19 +901,22 @@
             deviceType, userAgent: rawUserAgent, hourOfDay, dayOfWeek,
           };
 
-          const res = await fetch('/api/subject/respond', {
+          const submitUrl = mode === 'calibration' ? '/api/subject/calibrate' : '/api/subject/respond';
+          const submitBody = mode === 'calibration'
+            ? { prompt: ctx.prompt!, text, sessionSummary }
+            : { question_id: ctx.questionId!, text, sessionSummary };
+
+          const res = await fetch(submitUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              question_id: questionId,
-              text,
-              sessionSummary,
-            }),
+            body: JSON.stringify(submitBody),
           });
 
           if (res.ok) {
-            questionEl.textContent = '';
-            inputArea.innerHTML = `<div class="done-message">${getDoneMessage()}</div>`;
+            // Both modes land on the same done-message + free-write affordance.
+            // After calibration, the same button lets the subject run another
+            // calibration prompt — unlimited access, owner gates nothing.
+            showDoneMessageWithFreeWrite();
           } else {
             submitBtn.textContent = 'done';
             submitBtn.disabled = false;
