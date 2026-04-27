@@ -25,128 +25,220 @@
 
       :root {
         --bg: #f5f2ed;
+        --bg-pre: #e9e5de;
         --bg-input: #ebe7e1;
         --text: #1a1a1a;
+        --text-pre: #a8a39d;
         --text-muted: #6b6560;
         --text-faint: #9a9590;
         --border: #ccc5bc;
         --border-focus: #8a8580;
         --btn-bg: #e0dbd5;
         --btn-hover: #ccc5bc;
+        --btn-text: #1a1a1a;
         --done-text: #8a8580;
+        --loading: #c5c0ba;
       }
 
       [data-theme="dark"] {
         --bg: #141210;
+        --bg-pre: #050505;
         --bg-input: #161514;
         --text: #ffffff;
+        --text-pre: #3a3530;
         --text-muted: #7a7570;
         --text-faint: #4a4540;
         --border: #333;
         --border-focus: #666;
         --btn-bg: #222;
         --btn-hover: #444;
-        --done-text: #555;
+        --btn-text: #ffffff;
+        --done-text: #8a8580;
+        --loading: #4a4540;
       }
 
       * { margin: 0; padding: 0; box-sizing: border-box; }
 
-      body {
-        font-family: 'Cormorant Garamond', Georgia, serif;
+      html, body {
+        height: 100%;
         background: var(--bg);
         color: var(--text);
-        min-height: 100vh;
+        font-family: 'EB Garamond', Georgia, serif;
+      }
+
+      body {
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        padding: 6rem 2rem 2rem;
+        background-color: var(--bg);
+        transition: background-color 2.5s ease;
+        min-height: 100%;
+      }
+
+      body.pre-arrival {
+        background-color: var(--bg-pre);
       }
 
       .container {
-        max-width: 640px;
-        margin: 0 auto;
-        padding: 3rem 1.5rem;
+        max-width: 820px;
+        width: 100%;
       }
 
       .date {
-        font-size: 0.75rem;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
+        font-size: 11px;
         color: var(--text-faint);
-        margin-bottom: 1.5rem;
-        text-align: center;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        margin-bottom: 5rem;
+        transition: opacity 2s ease;
       }
+
+      body.pre-arrival .date { opacity: 0.5; }
+      body.deepening-3 .date { opacity: 0.3; }
 
       .question {
-        font-size: 1.5rem;
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-size: 1.95rem;
         font-weight: 300;
-        line-height: 1.5;
-        text-align: center;
-        margin-bottom: 2rem;
+        line-height: 1.7;
+        letter-spacing: 0.015em;
         color: var(--text);
-        transition: opacity 8s ease;
+        margin-bottom: 1.4rem;
+        font-style: italic;
+        transition: color 2.5s ease, opacity 3s ease;
       }
 
-      .question.loading { color: var(--text-faint); }
-      .question.faded { opacity: 0.25; }
+      body.pre-arrival .question { color: var(--text-pre); }
+      body.deepening-1 .question { opacity: 0.55; }
+      body.deepening-2 .question { opacity: 0.3; }
+      body.deepening-3 .question { opacity: 0.12; }
 
+      .question.loading { color: var(--loading); font-style: italic; }
+
+      /* Writing surface — same as owner's: borderless, transparent, the
+         response continues from the question on the same column. */
       .response-area {
         width: 100%;
-        min-height: 300px;
-        padding: 1rem;
-        font-family: 'Cormorant Garamond', Georgia, serif;
-        font-size: 1.15rem;
-        line-height: 1.7;
-        background: var(--bg-input);
-        border: 1px solid var(--border);
-        border-radius: 6px;
+        min-height: 200px;
+        background: transparent;
+        border: none;
+        border-radius: 0;
         color: var(--text);
-        resize: vertical;
+        font-family: 'EB Garamond', Georgia, serif;
+        font-size: 1.55rem;
+        line-height: 1.7;
+        letter-spacing: 0.005em;
+        padding: 0;
+        resize: none;
         outline: none;
-        transition: border-color 0.2s ease;
+        -webkit-appearance: none;
+        appearance: none;
+        caret-color: var(--text);
+        transition: caret-color 2s ease, color 2.5s ease;
       }
 
-      .response-area:focus { border-color: var(--border-focus); }
+      .response-area:focus { outline: none; }
 
-      .submit-row {
-        display: flex;
-        justify-content: flex-end;
-        margin-top: 1rem;
-        transition: opacity 0.3s ease;
+      body.pre-arrival .response-area {
+        caret-color: var(--text-faint);
+        color: var(--text-pre);
       }
 
-      .submit-row.hidden { opacity: 0; pointer-events: none; }
-      .submit-row.visible { opacity: 1; pointer-events: auto; }
+      .submit-row { margin-top: 3.5rem; }
 
       .submit-btn {
-        font-family: 'Cormorant Garamond', Georgia, serif;
-        font-size: 1rem;
-        padding: 0.5rem 1.5rem;
-        background: var(--btn-bg);
+        background: none;
         border: 1px solid var(--border);
-        border-radius: 6px;
-        color: var(--text);
+        border-radius: 3px;
+        color: var(--text-muted);
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-size: 1.15rem;
+        font-style: italic;
+        font-weight: 300;
+        letter-spacing: 0.06em;
+        padding: 0.55rem 2.4rem;
         cursor: pointer;
-        transition: background 0.2s ease;
+        transition: color 0.4s ease, border-color 0.4s ease, opacity 0.4s ease;
       }
 
-      .submit-btn:hover { background: var(--btn-hover); }
-      .submit-btn:disabled { opacity: 0.4; cursor: default; }
+      .submit-btn:hover:not(:disabled) {
+        color: var(--text);
+        border-color: var(--border-focus);
+      }
+
+      .submit-btn:active:not(:disabled) { opacity: 0.7; }
+      .submit-btn:disabled { opacity: 0.3; cursor: default; }
+
+      .submit-row.hidden {
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 2s ease;
+      }
+      .submit-row.visible {
+        opacity: 1;
+        pointer-events: auto;
+        transition: opacity 2s ease;
+      }
 
       .done-message {
-        font-size: 1.2rem;
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-size: 1.8rem;
         font-weight: 300;
+        font-style: italic;
+        line-height: 1.8;
         color: var(--done-text);
-        text-align: center;
-        margin-top: 3rem;
+        margin-top: 1rem;
       }
 
       .no-question {
-        font-size: 1.2rem;
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-size: 1.5rem;
         font-weight: 300;
+        font-style: italic;
         color: var(--text-muted);
-        text-align: center;
-        margin-top: 3rem;
+        margin-top: 1rem;
+      }
+
+      /* Top-right controls — theme toggle + logout (subject's only nav). */
+      .top-controls {
+        position: fixed;
+        top: 2rem;
+        right: 2rem;
+        display: flex;
+        gap: 0.6rem;
+        align-items: center;
+        z-index: 10;
+      }
+
+      .top-btn {
+        background: none;
+        border: 1px solid var(--border);
+        border-radius: 50%;
+        width: 36px;
+        height: 36px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s ease;
+        color: var(--text-muted);
+        font-size: 1rem;
+        text-decoration: none;
+        font-family: 'Cormorant Garamond', Georgia, serif;
+      }
+
+      .top-btn:hover {
+        border-color: var(--border-focus);
+        color: var(--text);
       }
     </style>
   </head>
   <body>
+    <div class="top-controls">
+      <button class="top-btn" id="theme-toggle" aria-label="Toggle theme"></button>
+      <button class="top-btn" id="logout-btn" aria-label="Log out" title="Log out">⏻</button>
+    </div>
     <div class="container">
       <div class="date" id="date"></div>
       <div class="question loading" id="question">...</div>
@@ -154,6 +246,44 @@
     </div>
 
     <script>
+      // ── Theme toggle ────────────────────────────────────────────────────
+      const themeBtn = document.getElementById('theme-toggle')!;
+      const savedTheme = localStorage.getItem('alice-theme') || 'light';
+      document.documentElement.setAttribute('data-theme', savedTheme);
+      themeBtn.textContent = savedTheme === 'dark' ? '☀' : '☾';
+      themeBtn.addEventListener('click', () => {
+        const current = document.documentElement.getAttribute('data-theme');
+        const next = current === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        localStorage.setItem('alice-theme', next);
+        themeBtn.textContent = next === 'dark' ? '☀' : '☾';
+      });
+
+      // ── Logout ──────────────────────────────────────────────────────────
+      const logoutBtn = document.getElementById('logout-btn')!;
+      logoutBtn.addEventListener('click', async () => {
+        try { await fetch('/api/subject/logout', { method: 'POST' }); }
+        catch { /* fall through to redirect anyway */ }
+        window.location.href = '/enter';
+      });
+
+      // ── Presence — the room is dim until you arrive. Any signal of
+      //    presence (mouse, scroll, touch, keystroke) warms the room.
+      //    Brightening happens *around* your typing, not before it.
+      document.body.classList.add('pre-arrival');
+      {
+        const presenceEvents: Array<keyof WindowEventMap> = ['mousemove', 'scroll', 'touchstart', 'pointerdown', 'keydown'];
+        function onPresence() {
+          document.body.classList.remove('pre-arrival');
+          for (const ev of presenceEvents) window.removeEventListener(ev, onPresence);
+        }
+        for (const ev of presenceEvents) window.addEventListener(ev, onPresence, { once: false, passive: true });
+      }
+      // Deepening transitions — same cadence as owner page.
+      setTimeout(() => document.body.classList.add('deepening-1'), 30000);
+      setTimeout(() => document.body.classList.add('deepening-2'), 75000);
+      setTimeout(() => document.body.classList.add('deepening-3'), 150000);
+
       const dateEl = document.getElementById('date')!;
       const questionEl = document.getElementById('question')!;
       const inputArea = document.getElementById('input-area')!;
