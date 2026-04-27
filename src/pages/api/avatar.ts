@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import sql from '../../lib/libDbPool.ts';
 import { OWNER_SUBJECT_ID } from '../../lib/libDb.ts';
 import { parseBody } from '../../lib/utlParseBody.ts';
+import { BINARY_PATH } from '../../lib/libSignalsNative.ts';
 import { createRequire } from 'node:module';
 
 /**
@@ -13,11 +14,15 @@ import { createRequire } from 'node:module';
  * their motor profile. No LLM. Pure math.
  */
 
-// Load native Rust module (same pattern as libSignalsNative.ts)
+// Load native Rust module via the canonical platform-aware path resolver
+// in libSignalsNative. Hardcoding `darwin-arm64.node` here would make the
+// avatar API a 503-only no-op on production Linux.
 let nativeModule: any = null;
 try {
-  const require = createRequire(import.meta.url);
-  nativeModule = require('../../../src-rs/alice-signals.darwin-arm64.node');
+  if (BINARY_PATH) {
+    const require = createRequire(import.meta.url);
+    nativeModule = require(`../../../src-rs/${BINARY_PATH}`);
+  }
 } catch {
   // Rust engine not built; avatar unavailable
 }

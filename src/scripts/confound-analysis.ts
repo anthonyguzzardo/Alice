@@ -10,10 +10,17 @@
  */
 import sql from '../lib/libDbPool.ts';
 import { parseSubjectIdArg } from '../lib/utlSubjectIdArg.ts';
+import { BINARY_PATH } from '../lib/libSignalsNative.ts';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 // ─── Load Rust engine ───────────────────────────────────────────────
+//
+// Resolve the binary filename per process.platform/arch via the canonical
+// helper in libSignalsNative; never hardcode `darwin-arm64.node` here. The
+// previous hardcode caused the linked Step 6 hotspot K test to fail on
+// Linux CI (where the binary is `linux-x64-gnu.node`) and would silently
+// disable this script on any non-darwin-arm64 host.
 
 interface NativeModule {
   computeDynamicalSignals(streamJson: string): Record<string, unknown>;
@@ -22,7 +29,10 @@ interface NativeModule {
 const require = createRequire(import.meta.url);
 let native: NativeModule;
 try {
-  native = require('../../src-rs/alice-signals.darwin-arm64.node') as NativeModule;
+  if (!BINARY_PATH) {
+    throw new Error(`Unsupported platform/arch: ${process.platform}/${process.arch}`);
+  }
+  native = require(`../../src-rs/${BINARY_PATH}`) as NativeModule;
 } catch {
   console.error('FATAL: Rust engine not available. Run npm run build:rust first.');
   process.exit(1);
