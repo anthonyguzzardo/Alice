@@ -42,16 +42,19 @@ export const EXHAUSTION_WARNING_THRESHOLD = 7;
 
 export interface ScheduleResult {
   question_id: number;
-  corpus_question_id: number;
+  /** Null when the existing row is a seed/calibration/generated question (idempotency hit a non-corpus row). Set on every fresh corpus draw. */
+  corpus_question_id: number | null;
   was_repeat: boolean;
 }
 
 export interface ScheduledQuestion {
   question_id: number;
   subject_id: number;
-  corpus_question_id: number;
+  /** Null for seed/calibration/generated rows; set only on corpus draws (question_source_id = 4). */
+  corpus_question_id: number | null;
   scheduled_for: string;
   text: string;
+  /** Only present on corpus rows (joined from tb_question_corpus). */
   theme_tag: string | null;
 }
 

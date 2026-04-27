@@ -230,19 +230,26 @@ export async function scheduleSubjectCorpusQuestion(
 export async function getSubjectScheduledQuestion(
   subjectId: number,
   scheduledFor: string,
-): Promise<{ question_id: number; corpus_question_id: number; text: string; theme_tag: string | null; scheduled_for: string } | null> {
+): Promise<{ question_id: number; corpus_question_id: number | null; text: string; theme_tag: string | null; scheduled_for: string } | null> {
+  // Returns whichever question the subject has scheduled for that date,
+  // regardless of source. Subjects start with 30 seed questions
+  // (question_source_id = 1, corpus_question_id NULL) and roll into corpus
+  // draws (question_source_id = 4, corpus_question_id set) once the seed
+  // window closes. Calibration questions (question_source_id = 3) can also
+  // appear here. The (subject_id, scheduled_for) UNIQUE constraint guarantees
+  // at most one match per day. theme_tag only exists on corpus rows; LEFT
+  // JOIN keeps seed/calibration rows visible with theme_tag = NULL.
   const rows = await sql`
     SELECT q.question_id, q.corpus_question_id,
            q.text_ciphertext AS "qCt", q.text_nonce AS "qNonce",
            q.scheduled_for, qc.theme_tag
     FROM tb_questions q
-    JOIN tb_question_corpus qc ON q.corpus_question_id = qc.corpus_question_id
+    LEFT JOIN tb_question_corpus qc ON q.corpus_question_id = qc.corpus_question_id
     WHERE q.subject_id = ${subjectId}
       AND q.scheduled_for = ${scheduledFor}
-      AND q.question_source_id = 4
   ` as Array<{
     question_id: number;
-    corpus_question_id: number;
+    corpus_question_id: number | null;
     qCt: string;
     qNonce: string;
     scheduled_for: string;
