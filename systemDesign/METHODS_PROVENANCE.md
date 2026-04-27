@@ -8,6 +8,77 @@ Newest first.
 
 ---
 
+## INC-016: Alice Negative state/dynamics/coupling tables archived (consumer-side scrub)
+
+**Date:** 2026-04-27
+**Type:** Architectural correction (orphan consumer surfaces left displaying frozen data after producer was deleted)
+
+### What was wrong
+
+INC-014 deleted the Alice Negative producer pipeline (`renderWitnessState` and the `libAliceNegative/*` modules). It did not delete the consumer surfaces: six observatory pages and APIs continued to read from six tables that stopped receiving writes at 2026-04-25 11:58 (the pipeline's last successful run before the scrub). The user opened the entry observatory page expecting their most recent session and got "NO SEMANTIC STATE FOR THIS ENTRY" — a panel that would never populate again because the producer was gone.
+
+The orphan-consumer pattern is the mirror of INC-015's orphan-producer pattern: when a feature is archived, both sides of the producer-consumer edge must be cut in the same commit. INC-014 cut the producer; the consumer side carried frozen-data displays for two days until the user noticed.
+
+Tables affected (all confirmed frozen at 2026-04-25 11:58 via `SELECT max(dttm_created_utc)`):
+
+| Table                          | Last write          | Rows |
+|--------------------------------|---------------------|------|
+| tb_semantic_states             | 2026-04-25 11:58:33 | 13   |
+| tb_semantic_dynamics           | 2026-04-25 11:58:33 | 110  |
+| tb_semantic_coupling           | 2026-04-25 11:58:33 | 218  |
+| tb_trait_dynamics              | 2026-04-25 11:58:33 | 70   |
+| tb_coupling_matrix             | 2026-04-25 11:58:33 | 82   |
+| tb_emotion_behavior_coupling   | 2026-04-25 11:58:33 | 194  |
+
+### Discovery method
+
+User report on the observatory entry detail view: a recent entry showed an empty "SEMANTIC 11D" panel with no semantic state. Code search confirmed `saveSemanticState` had zero callers anywhere in `src/`, and `git show c0023bb` showed `libAliceNegative/libRenderWitness.ts` (the only writer) had been deleted in INC-014. A second pass on the four other dimensions of the dead pipeline (semantic dynamics, semantic coupling, trait dynamics, coupling matrix, emotion-behavior coupling) confirmed every save function had zero callers and every table was frozen at the same instant.
+
+### Resolution
+
+**Application code removed (per CLAUDE.md "archival means removal"):**
+
+- `src/pages/api/observatory/coupling.ts` — entire file (read tb_semantic_coupling, tb_semantic_dynamics, tb_coupling_matrix, tb_trait_dynamics, tb_emotion_behavior_coupling)
+- `src/pages/api/observatory/synthesis.ts` — entire file (the "Right Now / Sustained Trends / Discoveries" narration generator; read all six dead tables)
+- `src/pages/observatory/coupling.astro` — rewritten down to just the live coupling-stability section (still computed via `libCouplingStability` from raw signals, not from frozen tables). Behavioral dynamics, behavioral coupling, semantic dynamics, semantic coupling, and emotion-behavior coupling panels deleted.
+- `src/pages/observatory/index.astro` — "Right Now", "Sustained Trends", "Discoveries" panels and their `renderInsights/renderArcs/renderDiscoveries` helpers removed; the `sem-conv` column was dropped from the entries table; the synthesis fetch was removed from the Promise.all.
+- `src/pages/observatory/trajectory.astro` — `SEMANTIC_DIMS`, `EMOTION_DIMS`, the two semantic trajectory sections, and the semantic-convergence chart removed.
+- `src/pages/observatory/entry/[id].astro` — the Semantic 11D radar panel and `SEMANTIC_DIMS` constant removed (this was the user's original entry point).
+- `src/pages/api/observatory/entry/[id].ts` — `tb_semantic_states` query and `semanticState` response field removed.
+- `src/pages/api/observatory/states.ts` — `tb_semantic_states` query and `semantic` enrichment field removed.
+- `src/lib/libDb.ts` — `SemanticStateRow`, `saveSemanticState`, `getSemanticStateCount`, `SemanticDynamicRow`, `saveSemanticDynamics`, `SemanticCouplingRow`, `saveSemanticCoupling`, `TraitDynamicRow`, `saveTraitDynamics`, `getLatestTraitDynamics`, `CouplingRow`, `saveCouplingMatrix`, `getLatestCouplingMatrix`, `EmotionBehaviorCouplingRow`, `saveEmotionBehaviorCoupling`, `getLatestEmotionBehaviorCoupling` deleted. The `@region state` marker was rewritten to `tb_entry_states` only.
+
+**Schema-side work:**
+
+- `db/sql/migrations/035_archive_alice_negative_state_tables.sql` — new migration. One DO block, six idempotent renames to `zz_archive_*`, post-archive verification query confirming every original `to_regclass` returns NULL. Run locally; operator runs `psql "$ALICE_PG_URL" -v ON_ERROR_STOP=1 -f db/sql/migrations/035_archive_alice_negative_state_tables.sql` against Supabase when ready. NOT auto-applied.
+- `db/sql/dbAlice_Tables.sql` — the six `CREATE TABLE` blocks deleted; `@region state` marker rewritten to `tb_entry_states` only; the stale `REFERENCED BY: tb_entry_states, tb_semantic_states, tb_embeddings` comment on `tb_responses` corrected to drop `tb_semantic_states`.
+- `tests/unit/lint/subjectScopeLint.ts` — six dead tables removed from `SUBJECT_BEARING_TABLES`.
+
+### Existing data
+
+Local DB: 687 rows total across the six tables, all frozen at 2026-04-25 11:58. After migration, every row lives in `zz_archive_*` and is inert. No application code reads them.
+
+`tb_entry_states` was deliberately NOT archived in this commit despite also being frozen since 2026-04-25. The behavioral 7D radar on the entry observatory page still reads from it. That panel is showing pre-INC-014 data for old entries and will return "Entry not found" for any entry submitted after 2026-04-25. Out of scope for this incident; tracked separately.
+
+### Verification
+
+| Check | Pre-fix | Post-fix |
+|---|---|---|
+| Files reading the six dead tables | 7 (4 API, 3 page) | 0 |
+| `saveSemanticState`/`saveTraitDynamics`/`saveCouplingMatrix` callers | 0 (already orphaned) | 0 (now also deleted) |
+| `to_regclass('alice.tb_semantic_states')` etc. (×6) | non-NULL | NULL |
+| `to_regclass('alice.zz_archive_tb_semantic_states')` etc. (×6) | NULL | non-NULL with original row counts |
+| Live `src/` references to dead table names or removed exports | varied | 0 |
+| TS check on touched files | clean | clean (pre-existing strict-null noise unchanged) |
+
+### What this does NOT fix
+
+- **Migration 035 not yet applied to Supabase.** Until then, the six tables remain live in production with their frozen 2026-04-25 row counts. No code reads or writes them; the only effect of leaving them un-archived is database surface area.
+- **`tb_entry_states` is also frozen.** It writes stopped on 2026-04-25 along with the rest of the pipeline. The entry observatory page joins on it for the behavioral 7D radar. Any entry created after 2026-04-25 will return 404 from `/api/observatory/entry/[id]`. A future incident either rebuilds the producer or archives the table and removes the radar panel.
+- **Discipline confirmation.** The orphan-producer rule from INC-015 has its mirror image: when archiving a feature, grep for tables and exported helpers to confirm there are no satellite consumers left displaying frozen data. Both directions of the dependency edge must be cut in the archival commit.
+
+---
+
 ## INC-015: Calibration context extraction deprecated (orphan producer purged)
 
 **Date:** 2026-04-27
