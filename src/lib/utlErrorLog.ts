@@ -41,15 +41,32 @@ export function logError(
 }
 
 /**
- * Read the last N lines of the error log for surfacing in the UI.
- * Returns [] if the log doesn't exist yet.
+ * Read the most recent error records for surfacing in the UI.
+ *
+ * Filters by time first (only records whose ISO timestamp falls within
+ * `withinMs` of now), then takes the trailing `limit` of those. The default
+ * 24h window keeps stale debug output from earlier days from flagging the
+ * health dot red indefinitely; the file remains append-only as a forensic
+ * trail, but the UI signal reflects current state.
+ *
+ * Returns [] if the log doesn't exist yet. Records whose timestamp is
+ * unparseable are included (fail-safe — better to surface a malformed
+ * record than to silently drop a real error).
  */
-export function readRecentErrors(limit = 20): string[] {
+export function readRecentErrors(limit = 20, withinMs = 24 * 60 * 60 * 1000): string[] {
   try {
     if (!fs.existsSync(LOG_PATH)) return [];
     const content = fs.readFileSync(LOG_PATH, 'utf8');
     const records = content.split(/\n\n/).filter(r => r.trim().length > 0);
-    return records.slice(-limit);
+    const cutoff = Date.now() - withinMs;
+    const fresh = records.filter(r => {
+      const match = r.match(/^\[([0-9T:.Z\-]+)\]/);
+      if (!match) return true;
+      const ts = Date.parse(match[1]!);
+      if (Number.isNaN(ts)) return true;
+      return ts >= cutoff;
+    });
+    return fresh.slice(-limit);
   } catch {
     return [];
   }
