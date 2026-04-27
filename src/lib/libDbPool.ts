@@ -18,7 +18,12 @@ const sql = postgres(connectionString, {
   idle_timeout: 20,
   connect_timeout: 10,
   connection: {
-    search_path: 'alice,public',
+    // `extensions` is included so the pgvector `vector` type resolves on
+    // Supabase (which installs the extension in the extensions schema).
+    // Without it, INSERTs into tb_embeddings fail with "type vector does
+    // not exist" — the column type is `vector(512)` and cast resolution
+    // walks the search_path.
+    search_path: 'alice,public,extensions',
   },
   types: {
     // pgvector sends vector as text like "[0.1,0.2,...]"
