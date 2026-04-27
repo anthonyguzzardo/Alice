@@ -16,6 +16,56 @@
 import { sql } from '../lib/libDb.ts';
 import { computeReconstructionResidual } from '../lib/libReconstruction.ts';
 import { parseSubjectIdArg } from '../lib/utlSubjectIdArg.ts';
+import { fileURLToPath } from 'node:url';
+
+export async function getReconstructionResidualCount(subjectId: number): Promise<number> {
+  const [{ c }] = await sql`
+    SELECT COUNT(*)::int AS c FROM tb_reconstruction_residuals WHERE subject_id = ${subjectId}
+  ` as [{ c: number }];
+  return c;
+}
+
+export interface ReconstructionStats {
+  total: number;
+  with_norm: number;
+  avg_norm: string | null;
+  min_norm: string | null;
+  max_norm: string | null;
+  avg_signals: string | null;
+}
+
+export async function getReconstructionStats(subjectId: number): Promise<ReconstructionStats> {
+  const [stats] = await sql`
+    SELECT
+      COUNT(*)::int AS total,
+      COUNT(total_l2_norm)::int AS with_norm,
+      ROUND(AVG(total_l2_norm)::numeric, 4) AS avg_norm,
+      ROUND(MIN(total_l2_norm)::numeric, 4) AS min_norm,
+      ROUND(MAX(total_l2_norm)::numeric, 4) AS max_norm,
+      ROUND(AVG(residual_count)::numeric, 1) AS avg_signals
+    FROM tb_reconstruction_residuals
+    WHERE subject_id = ${subjectId}
+  ` as [ReconstructionStats];
+  return stats;
+}
+
+export interface SourceSplitRow {
+  question_source_id: number;
+  c: number;
+  avg_norm: string | null;
+}
+
+export async function getReconstructionSourceSplit(subjectId: number): Promise<SourceSplitRow[]> {
+  return await sql`
+    SELECT question_source_id, COUNT(*)::int AS c,
+           ROUND(AVG(total_l2_norm)::numeric, 4) AS avg_norm
+    FROM tb_reconstruction_residuals
+    WHERE subject_id = ${subjectId}
+      AND question_source_id IS NOT NULL
+    GROUP BY question_source_id
+    ORDER BY question_source_id
+  ` as SourceSplitRow[];
+}
 
 async function main() {
   const subjectId = parseSubjectIdArg();
@@ -71,20 +121,8 @@ async function main() {
   console.log(`\n\nBackfill complete. New: ${success}, Skipped: ${skipped}, Failed: ${failed}`);
 
   // Report final state
-  const [{ c: residualCount }] = await sql`
-    SELECT COUNT(*)::int AS c FROM tb_reconstruction_residuals WHERE subject_id = ${subjectId}
-  ` as [{ c: number }];
-  const [stats] = await sql`
-    SELECT
-      COUNT(*)::int AS total,
-      COUNT(total_l2_norm)::int AS with_norm,
-      ROUND(AVG(total_l2_norm)::numeric, 4) AS avg_norm,
-      ROUND(MIN(total_l2_norm)::numeric, 4) AS min_norm,
-      ROUND(MAX(total_l2_norm)::numeric, 4) AS max_norm,
-      ROUND(AVG(residual_count)::numeric, 1) AS avg_signals
-    FROM tb_reconstruction_residuals
-    WHERE subject_id = ${subjectId}
-  ` as [{ total: number; with_norm: number; avg_norm: string; min_norm: string; max_norm: string; avg_signals: string }];
+  const residualCount = await getReconstructionResidualCount(subjectId);
+  const stats = await getReconstructionStats(subjectId);
 
   console.log(`\n  tb_reconstruction_residuals: ${residualCount} rows`);
   console.log(`  With L2 norm: ${stats.with_norm}`);
@@ -92,15 +130,7 @@ async function main() {
   console.log(`  Avg signals per row: ${stats.avg_signals}`);
 
   // Source split
-  const sourceSplit = await sql`
-    SELECT question_source_id, COUNT(*)::int AS c,
-           ROUND(AVG(total_l2_norm)::numeric, 4) AS avg_norm
-    FROM tb_reconstruction_residuals
-    WHERE subject_id = ${subjectId}
-      AND question_source_id IS NOT NULL
-    GROUP BY question_source_id
-    ORDER BY question_source_id
-  ` as Array<{ question_source_id: number; c: number; avg_norm: string }>;
+  const sourceSplit = await getReconstructionSourceSplit(subjectId);
 
   if (sourceSplit.length > 0) {
     console.log('\n  By source:');
@@ -111,7 +141,9 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error('Backfill failed:', err);
-  process.exit(1);
-});
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  main().catch((err) => {
+    console.error('Backfill failed:', err);
+    process.exit(1);
+  });
+}

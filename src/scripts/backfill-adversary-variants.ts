@@ -19,6 +19,35 @@
 import { sql } from '../lib/libDb.ts';
 import { computeReconstructionResidual } from '../lib/libReconstruction.ts';
 import { parseSubjectIdArg } from '../lib/utlSubjectIdArg.ts';
+import { fileURLToPath } from 'node:url';
+
+export interface VariantStat {
+  id: number;
+  name: string;
+  count: number;
+  avg_l2: string | null;
+  avg_motor_l2: string | null;
+}
+
+/** Per-variant rollup: COUNT and AVG over tb_reconstruction_residuals
+ *  scoped to a subject. The subject scope lives on the LEFT JOIN's ON
+ *  clause so variants with zero rows for that subject still appear with
+ *  count=0 (not filtered out by a WHERE). */
+export async function getVariantStats(subjectId: number): Promise<VariantStat[]> {
+  return await sql`
+    SELECT
+      v.adversary_variant_id AS id,
+      v.name,
+      COUNT(r.reconstruction_residual_id)::int AS count,
+      ROUND(AVG(r.total_l2_norm)::numeric, 4) AS avg_l2,
+      ROUND(AVG(r.motor_l2_norm)::numeric, 4) AS avg_motor_l2
+    FROM te_adversary_variants v
+    LEFT JOIN tb_reconstruction_residuals r
+      ON v.adversary_variant_id = r.adversary_variant_id AND r.subject_id = ${subjectId}
+    GROUP BY v.adversary_variant_id, v.name
+    ORDER BY v.adversary_variant_id
+  ` as VariantStat[];
+}
 
 async function main() {
   const subjectId = parseSubjectIdArg();
@@ -69,19 +98,7 @@ async function main() {
   console.log(`\n\nBackfill complete. Processed: ${processed}, Failed: ${failed}`);
 
   // Report final state by variant
-  const variantStats = await sql`
-    SELECT
-      v.adversary_variant_id AS id,
-      v.name,
-      COUNT(r.reconstruction_residual_id)::int AS count,
-      ROUND(AVG(r.total_l2_norm)::numeric, 4) AS avg_l2,
-      ROUND(AVG(r.motor_l2_norm)::numeric, 4) AS avg_motor_l2
-    FROM te_adversary_variants v
-    LEFT JOIN tb_reconstruction_residuals r
-      ON v.adversary_variant_id = r.adversary_variant_id AND r.subject_id = ${subjectId}
-    GROUP BY v.adversary_variant_id, v.name
-    ORDER BY v.adversary_variant_id
-  ` as Array<{ id: number; name: string; count: number; avg_l2: string; avg_motor_l2: string }>;
+  const variantStats = await getVariantStats(subjectId);
 
   console.log('\n  Residuals by variant:');
   for (const row of variantStats) {
@@ -89,7 +106,9 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error('Backfill failed:', err);
-  process.exit(1);
-});
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  main().catch((err) => {
+    console.error('Backfill failed:', err);
+    process.exit(1);
+  });
+}
