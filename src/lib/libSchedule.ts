@@ -12,8 +12,8 @@ import { localDateStr } from './utlDate.ts';
  *
  * After day 30, generate.ts takes over. There is no valid reason to re-seed.
  */
-export async function seedUpcomingQuestions(days = 30): Promise<void> {
-  if (await countScheduledSeedQuestions() > 0) return;
+export async function seedUpcomingQuestions(subjectId: number, days = 30): Promise<void> {
+  if (await countScheduledSeedQuestions(subjectId) > 0) return;
 
   const today = new Date();
   for (let i = 0; i < days && i < SEED_QUESTIONS.length; i++) {
@@ -21,8 +21,8 @@ export async function seedUpcomingQuestions(days = 30): Promise<void> {
     date.setDate(today.getDate() + i);
     const dateStr = localDateStr(date);
 
-    if (!(await hasQuestionForDate(dateStr))) {
-      await scheduleQuestion(SEED_QUESTIONS[i], dateStr, 'seed');
+    if (!(await hasQuestionForDate(subjectId, dateStr))) {
+      await scheduleQuestion(subjectId, SEED_QUESTIONS[i]!, dateStr, 'seed');
     }
   }
 }

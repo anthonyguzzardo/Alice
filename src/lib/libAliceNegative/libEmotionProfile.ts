@@ -77,7 +77,7 @@ const COUPLING_THRESHOLD = 0.3;
 
 // ─── Load emotion densities from DB ─────────────────────────────────
 
-export async function loadEmotionEntries(): Promise<EmotionEntry[]> {
+export async function loadEmotionEntries(subjectId: number): Promise<EmotionEntry[]> {
   const rows = await sql`
     SELECT
        r.response_id
@@ -93,6 +93,7 @@ export async function loadEmotionEntries(): Promise<EmotionEntry[]> {
     FROM tb_session_summaries ss
     JOIN tb_responses r ON ss.question_id = r.question_id
     JOIN tb_questions q ON r.question_id = q.question_id
+    WHERE q.subject_id = ${subjectId}
     ORDER BY ss.session_summary_id ASC
   ` as any[];
 
@@ -264,10 +265,11 @@ function discoverEmotionBehaviorCoupling(
 // ─── Public API ─────────────────────────────────────────────────────
 
 export async function computeEmotionAnalysis(
+  subjectId: number,
   behaviorStates: EntryState[],
   emotionEntries?: EmotionEntry[],
 ): Promise<EmotionAnalysis> {
-  if (!emotionEntries) emotionEntries = await loadEmotionEntries();
+  if (!emotionEntries) emotionEntries = await loadEmotionEntries(subjectId);
 
   const profile = computeEmotionProfile(emotionEntries);
   const emotionBehaviorCoupling = discoverEmotionBehaviorCoupling(emotionEntries, behaviorStates);

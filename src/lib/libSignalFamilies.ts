@@ -250,9 +250,11 @@ export interface VariantTreeResult {
  *   3. For solo: zero ALL families except one → recompute
  *   4. Compute inter-family correlations from the deviation patterns
  */
-export async function computeVariantTree(): Promise<VariantTreeResult> {
-  const sessions = await loadSessions();
-  const baseline = await computeEntryStates(sessions);
+export async function computeVariantTree(subjectId: number): Promise<VariantTreeResult> {
+  // TODO(step5): review — owner-pinned today; loadSessions/computeEntryStates now
+  // accept subjectId but the LLM-orchestration call sites all pass OWNER_SUBJECT_ID.
+  const sessions = await loadSessions(subjectId);
+  const baseline = await computeEntryStates(subjectId, sessions);
 
   if (baseline.length === 0) {
     return {
@@ -324,7 +326,7 @@ export async function computeVariantTree(): Promise<VariantTreeResult> {
     if (!neutralize) return makeEmptyAblation([family.id], stateEngineFamilies.map(f => f.id).filter(id => id !== family.id));
 
     const ablatedSessions = sessions.map(s => neutralize(s));
-    const ablatedStates = await computeEntryStates(ablatedSessions);
+    const ablatedStates = await computeEntryStates(subjectId, ablatedSessions);
     return measureDeviation(baseline, ablatedStates, [family.id], baselineVariance);
   }));
 
@@ -344,7 +346,7 @@ export async function computeVariantTree(): Promise<VariantTreeResult> {
       return result;
     });
 
-    const soloStates = await computeEntryStates(soloSessions);
+    const soloStates = await computeEntryStates(subjectId, soloSessions);
     return measureDeviation(baseline, soloStates,
       stateEngineFamilies.filter(f => f.id !== family.id).map(f => f.id),
       baselineVariance,

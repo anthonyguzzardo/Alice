@@ -34,8 +34,8 @@ import { type EmotionAnalysis, formatEmotionForRenderer } from './libEmotionProf
 
 /** Load the latest persisted traits, regardless of entry count.
  *  Returns null only if no witness state has ever been generated. */
-export async function loadPersistedTraits(): Promise<WitnessTraits | null> {
-  const row = await getLatestWitnessState();
+export async function loadPersistedTraits(subjectId: number): Promise<WitnessTraits | null> {
+  const row = await getLatestWitnessState(subjectId);
   if (!row) return null;
 
   try {
@@ -46,8 +46,8 @@ export async function loadPersistedTraits(): Promise<WitnessTraits | null> {
 }
 
 /** Check if a new render is needed (entry count changed since last persist) */
-export async function needsNewRender(currentEntryCount: number): Promise<boolean> {
-  const row = await getLatestWitnessState();
+export async function needsNewRender(subjectId: number, currentEntryCount: number): Promise<boolean> {
+  const row = await getLatestWitnessState(subjectId);
   if (!row) return true;
   return row.entry_count !== currentEntryCount;
 }
@@ -164,6 +164,7 @@ let inflight: Promise<WitnessTraits> | null = null;
 /** Render new witness traits via LLM. Called ONLY from session completion pipeline.
  *  This ALWAYS calls the LLM — caller must check needsNewRender() first. */
 export async function renderTraits(
+  subjectId: number,
   dynamics: DynamicsAnalysis,
   entryCount: number,
   emotionAnalysis?: EmotionAnalysis,
@@ -171,7 +172,7 @@ export async function renderTraits(
   // Prevent duplicate LLM calls from concurrent requests
   if (inflight) return inflight;
 
-  inflight = renderTraitsInner(dynamics, entryCount, emotionAnalysis);
+  inflight = renderTraitsInner(subjectId, dynamics, entryCount, emotionAnalysis);
   try {
     return await inflight;
   } finally {
@@ -180,6 +181,7 @@ export async function renderTraits(
 }
 
 async function renderTraitsInner(
+  subjectId: number,
   dynamics: DynamicsAnalysis,
   entryCount: number,
   emotionAnalysis?: EmotionAnalysis,
@@ -207,6 +209,7 @@ async function renderTraitsInner(
     if (parsed) {
       // Persist to DB (store dynamics + emotion context)
       await saveWitnessState(
+        subjectId,
         entryCount,
         JSON.stringify(parsed),
         JSON.stringify({
@@ -227,7 +230,7 @@ async function renderTraitsInner(
   }
 
   // Fallback: return whatever was last persisted, or defaults
-  const lastRow = await getLatestWitnessState();
+  const lastRow = await getLatestWitnessState(subjectId);
   if (lastRow) {
     try { return JSON.parse(lastRow.traits_json) as WitnessTraits; } catch {}
   }
@@ -266,11 +269,11 @@ import { computeEmotionAnalysis } from './libEmotionProfile.ts';
 import type { AliceNegativeSignal } from './libTypes.js';
 
 /** Legacy bridge for scripts/reinterpret.ts — runs full pipeline unconditionally */
-export async function interpretTraits(_sig: AliceNegativeSignal, entryCount: number): Promise<WitnessTraits> {
-  const states = await computeEntryStates();
+export async function interpretTraits(subjectId: number, _sig: AliceNegativeSignal, entryCount: number): Promise<WitnessTraits> {
+  const states = await computeEntryStates(subjectId);
   if (states.length < 3) return { ...DEFAULT_TRAITS };
 
   const dynamics = computeDynamics(states);
-  const emotionAnalysis = await computeEmotionAnalysis(states);
-  return renderTraits(dynamics, entryCount, emotionAnalysis);
+  const emotionAnalysis = await computeEmotionAnalysis(subjectId, states);
+  return renderTraits(subjectId, dynamics, entryCount, emotionAnalysis);
 }

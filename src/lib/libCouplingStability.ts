@@ -88,10 +88,10 @@ function linregSlope(xs: number[], ys: number[]): number {
 
 // ─── Main computation ───────────────────────────────────────────────
 
-export async function computeCouplingStability(): Promise<CouplingStabilityResult> {
+export async function computeCouplingStability(subjectId: number): Promise<CouplingStabilityResult> {
   const [emotionEntries, behaviorStates] = await Promise.all([
-    loadEmotionEntries(),
-    computeEntryStates(),
+    loadEmotionEntries(subjectId),
+    computeEntryStates(subjectId),
   ]);
 
   const maxN = Math.min(emotionEntries.length, behaviorStates.length);

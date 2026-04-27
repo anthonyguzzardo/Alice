@@ -48,22 +48,22 @@ export interface GenerationOptions {
   onApiCall?: (info: ApiCallInfo) => void;
 }
 
-export async function runGeneration(options?: GenerationOptions): Promise<void> {
+export async function runGeneration(subjectId: number, options?: GenerationOptions): Promise<void> {
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowStr = localDateStr(tomorrow);
 
-  if (await hasQuestionForDate(tomorrowStr)) return;
+  if (await hasQuestionForDate(subjectId, tomorrowStr)) return;
 
-  const responseCount = await getResponseCount();
+  const responseCount = await getResponseCount(subjectId);
   const seedThreshold = options?.seedDaysOverride ?? SEED_DAYS;
   if (responseCount < seedThreshold) return;
 
   // --- RECENT RAW ENTRIES (always included verbatim) ---
-  const recentResponses = await getRecentResponses(RECENT_WINDOW);
+  const recentResponses = await getRecentResponses(subjectId, RECENT_WINDOW);
 
   // --- REFLECTIONS: recent in full, older only if RAG resurfaces them ---
-  const allReflections = await getAllReflections();
+  const allReflections = await getAllReflections(subjectId);
   const RECENT_REFLECTIONS = 4;
   const recentReflections = allReflections.slice(-RECENT_REFLECTIONS);
   const latestReflection = recentReflections[recentReflections.length - 1] ?? null;
@@ -77,7 +77,7 @@ export async function runGeneration(options?: GenerationOptions): Promise<void> 
     querySeeds.push(latestReflection.text.slice(0, 500));
   }
 
-  const ragEntries = await retrieveSimilarMulti(querySeeds, {
+  const ragEntries = await retrieveSimilarMulti(subjectId, querySeeds, {
     topK: 10,
     sourceTypes: ['response'],
     excludeDates: Array.from(recentDates),
@@ -87,7 +87,7 @@ export async function runGeneration(options?: GenerationOptions): Promise<void> 
 
   // --- CONTRARIAN: entries that break the echo chamber ---
   const ragIds = new Set(ragEntries.map(e => e.embeddingId));
-  const contrarianEntries = (await retrieveContrarian(querySeeds, {
+  const contrarianEntries = (await retrieveContrarian(subjectId, querySeeds, {
     topK: 3,
     sourceTypes: ['response'],
     excludeDates: Array.from(recentDates),
@@ -96,7 +96,7 @@ export async function runGeneration(options?: GenerationOptions): Promise<void> 
   // --- RAG: older reflections that resonate with current moment ---
   const recentReflectionIds = new Set(recentReflections.map(r => r.reflection_id));
   const ragReflections = allReflections.length > RECENT_REFLECTIONS
-    ? (await retrieveSimilarMulti(querySeeds.slice(0, 2), {
+    ? (await retrieveSimilarMulti(subjectId, querySeeds.slice(0, 2), {
         topK: 3,
         sourceTypes: ['reflection'],
         recencyHalfLifeDays: 90,
@@ -106,9 +106,9 @@ export async function runGeneration(options?: GenerationOptions): Promise<void> 
 
   // --- SCOPED CONTEXT ---
   // Observations + suppressed questions archived 2026-04-16 — no longer included.
-  const recentFeedback = await getRecentFeedback(10);
+  const recentFeedback = await getRecentFeedback(subjectId, 10);
   const recentQuestionIds = recentResponses.map(r => r.question_id);
-  const recentSummaries = await getSessionSummariesForQuestions(recentQuestionIds);
+  const recentSummaries = await getSessionSummariesForQuestions(subjectId, recentQuestionIds);
 
   // --- FORMAT SECTIONS ---
   // Recent entries are sorted DESC from query, reverse for chronological display
@@ -140,26 +140,26 @@ export async function runGeneration(options?: GenerationOptions): Promise<void> 
   }
 
   // Enriched behavioral signals (research-backed formatting)
-  const allSummaries = await getAllSessionSummaries();
+  const allSummaries = await getAllSessionSummaries(subjectId);
   const behavioralSection = recentSummaries.length > 0
     ? formatCompactSignals(recentSummaries, allSummaries)
     : 'No behavioral data available.';
 
   // Dynamics context (8D PersDyn behavioral dynamics)
-  const entryStates = await computeEntryStates();
+  const entryStates = await computeEntryStates(subjectId);
   const dynamics = computeDynamics(entryStates);
   const dynamicsSection = dynamics.entryCount > 0
     ? formatDynamicsContext(dynamics, 'compact')
     : '';
 
   // Life-context from recent calibration extractions
-  const recentLifeContext = await getRecentCalibrationContext(20);
+  const recentLifeContext = await getRecentCalibrationContext(subjectId, 20);
   const lifeContextSection = recentLifeContext.length > 0
     ? formatGenerateLifeContext(recentLifeContext)
     : '';
 
   // Daily delta trends (retrospective calibration vs journal shifts)
-  const recentDeltas = await getRecentSessionDeltas(14);
+  const recentDeltas = await getRecentSessionDeltas(subjectId, 14);
   const deltaTrendSection = recentDeltas.length > 0
     ? formatCompactDelta(recentDeltas)
     : '';
@@ -348,10 +348,11 @@ Generate 3 candidate questions with your selection, theme tags, and uncertainty 
     ? selectedMatch[1].trim()
     : rawOutput.replace(/\n*(THEME|UNCERTAINTY|RUNNER_UP_\d)\s*:.*/gis, '').trim();
 
-  await scheduleQuestion(questionText, tomorrowStr, 'generated');
+  await scheduleQuestion(subjectId, questionText, tomorrowStr, 'generated');
 
   // Log what went into this prompt for future auditability
   await savePromptTrace({
+    subjectId,
     type: 'generation',
     recentEntryIds: recentResponses.map(r => r.response_id),
     ragEntryIds: ragEntries.map(e => e.sourceRecordId),

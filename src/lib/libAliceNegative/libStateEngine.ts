@@ -109,7 +109,7 @@ interface SessionRaw {
   strategyShiftCount: number | null;
 }
 
-export async function loadSessions(): Promise<SessionRaw[]> {
+export async function loadSessions(subjectId: number): Promise<SessionRaw[]> {
   const rows = await sql`
     SELECT
        ss.session_summary_id
@@ -160,7 +160,8 @@ export async function loadSessions(): Promise<SessionRaw[]> {
     LEFT JOIN tb_dynamical_signals ds ON ss.question_id = ds.question_id
     LEFT JOIN tb_motor_signals ms ON ss.question_id = ms.question_id
     LEFT JOIN tb_process_signals ps ON ss.question_id = ps.question_id
-    WHERE q.question_source_id != 3
+    WHERE q.subject_id = ${subjectId}
+      AND q.question_source_id != 3
     ORDER BY ss.session_summary_id ASC
   ` as any[];
 
@@ -252,8 +253,8 @@ export async function loadSessions(): Promise<SessionRaw[]> {
 
 // ─── 7D State computation ──────────────────────────────────────────
 
-export async function computeEntryStates(sessions?: SessionRaw[]): Promise<EntryState[]> {
-  if (!sessions) sessions = await loadSessions();
+export async function computeEntryStates(subjectId: number, sessions?: SessionRaw[]): Promise<EntryState[]> {
+  if (!sessions) sessions = await loadSessions(subjectId);
   if (sessions.length < MIN_ENTRIES) return [];
 
   const hasBurstData = sessions.some(s => s.avgPBurstLength > 0);

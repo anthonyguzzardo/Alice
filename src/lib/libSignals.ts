@@ -618,15 +618,15 @@ export interface KnowledgeTransformResult {
  * This is what writing looks like when nothing interesting is happening.
  * Cached per call since calibration data changes rarely.
  */
-async function computeCalibrationKTFloor(allSummaries: SessionSummaryInput[]): Promise<number> {
-  const calSessions = await getCalibrationSessionsWithText();
+async function computeCalibrationKTFloor(subjectId: number, allSummaries: SessionSummaryInput[]): Promise<number> {
+  const calSessions = await getCalibrationSessionsWithText(subjectId);
   // Need at least 5 calibration sessions with decent length for a reliable floor
   const usable = calSessions.filter(s => s.wordCount >= 20);
   if (usable.length < 3) return 0; // insufficient data — fall back to no floor
 
   const scores: number[] = [];
   for (const cal of usable) {
-    const result = await computeRawKTScore(cal, (cal as any).responseText, allSummaries);
+    const result = await computeRawKTScore(subjectId, cal, (cal as any).responseText, allSummaries);
     scores.push(result.rawScore);
   }
 
@@ -640,6 +640,7 @@ async function computeCalibrationKTFloor(allSummaries: SessionSummaryInput[]): P
  * Internal: compute raw KT score without calibration adjustment.
  */
 async function computeRawKTScore(
+  subjectId: number,
   session: SessionSummaryInput,
   responseText: string,
   allSummaries: SessionSummaryInput[],
@@ -699,7 +700,7 @@ async function computeRawKTScore(
   // The KT signature: short fragmented bursts early → longer sustained bursts later
   // as thinking consolidates during writing.
   try {
-    const bursts = await getBurstSequence(session.questionId);
+    const bursts = await getBurstSequence(subjectId, session.questionId);
     if (bursts.length >= 4) {
       const mid = Math.floor(bursts.length / 2);
       const firstHalfBursts = bursts.slice(0, mid);
@@ -750,12 +751,13 @@ async function computeRawKTScore(
  * distance above that floor is the real signal.
  */
 export async function computeKnowledgeTransformScore(
+  subjectId: number,
   session: SessionSummaryInput,
   responseText: string,
   allSummaries: SessionSummaryInput[],
 ): Promise<KnowledgeTransformResult> {
-  const { rawScore, signals } = await computeRawKTScore(session, responseText, allSummaries);
-  const calibrationFloor = await computeCalibrationKTFloor(allSummaries);
+  const { rawScore, signals } = await computeRawKTScore(subjectId, session, responseText, allSummaries);
+  const calibrationFloor = await computeCalibrationKTFloor(subjectId, allSummaries);
   const aboveFloor = Math.max(0, rawScore - calibrationFloor);
 
   if (calibrationFloor > 0 && aboveFloor > 0.15) {

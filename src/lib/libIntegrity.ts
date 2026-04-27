@@ -66,31 +66,31 @@ const DIMENSIONS: DimensionDef[] = [
 
 // ─── Load profile ───────────────────────────────────────────────────
 
-async function loadProfile(): Promise<Record<string, number | null> | null> {
-  const rows = await sql`SELECT * FROM tb_personal_profile LIMIT 1`;
+async function loadProfile(subjectId: number): Promise<Record<string, number | null> | null> {
+  const rows = await sql`SELECT * FROM tb_personal_profile WHERE subject_id = ${subjectId} LIMIT 1`;
   if (rows.length === 0) return null;
   return rows[0] as Record<string, number | null>;
 }
 
 // ─── Load session data ──────────────────────────────────────────────
 
-async function loadSessionSummary(questionId: number): Promise<Record<string, number | null> | null> {
+async function loadSessionSummary(subjectId: number, questionId: number): Promise<Record<string, number | null> | null> {
   const rows = await sql`
     SELECT inter_key_interval_mean, hold_time_mean, flight_time_mean,
            p_burst_count, avg_p_burst_length, total_duration_ms, word_count,
            first_keystroke_ms, mattr
     FROM tb_session_summaries
-    WHERE question_id = ${questionId}
+    WHERE subject_id = ${subjectId} AND question_id = ${questionId}
   `;
   if (rows.length === 0) return null;
   return rows[0] as Record<string, number | null>;
 }
 
-async function loadMotorSignals(questionId: number): Promise<Record<string, number | null> | null> {
+async function loadMotorSignals(subjectId: number, questionId: number): Promise<Record<string, number | null> | null> {
   const rows = await sql`
     SELECT ex_gaussian_mu, ex_gaussian_sigma, ex_gaussian_tau
     FROM tb_motor_signals
-    WHERE question_id = ${questionId}
+    WHERE subject_id = ${subjectId} AND question_id = ${questionId}
   `;
   if (rows.length === 0) return null;
   return rows[0] as Record<string, number | null>;
@@ -98,10 +98,11 @@ async function loadMotorSignals(questionId: number): Promise<Record<string, numb
 
 // ─── Compute historical threshold ───────────────────────────────────
 
-async function computeThreshold(dimensionCount: number): Promise<number> {
+async function computeThreshold(subjectId: number, dimensionCount: number): Promise<number> {
   const rows = await sql`
     SELECT profile_distance
     FROM tb_session_integrity
+    WHERE subject_id = ${subjectId}
     ORDER BY session_integrity_id ASC
   `;
 
@@ -126,24 +127,25 @@ async function computeThreshold(dimensionCount: number): Promise<number> {
 
 // ─── Main computation ───────────────────────────────────────────────
 
-export async function computeSessionIntegrity(questionId: number): Promise<IntegrityResult | null> {
+export async function computeSessionIntegrity(subjectId: number, questionId: number): Promise<IntegrityResult | null> {
   // Calibration sessions (question_source_id = 3) are prompted neutral writing
   // that produces systematically large distances against the journal-derived
   // profile. Allowing them in would inflate the threshold and mask genuine
   // journal anomalies.
   const sourceRows = await sql`
-    SELECT question_source_id FROM tb_questions WHERE question_id = ${questionId}
+    SELECT question_source_id FROM tb_questions
+    WHERE question_id = ${questionId} AND subject_id = ${subjectId}
   `;
   if (sourceRows.length === 0) return null;
   if ((sourceRows[0] as { question_source_id: number }).question_source_id === 3) return null;
 
-  const profile = await loadProfile();
+  const profile = await loadProfile(subjectId);
   if (!profile || !profile.session_count || (profile.session_count as number) < 5) return null;
 
-  const summary = await loadSessionSummary(questionId);
+  const summary = await loadSessionSummary(subjectId, questionId);
   if (!summary) return null;
 
-  const motor = await loadMotorSignals(questionId);
+  const motor = await loadMotorSignals(subjectId, questionId);
 
   // Gather aligned values/means/stds for dimensions with valid data
   const dimNames: string[] = [];
@@ -183,7 +185,7 @@ export async function computeSessionIntegrity(questionId: number): Promise<Integ
 
   const dimCount = dimNames.length;
 
-  const threshold = await computeThreshold(dimCount);
+  const threshold = await computeThreshold(subjectId, dimCount);
   const isFlagged = distance > threshold;
 
   return {

@@ -63,6 +63,7 @@ export async function generateEmbeddings(texts: string[]): Promise<(number[] | n
 }
 
 async function storeEmbedding(
+  subjectId: number,
   sourceType: keyof typeof SOURCE_IDS,
   sourceRecordId: number,
   embeddedText: string,
@@ -71,6 +72,7 @@ async function storeEmbedding(
   modelVersionId: number | null,
 ): Promise<void> {
   const embeddingId = await insertEmbeddingMeta(
+    subjectId,
     SOURCE_IDS[sourceType],
     sourceRecordId,
     embeddedText,
@@ -83,6 +85,7 @@ async function storeEmbedding(
 }
 
 export async function embedResponse(
+  subjectId: number,
   responseId: number,
   questionText: string,
   responseText: string,
@@ -93,15 +96,15 @@ export async function embedResponse(
   const text = `Question: ${questionText}\nResponse: ${responseText}`;
   const vector = await generateEmbedding(text);
   if (!vector) return;
-  await storeEmbedding('response', responseId, text, sourceDate, vector, modelVersionId);
+  await storeEmbedding(subjectId, 'response', responseId, text, sourceDate, vector, modelVersionId);
 }
 
-export async function backfillEmbeddings(): Promise<{ embedded: number; failed: number }> {
+export async function backfillEmbeddings(subjectId: number): Promise<{ embedded: number; failed: number }> {
   let embedded = 0;
   let failed = 0;
 
   const modelVersionId = await getActiveEmbeddingModelVersionId();
-  const unembeddedResponses = await getUnembeddedResponses(modelVersionId ?? undefined);
+  const unembeddedResponses = await getUnembeddedResponses(subjectId, modelVersionId ?? undefined);
   if (unembeddedResponses.length === 0) {
     console.log('[backfill] All records already embedded.');
     return { embedded: 0, failed: 0 };
@@ -112,7 +115,7 @@ export async function backfillEmbeddings(): Promise<{ embedded: number; failed: 
     const text = `Question: ${record.question}\nResponse: ${record.response}`;
     const vector = await generateEmbedding(text);
     if (vector) {
-      await storeEmbedding('response', record.response_id, text, record.date, vector, modelVersionId);
+      await storeEmbedding(subjectId, 'response', record.response_id, text, record.date, vector, modelVersionId);
       embedded++;
     } else {
       failed++;

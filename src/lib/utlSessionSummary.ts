@@ -19,6 +19,7 @@ import { computeMATTR } from './libAliceNegative/libHelpers.ts';
  * later by saveCalibrationSession) while respond.ts uses the real ID.
  */
 export function coerceSessionSummary(
+  subjectId: number,
   sessionSummary: Record<string, unknown>,
   questionId: number,
   responseText: string,
@@ -35,6 +36,7 @@ export function coerceSessionSummary(
     ? sentWordCounts.reduce((sum: number, c: number) => sum + (c - avgSentenceLength) ** 2, 0) / (sentWordCounts.length - 1) : null;
 
   return {
+    subjectId,
     questionId,
     firstKeystrokeMs: (sessionSummary.firstKeystrokeMs as number) ?? null,
     totalDurationMs: (sessionSummary.totalDurationMs as number) ?? null,

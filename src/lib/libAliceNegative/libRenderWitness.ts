@@ -31,26 +31,30 @@ import { computeDynamics } from './libDynamics.ts';
 import { computeEmotionAnalysis } from './libEmotionProfile.ts';
 import { renderTraits } from './libInterpreter.ts';
 
-export async function renderWitnessState(): Promise<void> {
+export async function renderWitnessState(subjectId: number): Promise<void> {
   const countRows = await sql`
     SELECT COUNT(*) as c FROM tb_session_summaries ss
     JOIN tb_questions q ON ss.question_id = q.question_id
-    WHERE q.question_source_id != 3
+    WHERE q.subject_id = ${subjectId}
+      AND q.question_source_id != 3
   `;
   const currentCount = (countRows[0] as { c: number }).c;
 
   if (currentCount === 0) return;
 
   // ── Phase 1a: Compute 7D behavioral entry states (deterministic) ──
-  const states = await computeEntryStates();
+  // TODO(step5): AN modules (computeEntryStates/computeSemanticStates/computeEmotionAnalysis)
+  // not yet threaded for subjectId per AN minimal-touch policy. They read all subjects' data.
+  const states = await computeEntryStates(subjectId);
   if (states.length < 3) return;
 
   // Persist any new behavioral entry states
-  const existingStateCount = await getEntryStateCount();
+  const existingStateCount = await getEntryStateCount(subjectId);
   if (states.length > existingStateCount) {
     const newStates = states.slice(existingStateCount);
     for (const s of newStates) {
       await saveEntryState({
+        subject_id: subjectId,
         response_id: s.responseId,
         fluency: s.fluency,
         deliberation: s.deliberation,
@@ -66,11 +70,12 @@ export async function renderWitnessState(): Promise<void> {
 
   // ── Phase 1b: Compute semantic entry states (deterministic, parallel space) ──
   const semanticStates = await computeSemanticStates();
-  const existingSemanticCount = await getSemanticStateCount();
+  const existingSemanticCount = await getSemanticStateCount(subjectId);
   if (semanticStates.length > existingSemanticCount) {
     const newSemantic = semanticStates.slice(existingSemanticCount);
     for (const s of newSemantic) {
       await saveSemanticState({
+        subject_id: subjectId,
         response_id: s.responseId,
         syntactic_complexity: s.syntactic_complexity,
         interrogation: s.interrogation,
@@ -96,6 +101,7 @@ export async function renderWitnessState(): Promise<void> {
   const dynamics = computeDynamics(states);
 
   await saveTraitDynamics(dynamics.dimensions.map(d => ({
+    subject_id: subjectId,
     entry_count: currentCount,
     dimension: d.dimension,
     baseline: d.baseline,
@@ -108,6 +114,7 @@ export async function renderWitnessState(): Promise<void> {
 
   if (dynamics.coupling.length > 0) {
     await saveCouplingMatrix(dynamics.coupling.map(c => ({
+      subject_id: subjectId,
       entry_count: currentCount,
       leader: c.leader,
       follower: c.follower,
@@ -122,6 +129,7 @@ export async function renderWitnessState(): Promise<void> {
     const semanticDynamics = computeDynamics(semanticStates, SEMANTIC_DIMENSIONS);
 
     await saveSemanticDynamics(semanticDynamics.dimensions.map(d => ({
+      subject_id: subjectId,
       entry_count: currentCount,
       dimension: d.dimension,
       baseline: d.baseline,
@@ -134,6 +142,7 @@ export async function renderWitnessState(): Promise<void> {
 
     if (semanticDynamics.coupling.length > 0) {
       await saveSemanticCoupling(semanticDynamics.coupling.map(c => ({
+        subject_id: subjectId,
         entry_count: currentCount,
         leader: c.leader,
         follower: c.follower,
@@ -145,10 +154,11 @@ export async function renderWitnessState(): Promise<void> {
   }
 
   // ── Phase 3: Emotion profile + emotion→behavior coupling ──
-  const emotionAnalysis = await computeEmotionAnalysis(states);
+  const emotionAnalysis = await computeEmotionAnalysis(subjectId, states);
 
   if (emotionAnalysis.emotionBehaviorCoupling.length > 0) {
     await saveEmotionBehaviorCoupling(emotionAnalysis.emotionBehaviorCoupling.map(c => ({
+      subject_id: subjectId,
       entry_count: currentCount,
       emotion_dim: c.emotionDim,
       behavior_dim: c.behaviorDim,
@@ -159,7 +169,7 @@ export async function renderWitnessState(): Promise<void> {
   }
 
   // ── Phase 4: Render visual traits (LLM call) ──
-  await renderTraits(dynamics, currentCount, emotionAnalysis);
+  await renderTraits(subjectId, dynamics, currentCount, emotionAnalysis);
 
   console.log(`[witness] New Alice Negative generated for entry count ${currentCount}`);
 }
