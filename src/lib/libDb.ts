@@ -7,6 +7,29 @@ export { default as sql } from './libDbPool.ts';
 export type { TxSql } from './libDbPool.ts';
 
 // ----------------------------------------------------------------------------
+// OWNER_SUBJECT_ID — temporary scaffolding for the unification rollout
+// ----------------------------------------------------------------------------
+// Every behavioral table now carries a NOT NULL `subject_id` (migration 030).
+// Public functions in this file accept `subjectId` as an explicit parameter so
+// that the dependency is visible at every call site — no implicit owner.
+//
+// During Step 5 of the unification plan, callers without a real subject
+// context will pass `OWNER_SUBJECT_ID` explicitly. Each such call site is
+// reviewed individually to determine whether it should pull a real subjectId
+// from request context (e.g. `locals.subject!.subject_id`) or stay
+// owner-pinned (e.g. owner-only background scripts, owner-public health
+// endpoints). Sites that genuinely belong owner-pinned keep the constant;
+// sites that should be subject-aware are rewritten.
+//
+// All current uses of OWNER_SUBJECT_ID across the codebase MUST carry a
+// // TODO(step5): review comment so the Step 5 sweep can grep for them.
+//
+// This constant is intentionally NOT a function default — defaults bury the
+// dependency. The point of explicit passing is to make every subject scope
+// decision visible during review.
+export const OWNER_SUBJECT_ID = 1;
+
+// ----------------------------------------------------------------------------
 // DATE OVERRIDE (for simulation -- production never calls this)
 // ----------------------------------------------------------------------------
 // When set, save functions use this instead of CURRENT_TIMESTAMP.
@@ -34,24 +57,25 @@ function nowStr(): string {
 // QUERIES
 // ----------------------------------------------------------------------------
 
-export async function getTodaysQuestion(): Promise<{ question_id: number; text: string } | null> {
+export async function getTodaysQuestion(subjectId: number): Promise<{ question_id: number; text: string } | null> {
   const today = localDateStr();
-  const rows = await sql`SELECT question_id, text FROM tb_questions WHERE scheduled_for = ${today}`;
+  const rows = await sql`SELECT question_id, text FROM tb_questions WHERE subject_id = ${subjectId} AND scheduled_for = ${today}`;
   return (rows[0] as { question_id: number; text: string }) ?? null;
 }
 
-export async function getTodaysResponse(): Promise<{ response_id: number; text: string } | null> {
+export async function getTodaysResponse(subjectId: number): Promise<{ response_id: number; text: string } | null> {
   const today = localDateStr();
   const rows = await sql`
     SELECT r.response_id, r.text
     FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
-    WHERE q.scheduled_for = ${today}
+    WHERE q.subject_id = ${subjectId} AND q.scheduled_for = ${today}
   `;
   return (rows[0] as { response_id: number; text: string }) ?? null;
 }
 
 export async function saveResponse(
+  subjectId: number,
   questionId: number,
   text: string,
   tx?: TxSql,
@@ -62,69 +86,73 @@ export async function saveResponse(
   const ref = attestation?.codePathsRef ?? 'docs/contamination-boundary-v1.md';
   const hash = attestation?.commitHash ?? 'pre-attestation';
   const [row] = await q`
-    INSERT INTO tb_responses (question_id, text, contamination_boundary_version, audited_code_paths_ref, code_commit_hash, dttm_created_utc)
-    VALUES (${questionId}, ${text}, ${bv}, ${ref}, ${hash}, ${nowStr()})
+    INSERT INTO tb_responses (subject_id, question_id, text, contamination_boundary_version, audited_code_paths_ref, code_commit_hash, dttm_created_utc)
+    VALUES (${subjectId}, ${questionId}, ${text}, ${bv}, ${ref}, ${hash}, ${nowStr()})
     RETURNING response_id
   `;
   return row.response_id;
 }
 
-export async function scheduleQuestion(text: string, date: string, source: 'seed' | 'generated' | 'calibration' = 'seed'): Promise<void> {
+export async function scheduleQuestion(subjectId: number, text: string, date: string, source: 'seed' | 'generated' | 'calibration' = 'seed'): Promise<void> {
   const sourceId = source === 'generated' ? 2 : source === 'calibration' ? 3 : 1;
+  // CONFLICT TARGET CHANGED (migration 030): (scheduled_for) → (subject_id, scheduled_for)
   await sql`
-    INSERT INTO tb_questions (text, question_source_id, scheduled_for)
-    VALUES (${text}, ${sourceId}, ${date})
-    ON CONFLICT (scheduled_for) DO NOTHING
+    INSERT INTO tb_questions (subject_id, text, question_source_id, scheduled_for)
+    VALUES (${subjectId}, ${text}, ${sourceId}, ${date})
+    ON CONFLICT (subject_id, scheduled_for) DO NOTHING
   `;
 }
 
-export async function getAllResponses(): Promise<Array<{ question: string; response: string; date: string }>> {
+export async function getAllResponses(subjectId: number): Promise<Array<{ question: string; response: string; date: string }>> {
   return await sql`
     SELECT q.text AS question, r.text AS response, q.scheduled_for AS date
     FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
+    WHERE q.subject_id = ${subjectId}
     ORDER BY q.scheduled_for ASC
   ` as Array<{ question: string; response: string; date: string }>;
 }
 
-export async function getLatestReflection(): Promise<{ text: string; dttm_created_utc: string } | null> {
+export async function getLatestReflection(subjectId: number): Promise<{ text: string; dttm_created_utc: string } | null> {
   const rows = await sql`
-    SELECT text, dttm_created_utc FROM tb_reflections ORDER BY dttm_created_utc DESC LIMIT 1
+    SELECT text, dttm_created_utc FROM tb_reflections
+    WHERE subject_id = ${subjectId}
+    ORDER BY dttm_created_utc DESC LIMIT 1
   `;
   return (rows[0] as { text: string; dttm_created_utc: string }) ?? null;
 }
 
-export async function saveReflection(text: string, type: 'weekly' | 'monthly' = 'weekly', coverageThroughResponseId?: number): Promise<number> {
+export async function saveReflection(subjectId: number, text: string, type: 'weekly' | 'monthly' = 'weekly', coverageThroughResponseId?: number): Promise<number> {
   const typeId = type === 'monthly' ? 2 : 1;
   const [row] = await sql`
-    INSERT INTO tb_reflections (text, reflection_type_id, coverage_through_response_id, dttm_created_utc)
-    VALUES (${text}, ${typeId}, ${coverageThroughResponseId ?? null}, ${nowStr()})
+    INSERT INTO tb_reflections (subject_id, text, reflection_type_id, coverage_through_response_id, dttm_created_utc)
+    VALUES (${subjectId}, ${text}, ${typeId}, ${coverageThroughResponseId ?? null}, ${nowStr()})
     RETURNING reflection_id
   `;
   return row.reflection_id;
 }
 
-export async function logInteractionEvent(questionId: number, eventType: string, metadata?: string | Record<string, unknown>): Promise<void> {
+export async function logInteractionEvent(subjectId: number, questionId: number, eventType: string, metadata?: string | Record<string, unknown>): Promise<void> {
   const typeRows = await sql`
     SELECT interaction_event_type_id FROM te_interaction_event_type WHERE enum_code = ${eventType}
   `;
   const typeRow = typeRows[0] as { interaction_event_type_id: number } | undefined;
   if (!typeRow) return;
   await sql`
-    INSERT INTO tb_interaction_events (question_id, interaction_event_type_id, metadata)
-    VALUES (${questionId}, ${typeRow.interaction_event_type_id}, ${metadata ?? null})
+    INSERT INTO tb_interaction_events (subject_id, question_id, interaction_event_type_id, metadata)
+    VALUES (${subjectId}, ${questionId}, ${typeRow.interaction_event_type_id}, ${metadata ?? null})
   `;
 }
 
-export async function hasQuestionForDate(date: string): Promise<boolean> {
-  const rows = await sql`SELECT 1 FROM tb_questions WHERE scheduled_for = ${date}`;
+export async function hasQuestionForDate(subjectId: number, date: string): Promise<boolean> {
+  const rows = await sql`SELECT 1 FROM tb_questions WHERE subject_id = ${subjectId} AND scheduled_for = ${date}`;
   return rows.length > 0;
 }
 
-export async function countScheduledSeedQuestions(): Promise<number> {
+export async function countScheduledSeedQuestions(subjectId: number): Promise<number> {
   const [row] = await sql`
     SELECT COUNT(*)::int AS c FROM tb_questions
-    WHERE question_source_id = 1 AND scheduled_for IS NOT NULL
+    WHERE subject_id = ${subjectId} AND question_source_id = 1 AND scheduled_for IS NOT NULL
   `;
   return (row as { c: number }).c;
 }
@@ -135,6 +163,7 @@ export async function countScheduledSeedQuestions(): Promise<number> {
 // ----------------------------------------------------------------------------
 
 export interface SessionSummaryInput {
+  subjectId: number;
   questionId: number;
   firstKeystrokeMs: number | null;
   totalDurationMs: number | null;
@@ -237,7 +266,7 @@ export async function saveSessionSummary(s: SessionSummaryInput, tx?: TxSql): Pr
   const q = tx ?? sql;
   await q`
     INSERT INTO tb_session_summaries (
-       question_id, first_keystroke_ms, total_duration_ms,
+       subject_id, question_id, first_keystroke_ms, total_duration_ms,
        total_chars_typed, final_char_count, commitment_ratio,
        pause_count, total_pause_ms, deletion_count, largest_deletion,
        total_chars_deleted, tab_away_count, total_tab_away_ms,
@@ -271,7 +300,7 @@ export async function saveSessionSummary(s: SessionSummaryInput, tx?: TxSql): Pr
        punctuation_flight_mean, punctuation_letter_ratio,
        device_type, user_agent, hour_of_day, day_of_week
     ) VALUES (
-      ${s.questionId}, ${s.firstKeystrokeMs}, ${s.totalDurationMs},
+      ${s.subjectId}, ${s.questionId}, ${s.firstKeystrokeMs}, ${s.totalDurationMs},
       ${s.totalCharsTyped}, ${s.finalCharCount}, ${s.commitmentRatio},
       ${s.pauseCount}, ${s.totalPauseMs}, ${s.deletionCount}, ${s.largestDeletion},
       ${s.totalCharsDeleted}, ${s.tabAwayCount}, ${s.totalTabAwayMs},
@@ -320,34 +349,33 @@ export interface BurstEntry {
   durationMs: number;
 }
 
-export async function saveBurstSequence(questionId: number, bursts: BurstEntry[], tx?: TxSql): Promise<void> {
+export async function saveBurstSequence(subjectId: number, questionId: number, bursts: BurstEntry[], tx?: TxSql): Promise<void> {
   if (tx) {
-    // Already in a transaction; use the handle directly
     for (let i = 0; i < bursts.length; i++) {
       await tx`
-        INSERT INTO tb_burst_sequences (question_id, burst_index, burst_char_count, burst_duration_ms, burst_start_offset_ms)
-        VALUES (${questionId}, ${i}, ${bursts[i].chars}, ${bursts[i].durationMs}, ${bursts[i].startOffsetMs})
+        INSERT INTO tb_burst_sequences (subject_id, question_id, burst_index, burst_char_count, burst_duration_ms, burst_start_offset_ms)
+        VALUES (${subjectId}, ${questionId}, ${i}, ${bursts[i].chars}, ${bursts[i].durationMs}, ${bursts[i].startOffsetMs})
       `;
     }
   } else {
     await sql.begin(async (sql) => {
       for (let i = 0; i < bursts.length; i++) {
         await sql`
-          INSERT INTO tb_burst_sequences (question_id, burst_index, burst_char_count, burst_duration_ms, burst_start_offset_ms)
-          VALUES (${questionId}, ${i}, ${bursts[i].chars}, ${bursts[i].durationMs}, ${bursts[i].startOffsetMs})
+          INSERT INTO tb_burst_sequences (subject_id, question_id, burst_index, burst_char_count, burst_duration_ms, burst_start_offset_ms)
+          VALUES (${subjectId}, ${questionId}, ${i}, ${bursts[i].chars}, ${bursts[i].durationMs}, ${bursts[i].startOffsetMs})
         `;
       }
     });
   }
 }
 
-export async function getBurstSequence(questionId: number, tx?: TxSql): Promise<Array<BurstEntry & { burstIndex: number }>> {
+export async function getBurstSequence(subjectId: number, questionId: number, tx?: TxSql): Promise<Array<BurstEntry & { burstIndex: number }>> {
   const q = tx ?? sql;
   return await q`
     SELECT burst_index AS "burstIndex", burst_char_count AS chars,
            burst_duration_ms AS "durationMs", burst_start_offset_ms AS "startOffsetMs"
     FROM tb_burst_sequences
-    WHERE question_id = ${questionId}
+    WHERE subject_id = ${subjectId} AND question_id = ${questionId}
     ORDER BY burst_index ASC
   ` as Array<BurstEntry & { burstIndex: number }>;
 }
@@ -364,28 +392,28 @@ export interface RBurstEntry {
   isLeadingEdge: boolean;
 }
 
-export async function saveRburstSequence(questionId: number, rbursts: RBurstEntry[], tx?: TxSql): Promise<void> {
+export async function saveRburstSequence(subjectId: number, questionId: number, rbursts: RBurstEntry[], tx?: TxSql): Promise<void> {
   if (rbursts.length === 0) return;
   if (tx) {
     for (let i = 0; i < rbursts.length; i++) {
       await tx`
-        INSERT INTO tb_rburst_sequences (question_id, burst_index, deleted_char_count, total_char_count, burst_duration_ms, burst_start_offset_ms, is_leading_edge)
-        VALUES (${questionId}, ${i}, ${rbursts[i].deletedCharCount}, ${rbursts[i].totalCharCount}, ${rbursts[i].durationMs}, ${rbursts[i].startOffsetMs}, ${rbursts[i].isLeadingEdge})
+        INSERT INTO tb_rburst_sequences (subject_id, question_id, burst_index, deleted_char_count, total_char_count, burst_duration_ms, burst_start_offset_ms, is_leading_edge)
+        VALUES (${subjectId}, ${questionId}, ${i}, ${rbursts[i].deletedCharCount}, ${rbursts[i].totalCharCount}, ${rbursts[i].durationMs}, ${rbursts[i].startOffsetMs}, ${rbursts[i].isLeadingEdge})
       `;
     }
   } else {
     await sql.begin(async (sql) => {
       for (let i = 0; i < rbursts.length; i++) {
         await sql`
-          INSERT INTO tb_rburst_sequences (question_id, burst_index, deleted_char_count, total_char_count, burst_duration_ms, burst_start_offset_ms, is_leading_edge)
-          VALUES (${questionId}, ${i}, ${rbursts[i].deletedCharCount}, ${rbursts[i].totalCharCount}, ${rbursts[i].durationMs}, ${rbursts[i].startOffsetMs}, ${rbursts[i].isLeadingEdge})
+          INSERT INTO tb_rburst_sequences (subject_id, question_id, burst_index, deleted_char_count, total_char_count, burst_duration_ms, burst_start_offset_ms, is_leading_edge)
+          VALUES (${subjectId}, ${questionId}, ${i}, ${rbursts[i].deletedCharCount}, ${rbursts[i].totalCharCount}, ${rbursts[i].durationMs}, ${rbursts[i].startOffsetMs}, ${rbursts[i].isLeadingEdge})
         `;
       }
     });
   }
 }
 
-export async function getRburstSequence(questionId: number, tx?: TxSql): Promise<Array<RBurstEntry & { burstIndex: number }>> {
+export async function getRburstSequence(subjectId: number, questionId: number, tx?: TxSql): Promise<Array<RBurstEntry & { burstIndex: number }>> {
   const q = tx ?? sql;
   return await q`
     SELECT burst_index AS "burstIndex",
@@ -395,7 +423,7 @@ export async function getRburstSequence(questionId: number, tx?: TxSql): Promise
            burst_start_offset_ms AS "startOffsetMs",
            is_leading_edge AS "isLeadingEdge"
     FROM tb_rburst_sequences
-    WHERE question_id = ${questionId}
+    WHERE subject_id = ${subjectId} AND question_id = ${questionId}
     ORDER BY burst_index ASC
   ` as Array<RBurstEntry & { burstIndex: number }>;
 }
@@ -406,6 +434,7 @@ export async function getRburstSequence(questionId: number, tx?: TxSql): Promise
 
 export interface SessionMetadataRow {
   session_metadata_id: number;
+  subject_id: number;
   question_id: number;
   hour_typicality: number | null;
   deletion_curve_type: string | null;
@@ -421,12 +450,12 @@ export async function saveSessionMetadata(row: Omit<SessionMetadataRow, 'session
   const q = tx ?? sql;
   const [result] = await q`
     INSERT INTO tb_session_metadata (
-       question_id, hour_typicality, deletion_curve_type, burst_trajectory_shape,
+       subject_id, question_id, hour_typicality, deletion_curve_type, burst_trajectory_shape,
        rburst_trajectory_shape,
        inter_burst_interval_mean_ms, inter_burst_interval_std_ms,
        deletion_during_burst_count, deletion_between_burst_count
     ) VALUES (
-      ${row.question_id}, ${row.hour_typicality}, ${row.deletion_curve_type}, ${row.burst_trajectory_shape},
+      ${row.subject_id}, ${row.question_id}, ${row.hour_typicality}, ${row.deletion_curve_type}, ${row.burst_trajectory_shape},
       ${row.rburst_trajectory_shape},
       ${row.inter_burst_interval_mean_ms}, ${row.inter_burst_interval_std_ms},
       ${row.deletion_during_burst_count}, ${row.deletion_between_burst_count}
@@ -436,21 +465,21 @@ export async function saveSessionMetadata(row: Omit<SessionMetadataRow, 'session
   return result.session_metadata_id;
 }
 
-export async function getSessionMetadata(questionId: number): Promise<SessionMetadataRow | null> {
+export async function getSessionMetadata(subjectId: number, questionId: number): Promise<SessionMetadataRow | null> {
   const rows = await sql`
-    SELECT * FROM tb_session_metadata WHERE question_id = ${questionId} ORDER BY session_metadata_id DESC LIMIT 1
+    SELECT * FROM tb_session_metadata WHERE subject_id = ${subjectId} AND question_id = ${questionId} ORDER BY session_metadata_id DESC LIMIT 1
   `;
   return (rows[0] as SessionMetadataRow) ?? null;
 }
 
-export async function getAllSessionMetadata(): Promise<SessionMetadataRow[]> {
+export async function getAllSessionMetadata(subjectId: number): Promise<SessionMetadataRow[]> {
   return await sql`
-    SELECT * FROM tb_session_metadata ORDER BY session_metadata_id ASC
+    SELECT * FROM tb_session_metadata WHERE subject_id = ${subjectId} ORDER BY session_metadata_id ASC
   ` as SessionMetadataRow[];
 }
 
-export async function getMetadataQuestionIdsAlreadyComputed(): Promise<Set<number>> {
-  const rows = await sql`SELECT DISTINCT question_id FROM tb_session_metadata` as Array<{ question_id: number }>;
+export async function getMetadataQuestionIdsAlreadyComputed(subjectId: number): Promise<Set<number>> {
+  const rows = await sql`SELECT DISTINCT question_id FROM tb_session_metadata WHERE subject_id = ${subjectId}` as Array<{ question_id: number }>;
   return new Set(rows.map(r => r.question_id));
 }
 
@@ -460,6 +489,7 @@ export async function getMetadataQuestionIdsAlreadyComputed(): Promise<Set<numbe
 
 export interface CalibrationHistoryRow {
   calibration_history_id: number;
+  subject_id: number;
   calibration_session_count: number;
   device_type: string | null;
   avg_first_keystroke_ms: number | null;
@@ -480,14 +510,14 @@ export interface CalibrationHistoryRow {
 export async function saveCalibrationBaselineSnapshot(row: Omit<CalibrationHistoryRow, 'calibration_history_id'>): Promise<number> {
   const [result] = await sql`
     INSERT INTO tb_calibration_baselines_history (
-       calibration_session_count, device_type,
+       subject_id, calibration_session_count, device_type,
        avg_first_keystroke_ms, avg_commitment_ratio, avg_duration_ms,
        avg_pause_count, avg_deletion_count, avg_chars_per_minute,
        avg_p_burst_length, avg_small_deletion_count, avg_large_deletion_count,
        avg_iki_mean, avg_hold_time_mean, avg_flight_time_mean,
        drift_magnitude
     ) VALUES (
-      ${row.calibration_session_count}, ${row.device_type},
+      ${row.subject_id}, ${row.calibration_session_count}, ${row.device_type},
       ${row.avg_first_keystroke_ms}, ${row.avg_commitment_ratio}, ${row.avg_duration_ms},
       ${row.avg_pause_count}, ${row.avg_deletion_count}, ${row.avg_chars_per_minute},
       ${row.avg_p_burst_length}, ${row.avg_small_deletion_count}, ${row.avg_large_deletion_count},
@@ -499,22 +529,22 @@ export async function saveCalibrationBaselineSnapshot(row: Omit<CalibrationHisto
   return result.calibration_history_id;
 }
 
-export async function getCalibrationHistory(): Promise<CalibrationHistoryRow[]> {
+export async function getCalibrationHistory(subjectId: number): Promise<CalibrationHistoryRow[]> {
   return await sql`
-    SELECT * FROM tb_calibration_baselines_history ORDER BY calibration_history_id ASC
+    SELECT * FROM tb_calibration_baselines_history WHERE subject_id = ${subjectId} ORDER BY calibration_history_id ASC
   ` as CalibrationHistoryRow[];
 }
 
-export async function getLatestCalibrationSnapshot(deviceType?: string | null): Promise<CalibrationHistoryRow | null> {
+export async function getLatestCalibrationSnapshot(subjectId: number, deviceType?: string | null): Promise<CalibrationHistoryRow | null> {
   if (deviceType) {
     const rows = await sql`
-      SELECT * FROM tb_calibration_baselines_history WHERE device_type = ${deviceType}
+      SELECT * FROM tb_calibration_baselines_history WHERE subject_id = ${subjectId} AND device_type = ${deviceType}
       ORDER BY calibration_history_id DESC LIMIT 1
     `;
     return (rows[0] as CalibrationHistoryRow) ?? null;
   }
   const rows = await sql`
-    SELECT * FROM tb_calibration_baselines_history WHERE device_type IS NULL
+    SELECT * FROM tb_calibration_baselines_history WHERE subject_id = ${subjectId} AND device_type IS NULL
     ORDER BY calibration_history_id DESC LIMIT 1
   `;
   return (rows[0] as CalibrationHistoryRow) ?? null;
@@ -526,6 +556,7 @@ export async function getLatestCalibrationSnapshot(deviceType?: string | null): 
 
 export interface SessionEventsRow {
   session_event_id: number;
+  subject_id: number;
   question_id: number;
   event_log_json: string;
   total_events: number;
@@ -538,22 +569,23 @@ export interface SessionEventsRow {
 export async function saveSessionEvents(row: Omit<SessionEventsRow, 'session_event_id'>, tx?: TxSql): Promise<number> {
   const q = tx ?? sql;
   const [result] = await q`
-    INSERT INTO tb_session_events (question_id, event_log_json, total_events, session_duration_ms, keystroke_stream_json, total_input_events, decimation_count)
-    VALUES (${row.question_id}, ${row.event_log_json}, ${row.total_events}, ${row.session_duration_ms}, ${row.keystroke_stream_json ?? null}, ${row.total_input_events ?? null}, ${row.decimation_count ?? null})
+    INSERT INTO tb_session_events (subject_id, question_id, event_log_json, total_events, session_duration_ms, keystroke_stream_json, total_input_events, decimation_count)
+    VALUES (${row.subject_id}, ${row.question_id}, ${row.event_log_json}, ${row.total_events}, ${row.session_duration_ms}, ${row.keystroke_stream_json ?? null}, ${row.total_input_events ?? null}, ${row.decimation_count ?? null})
     RETURNING session_event_id
   `;
   return result.session_event_id;
 }
 
-export async function getSessionEvents(questionId: number): Promise<SessionEventsRow | null> {
+export async function getSessionEvents(subjectId: number, questionId: number): Promise<SessionEventsRow | null> {
   const rows = await sql`
-    SELECT * FROM tb_session_events WHERE question_id = ${questionId} ORDER BY session_event_id DESC LIMIT 1
+    SELECT * FROM tb_session_events WHERE subject_id = ${subjectId} AND question_id = ${questionId} ORDER BY session_event_id DESC LIMIT 1
   `;
   if (!rows[0]) return null;
   const row = rows[0] as Record<string, unknown>;
   // JSONB columns auto-parsed by postgres driver; callers expect strings
   return {
     session_event_id: row.session_event_id as number,
+    subject_id: row.subject_id as number,
     question_id: row.question_id as number,
     event_log_json: typeof row.event_log_json === 'object' ? JSON.stringify(row.event_log_json) : row.event_log_json as string,
     total_events: row.total_events as number,
@@ -565,10 +597,11 @@ export async function getSessionEvents(questionId: number): Promise<SessionEvent
 }
 
 // Save deletion events JSON onto the session summary row
-export async function updateDeletionEvents(questionId: number, deletionEventsJson: string, tx?: TxSql): Promise<void> {
+export async function updateDeletionEvents(subjectId: number, questionId: number, deletionEventsJson: string, tx?: TxSql): Promise<void> {
   const q = tx ?? sql;
   await q`
-    UPDATE tb_session_summaries SET deletion_events_json = ${deletionEventsJson} WHERE question_id = ${questionId}
+    UPDATE tb_session_summaries SET deletion_events_json = ${deletionEventsJson}
+    WHERE subject_id = ${subjectId} AND question_id = ${questionId}
   `;
 }
 
@@ -576,6 +609,7 @@ export async function updateDeletionEvents(questionId: number, deletionEventsJso
 // All queries that return SessionSummaryInput MUST use this constant.
 // Uses s. prefix so it works in multi-table JOINs. Table alias must be `s`.
 const SESSION_SUMMARY_COLS = `
+  s.subject_id AS "subjectId",
   s.question_id AS "questionId", s.first_keystroke_ms AS "firstKeystrokeMs",
   s.total_duration_ms AS "totalDurationMs", s.total_chars_typed AS "totalCharsTyped",
   s.final_char_count AS "finalCharCount", s.commitment_ratio AS "commitmentRatio",
@@ -635,61 +669,67 @@ const SESSION_SUMMARY_COLS = `
   s.hour_of_day AS "hourOfDay", s.day_of_week AS "dayOfWeek"
 `;
 
-export async function getSessionSummary(questionId: number): Promise<SessionSummaryInput | null> {
+export async function getSessionSummary(subjectId: number, questionId: number): Promise<SessionSummaryInput | null> {
   const rows = await sql.unsafe(
-    `SELECT ${SESSION_SUMMARY_COLS} FROM tb_session_summaries s WHERE s.question_id = $1`,
-    [questionId]
+    `SELECT ${SESSION_SUMMARY_COLS} FROM tb_session_summaries s WHERE s.subject_id = $1 AND s.question_id = $2`,
+    [subjectId, questionId]
   );
   return (rows[0] as unknown as SessionSummaryInput) ?? null;
 }
 
-export async function getAllSessionSummaries(): Promise<Array<SessionSummaryInput & { date: string }>> {
+export async function getAllSessionSummaries(subjectId: number): Promise<Array<SessionSummaryInput & { date: string }>> {
   return await sql.unsafe(
     `SELECT ${SESSION_SUMMARY_COLS}, q.scheduled_for AS date
     FROM tb_session_summaries s
     JOIN tb_questions q ON s.question_id = q.question_id
-    ORDER BY q.scheduled_for ASC`
+    WHERE s.subject_id = $1
+    ORDER BY q.scheduled_for ASC`,
+    [subjectId]
   ) as Array<SessionSummaryInput & { date: string }>;
 }
 
 // @region calibration -- getCalibrationSessionsWithText, isCalibrationQuestion, saveCalibrationSession, getUsedCalibrationPrompts, getCalibrationPromptsByRecency, saveCalibrationBaselineSnapshot, getCalibrationHistory, getLatestCalibrationSnapshot, saveQuestionFeedback, getAllQuestionFeedback
 
-export async function getCalibrationSessionsWithText(): Promise<Array<SessionSummaryInput & { date: string; responseText: string }>> {
+export async function getCalibrationSessionsWithText(subjectId: number): Promise<Array<SessionSummaryInput & { date: string; responseText: string }>> {
   return await sql.unsafe(
     `SELECT ${SESSION_SUMMARY_COLS}, q.scheduled_for AS date, r.text AS "responseText"
     FROM tb_session_summaries s
     JOIN tb_questions q ON s.question_id = q.question_id
     JOIN tb_responses r ON q.question_id = r.question_id
-    WHERE q.question_source_id = 3
+    WHERE q.subject_id = $1
+      AND q.question_source_id = 3
       AND s.word_count >= 10
-    ORDER BY q.question_id ASC`
+    ORDER BY q.question_id ASC`,
+    [subjectId]
   ) as Array<SessionSummaryInput & { date: string; responseText: string }>;
 }
 
 export async function isCalibrationQuestion(questionId: number): Promise<boolean> {
+  // No subject scoping needed — question_id is globally unique and we're only
+  // identifying the question's source_id, not reading subject-private data.
   const rows = await sql`
     SELECT 1 FROM tb_questions WHERE question_id = ${questionId} AND question_source_id = 3
   `;
   return rows.length > 0;
 }
 
-export async function getResponseCount(): Promise<number> {
-  const [row] = await sql`SELECT COUNT(*)::int AS count FROM tb_responses`;
+export async function getResponseCount(subjectId: number): Promise<number> {
+  const [row] = await sql`SELECT COUNT(*)::int AS count FROM tb_responses WHERE subject_id = ${subjectId}`;
   return (row as { count: number }).count;
 }
 
-export async function getUsedCalibrationPrompts(): Promise<string[]> {
-  const rows = await sql`SELECT text FROM tb_questions WHERE question_source_id = 3` as Array<{ text: string }>;
+export async function getUsedCalibrationPrompts(subjectId: number): Promise<string[]> {
+  const rows = await sql`SELECT text FROM tb_questions WHERE subject_id = ${subjectId} AND question_source_id = 3` as Array<{ text: string }>;
   return rows.map(r => r.text);
 }
 
 /** Return calibration prompt texts ordered by last use, oldest first. */
-export async function getCalibrationPromptsByRecency(): Promise<string[]> {
+export async function getCalibrationPromptsByRecency(subjectId: number): Promise<string[]> {
   const rows = await sql`
     SELECT sub.text FROM (
       SELECT text, MAX(dttm_created_utc) AS last_used
       FROM tb_questions
-      WHERE question_source_id = 3
+      WHERE subject_id = ${subjectId} AND question_source_id = 3
       GROUP BY text
     ) sub
     ORDER BY sub.last_used ASC
@@ -705,6 +745,7 @@ export interface SaveCalibrationSessionOptions {
 }
 
 export async function saveCalibrationSession(
+  subjectId: number,
   promptText: string,
   responseText: string,
   summary: SessionSummaryInput,
@@ -715,18 +756,18 @@ export async function saveCalibrationSession(
   const hash = options?.attestation?.commitHash ?? 'pre-attestation';
   return await sql.begin(async (tx) => {
     const [qRow] = await tx`
-      INSERT INTO tb_questions (text, question_source_id)
-      VALUES (${promptText}, 3)
+      INSERT INTO tb_questions (subject_id, text, question_source_id)
+      VALUES (${subjectId}, ${promptText}, 3)
       RETURNING question_id
     `;
     const questionId = qRow.question_id as number;
 
     await tx`
-      INSERT INTO tb_responses (question_id, text, contamination_boundary_version, audited_code_paths_ref, code_commit_hash)
-      VALUES (${questionId}, ${responseText}, ${bv}, ${ref}, ${hash})
+      INSERT INTO tb_responses (subject_id, question_id, text, contamination_boundary_version, audited_code_paths_ref, code_commit_hash)
+      VALUES (${subjectId}, ${questionId}, ${responseText}, ${bv}, ${ref}, ${hash})
     `;
 
-    await saveSessionSummary({ ...summary, questionId }, tx);
+    await saveSessionSummary({ ...summary, subjectId, questionId }, tx);
 
     // Event log + keystroke stream persisted in the same transaction so a
     // calibration session never exists without its measurement input. Pre-2026-04-25
@@ -734,7 +775,7 @@ export async function saveCalibrationSession(
     // derived data is best-effort." Keystroke streams are raw measurement input,
     // not derived data; the rationalization was wrong. See GOTCHAS.md.
     if (options?.events) {
-      await saveSessionEvents({ ...options.events, question_id: questionId }, tx);
+      await saveSessionEvents({ ...options.events, subject_id: subjectId, question_id: questionId }, tx);
     }
 
     // Optional signal-pipeline job enqueue inside the same transaction.
@@ -742,6 +783,7 @@ export async function saveCalibrationSession(
     if (options?.signalJob) {
       await enqueueSignalJob(
         {
+          subjectId,
           questionId,
           kindId: options.signalJob.kindId,
           params: options.signalJob.params ?? null,
@@ -763,19 +805,20 @@ export async function saveCalibrationSession(
 // QUESTION FEEDBACK
 // ----------------------------------------------------------------------------
 
-export async function saveQuestionFeedback(questionId: number, landed: boolean): Promise<void> {
+export async function saveQuestionFeedback(subjectId: number, questionId: number, landed: boolean): Promise<void> {
   await sql`
-    INSERT INTO tb_question_feedback (question_id, landed)
-    VALUES (${questionId}, ${landed})
+    INSERT INTO tb_question_feedback (subject_id, question_id, landed)
+    VALUES (${subjectId}, ${questionId}, ${landed})
     ON CONFLICT (question_id) DO NOTHING
   `;
 }
 
-export async function getAllQuestionFeedback(): Promise<Array<{ date: string; landed: boolean }>> {
+export async function getAllQuestionFeedback(subjectId: number): Promise<Array<{ date: string; landed: boolean }>> {
   const rows = await sql`
     SELECT q.scheduled_for AS date, f.landed
     FROM tb_question_feedback f
     JOIN tb_questions q ON f.question_id = q.question_id
+    WHERE q.subject_id = ${subjectId}
     ORDER BY q.scheduled_for ASC
   `;
   return rows.map((r: Record<string, unknown>) => ({ date: r.date as string, landed: !!r.landed }));
@@ -786,13 +829,14 @@ export async function getAllQuestionFeedback(): Promise<Array<{ date: string; la
 // SCOPED RETRIEVAL (for RAG-augmented prompts)
 // ----------------------------------------------------------------------------
 
-export async function getRecentResponses(limit: number): Promise<Array<{
+export async function getRecentResponses(subjectId: number, limit: number): Promise<Array<{
   response_id: number; question_id: number; question: string; response: string; date: string;
 }>> {
   return await sql`
     SELECT r.response_id, q.question_id, q.text AS question, r.text AS response, q.scheduled_for AS date
     FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
+    WHERE q.subject_id = ${subjectId}
     ORDER BY q.scheduled_for DESC
     LIMIT ${limit}
   ` as Array<{
@@ -800,41 +844,42 @@ export async function getRecentResponses(limit: number): Promise<Array<{
   }>;
 }
 
-export async function getResponsesSince(sinceDate: string): Promise<Array<{
+export async function getResponsesSince(subjectId: number, sinceDate: string): Promise<Array<{
   response_id: number; question_id: number; question: string; response: string; date: string;
 }>> {
   return await sql`
     SELECT r.response_id, q.question_id, q.text AS question, r.text AS response, q.scheduled_for AS date
     FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
-    WHERE q.scheduled_for > ${sinceDate}
+    WHERE q.subject_id = ${subjectId} AND q.scheduled_for > ${sinceDate}
     ORDER BY q.scheduled_for ASC
   ` as Array<{
     response_id: number; question_id: number; question: string; response: string; date: string;
   }>;
 }
 
-export async function getResponsesSinceId(sinceResponseId: number): Promise<Array<{
+export async function getResponsesSinceId(subjectId: number, sinceResponseId: number): Promise<Array<{
   response_id: number; question_id: number; question: string; response: string; date: string;
 }>> {
   return await sql`
     SELECT r.response_id, q.question_id, q.text AS question, r.text AS response, q.scheduled_for AS date
     FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
-    WHERE r.response_id > ${sinceResponseId}
+    WHERE q.subject_id = ${subjectId} AND r.response_id > ${sinceResponseId}
     ORDER BY q.scheduled_for ASC
   ` as Array<{
     response_id: number; question_id: number; question: string; response: string; date: string;
   }>;
 }
 
-export async function getAllReflections(): Promise<Array<{
+export async function getAllReflections(subjectId: number): Promise<Array<{
   reflection_id: number; text: string; coverage_through_response_id: number | null;
   dttm_created_utc: string;
 }>> {
   return await sql`
     SELECT reflection_id, text, coverage_through_response_id, dttm_created_utc
     FROM tb_reflections
+    WHERE subject_id = ${subjectId}
     ORDER BY dttm_created_utc ASC
   ` as Array<{
     reflection_id: number; text: string; coverage_through_response_id: number | null;
@@ -842,7 +887,7 @@ export async function getAllReflections(): Promise<Array<{
   }>;
 }
 
-export async function getLatestReflectionWithCoverage(): Promise<{
+export async function getLatestReflectionWithCoverage(subjectId: number): Promise<{
   reflection_id: number; text: string;
   coverage_through_response_id: number | null;
   dttm_created_utc: string;
@@ -850,6 +895,7 @@ export async function getLatestReflectionWithCoverage(): Promise<{
   const rows = await sql`
     SELECT reflection_id, text, coverage_through_response_id, dttm_created_utc
     FROM tb_reflections
+    WHERE subject_id = ${subjectId}
     ORDER BY dttm_created_utc DESC
     LIMIT 1
   `;
@@ -860,31 +906,32 @@ export async function getLatestReflectionWithCoverage(): Promise<{
   }) ?? null;
 }
 
-export async function getRecentFeedback(limit: number): Promise<Array<{ date: string; landed: boolean }>> {
+export async function getRecentFeedback(subjectId: number, limit: number): Promise<Array<{ date: string; landed: boolean }>> {
   const rows = await sql`
     SELECT q.scheduled_for AS date, f.landed
     FROM tb_question_feedback f
     JOIN tb_questions q ON f.question_id = q.question_id
+    WHERE q.subject_id = ${subjectId}
     ORDER BY q.scheduled_for DESC
     LIMIT ${limit}
   `;
   return rows.map((r: Record<string, unknown>) => ({ date: r.date as string, landed: !!r.landed }));
 }
 
-export async function getSessionSummariesForQuestions(questionIds: number[]): Promise<Array<SessionSummaryInput & { date: string }>> {
+export async function getSessionSummariesForQuestions(subjectId: number, questionIds: number[]): Promise<Array<SessionSummaryInput & { date: string }>> {
   if (questionIds.length === 0) return [];
   return await sql.unsafe(
     `SELECT ${SESSION_SUMMARY_COLS}, q.scheduled_for AS date
     FROM tb_session_summaries s
     JOIN tb_questions q ON s.question_id = q.question_id
-    WHERE s.question_id = ANY($1)
+    WHERE s.subject_id = $1 AND s.question_id = ANY($2)
     ORDER BY q.scheduled_for ASC`,
-    [questionIds]
+    [subjectId, questionIds]
   ) as Array<SessionSummaryInput & { date: string }>;
 }
 
-export async function getMaxResponseId(): Promise<number> {
-  const [row] = await sql`SELECT MAX(response_id) AS max_id FROM tb_responses`;
+export async function getMaxResponseId(subjectId: number): Promise<number> {
+  const [row] = await sql`SELECT MAX(response_id) AS max_id FROM tb_responses WHERE subject_id = ${subjectId}`;
   return (row as { max_id: number | null }).max_id ?? 0;
 }
 
@@ -893,6 +940,7 @@ export async function getMaxResponseId(): Promise<number> {
 // ----------------------------------------------------------------------------
 
 export async function insertEmbeddingMeta(
+  subjectId: number,
   embeddingSourceId: number,
   sourceRecordId: number,
   embeddedText: string,
@@ -904,16 +952,16 @@ export async function insertEmbeddingMeta(
   if (embedding) {
     const vectorString = `[${embedding.join(',')}]`;
     const [row] = await sql`
-      INSERT INTO tb_embeddings (embedding_source_id, source_record_id, embedded_text, source_date, model_name, embedding, embedding_model_version_id)
-      VALUES (${embeddingSourceId}, ${sourceRecordId}, ${embeddedText}, ${sourceDate}, ${modelName}, ${vectorString}::vector, ${embeddingModelVersionId ?? null})
+      INSERT INTO tb_embeddings (subject_id, embedding_source_id, source_record_id, embedded_text, source_date, model_name, embedding, embedding_model_version_id)
+      VALUES (${subjectId}, ${embeddingSourceId}, ${sourceRecordId}, ${embeddedText}, ${sourceDate}, ${modelName}, ${vectorString}::vector, ${embeddingModelVersionId ?? null})
       ON CONFLICT (embedding_source_id, source_record_id, embedding_model_version_id) DO NOTHING
       RETURNING embedding_id
     `;
     return row?.embedding_id ?? 0;
   }
   const [row] = await sql`
-    INSERT INTO tb_embeddings (embedding_source_id, source_record_id, embedded_text, source_date, model_name, embedding_model_version_id)
-    VALUES (${embeddingSourceId}, ${sourceRecordId}, ${embeddedText}, ${sourceDate}, ${modelName}, ${embeddingModelVersionId ?? null})
+    INSERT INTO tb_embeddings (subject_id, embedding_source_id, source_record_id, embedded_text, source_date, model_name, embedding_model_version_id)
+    VALUES (${subjectId}, ${embeddingSourceId}, ${sourceRecordId}, ${embeddedText}, ${sourceDate}, ${modelName}, ${embeddingModelVersionId ?? null})
     ON CONFLICT (embedding_source_id, source_record_id, embedding_model_version_id) DO NOTHING
     RETURNING embedding_id
   `;
@@ -938,14 +986,15 @@ export async function isRecordEmbedded(embeddingSourceId: number, sourceRecordId
   return rows.length > 0;
 }
 
-export async function getUnembeddedResponses(embeddingModelVersionId?: number): Promise<Array<{
+export async function getUnembeddedResponses(subjectId: number, embeddingModelVersionId?: number): Promise<Array<{
   response_id: number; question: string; response: string; date: string;
 }>> {
   return await sql`
     SELECT r.response_id, q.text AS question, r.text AS response, q.scheduled_for AS date
     FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
-    WHERE q.question_source_id != 3
+    WHERE q.subject_id = ${subjectId}
+      AND q.question_source_id != 3
       AND NOT EXISTS (
         SELECT 1 FROM tb_embeddings e
         WHERE e.embedding_source_id = 1
@@ -960,7 +1009,7 @@ export async function getUnembeddedResponses(embeddingModelVersionId?: number): 
 }
 
 
-export async function searchVecEmbeddings(queryVector: number[], k: number): Promise<Array<{
+export async function searchVecEmbeddings(subjectId: number, queryVector: number[], k: number): Promise<Array<{
   embedding_id: number; distance: number; embedding_source_id: number;
   source_record_id: number; embedded_text: string; source_date: string | null;
 }>> {
@@ -971,7 +1020,8 @@ export async function searchVecEmbeddings(queryVector: number[], k: number): Pro
              e.embedded_text, e.source_date,
              (e.embedding <-> ${vectorString}::vector) AS distance
       FROM tb_embeddings e
-      WHERE e.embedding IS NOT NULL
+      WHERE e.subject_id = ${subjectId}
+        AND e.embedding IS NOT NULL
         AND e.invalidated_at IS NULL
       ORDER BY e.embedding <-> ${vectorString}::vector
       LIMIT ${k}
@@ -1000,6 +1050,7 @@ export async function getActiveEmbeddingModelVersionId(): Promise<number | null>
 // ----------------------------------------------------------------------------
 
 export interface PromptTraceInput {
+  subjectId: number;
   type: 'generation' | 'observation' | 'reflection';
   outputRecordId?: number;
   recentEntryIds?: number[];
@@ -1017,12 +1068,13 @@ export async function savePromptTrace(trace: PromptTraceInput): Promise<void> {
   const typeId = trace.type === 'generation' ? 1 : trace.type === 'observation' ? 2 : 3;
   await sql`
     INSERT INTO tb_prompt_traces (
-       prompt_trace_type_id, output_record_id,
+       subject_id, prompt_trace_type_id, output_record_id,
        recent_entry_ids, rag_entry_ids, contrarian_entry_ids,
        reflection_ids, observation_ids,
        model_name, token_estimate,
        difficulty_level, difficulty_inputs
     ) VALUES (
+      ${trace.subjectId},
       ${typeId},
       ${trace.outputRecordId ?? null},
       ${trace.recentEntryIds ? JSON.stringify(trace.recentEntryIds) : null},
@@ -1043,19 +1095,20 @@ export async function savePromptTrace(trace: PromptTraceInput): Promise<void> {
 // WITNESS STATE
 // ----------------------------------------------------------------------------
 
-export async function saveWitnessState(entryCount: number, traitsJson: string, signalsJson: string, modelName = 'claude-sonnet-4-20250514'): Promise<number> {
+export async function saveWitnessState(subjectId: number, entryCount: number, traitsJson: string, signalsJson: string, modelName = 'claude-sonnet-4-20250514'): Promise<number> {
   const [row] = await sql`
-    INSERT INTO tb_witness_states (entry_count, traits_json, signals_json, model_name)
-    VALUES (${entryCount}, ${traitsJson}, ${signalsJson}, ${modelName})
+    INSERT INTO tb_witness_states (subject_id, entry_count, traits_json, signals_json, model_name)
+    VALUES (${subjectId}, ${entryCount}, ${traitsJson}, ${signalsJson}, ${modelName})
     RETURNING witness_state_id
   `;
   return row.witness_state_id;
 }
 
-export async function getLatestWitnessState(): Promise<{ witness_state_id: number; entry_count: number; traits_json: string; signals_json: string } | null> {
+export async function getLatestWitnessState(subjectId: number): Promise<{ witness_state_id: number; entry_count: number; traits_json: string; signals_json: string } | null> {
   const rows = await sql`
     SELECT witness_state_id, entry_count, traits_json, signals_json
     FROM tb_witness_states
+    WHERE subject_id = ${subjectId}
     ORDER BY witness_state_id DESC LIMIT 1
   `;
   if (!rows[0]) return null;
@@ -1075,6 +1128,7 @@ export async function getLatestWitnessState(): Promise<{ witness_state_id: numbe
 
 export interface EntryStateRow {
   entry_state_id: number;
+  subject_id: number;
   response_id: number;
   fluency: number;
   deliberation: number;
@@ -1089,10 +1143,10 @@ export interface EntryStateRow {
 export async function saveEntryState(state: Omit<EntryStateRow, 'entry_state_id'>): Promise<number> {
   const [row] = await sql`
     INSERT INTO tb_entry_states (
-       response_id, fluency, deliberation, revision,
+       subject_id, response_id, fluency, deliberation, revision,
        commitment, volatility, thermal, presence, convergence
     ) VALUES (
-      ${state.response_id}, ${state.fluency}, ${state.deliberation},
+      ${state.subject_id}, ${state.response_id}, ${state.fluency}, ${state.deliberation},
       ${state.revision}, ${state.commitment},
       ${state.volatility}, ${state.thermal}, ${state.presence}, ${state.convergence}
     )
@@ -1101,14 +1155,14 @@ export async function saveEntryState(state: Omit<EntryStateRow, 'entry_state_id'
   return row.entry_state_id;
 }
 
-export async function getAllEntryStates(): Promise<EntryStateRow[]> {
+export async function getAllEntryStates(subjectId: number): Promise<EntryStateRow[]> {
   return await sql`
-    SELECT * FROM tb_entry_states ORDER BY entry_state_id ASC
+    SELECT * FROM tb_entry_states WHERE subject_id = ${subjectId} ORDER BY entry_state_id ASC
   ` as EntryStateRow[];
 }
 
-export async function getEntryStateCount(): Promise<number> {
-  const [row] = await sql`SELECT COUNT(*)::int AS c FROM tb_entry_states`;
+export async function getEntryStateCount(subjectId: number): Promise<number> {
+  const [row] = await sql`SELECT COUNT(*)::int AS c FROM tb_entry_states WHERE subject_id = ${subjectId}`;
   return (row as { c: number }).c;
 }
 
@@ -1118,6 +1172,7 @@ export async function getEntryStateCount(): Promise<number> {
 
 export interface SemanticStateRow {
   semantic_state_id: number;
+  subject_id: number;
   response_id: number;
   // Deterministic dimensions (always populated)
   syntactic_complexity: number;
@@ -1142,14 +1197,14 @@ export interface SemanticStateRow {
 export async function saveSemanticState(state: Omit<SemanticStateRow, 'semantic_state_id'>): Promise<number> {
   const [row] = await sql`
     INSERT INTO tb_semantic_states (
-       response_id,
+       subject_id, response_id,
        syntactic_complexity, interrogation, self_focus, uncertainty,
        cognitive_processing,
        nrc_anger, nrc_fear, nrc_joy, nrc_sadness, nrc_trust, nrc_anticipation,
        sentiment, abstraction, agency_framing, temporal_orientation,
        convergence
     ) VALUES (
-      ${state.response_id},
+      ${state.subject_id}, ${state.response_id},
       ${state.syntactic_complexity}, ${state.interrogation}, ${state.self_focus}, ${state.uncertainty},
       ${state.cognitive_processing},
       ${state.nrc_anger}, ${state.nrc_fear}, ${state.nrc_joy}, ${state.nrc_sadness}, ${state.nrc_trust}, ${state.nrc_anticipation},
@@ -1161,13 +1216,14 @@ export async function saveSemanticState(state: Omit<SemanticStateRow, 'semantic_
   return row.semantic_state_id;
 }
 
-export async function getSemanticStateCount(): Promise<number> {
-  const [row] = await sql`SELECT COUNT(*)::int AS c FROM tb_semantic_states`;
+export async function getSemanticStateCount(subjectId: number): Promise<number> {
+  const [row] = await sql`SELECT COUNT(*)::int AS c FROM tb_semantic_states WHERE subject_id = ${subjectId}`;
   return (row as { c: number }).c;
 }
 
 export interface SemanticDynamicRow {
   semantic_dynamic_id: number;
+  subject_id: number;
   entry_count: number;
   dimension: string;
   baseline: number;
@@ -1183,10 +1239,10 @@ export async function saveSemanticDynamics(dynamics: Omit<SemanticDynamicRow, 's
     for (const d of dynamics) {
       await sql`
         INSERT INTO tb_semantic_dynamics (
-           entry_count, dimension, baseline, variability,
+           subject_id, entry_count, dimension, baseline, variability,
            attractor_force, current_state, deviation, window_size
         ) VALUES (
-          ${d.entry_count}, ${d.dimension}, ${d.baseline}, ${d.variability},
+          ${d.subject_id}, ${d.entry_count}, ${d.dimension}, ${d.baseline}, ${d.variability},
           ${d.attractor_force}, ${d.current_state}, ${d.deviation}, ${d.window_size}
         )
       `;
@@ -1196,6 +1252,7 @@ export async function saveSemanticDynamics(dynamics: Omit<SemanticDynamicRow, 's
 
 export interface SemanticCouplingRow {
   semantic_coupling_id: number;
+  subject_id: number;
   entry_count: number;
   leader: string;
   follower: string;
@@ -1209,9 +1266,9 @@ export async function saveSemanticCoupling(couplings: Omit<SemanticCouplingRow, 
     for (const c of couplings) {
       await sql`
         INSERT INTO tb_semantic_coupling (
-           entry_count, leader, follower, lag_sessions, correlation, direction
+           subject_id, entry_count, leader, follower, lag_sessions, correlation, direction
         ) VALUES (
-          ${c.entry_count}, ${c.leader}, ${c.follower}, ${c.lag_sessions}, ${c.correlation}, ${c.direction}
+          ${c.subject_id}, ${c.entry_count}, ${c.leader}, ${c.follower}, ${c.lag_sessions}, ${c.correlation}, ${c.direction}
         )
       `;
     }
@@ -1224,6 +1281,7 @@ export async function saveSemanticCoupling(couplings: Omit<SemanticCouplingRow, 
 
 export interface TraitDynamicRow {
   trait_dynamic_id: number;
+  subject_id: number;
   entry_count: number;
   dimension: string;
   baseline: number;
@@ -1239,10 +1297,10 @@ export async function saveTraitDynamics(dynamics: Omit<TraitDynamicRow, 'trait_d
     for (const d of dynamics) {
       await sql`
         INSERT INTO tb_trait_dynamics (
-           entry_count, dimension, baseline, variability,
+           subject_id, entry_count, dimension, baseline, variability,
            attractor_force, current_state, deviation, window_size
         ) VALUES (
-          ${d.entry_count}, ${d.dimension}, ${d.baseline}, ${d.variability},
+          ${d.subject_id}, ${d.entry_count}, ${d.dimension}, ${d.baseline}, ${d.variability},
           ${d.attractor_force}, ${d.current_state}, ${d.deviation}, ${d.window_size}
         )
       `;
@@ -1250,10 +1308,10 @@ export async function saveTraitDynamics(dynamics: Omit<TraitDynamicRow, 'trait_d
   });
 }
 
-export async function getLatestTraitDynamics(entryCount: number): Promise<TraitDynamicRow[]> {
+export async function getLatestTraitDynamics(subjectId: number, entryCount: number): Promise<TraitDynamicRow[]> {
   return await sql`
     SELECT * FROM tb_trait_dynamics
-    WHERE entry_count = ${entryCount}
+    WHERE subject_id = ${subjectId} AND entry_count = ${entryCount}
     ORDER BY trait_dynamic_id ASC
   ` as TraitDynamicRow[];
 }
@@ -1264,6 +1322,7 @@ export async function getLatestTraitDynamics(entryCount: number): Promise<TraitD
 
 export interface CouplingRow {
   coupling_id: number;
+  subject_id: number;
   entry_count: number;
   leader: string;
   follower: string;
@@ -1277,19 +1336,19 @@ export async function saveCouplingMatrix(couplings: Omit<CouplingRow, 'coupling_
     for (const c of couplings) {
       await sql`
         INSERT INTO tb_coupling_matrix (
-           entry_count, leader, follower, lag_sessions, correlation, direction
+           subject_id, entry_count, leader, follower, lag_sessions, correlation, direction
         ) VALUES (
-          ${c.entry_count}, ${c.leader}, ${c.follower}, ${c.lag_sessions}, ${c.correlation}, ${c.direction}
+          ${c.subject_id}, ${c.entry_count}, ${c.leader}, ${c.follower}, ${c.lag_sessions}, ${c.correlation}, ${c.direction}
         )
       `;
     }
   });
 }
 
-export async function getLatestCouplingMatrix(entryCount: number): Promise<CouplingRow[]> {
+export async function getLatestCouplingMatrix(subjectId: number, entryCount: number): Promise<CouplingRow[]> {
   return await sql`
     SELECT * FROM tb_coupling_matrix
-    WHERE entry_count = ${entryCount}
+    WHERE subject_id = ${subjectId} AND entry_count = ${entryCount}
     ORDER BY correlation DESC
   ` as CouplingRow[];
 }
@@ -1300,6 +1359,7 @@ export async function getLatestCouplingMatrix(entryCount: number): Promise<Coupl
 
 export interface EmotionBehaviorCouplingRow {
   emotion_coupling_id: number;
+  subject_id: number;
   entry_count: number;
   emotion_dim: string;
   behavior_dim: string;
@@ -1313,19 +1373,19 @@ export async function saveEmotionBehaviorCoupling(couplings: Omit<EmotionBehavio
     for (const c of couplings) {
       await sql`
         INSERT INTO tb_emotion_behavior_coupling (
-           entry_count, emotion_dim, behavior_dim, lag_sessions, correlation, direction
+           subject_id, entry_count, emotion_dim, behavior_dim, lag_sessions, correlation, direction
         ) VALUES (
-          ${c.entry_count}, ${c.emotion_dim}, ${c.behavior_dim}, ${c.lag_sessions}, ${c.correlation}, ${c.direction}
+          ${c.subject_id}, ${c.entry_count}, ${c.emotion_dim}, ${c.behavior_dim}, ${c.lag_sessions}, ${c.correlation}, ${c.direction}
         )
       `;
     }
   });
 }
 
-export async function getLatestEmotionBehaviorCoupling(entryCount: number): Promise<EmotionBehaviorCouplingRow[]> {
+export async function getLatestEmotionBehaviorCoupling(subjectId: number, entryCount: number): Promise<EmotionBehaviorCouplingRow[]> {
   return await sql`
     SELECT * FROM tb_emotion_behavior_coupling
-    WHERE entry_count = ${entryCount}
+    WHERE subject_id = ${subjectId} AND entry_count = ${entryCount}
     ORDER BY correlation DESC
   ` as EmotionBehaviorCouplingRow[];
 }
@@ -1351,23 +1411,23 @@ const DIMENSION_ID_MAP: Record<string, number> = {
   stress: 5, exercise: 6, routine: 7,
 };
 
-export async function saveCalibrationContext(questionId: number, tags: CalibrationContextTag[]): Promise<void> {
+export async function saveCalibrationContext(subjectId: number, questionId: number, tags: CalibrationContextTag[]): Promise<void> {
   await sql.begin(async (sql) => {
     for (const tag of tags) {
       const dimId = DIMENSION_ID_MAP[tag.dimension];
       if (!dimId) continue;
       await sql`
         INSERT INTO tb_calibration_context (
-           question_id, context_dimension_id, value, detail, confidence
+           subject_id, question_id, context_dimension_id, value, detail, confidence
         ) VALUES (
-          ${questionId}, ${dimId}, ${tag.value}, ${tag.detail}, ${tag.confidence}
+          ${subjectId}, ${questionId}, ${dimId}, ${tag.value}, ${tag.detail}, ${tag.confidence}
         )
       `;
     }
   });
 }
 
-export async function getCalibrationContextForQuestion(questionId: number): Promise<Array<CalibrationContextTag & { questionId: number }>> {
+export async function getCalibrationContextForQuestion(subjectId: number, questionId: number): Promise<Array<CalibrationContextTag & { questionId: number }>> {
   return await sql`
     SELECT cc.question_id AS "questionId",
            d.enum_code AS dimension,
@@ -1376,12 +1436,12 @@ export async function getCalibrationContextForQuestion(questionId: number): Prom
            cc.confidence
     FROM tb_calibration_context cc
     JOIN te_context_dimension d ON cc.context_dimension_id = d.context_dimension_id
-    WHERE cc.question_id = ${questionId}
+    WHERE cc.subject_id = ${subjectId} AND cc.question_id = ${questionId}
     ORDER BY cc.context_dimension_id ASC
   ` as Array<CalibrationContextTag & { questionId: number }>;
 }
 
-export async function getRecentCalibrationContext(limit: number = 10): Promise<Array<{
+export async function getRecentCalibrationContext(subjectId: number, limit: number = 10): Promise<Array<{
   questionId: number;
   promptText: string;
   sessionDate: string;
@@ -1401,6 +1461,7 @@ export async function getRecentCalibrationContext(limit: number = 10): Promise<A
     FROM tb_calibration_context cc
     JOIN te_context_dimension d ON cc.context_dimension_id = d.context_dimension_id
     JOIN tb_questions q ON cc.question_id = q.question_id
+    WHERE cc.subject_id = ${subjectId}
     ORDER BY q.dttm_created_utc DESC, cc.context_dimension_id ASC
     LIMIT ${limit}
   ` as Array<{
@@ -1414,7 +1475,7 @@ export async function getRecentCalibrationContext(limit: number = 10): Promise<A
   }>;
 }
 
-export async function getCalibrationContextNearDate(targetDate: string, windowDays: number = 1): Promise<Array<{
+export async function getCalibrationContextNearDate(subjectId: number, targetDate: string, windowDays: number = 1): Promise<Array<{
   questionId: number;
   sessionDate: string;
   dimension: string;
@@ -1432,7 +1493,8 @@ export async function getCalibrationContextNearDate(targetDate: string, windowDa
     FROM tb_calibration_context cc
     JOIN te_context_dimension d ON cc.context_dimension_id = d.context_dimension_id
     JOIN tb_questions q ON cc.question_id = q.question_id
-    WHERE ABS(EXTRACT(EPOCH FROM (q.dttm_created_utc - ${targetDate}::timestamptz)) / 86400) <= ${windowDays}
+    WHERE cc.subject_id = ${subjectId}
+      AND ABS(EXTRACT(EPOCH FROM (q.dttm_created_utc - ${targetDate}::timestamptz)) / 86400) <= ${windowDays}
     ORDER BY ABS(EXTRACT(EPOCH FROM (q.dttm_created_utc - ${targetDate}::timestamptz)) / 86400) ASC, cc.context_dimension_id ASC
   ` as Array<{
     questionId: number;
@@ -1450,6 +1512,7 @@ export async function getCalibrationContextNearDate(targetDate: string, windowDa
 
 export interface SessionDeltaRow {
   sessionDeltaId: number;
+  subjectId: number;
   sessionDate: string;
   calibrationQuestionId: number;
   journalQuestionId: number;
@@ -1486,26 +1549,29 @@ export interface SessionDeltaRow {
   journalFlightTimeMean: number | null;
 }
 
-export async function getSameDayCalibrationSummary(date: string): Promise<SessionSummaryInput | null> {
+export async function getSameDayCalibrationSummary(subjectId: number, date: string): Promise<SessionSummaryInput | null> {
   // Calibration questions have scheduled_for = NULL (see saveCalibrationSession).
   // Match by dttm_created_utc::date instead. Take most recent if multiple same-day.
   const rows = await sql.unsafe(
     `SELECT ${SESSION_SUMMARY_COLS}
     FROM tb_session_summaries s
     JOIN tb_questions q ON s.question_id = q.question_id
-    WHERE q.question_source_id = 3
-      AND q.dttm_created_utc::date = $1
+    WHERE q.subject_id = $1
+      AND q.question_source_id = 3
+      AND q.dttm_created_utc::date = $2
     ORDER BY q.dttm_created_utc DESC
     LIMIT 1`,
-    [date]
+    [subjectId, date]
   );
   return (rows[0] as unknown as SessionSummaryInput) ?? null;
 }
 
 export async function saveSessionDelta(delta: SessionDeltaRow): Promise<void> {
+  // CONFLICT TARGET CHANGED (migration 030): (session_date) → (subject_id, session_date)
   await sql`
     INSERT INTO tb_session_delta (
-       session_date
+       subject_id
+      ,session_date
       ,calibration_question_id
       ,journal_question_id
       ,delta_first_person
@@ -1540,6 +1606,7 @@ export async function saveSessionDelta(delta: SessionDeltaRow): Promise<void> {
       ,calibration_flight_time_mean
       ,journal_flight_time_mean
     ) VALUES (
+      ${delta.subjectId},
       ${delta.sessionDate},
       ${delta.calibrationQuestionId},
       ${delta.journalQuestionId},
@@ -1575,7 +1642,7 @@ export async function saveSessionDelta(delta: SessionDeltaRow): Promise<void> {
       ${delta.calibrationFlightTimeMean},
       ${delta.journalFlightTimeMean}
     )
-    ON CONFLICT (session_date) DO UPDATE SET
+    ON CONFLICT (subject_id, session_date) DO UPDATE SET
        calibration_question_id = ${delta.calibrationQuestionId}
       ,journal_question_id = ${delta.journalQuestionId}
       ,delta_first_person = ${delta.deltaFirstPerson}
@@ -1612,10 +1679,11 @@ export async function saveSessionDelta(delta: SessionDeltaRow): Promise<void> {
   `;
 }
 
-export async function getRecentSessionDeltas(limit: number = 30): Promise<SessionDeltaRow[]> {
+export async function getRecentSessionDeltas(subjectId: number, limit: number = 30): Promise<SessionDeltaRow[]> {
   return await sql`
     SELECT
        session_delta_id AS "sessionDeltaId"
+      ,subject_id AS "subjectId"
       ,session_date AS "sessionDate"
       ,calibration_question_id AS "calibrationQuestionId"
       ,journal_question_id AS "journalQuestionId"
@@ -1651,6 +1719,7 @@ export async function getRecentSessionDeltas(limit: number = 30): Promise<Sessio
       ,calibration_flight_time_mean AS "calibrationFlightTimeMean"
       ,journal_flight_time_mean AS "journalFlightTimeMean"
     FROM tb_session_delta
+    WHERE subject_id = ${subjectId}
     ORDER BY session_date DESC
     LIMIT ${limit}
   ` as SessionDeltaRow[];
@@ -1661,17 +1730,18 @@ export async function getRecentSessionDeltas(limit: number = 30): Promise<Sessio
 // OBSERVATORY QUERIES
 // ===================================================================
 
-export async function getEntryStatesWithDates(): Promise<Array<EntryStateRow & { date: string; question_id: number }>> {
+export async function getEntryStatesWithDates(subjectId: number): Promise<Array<EntryStateRow & { date: string; question_id: number }>> {
   return await sql`
     SELECT es.*, q.scheduled_for AS date, q.question_id
     FROM tb_entry_states es
     JOIN tb_responses r ON es.response_id = r.response_id
     JOIN tb_questions q ON r.question_id = q.question_id
+    WHERE es.subject_id = ${subjectId}
     ORDER BY es.entry_state_id ASC
   ` as Array<EntryStateRow & { date: string; question_id: number }>;
 }
 
-export async function getEntryStateByResponseId(responseId: number): Promise<(EntryStateRow & {
+export async function getEntryStateByResponseId(subjectId: number, responseId: number): Promise<(EntryStateRow & {
   date: string; question_id: number; question_text: string;
 }) | null> {
   const rows = await sql`
@@ -1679,7 +1749,7 @@ export async function getEntryStateByResponseId(responseId: number): Promise<(En
     FROM tb_entry_states es
     JOIN tb_responses r ON es.response_id = r.response_id
     JOIN tb_questions q ON r.question_id = q.question_id
-    WHERE es.response_id = ${responseId}
+    WHERE es.subject_id = ${subjectId} AND es.response_id = ${responseId}
   `;
   return (rows[0] as (EntryStateRow & {
     date: string; question_id: number; question_text: string;
@@ -1960,10 +2030,10 @@ export interface DynamicalSignalRow {
   te_dominance: number | null;
 }
 
-export async function saveDynamicalSignals(questionId: number, s: Omit<DynamicalSignalRow, 'dynamical_signal_id' | 'question_id'>): Promise<number> {
+export async function saveDynamicalSignals(subjectId: number, questionId: number, s: Omit<DynamicalSignalRow, 'dynamical_signal_id' | 'question_id'>): Promise<number> {
   const [row] = await sql`
     INSERT INTO tb_dynamical_signals (
-       question_id, iki_count, hold_flight_count,
+       subject_id, question_id, iki_count, hold_flight_count,
        permutation_entropy, permutation_entropy_raw, pe_spectrum, dfa_alpha,
        mfdfa_spectrum_width, mfdfa_asymmetry, mfdfa_peak_alpha,
        temporal_irreversibility,
@@ -1981,7 +2051,7 @@ export async function saveDynamicalSignals(questionId: number, s: Omit<Dynamical
        pause_mixture_component_count, pause_mixture_motor_proportion, pause_mixture_cognitive_load_index,
        te_hold_to_flight, te_flight_to_hold, te_dominance
     ) VALUES (
-      ${questionId}, ${s.iki_count}, ${s.hold_flight_count},
+      ${subjectId}, ${questionId}, ${s.iki_count}, ${s.hold_flight_count},
       ${s.permutation_entropy}, ${s.permutation_entropy_raw}, ${s.pe_spectrum}, ${s.dfa_alpha},
       ${s.mfdfa_spectrum_width}, ${s.mfdfa_asymmetry}, ${s.mfdfa_peak_alpha},
       ${s.temporal_irreversibility},
@@ -2005,8 +2075,8 @@ export async function saveDynamicalSignals(questionId: number, s: Omit<Dynamical
   return row?.dynamical_signal_id ?? 0;
 }
 
-export async function getDynamicalSignals(questionId: number): Promise<DynamicalSignalRow | null> {
-  const rows = await sql`SELECT * FROM tb_dynamical_signals WHERE question_id = ${questionId}`;
+export async function getDynamicalSignals(subjectId: number, questionId: number): Promise<DynamicalSignalRow | null> {
+  const rows = await sql`SELECT * FROM tb_dynamical_signals WHERE subject_id = ${subjectId} AND question_id = ${questionId}`;
   if (!rows[0]) return null;
   const row = rows[0] as Record<string, unknown>;
   // JSONB columns auto-parsed by postgres driver; callers expect strings
@@ -2042,17 +2112,17 @@ export interface MotorSignalRow {
   hold_flight_rank_corr: number | null;
 }
 
-export async function saveMotorSignals(questionId: number, s: Omit<MotorSignalRow, 'motor_signal_id' | 'question_id'>): Promise<number> {
+export async function saveMotorSignals(subjectId: number, questionId: number, s: Omit<MotorSignalRow, 'motor_signal_id' | 'question_id'>): Promise<number> {
   const [row] = await sql`
     INSERT INTO tb_motor_signals (
-       question_id, sample_entropy, mse_series, complexity_index, ex_gaussian_fisher_trace,
+       subject_id, question_id, sample_entropy, mse_series, complexity_index, ex_gaussian_fisher_trace,
        iki_autocorrelation_json,
        motor_jerk, lapse_rate, tempo_drift,
        iki_compression_ratio, digraph_latency_json,
        ex_gaussian_tau, ex_gaussian_mu, ex_gaussian_sigma,
        tau_proportion, adjacent_hold_time_cov, hold_flight_rank_corr
     ) VALUES (
-      ${questionId}, ${s.sample_entropy}, ${s.mse_series}, ${s.complexity_index}, ${s.ex_gaussian_fisher_trace},
+      ${subjectId}, ${questionId}, ${s.sample_entropy}, ${s.mse_series}, ${s.complexity_index}, ${s.ex_gaussian_fisher_trace},
       ${s.iki_autocorrelation_json},
       ${s.motor_jerk}, ${s.lapse_rate}, ${s.tempo_drift},
       ${s.iki_compression_ratio}, ${s.digraph_latency_json},
@@ -2065,8 +2135,8 @@ export async function saveMotorSignals(questionId: number, s: Omit<MotorSignalRo
   return row?.motor_signal_id ?? 0;
 }
 
-export async function getMotorSignals(questionId: number): Promise<MotorSignalRow | null> {
-  const rows = await sql`SELECT * FROM tb_motor_signals WHERE question_id = ${questionId}`;
+export async function getMotorSignals(subjectId: number, questionId: number): Promise<MotorSignalRow | null> {
+  const rows = await sql`SELECT * FROM tb_motor_signals WHERE subject_id = ${subjectId} AND question_id = ${questionId}`;
   if (!rows[0]) return null;
   const row = rows[0] as Record<string, unknown>;
   // JSONB columns auto-parsed by postgres driver; callers expect strings
@@ -2100,17 +2170,17 @@ export interface SemanticSignalRow {
   paste_contaminated: boolean;
 }
 
-export async function saveSemanticSignals(questionId: number, s: Omit<SemanticSignalRow, 'semantic_signal_id' | 'question_id'>): Promise<number> {
+export async function saveSemanticSignals(subjectId: number, questionId: number, s: Omit<SemanticSignalRow, 'semantic_signal_id' | 'question_id'>): Promise<number> {
   const [row] = await sql`
     INSERT INTO tb_semantic_signals (
-       question_id, idea_density, lexical_sophistication, epistemic_stance,
+       subject_id, question_id, idea_density, lexical_sophistication, epistemic_stance,
        integrative_complexity, deep_cohesion, referential_cohesion,
        emotional_valence_arc, text_compression_ratio,
        discourse_global_coherence, discourse_local_coherence,
        discourse_global_local_ratio, discourse_coherence_decay_slope,
        lexicon_version, paste_contaminated
     ) VALUES (
-      ${questionId}, ${s.idea_density}, ${s.lexical_sophistication}, ${s.epistemic_stance},
+      ${subjectId}, ${questionId}, ${s.idea_density}, ${s.lexical_sophistication}, ${s.epistemic_stance},
       ${s.integrative_complexity}, ${s.deep_cohesion}, ${s.referential_cohesion},
       ${s.emotional_valence_arc}, ${s.text_compression_ratio},
       ${s.discourse_global_coherence}, ${s.discourse_local_coherence},
@@ -2123,8 +2193,8 @@ export async function saveSemanticSignals(questionId: number, s: Omit<SemanticSi
   return row?.semantic_signal_id ?? 0;
 }
 
-export async function getSemanticSignals(questionId: number): Promise<SemanticSignalRow | null> {
-  const rows = await sql`SELECT * FROM tb_semantic_signals WHERE question_id = ${questionId}`;
+export async function getSemanticSignals(subjectId: number, questionId: number): Promise<SemanticSignalRow | null> {
+  const rows = await sql`SELECT * FROM tb_semantic_signals WHERE subject_id = ${subjectId} AND question_id = ${questionId}`;
   return (rows[0] as SemanticSignalRow) ?? null;
 }
 
@@ -2146,14 +2216,14 @@ export interface ProcessSignalRow {
   strategy_shift_count: number | null;
 }
 
-export async function saveProcessSignals(questionId: number, s: Omit<ProcessSignalRow, 'process_signal_id' | 'question_id'>): Promise<number> {
+export async function saveProcessSignals(subjectId: number, questionId: number, s: Omit<ProcessSignalRow, 'process_signal_id' | 'question_id'>): Promise<number> {
   const [row] = await sql`
     INSERT INTO tb_process_signals (
-       question_id, pause_within_word, pause_between_word, pause_between_sentence,
+       subject_id, question_id, pause_within_word, pause_between_word, pause_between_sentence,
        abandoned_thought_count, r_burst_count, i_burst_count,
        vocab_expansion_rate, phase_transition_point, strategy_shift_count
     ) VALUES (
-      ${questionId}, ${s.pause_within_word}, ${s.pause_between_word}, ${s.pause_between_sentence},
+      ${subjectId}, ${questionId}, ${s.pause_within_word}, ${s.pause_between_word}, ${s.pause_between_sentence},
       ${s.abandoned_thought_count}, ${s.r_burst_count}, ${s.i_burst_count},
       ${s.vocab_expansion_rate}, ${s.phase_transition_point}, ${s.strategy_shift_count}
     )
@@ -2163,8 +2233,8 @@ export async function saveProcessSignals(questionId: number, s: Omit<ProcessSign
   return row?.process_signal_id ?? 0;
 }
 
-export async function getProcessSignals(questionId: number): Promise<ProcessSignalRow | null> {
-  const rows = await sql`SELECT * FROM tb_process_signals WHERE question_id = ${questionId}`;
+export async function getProcessSignals(subjectId: number, questionId: number): Promise<ProcessSignalRow | null> {
+  const rows = await sql`SELECT * FROM tb_process_signals WHERE subject_id = ${subjectId} AND question_id = ${questionId}`;
   return (rows[0] as ProcessSignalRow) ?? null;
 }
 
@@ -2188,15 +2258,15 @@ export interface CrossSessionSignalRow {
   bridging_ratio: number | null;
 }
 
-export async function saveCrossSessionSignals(questionId: number, s: Omit<CrossSessionSignalRow, 'cross_session_signal_id' | 'question_id'>): Promise<number> {
+export async function saveCrossSessionSignals(subjectId: number, questionId: number, s: Omit<CrossSessionSignalRow, 'cross_session_signal_id' | 'question_id'>): Promise<number> {
   const [row] = await sql`
     INSERT INTO tb_cross_session_signals (
-       question_id, self_perplexity, motor_self_perplexity,
+       subject_id, question_id, self_perplexity, motor_self_perplexity,
        ncd_lag_1, ncd_lag_3, ncd_lag_7, ncd_lag_30,
        vocab_recurrence_decay, digraph_stability,
        text_network_density, text_network_communities, bridging_ratio
     ) VALUES (
-      ${questionId}, ${s.self_perplexity}, ${s.motor_self_perplexity},
+      ${subjectId}, ${questionId}, ${s.self_perplexity}, ${s.motor_self_perplexity},
       ${s.ncd_lag_1}, ${s.ncd_lag_3}, ${s.ncd_lag_7}, ${s.ncd_lag_30},
       ${s.vocab_recurrence_decay}, ${s.digraph_stability},
       ${s.text_network_density}, ${s.text_network_communities}, ${s.bridging_ratio}
@@ -2207,8 +2277,8 @@ export async function saveCrossSessionSignals(questionId: number, s: Omit<CrossS
   return row?.cross_session_signal_id ?? 0;
 }
 
-export async function getCrossSessionSignals(questionId: number): Promise<CrossSessionSignalRow | null> {
-  const rows = await sql`SELECT * FROM tb_cross_session_signals WHERE question_id = ${questionId}`;
+export async function getCrossSessionSignals(subjectId: number, questionId: number): Promise<CrossSessionSignalRow | null> {
+  const rows = await sql`SELECT * FROM tb_cross_session_signals WHERE subject_id = ${subjectId} AND question_id = ${questionId}`;
   return (rows[0] as CrossSessionSignalRow) ?? null;
 }
 
@@ -2301,12 +2371,14 @@ export interface ReconstructionResidualInput {
 }
 
 export async function saveReconstructionResidual(
+  subjectId: number,
   questionId: number,
   s: ReconstructionResidualInput,
 ): Promise<number> {
   const [row] = await sql`
     INSERT INTO tb_reconstruction_residuals (
-       question_id
+       subject_id
+      ,question_id
       ,adversary_variant_id
       ,question_source_id
       ,avatar_seed, profile_snapshot_json, corpus_sha256, avatar_topic
@@ -2337,7 +2409,8 @@ export async function saveReconstructionResidual(
       ,residual_count
       ,behavioral_l2_norm, behavioral_residual_count
     ) VALUES (
-       ${questionId}
+       ${subjectId}
+      ,${questionId}
       ,${s.adversary_variant_id}
       ,${s.question_source_id}
       ,${s.avatar_seed}, ${s.profile_snapshot_json}, ${s.corpus_sha256}, ${s.avatar_topic}
@@ -2381,10 +2454,10 @@ export async function saveReconstructionResidual(
   return (row as { reconstruction_residual_id: number })?.reconstruction_residual_id ?? 0;
 }
 
-export async function getReconstructionResidual(questionId: number, variantId: number = 1): Promise<ReconstructionResidualInput | null> {
+export async function getReconstructionResidual(subjectId: number, questionId: number, variantId: number = 1): Promise<ReconstructionResidualInput | null> {
   const rows = await sql`
     SELECT * FROM tb_reconstruction_residuals
-    WHERE question_id = ${questionId} AND adversary_variant_id = ${variantId}
+    WHERE subject_id = ${subjectId} AND question_id = ${questionId} AND adversary_variant_id = ${variantId}
   `;
   return (rows[0] as ReconstructionResidualInput) ?? null;
 }
@@ -2394,6 +2467,7 @@ export async function getReconstructionResidual(questionId: number, variantId: n
 // ----------------------------------------------------------------------------
 
 export interface SessionIntegrityInput {
+  subjectId: number;
   questionId: number;
   profileDistance: number;
   dimensionCount: number;
@@ -2406,19 +2480,20 @@ export interface SessionIntegrityInput {
 export async function saveSessionIntegrity(s: SessionIntegrityInput): Promise<void> {
   await sql`
     INSERT INTO tb_session_integrity (
-       question_id, profile_distance, dimension_count,
+       subject_id, question_id, profile_distance, dimension_count,
        z_scores_json, is_flagged, threshold_used, profile_session_count
     ) VALUES (
-      ${s.questionId}, ${s.profileDistance}, ${s.dimensionCount},
+      ${s.subjectId}, ${s.questionId}, ${s.profileDistance}, ${s.dimensionCount},
       ${s.zScoresJson}, ${s.isFlagged}, ${s.thresholdUsed}, ${s.profileSessionCount}
     )
     ON CONFLICT (question_id) DO NOTHING
   `;
 }
 
-export async function getSessionIntegrity(questionId: number): Promise<SessionIntegrityInput | null> {
+export async function getSessionIntegrity(subjectId: number, questionId: number): Promise<SessionIntegrityInput | null> {
   const rows = await sql`
-    SELECT question_id AS "questionId",
+    SELECT subject_id AS "subjectId",
+           question_id AS "questionId",
            profile_distance AS "profileDistance",
            dimension_count AS "dimensionCount",
            z_scores_json AS "zScoresJson",
@@ -2426,7 +2501,7 @@ export async function getSessionIntegrity(questionId: number): Promise<SessionIn
            threshold_used AS "thresholdUsed",
            profile_session_count AS "profileSessionCount"
     FROM tb_session_integrity
-    WHERE question_id = ${questionId}
+    WHERE subject_id = ${subjectId} AND question_id = ${questionId}
   `;
   return (rows[0] as SessionIntegrityInput) ?? null;
 }
@@ -2490,16 +2565,17 @@ export async function getEngineProvenanceById(id: number): Promise<EngineProvena
  * Rust-derived row for this question has provenance, or none of them do.
  */
 export async function stampEngineProvenance(
+  subjectId: number,
   questionId: number,
   engineProvenanceId: number,
 ): Promise<void> {
   await sql.begin(async (tx) => {
-    await tx`UPDATE tb_dynamical_signals      SET engine_provenance_id = ${engineProvenanceId} WHERE question_id = ${questionId} AND engine_provenance_id IS NULL`;
-    await tx`UPDATE tb_motor_signals          SET engine_provenance_id = ${engineProvenanceId} WHERE question_id = ${questionId} AND engine_provenance_id IS NULL`;
-    await tx`UPDATE tb_process_signals        SET engine_provenance_id = ${engineProvenanceId} WHERE question_id = ${questionId} AND engine_provenance_id IS NULL`;
-    await tx`UPDATE tb_cross_session_signals  SET engine_provenance_id = ${engineProvenanceId} WHERE question_id = ${questionId} AND engine_provenance_id IS NULL`;
-    await tx`UPDATE tb_session_integrity      SET engine_provenance_id = ${engineProvenanceId} WHERE question_id = ${questionId} AND engine_provenance_id IS NULL`;
-    await tx`UPDATE tb_reconstruction_residuals SET engine_provenance_id = ${engineProvenanceId} WHERE question_id = ${questionId} AND engine_provenance_id IS NULL`;
+    await tx`UPDATE tb_dynamical_signals      SET engine_provenance_id = ${engineProvenanceId} WHERE subject_id = ${subjectId} AND question_id = ${questionId} AND engine_provenance_id IS NULL`;
+    await tx`UPDATE tb_motor_signals          SET engine_provenance_id = ${engineProvenanceId} WHERE subject_id = ${subjectId} AND question_id = ${questionId} AND engine_provenance_id IS NULL`;
+    await tx`UPDATE tb_process_signals        SET engine_provenance_id = ${engineProvenanceId} WHERE subject_id = ${subjectId} AND question_id = ${questionId} AND engine_provenance_id IS NULL`;
+    await tx`UPDATE tb_cross_session_signals  SET engine_provenance_id = ${engineProvenanceId} WHERE subject_id = ${subjectId} AND question_id = ${questionId} AND engine_provenance_id IS NULL`;
+    await tx`UPDATE tb_session_integrity      SET engine_provenance_id = ${engineProvenanceId} WHERE subject_id = ${subjectId} AND question_id = ${questionId} AND engine_provenance_id IS NULL`;
+    await tx`UPDATE tb_reconstruction_residuals SET engine_provenance_id = ${engineProvenanceId} WHERE subject_id = ${subjectId} AND question_id = ${questionId} AND engine_provenance_id IS NULL`;
   });
 }
 
@@ -2527,7 +2603,7 @@ export type SignalJobKindId = (typeof SIGNAL_JOB_KIND)[keyof typeof SIGNAL_JOB_K
 export interface SignalJobRow {
   signal_job_id: number;
   question_id: number;
-  subject_id: number | null;
+  subject_id: number;
   signal_job_kind_id: SignalJobKindId;
   signal_job_status_id: SignalJobStatusId;
   attempts: number;
@@ -2542,9 +2618,9 @@ export interface SignalJobRow {
 }
 
 export interface EnqueueSignalJobInput {
+  subjectId: number;
   questionId: number;
   kindId: SignalJobKindId;
-  subjectId?: number | null;
   params?: Record<string, unknown> | null;
   maxAttempts?: number;
 }
@@ -2571,10 +2647,10 @@ export async function enqueueSignalJob(
   const maxAttempts = input.maxAttempts ?? 5;
   const rows = await q`
     INSERT INTO tb_signal_jobs (
-       question_id, subject_id, signal_job_kind_id, signal_job_status_id,
+       subject_id, question_id, signal_job_kind_id, signal_job_status_id,
        max_attempts, params_json
     ) VALUES (
-      ${input.questionId}, ${input.subjectId ?? null}, ${input.kindId}, 1,
+      ${input.subjectId}, ${input.questionId}, ${input.kindId}, 1,
       ${maxAttempts}, ${params as never}
     )
     ON CONFLICT (question_id, signal_job_kind_id) WHERE signal_job_status_id <> 5
