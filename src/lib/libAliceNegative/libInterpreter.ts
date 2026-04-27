@@ -187,7 +187,7 @@ async function renderTraitsInner(
   emotionAnalysis?: EmotionAnalysis,
 ): Promise<WitnessTraits> {
   try {
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY2 });
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     let userMessage = formatDynamicsForRenderer(dynamics);
 

@@ -77,7 +77,7 @@ DIVERSITY RULES:
 
 Output format: one question per line, no numbering, no commentary, no blank lines. Just the questions.`;
 
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY2 });
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
   const message = await client.messages.create({
     model: 'claude-sonnet-4-20250514',

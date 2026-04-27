@@ -40,16 +40,16 @@
         --bg-pre: #050505;
         --bg-input: #161514;
         --text: #ffffff;
-        --text-pre: #3a3530;
-        --text-muted: #7a7570;
-        --text-faint: #4a4540;
+        --text-pre: #6a6560;
+        --text-muted: #b0aba5;
+        --text-faint: #888178;
         --border: #333;
         --border-focus: #666;
         --btn-bg: #222;
         --btn-hover: #444;
         --btn-text: #ffffff;
         --done-text: #8a8580;
-        --loading: #4a4540;
+        --loading: #888178;
         --free-border: #3a3530;
         --free-hover-bg: rgba(255, 255, 255, 0.04);
       }
@@ -754,18 +754,12 @@
           // Writing is open from the moment the surface renders. The room
           // may still be dim until presence lands, but nothing is blocked.
           textarea.focus();
-          const writingOpenedAt = performance.now();
 
-          // Submit visibility: both gates must pass (time + content).
-          // 90s from writing-open removes implicit "finish" pressure
-          // (Hallnäs & Redström 2001); 20-char threshold prevents the
-          // button appearing before there's anything to close.
-          setTimeout(maybeShowSubmit, 90000);
-
+          // Submit visibility: gated on content only. The button appears
+          // once you've actually written something, never on a timer.
           function maybeShowSubmit() {
-            const timeOk = performance.now() - writingOpenedAt >= 90000;
             const contentOk = textarea.value.trim().length >= 20;
-            if (timeOk && contentOk) {
+            if (contentOk) {
               submitRow.classList.remove('hidden');
               submitRow.classList.add('visible');
             }
