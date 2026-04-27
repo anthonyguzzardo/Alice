@@ -31,14 +31,21 @@ import { computeDynamics } from './libDynamics.ts';
 import { computeEmotionAnalysis } from './libEmotionProfile.ts';
 import { renderTraits } from './libInterpreter.ts';
 
-export async function renderWitnessState(subjectId: number): Promise<void> {
+/** Counts journal (non-calibration) session_summaries for a subject.
+ *  Used by renderWitnessState as the witness `entry_count`; extracted
+ *  for hotspot N4 scoping verification. */
+export async function getWitnessJournalSessionCount(subjectId: number): Promise<number> {
   const countRows = await sql`
-    SELECT COUNT(*) as c FROM tb_session_summaries ss
+    SELECT COUNT(*)::int as c FROM tb_session_summaries ss
     JOIN tb_questions q ON ss.question_id = q.question_id
     WHERE q.subject_id = ${subjectId}
       AND q.question_source_id != 3
   `;
-  const currentCount = (countRows[0] as { c: number }).c;
+  return (countRows[0] as { c: number }).c;
+}
+
+export async function renderWitnessState(subjectId: number): Promise<void> {
+  const currentCount = await getWitnessJournalSessionCount(subjectId);
 
   if (currentCount === 0) return;
 
