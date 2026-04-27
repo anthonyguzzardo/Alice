@@ -21,7 +21,6 @@ import { decrypt } from '../../lib/libCrypto.ts';
 
 interface PipelineCoverage {
   embedded: boolean;
-  entryState: boolean;
 }
 
 interface LastSessionStatus {
@@ -42,7 +41,6 @@ interface HealthResponse {
   lastSession: LastSessionStatus | null;
   sessions: {
     count: number;
-    nextReflectionAt: number | null;
   };
   tomorrow: {
     questionReady: boolean;
@@ -102,21 +100,17 @@ export const GET: APIRoute = async () => {
 
   let lastSessionStatus: LastSessionStatus | null = null;
   if (lastSession) {
-    // Observation + suppressed-question coverage checks removed 2026-04-16.
     const coverageRows = await sql`
       SELECT
-        (SELECT 1 FROM tb_embeddings WHERE subject_id = ${subjectId} AND source_record_id = ${lastSession.response_id} AND embedding_source_id = 1 LIMIT 1) AS embedded,
-        (SELECT 1 FROM tb_entry_states WHERE subject_id = ${subjectId} AND response_id = ${lastSession.response_id} LIMIT 1) AS entry_state
+        (SELECT 1 FROM tb_embeddings WHERE subject_id = ${subjectId} AND source_record_id = ${lastSession.response_id} AND embedding_source_id = 1 LIMIT 1) AS embedded
     `;
-    const coverage = coverageRows[0] as { embedded: number | null; entry_state: number | null };
+    const coverage = coverageRows[0] as { embedded: number | null };
 
     const pipeline: PipelineCoverage = {
       embedded: !!coverage.embedded,
-      entryState: !!coverage.entry_state,
     };
     const missing: string[] = [];
     if (!pipeline.embedded) missing.push('embedding');
-    if (!pipeline.entryState) missing.push('entry_state');
 
     lastSessionStatus = {
       date: lastSession.day,
@@ -128,7 +122,7 @@ export const GET: APIRoute = async () => {
     };
   }
 
-  // --- SESSIONS COUNT + REFLECTION CADENCE --------------------------------
+  // --- SESSIONS COUNT ------------------------------------------------------
   const [sessionCountRow] = await sql`
     SELECT COUNT(*)::int AS c FROM tb_responses r
     JOIN tb_questions q ON r.question_id = q.question_id
@@ -136,21 +130,6 @@ export const GET: APIRoute = async () => {
       AND q.question_source_id != 3
   `;
   const sessionCount = (sessionCountRow as { c: number }).c;
-
-  // Reflection cadence: fires when responseCount >= 5 && responseCount % 7 === 0
-  // responseCount in respond.ts is total responses (see getResponseCount), not
-  // sessions-only. We surface the next fire count as informational; if the
-  // cadence is session-scoped instead, this number just reads differently.
-  const [totalResponsesRow] = await sql`
-    SELECT COUNT(*)::int AS c FROM tb_responses WHERE subject_id = ${subjectId}
-  `;
-  const totalResponses = (totalResponsesRow as { c: number }).c;
-  let nextReflectionAt: number | null = null;
-  if (totalResponses < 5) {
-    nextReflectionAt = 7;
-  } else {
-    nextReflectionAt = Math.ceil((totalResponses + 1) / 7) * 7;
-  }
 
   // --- TOMORROW -----------------------------------------------------------
   const tomorrowQuestionRows = await sql`
@@ -266,7 +245,6 @@ export const GET: APIRoute = async () => {
     lastSession: lastSessionStatus,
     sessions: {
       count: sessionCount,
-      nextReflectionAt,
     },
     tomorrow: {
       questionReady: !!tomorrowQuestion,
