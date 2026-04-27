@@ -145,13 +145,23 @@
         color: var(--text-pre);
       }
 
-      .submit-row { margin-top: 3.5rem; }
+      .submit-row {
+        margin-top: 3.5rem;
+        --submit-presence: 0;
+        opacity: var(--submit-presence);
+        pointer-events: none;
+        transition: opacity 0.8s ease;
+      }
+
+      .submit-row.present {
+        pointer-events: auto;
+      }
 
       .submit-btn {
         background: none;
         border: 1px solid var(--border);
         border-radius: 3px;
-        color: var(--text-muted);
+        color: color-mix(in oklab, var(--text-faint), var(--done-text) calc(var(--submit-presence, 0) * 100%));
         font-family: 'Cormorant Garamond', Georgia, serif;
         font-size: 1.15rem;
         font-style: italic;
@@ -169,17 +179,6 @@
 
       .submit-btn:active:not(:disabled) { opacity: 0.7; }
       .submit-btn:disabled { opacity: 0.3; cursor: default; }
-
-      .submit-row.hidden {
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity 2s ease;
-      }
-      .submit-row.visible {
-        opacity: 1;
-        pointer-events: auto;
-        transition: opacity 2s ease;
-      }
 
       .done-message {
         font-family: 'Cormorant Garamond', Georgia, serif;
@@ -429,9 +428,6 @@
         }
         const pageOpenTime = performance.now();
 
-        // Calibration is a deliberate click — show submit immediately.
-        // Journal keeps the 90s + 20-char friction gate (Hallnäs & Redström 2001).
-        const initialSubmitClass = mode === 'calibration' ? 'visible' : 'hidden';
         inputArea.innerHTML = `
           <textarea
             class="response-area"
@@ -441,7 +437,7 @@
             autocapitalize="off"
             spellcheck="false"
           ></textarea>
-          <div class="submit-row ${initialSubmitClass}" id="submit-row">
+          <div class="submit-row" id="submit-row">
             <button class="submit-btn" id="submit" disabled>done</button>
           </div>
         `;
@@ -452,12 +448,33 @@
 
         textarea.focus();
 
-        function maybeShowSubmit() {
-          const contentOk = textarea.value.trim().length >= 20;
-          if (contentOk) {
-            submitRow.classList.remove('hidden');
-            submitRow.classList.add('visible');
+        // Calibration is a deliberate click — full presence immediately.
+        // Journal uses a continuous fade-in driven by content length: faint
+        // ghost at 5 chars, full presence around 500 chars, always clickable
+        // once visible. (Hallnäs & Redström 2001 reframed: no moment of
+        // permission, just a peripheral signal that grows with the work.)
+        const SUBMIT_START_CHARS = 5;
+        const SUBMIT_FULL_CHARS = 500;
+        const SUBMIT_MIN_PRESENCE = 0.10;
+        function updateSubmitPresence() {
+          if (mode === 'calibration') return; // presence pinned at 1 below
+          const chars = textarea.value.trim().length;
+          let presence;
+          if (chars < SUBMIT_START_CHARS) {
+            presence = 0;
+          } else if (chars >= SUBMIT_FULL_CHARS) {
+            presence = 1;
+          } else {
+            const t = (chars - SUBMIT_START_CHARS) / (SUBMIT_FULL_CHARS - SUBMIT_START_CHARS);
+            presence = SUBMIT_MIN_PRESENCE + (1 - SUBMIT_MIN_PRESENCE) * Math.pow(t, 1.5);
           }
+          submitRow.style.setProperty('--submit-presence', presence.toFixed(3));
+          submitRow.classList.toggle('present', presence > 0);
+        }
+
+        if (mode === 'calibration') {
+          submitRow.style.setProperty('--submit-presence', '1');
+          submitRow.classList.add('present');
         }
 
         // ================================================================
@@ -728,7 +745,7 @@
 
           lastTextLength = currentLength;
           submitBtn.disabled = !textarea.value.trim();
-          maybeShowSubmit();
+          updateSubmitPresence();
 
           if (!firstKeystrokeSent) {
             firstKeystrokeTime = performance.now();

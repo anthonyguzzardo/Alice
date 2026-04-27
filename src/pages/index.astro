@@ -154,13 +154,21 @@
 
       .submit-row {
         margin-top: 3.5rem;
+        --submit-presence: 0;
+        opacity: var(--submit-presence);
+        pointer-events: none;
+        transition: opacity 0.8s ease;
+      }
+
+      .submit-row.present {
+        pointer-events: auto;
       }
 
       .submit-btn {
         background: none;
         border: 1px solid var(--border);
         border-radius: 3px;
-        color: var(--text-muted);
+        color: color-mix(in oklab, var(--text-faint), var(--done-text) calc(var(--submit-presence, 0) * 100%));
         font-family: 'Cormorant Garamond', Georgia, serif;
         font-size: 1.15rem;
         font-style: italic;
@@ -183,18 +191,6 @@
       .submit-btn:disabled {
         opacity: 0.3;
         cursor: default;
-      }
-
-      .submit-row.hidden {
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity 2s ease;
-      }
-
-      .submit-row.visible {
-        opacity: 1;
-        pointer-events: auto;
-        transition: opacity 2s ease;
       }
 
       .done-message {
@@ -741,7 +737,7 @@
               autocapitalize="off"
               spellcheck="false"
             ></textarea>
-            <div class="submit-row hidden" id="submit-row">
+            <div class="submit-row" id="submit-row">
               <button class="submit-btn" id="submit" disabled>done</button>
             </div>
           `;
@@ -755,14 +751,28 @@
           // may still be dim until presence lands, but nothing is blocked.
           textarea.focus();
 
-          // Submit visibility: gated on content only. The button appears
-          // once you've actually written something, never on a timer.
-          function maybeShowSubmit() {
-            const contentOk = textarea.value.trim().length >= 20;
-            if (contentOk) {
-              submitRow.classList.remove('hidden');
-              submitRow.classList.add('visible');
+          // Submit presence: continuous fade-in driven by content length.
+          // Appears as a faint ghost at 5 chars, reaches full presence
+          // around 500 chars. Always clickable once visible — the curve
+          // expresses earned presence, not permission. (Hallnäs & Redström
+          // 2001 reframed: no moment of finishing-permission, just a
+          // peripheral signal that grows with the work.)
+          const SUBMIT_START_CHARS = 5;
+          const SUBMIT_FULL_CHARS = 500;
+          const SUBMIT_MIN_PRESENCE = 0.10;
+          function updateSubmitPresence() {
+            const chars = textarea.value.trim().length;
+            let presence;
+            if (chars < SUBMIT_START_CHARS) {
+              presence = 0;
+            } else if (chars >= SUBMIT_FULL_CHARS) {
+              presence = 1;
+            } else {
+              const t = (chars - SUBMIT_START_CHARS) / (SUBMIT_FULL_CHARS - SUBMIT_START_CHARS);
+              presence = SUBMIT_MIN_PRESENCE + (1 - SUBMIT_MIN_PRESENCE) * Math.pow(t, 1.5);
             }
+            submitRow.style.setProperty('--submit-presence', presence.toFixed(3));
+            submitRow.classList.toggle('present', presence > 0);
           }
 
 
@@ -1181,7 +1191,7 @@
 
             lastTextLength = currentLength;
             submitBtn.disabled = !textarea.value.trim();
-            maybeShowSubmit();
+            updateSubmitPresence();
 
             if (!firstKeystrokeSent) {
               firstKeystrokeTime = performance.now();
@@ -1647,7 +1657,7 @@
             autocapitalize="off"
             spellcheck="false"
           ></textarea>
-          <div class="submit-row visible">
+          <div class="submit-row present" style="--submit-presence: 1;">
             <button class="submit-btn" id="submit" disabled>done</button>
           </div>
         `;
