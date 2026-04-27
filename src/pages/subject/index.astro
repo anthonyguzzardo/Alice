@@ -234,7 +234,7 @@
           return;
         }
 
-        const scheduledQuestionId = data.scheduled_question_id;
+        const questionId = data.question_id;
         const pageOpenTime = performance.now();
 
         inputArea.innerHTML = `
@@ -677,7 +677,7 @@
           const punctuationLetterRatio = (punctuationFlightMean != null && letterFlightMean != null && letterFlightMean > 0) ? punctuationFlightMean / letterFlightMean : null;
 
           const sessionSummary = {
-            scheduledQuestionId,
+            questionId,
             firstKeystrokeMs, totalDurationMs, totalCharsTyped, finalCharCount,
             commitmentRatio, pauseCount, totalPauseMs, deletionCount, largestDeletion,
             totalCharsDeleted, tabAwayCount, totalTabAwayMs, wordCount, sentenceCount,
@@ -710,7 +710,7 @@
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              scheduled_question_id: scheduledQuestionId,
+              question_id: questionId,
               text,
               sessionSummary,
             }),

@@ -136,9 +136,6 @@ export const POPULATION_AGNOSTIC_TABLES: ReadonlySet<string> = new Set([
   'tb_paper_comments',              // public-website paper comments
   'tb_engine_provenance',           // (binary_sha256, cpu_model) keyed
   'tb_embedding_model_versions',    // static registry
-  'tb_subject_responses',           // legacy variant table, dropped at Step 9
-  'tb_subject_session_summaries',   // legacy variant table, dropped at Step 9
-  'tb_scheduled_questions',         // legacy variant table, dropped at Step 9
 ]);
 
 // ----------------------------------------------------------------------------

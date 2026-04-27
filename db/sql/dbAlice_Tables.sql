@@ -245,6 +245,14 @@ CREATE INDEX IF NOT EXISTS ix_subject_sessions_expires_at
 --           questions have scheduled_for IS NULL (no scheduled date) — UNIQUE
 --           permits multiple NULLs per Postgres semantics, so a subject may
 --           have many calibration rows with (subject_id, NULL).
+--
+--           question_source_id semantics:
+--             1 = seed         (owner journal seed text)
+--             2 = generated    (owner journal LLM-generated text)
+--             3 = calibration  (owner calibration prompt; scheduled_for IS NULL)
+--             4 = corpus       (subject corpus draw; corpus_question_id IS NOT NULL)
+--           For source = 4 rows, corpus_question_id is the logical FK to
+--           tb_question_corpus. For sources 1-3, corpus_question_id is NULL.
 -- MUTABILITY: insert once, rarely updated (intervention fields may be set later)
 -- REFERENCED BY: tb_responses, tb_session_summaries, tb_session_events, tb_burst_sequences, tb_rburst_sequences
 -- FOOTER: yes
@@ -257,6 +265,10 @@ CREATE TABLE IF NOT EXISTS tb_questions (
   ,text_nonce             TEXT NOT NULL
   ,question_source_id     SMALLINT NOT NULL DEFAULT 1
   ,scheduled_for          DATE
+  -- corpus_question_id (migration 032): logical FK to tb_question_corpus.
+  -- NOT NULL for question_source_id = 4 rows (subject corpus draws),
+  -- NULL for owner journal/calibration sources (1-3).
+  ,corpus_question_id     INT
   ,intervention_intent_id INT
   ,intervention_rationale TEXT
   ,dttm_created_utc       TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -268,6 +280,13 @@ CREATE TABLE IF NOT EXISTS tb_questions (
 
 CREATE INDEX IF NOT EXISTS ix_questions_subject_scheduled_for
   ON tb_questions (subject_id, scheduled_for);
+
+-- Partial index for the corpus round-robin no-repeat lookup: "which corpus
+-- questions has this subject been assigned?" The partial WHERE keeps the
+-- index narrow (owner journal rows have corpus_question_id IS NULL).
+CREATE INDEX IF NOT EXISTS ix_questions_subject_corpus_question_id
+  ON tb_questions (subject_id, corpus_question_id)
+  WHERE corpus_question_id IS NOT NULL;
 
 -- --------------------------------------------------------------------------
 
@@ -288,145 +307,6 @@ CREATE TABLE IF NOT EXISTS tb_question_corpus (
 );
 
 -- --------------------------------------------------------------------------
-
--- ============================================================================
--- LEGACY SUBJECT-VARIANT TABLES — SLATED FOR DELETION (Step 9 of unification)
--- ============================================================================
--- The three tables below were the Phase 6a subject-variant tables. They are
--- ZERO-ROW on production; their data shape folds into the unified tables
--- (tb_questions / tb_responses / tb_session_summaries) via the new subject_id
--- column. They remain in this file until Step 9 of the unification plan
--- executes the DROP block in migration 030, at which point they should be
--- removed from this file as well.
---
--- Do not write new code that references these tables.
--- ============================================================================
-
--- DEPRECATED — slated for deletion in Step 9. Use tb_questions with
--- corpus_question_id (TBD column add) instead. Empty on production.
-CREATE TABLE IF NOT EXISTS tb_scheduled_questions (
-   scheduled_question_id  INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
-  ,subject_id             INT NOT NULL
-  ,corpus_question_id     INT NOT NULL
-  ,scheduled_for          DATE NOT NULL
-  ,UNIQUE (subject_id, scheduled_for)
-  ,dttm_created_utc       TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS ix_scheduled_questions_subject_corpus
-  ON tb_scheduled_questions (subject_id, corpus_question_id);
-
--- --------------------------------------------------------------------------
-
--- DEPRECATED — slated for deletion in Step 9. Use tb_responses (now subject-aware
--- via subject_id) instead. Empty on production.
-CREATE TABLE IF NOT EXISTS tb_subject_responses (
-   subject_response_id    INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
-  ,subject_id             INT NOT NULL
-  ,scheduled_question_id  INT NOT NULL UNIQUE
-  ,text                   TEXT NOT NULL
-  ,dttm_created_utc       TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
--- --------------------------------------------------------------------------
-
--- DEPRECATED — slated for deletion in Step 9. Use tb_session_summaries (now
--- subject-aware via subject_id) instead. Empty on production. The schema-
--- parity exemption file db/sql/session_summary_divergence.allow is also
--- slated for deletion when this table goes.
-CREATE TABLE IF NOT EXISTS tb_subject_session_summaries (
-   subject_session_summary_id  INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
-  ,subject_id                  INT NOT NULL
-  ,scheduled_question_id       INT NOT NULL UNIQUE
-  ,first_keystroke_ms              DOUBLE PRECISION
-  ,total_duration_ms               DOUBLE PRECISION
-  ,total_chars_typed               INT
-  ,final_char_count                INT
-  ,commitment_ratio                DOUBLE PRECISION
-  ,pause_count                     INT
-  ,total_pause_ms                  DOUBLE PRECISION
-  ,deletion_count                  INT
-  ,largest_deletion                INT
-  ,total_chars_deleted             INT
-  ,tab_away_count                  INT
-  ,total_tab_away_ms               DOUBLE PRECISION
-  ,word_count                      INT
-  ,sentence_count                  INT
-  ,small_deletion_count            INT
-  ,large_deletion_count            INT
-  ,large_deletion_chars            INT
-  ,first_half_deletion_chars       INT
-  ,second_half_deletion_chars      INT
-  ,active_typing_ms                DOUBLE PRECISION
-  ,chars_per_minute                DOUBLE PRECISION
-  ,p_burst_count                   INT
-  ,avg_p_burst_length              DOUBLE PRECISION
-  ,nrc_anger_density               DOUBLE PRECISION
-  ,nrc_fear_density                DOUBLE PRECISION
-  ,nrc_joy_density                 DOUBLE PRECISION
-  ,nrc_sadness_density             DOUBLE PRECISION
-  ,nrc_trust_density               DOUBLE PRECISION
-  ,nrc_anticipation_density        DOUBLE PRECISION
-  ,cognitive_density               DOUBLE PRECISION
-  ,hedging_density                 DOUBLE PRECISION
-  ,first_person_density            DOUBLE PRECISION
-  ,inter_key_interval_mean         DOUBLE PRECISION
-  ,inter_key_interval_std          DOUBLE PRECISION
-  ,revision_chain_count            INT
-  ,revision_chain_avg_length       DOUBLE PRECISION
-  ,hold_time_mean                  DOUBLE PRECISION
-  ,hold_time_std                   DOUBLE PRECISION
-  ,flight_time_mean                DOUBLE PRECISION
-  ,flight_time_std                 DOUBLE PRECISION
-  ,keystroke_entropy               DOUBLE PRECISION
-  ,mattr                           DOUBLE PRECISION
-  ,avg_sentence_length             DOUBLE PRECISION
-  ,sentence_length_variance        DOUBLE PRECISION
-  ,scroll_back_count               INT
-  ,question_reread_count           INT
-  ,deletion_events_json            JSONB
-  ,confirmation_latency_ms         DOUBLE PRECISION
-  ,paste_count                     INT
-  ,paste_chars_total               INT
-  ,read_back_count                 INT
-  ,leading_edge_ratio              DOUBLE PRECISION
-  ,contextual_revision_count       INT
-  ,pre_contextual_revision_count   INT
-  ,considered_and_kept_count       INT
-  ,hold_time_mean_left             DOUBLE PRECISION
-  ,hold_time_mean_right            DOUBLE PRECISION
-  ,hold_time_std_left              DOUBLE PRECISION
-  ,hold_time_std_right             DOUBLE PRECISION
-  ,hold_time_cv                    DOUBLE PRECISION
-  ,negative_flight_time_count      INT
-  ,iki_skewness                    DOUBLE PRECISION
-  ,iki_kurtosis                    DOUBLE PRECISION
-  ,error_detection_latency_mean    DOUBLE PRECISION
-  ,terminal_velocity               DOUBLE PRECISION
-  ,cursor_distance_during_pauses   DOUBLE PRECISION
-  ,cursor_fidget_ratio             DOUBLE PRECISION
-  ,cursor_stillness_during_pauses  DOUBLE PRECISION
-  ,drift_to_submit_count           INT
-  ,cursor_pause_sample_count       INT
-  ,deletion_execution_speed_mean   DOUBLE PRECISION
-  ,postcorrection_latency_mean     DOUBLE PRECISION
-  ,mean_revision_distance          DOUBLE PRECISION
-  ,max_revision_distance           INT
-  ,punctuation_flight_mean         DOUBLE PRECISION
-  ,punctuation_letter_ratio        DOUBLE PRECISION
-  ,device_type                     TEXT
-  ,user_agent                      TEXT
-  ,hour_of_day                     SMALLINT
-  ,day_of_week                     SMALLINT
-  ,drop_count                      INT DEFAULT 0
-  ,dttm_created_utc                TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
--- --------------------------------------------------------------------------
-
--- ============================================================================
--- (END LEGACY SUBJECT-VARIANT BLOCK)
--- ============================================================================
 
 -- PURPOSE: journal responses (one row per question, one response per question)
 -- USE CASE: subject_id identifies which person submitted; question_id stays

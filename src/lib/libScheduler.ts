@@ -9,9 +9,22 @@
  * Determinism guarantees:
  * - Within unseen window: same subject + same date + same active corpus = same assignment.
  * - In repeat territory: deterministic given full scheduling history.
+ *
+ * Storage (post migration 032): subject corpus draws live in `tb_questions`
+ * with `question_source_id = 4` and `corpus_question_id` set. The legacy
+ * `tb_scheduled_questions` table was dropped in Step 9 of the schema
+ * unification. This module is now pure scheduling policy — every DB read
+ * and write goes through libDb so the encryption + subject-scope boundaries
+ * stay in one place.
  */
 
 import sql from './libDbPool.ts';
+import {
+  scheduleSubjectCorpusQuestion,
+  getSubjectScheduledQuestion,
+  getSubjectCorpusHistory,
+  getSubjectUnseenCorpusCount,
+} from './libDb.ts';
 
 // ----------------------------------------------------------------------------
 // Constants (exported for test override)
@@ -28,13 +41,13 @@ export const EXHAUSTION_WARNING_THRESHOLD = 7;
 // ----------------------------------------------------------------------------
 
 export interface ScheduleResult {
-  scheduled_question_id: number;
+  question_id: number;
   corpus_question_id: number;
   was_repeat: boolean;
 }
 
 export interface ScheduledQuestion {
-  scheduled_question_id: number;
+  question_id: number;
   subject_id: number;
   corpus_question_id: number;
   scheduled_for: string;
@@ -57,9 +70,13 @@ export async function scheduleQuestionForSubject(
   targetDate: string,
 ): Promise<ScheduleResult> {
   // Step 1: idempotency check
-  const existing = await getExistingSchedule(subjectId, targetDate);
+  const existing = await getSubjectScheduledQuestion(subjectId, targetDate);
   if (existing) {
-    return { ...existing, was_repeat: false };
+    return {
+      question_id: existing.question_id,
+      corpus_question_id: existing.corpus_question_id,
+      was_repeat: false,
+    };
   }
 
   // Step 2: load active corpus
@@ -78,12 +95,7 @@ export async function scheduleQuestionForSubject(
   const corpusSet = new Set(corpusIds);
 
   // Step 3: load subject's assignment history (chronological)
-  const history = await sql`
-    SELECT corpus_question_id, scheduled_for
-    FROM tb_scheduled_questions
-    WHERE subject_id = ${subjectId}
-    ORDER BY scheduled_for ASC
-  ` as Array<{ corpus_question_id: number; scheduled_for: string }>;
+  const history = await getSubjectCorpusHistory(subjectId);
 
   // Step 4: compute no-repeat window
   const corpusSize = corpusIds.length;
@@ -104,11 +116,11 @@ export async function scheduleQuestionForSubject(
   if (eligible.length > 0) {
     // Step 7a: unseen territory — walk from after last assignment, wrapping
     const lastId = history.length > 0
-      ? history[history.length - 1].corpus_question_id
+      ? history[history.length - 1]!.corpus_question_id
       : 0;
 
     const afterLast = eligible.filter(id => id > lastId);
-    pickedId = afterLast.length > 0 ? afterLast[0] : eligible[0];
+    pickedId = afterLast.length > 0 ? afterLast[0]! : eligible[0]!;
     wasRepeat = false;
   } else {
     // Step 7b: repeat territory — pick the one with oldest last-seen date
@@ -128,52 +140,45 @@ export async function scheduleQuestionForSubject(
       return a - b;
     });
 
-    pickedId = sorted[0];
+    pickedId = sorted[0]!;
     wasRepeat = true;
   }
 
-  // Step 8: insert (ON CONFLICT for race condition safety)
-  const [row] = await sql`
-    INSERT INTO tb_scheduled_questions (subject_id, corpus_question_id, scheduled_for)
-    VALUES (${subjectId}, ${pickedId}, ${targetDate})
-    ON CONFLICT (subject_id, scheduled_for) DO NOTHING
-    RETURNING scheduled_question_id, corpus_question_id
-  `;
-
-  if (row) {
-    return {
-      scheduled_question_id: (row as { scheduled_question_id: number }).scheduled_question_id,
-      corpus_question_id: (row as { corpus_question_id: number }).corpus_question_id,
-      was_repeat: wasRepeat,
-    };
-  }
-
-  // Race: another process inserted between our check and insert. Read it.
-  const raced = await getExistingSchedule(subjectId, targetDate);
-  if (!raced) throw new Error(`Schedule insert conflict but no row found for subject ${subjectId} on ${targetDate}`);
-  return { ...raced, was_repeat: false };
+  // Step 8: insert via libDb (idempotent on conflict; reads back the
+  // existing row if a concurrent insert won the race).
+  const result = await scheduleSubjectCorpusQuestion(subjectId, pickedId, targetDate);
+  return {
+    question_id: result.question_id,
+    corpus_question_id: result.corpus_question_id,
+    // A race that returned an existing row is not a "repeat" in the
+    // round-robin sense — it just means another worker scheduled the same
+    // day already.
+    was_repeat: result.was_inserted ? wasRepeat : false,
+  };
 }
 
 // ----------------------------------------------------------------------------
-// Reads
+// Reads (delegated to libDb)
 // ----------------------------------------------------------------------------
 
 /**
- * Get the scheduled question for a subject on a given date.
- * Returns the corpus question text + metadata, or null if not scheduled.
+ * Get the scheduled corpus question for a subject on a given date.
+ * Returns the question text + metadata, or null if not scheduled.
  */
 export async function getScheduledQuestion(
   subjectId: number,
   targetDate: string,
 ): Promise<ScheduledQuestion | null> {
-  const rows = await sql`
-    SELECT sq.scheduled_question_id, sq.subject_id, sq.corpus_question_id,
-           sq.scheduled_for, qc.text, qc.theme_tag
-    FROM tb_scheduled_questions sq
-    JOIN tb_question_corpus qc ON sq.corpus_question_id = qc.corpus_question_id
-    WHERE sq.subject_id = ${subjectId} AND sq.scheduled_for = ${targetDate}
-  `;
-  return (rows[0] as ScheduledQuestion) ?? null;
+  const row = await getSubjectScheduledQuestion(subjectId, targetDate);
+  if (!row) return null;
+  return {
+    question_id: row.question_id,
+    subject_id: subjectId,
+    corpus_question_id: row.corpus_question_id,
+    scheduled_for: row.scheduled_for,
+    text: row.text,
+    theme_tag: row.theme_tag,
+  };
 }
 
 /**
@@ -181,31 +186,5 @@ export async function getScheduledQuestion(
  * Used for the per-subject exhaustion warning.
  */
 export async function getUnseenCount(subjectId: number): Promise<number> {
-  const [row] = await sql`
-    SELECT count(*)::int AS unseen
-    FROM tb_question_corpus qc
-    WHERE qc.is_retired = FALSE
-      AND qc.corpus_question_id NOT IN (
-        SELECT DISTINCT corpus_question_id
-        FROM tb_scheduled_questions
-        WHERE subject_id = ${subjectId}
-      )
-  `;
-  return (row as { unseen: number }).unseen;
-}
-
-// ----------------------------------------------------------------------------
-// Internal
-// ----------------------------------------------------------------------------
-
-async function getExistingSchedule(
-  subjectId: number,
-  targetDate: string,
-): Promise<{ scheduled_question_id: number; corpus_question_id: number } | null> {
-  const rows = await sql`
-    SELECT scheduled_question_id, corpus_question_id
-    FROM tb_scheduled_questions
-    WHERE subject_id = ${subjectId} AND scheduled_for = ${targetDate}
-  `;
-  return (rows[0] as { scheduled_question_id: number; corpus_question_id: number }) ?? null;
+  return getSubjectUnseenCorpusCount(subjectId);
 }

@@ -78,7 +78,7 @@ function nowStr(): string {
 // No DDL or migration blocks here.
 // ----------------------------------------------------------------------------
 
-// @region queries -- getTodaysQuestion, getTodaysResponse, saveResponse, scheduleQuestion, getAllResponses, getLatestReflection, saveReflection, logInteractionEvent, hasQuestionForDate, countScheduledSeedQuestions
+// @region queries -- getTodaysQuestion, getTodaysResponse, saveResponse, scheduleQuestion, scheduleSubjectCorpusQuestion, getSubjectScheduledQuestion, getSubjectCorpusHistory, getSubjectUnseenCorpusCount, getAllResponses, getLatestReflection, saveReflection, logInteractionEvent, hasQuestionForDate, countScheduledSeedQuestions
 // ----------------------------------------------------------------------------
 // QUERIES
 // ----------------------------------------------------------------------------
@@ -137,6 +137,166 @@ export async function scheduleQuestion(subjectId: number, text: string, date: st
     VALUES (${subjectId}, ${enc.ciphertext}, ${enc.nonce}, ${sourceId}, ${date})
     ON CONFLICT (subject_id, scheduled_for) DO NOTHING
   `;
+}
+
+/**
+ * Schedule a corpus-drawn question for a subject on a given date (migration 032).
+ *
+ * Inserts a row into tb_questions with question_source_id = 4 ('corpus') and
+ * the corpus_question_id pointing back to tb_question_corpus. The text is read
+ * from the corpus row, encrypted with libCrypto, and stored on the question
+ * row alongside every other tb_questions row (uniform encryption boundary).
+ *
+ * Idempotent on (subject_id, scheduled_for): if the subject already has a
+ * question for that date, returns its existing question_id without re-inserting.
+ * The scheduler relies on this for the race-window read-after-conflict pattern.
+ *
+ * Returns the question_id (existing or newly inserted).
+ */
+export async function scheduleSubjectCorpusQuestion(
+  subjectId: number,
+  corpusQuestionId: number,
+  scheduledFor: string,
+  tx?: TxSql,
+): Promise<{ question_id: number; corpus_question_id: number; was_inserted: boolean }> {
+  const q = tx ?? sql;
+
+  const corpusRows = await q`
+    SELECT text FROM tb_question_corpus WHERE corpus_question_id = ${corpusQuestionId}
+  ` as Array<{ text: string }>;
+  const corpusRow = corpusRows[0];
+  if (!corpusRow) {
+    throw new Error(`scheduleSubjectCorpusQuestion: corpus_question_id ${corpusQuestionId} not found`);
+  }
+
+  const enc = encryptString(corpusRow.text);
+
+  const inserted = await q`
+    INSERT INTO tb_questions (
+       subject_id, text_ciphertext, text_nonce,
+       question_source_id, scheduled_for, corpus_question_id
+    )
+    VALUES (
+      ${subjectId}, ${enc.ciphertext}, ${enc.nonce},
+      4, ${scheduledFor}, ${corpusQuestionId}
+    )
+    ON CONFLICT (subject_id, scheduled_for) DO NOTHING
+    RETURNING question_id
+  ` as Array<{ question_id: number }>;
+
+  if (inserted.length > 0) {
+    return {
+      question_id: inserted[0]!.question_id,
+      corpus_question_id: corpusQuestionId,
+      was_inserted: true,
+    };
+  }
+
+  // Race: another process inserted between our check and insert. Read the
+  // existing row.
+  const existing = await q`
+    SELECT question_id, corpus_question_id
+    FROM tb_questions
+    WHERE subject_id = ${subjectId} AND scheduled_for = ${scheduledFor}
+  ` as Array<{ question_id: number; corpus_question_id: number | null }>;
+  const row = existing[0];
+  if (!row) {
+    throw new Error(
+      `scheduleSubjectCorpusQuestion: insert conflict but no existing row for subject ${subjectId} on ${scheduledFor}`,
+    );
+  }
+  if (row.corpus_question_id == null) {
+    throw new Error(
+      `scheduleSubjectCorpusQuestion: subject ${subjectId} already has a non-corpus question for ${scheduledFor}`,
+    );
+  }
+  return {
+    question_id: row.question_id,
+    corpus_question_id: row.corpus_question_id,
+    was_inserted: false,
+  };
+}
+
+/**
+ * Get the corpus-drawn scheduled question for a subject on a given date.
+ * Returns the question text (decrypted) plus the corpus theme tag, or null.
+ *
+ * Queries unified tb_questions; joins tb_question_corpus only for theme_tag
+ * (which is corpus metadata, not stored on tb_questions). Question text is
+ * decrypted from the per-row ciphertext column on tb_questions itself, so
+ * the corpus row's plaintext is never exposed beyond the JOIN result for
+ * theme_tag.
+ */
+export async function getSubjectScheduledQuestion(
+  subjectId: number,
+  scheduledFor: string,
+): Promise<{ question_id: number; corpus_question_id: number; text: string; theme_tag: string | null; scheduled_for: string } | null> {
+  const rows = await sql`
+    SELECT q.question_id, q.corpus_question_id,
+           q.text_ciphertext AS "qCt", q.text_nonce AS "qNonce",
+           q.scheduled_for, qc.theme_tag
+    FROM tb_questions q
+    JOIN tb_question_corpus qc ON q.corpus_question_id = qc.corpus_question_id
+    WHERE q.subject_id = ${subjectId}
+      AND q.scheduled_for = ${scheduledFor}
+      AND q.question_source_id = 4
+  ` as Array<{
+    question_id: number;
+    corpus_question_id: number;
+    qCt: string;
+    qNonce: string;
+    scheduled_for: string;
+    theme_tag: string | null;
+  }>;
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    question_id: row.question_id,
+    corpus_question_id: row.corpus_question_id,
+    text: decrypt(row.qCt, row.qNonce),
+    theme_tag: row.theme_tag,
+    scheduled_for: row.scheduled_for,
+  };
+}
+
+/**
+ * Subject's full corpus-draw assignment history, chronological. Used by the
+ * round-robin scheduler to compute the no-repeat window and to fall back to
+ * "oldest last-seen" once the corpus is exhausted.
+ *
+ * Only returns rows where corpus_question_id IS NOT NULL (subject corpus
+ * draws). Owner journal questions and calibration prompts are excluded.
+ */
+export async function getSubjectCorpusHistory(
+  subjectId: number,
+): Promise<Array<{ corpus_question_id: number; scheduled_for: string }>> {
+  const rows = await sql`
+    SELECT corpus_question_id, scheduled_for
+    FROM tb_questions
+    WHERE subject_id = ${subjectId}
+      AND corpus_question_id IS NOT NULL
+    ORDER BY scheduled_for ASC
+  ` as Array<{ corpus_question_id: number; scheduled_for: string }>;
+  return rows;
+}
+
+/**
+ * Count of active corpus questions this subject has NOT been assigned.
+ * Used for the per-subject exhaustion warning.
+ */
+export async function getSubjectUnseenCorpusCount(subjectId: number): Promise<number> {
+  const [row] = await sql`
+    SELECT count(*)::int AS unseen
+    FROM tb_question_corpus qc
+    WHERE qc.is_retired = FALSE
+      AND qc.corpus_question_id NOT IN (
+        SELECT DISTINCT corpus_question_id
+        FROM tb_questions
+        WHERE subject_id = ${subjectId}
+          AND corpus_question_id IS NOT NULL
+      )
+  `;
+  return (row as { unseen: number }).unseen;
 }
 
 export async function getAllResponses(subjectId: number): Promise<Array<{ question: string; response: string; date: string }>> {
@@ -2162,123 +2322,6 @@ export async function saveComment(slug: string, authorName: string, commentText:
     RETURNING paper_comment_id
   `;
   return row.paper_comment_id;
-}
-
-// @region subject-data -- saveSubjectResponse, getSubjectResponse, saveSubjectSessionSummary
-// ----------------------------------------------------------------------------
-// SUBJECT DATA
-// ----------------------------------------------------------------------------
-
-/** Save a subject's journal response. Returns the new ID. */
-export async function saveSubjectResponse(
-  subjectId: number,
-  scheduledQuestionId: number,
-  text: string,
-  tx?: TxSql,
-): Promise<number> {
-  const q = tx ?? sql;
-  const [row] = await q`
-    INSERT INTO tb_subject_responses (subject_id, scheduled_question_id, text)
-    VALUES (${subjectId}, ${scheduledQuestionId}, ${text})
-    RETURNING subject_response_id
-  `;
-  return (row as { subject_response_id: number }).subject_response_id;
-}
-
-/** Check if a subject has already responded to a scheduled question. */
-export async function getSubjectResponse(
-  scheduledQuestionId: number,
-): Promise<{ subject_response_id: number; text: string } | null> {
-  const rows = await sql`
-    SELECT subject_response_id, text
-    FROM tb_subject_responses
-    WHERE scheduled_question_id = ${scheduledQuestionId}
-  `;
-  return (rows[0] as { subject_response_id: number; text: string }) ?? null;
-}
-
-/** Save a subject's session summary. Uses the same SessionSummaryInput shape as the owner. */
-export async function saveSubjectSessionSummary(
-  subjectId: number,
-  scheduledQuestionId: number,
-  s: SessionSummaryInput,
-  tx?: TxSql,
-): Promise<void> {
-  const q = tx ?? sql;
-  await q`
-    INSERT INTO tb_subject_session_summaries (
-       subject_id, scheduled_question_id,
-       first_keystroke_ms, total_duration_ms,
-       total_chars_typed, final_char_count, commitment_ratio,
-       pause_count, total_pause_ms, deletion_count, largest_deletion,
-       total_chars_deleted, tab_away_count, total_tab_away_ms,
-       word_count, sentence_count,
-       small_deletion_count, large_deletion_count, large_deletion_chars,
-       first_half_deletion_chars, second_half_deletion_chars,
-       active_typing_ms, chars_per_minute, p_burst_count, avg_p_burst_length,
-       nrc_anger_density, nrc_fear_density, nrc_joy_density,
-       nrc_sadness_density, nrc_trust_density, nrc_anticipation_density,
-       cognitive_density, hedging_density, first_person_density,
-       inter_key_interval_mean, inter_key_interval_std,
-       revision_chain_count, revision_chain_avg_length,
-       hold_time_mean, hold_time_std, flight_time_mean, flight_time_std,
-       keystroke_entropy,
-       mattr, avg_sentence_length, sentence_length_variance,
-       scroll_back_count, question_reread_count,
-       confirmation_latency_ms, paste_count, paste_chars_total, drop_count,
-       read_back_count, leading_edge_ratio,
-       contextual_revision_count, pre_contextual_revision_count,
-       considered_and_kept_count,
-       hold_time_mean_left, hold_time_mean_right,
-       hold_time_std_left, hold_time_std_right, hold_time_cv,
-       negative_flight_time_count,
-       iki_skewness, iki_kurtosis,
-       error_detection_latency_mean, terminal_velocity,
-       cursor_distance_during_pauses, cursor_fidget_ratio,
-       cursor_stillness_during_pauses, drift_to_submit_count,
-       cursor_pause_sample_count,
-       deletion_execution_speed_mean, postcorrection_latency_mean,
-       mean_revision_distance, max_revision_distance,
-       punctuation_flight_mean, punctuation_letter_ratio,
-       device_type, user_agent, hour_of_day, day_of_week
-    ) VALUES (
-      ${subjectId}, ${scheduledQuestionId},
-      ${s.firstKeystrokeMs}, ${s.totalDurationMs},
-      ${s.totalCharsTyped}, ${s.finalCharCount}, ${s.commitmentRatio},
-      ${s.pauseCount}, ${s.totalPauseMs}, ${s.deletionCount}, ${s.largestDeletion},
-      ${s.totalCharsDeleted}, ${s.tabAwayCount}, ${s.totalTabAwayMs},
-      ${s.wordCount}, ${s.sentenceCount},
-      ${s.smallDeletionCount}, ${s.largeDeletionCount}, ${s.largeDeletionChars},
-      ${s.firstHalfDeletionChars}, ${s.secondHalfDeletionChars},
-      ${s.activeTypingMs}, ${s.charsPerMinute}, ${s.pBurstCount}, ${s.avgPBurstLength},
-      ${s.nrcAngerDensity}, ${s.nrcFearDensity}, ${s.nrcJoyDensity},
-      ${s.nrcSadnessDensity}, ${s.nrcTrustDensity}, ${s.nrcAnticipationDensity},
-      ${s.cognitiveDensity}, ${s.hedgingDensity}, ${s.firstPersonDensity},
-      ${s.interKeyIntervalMean}, ${s.interKeyIntervalStd},
-      ${s.revisionChainCount}, ${s.revisionChainAvgLength},
-      ${s.holdTimeMean}, ${s.holdTimeStd}, ${s.flightTimeMean}, ${s.flightTimeStd},
-      ${s.keystrokeEntropy},
-      ${s.mattr}, ${s.avgSentenceLength}, ${s.sentenceLengthVariance},
-      ${s.scrollBackCount}, ${s.questionRereadCount},
-      ${s.confirmationLatencyMs}, ${s.pasteCount}, ${s.pasteCharsTotal}, ${s.dropCount},
-      ${s.readBackCount}, ${s.leadingEdgeRatio},
-      ${s.contextualRevisionCount}, ${s.preContextualRevisionCount},
-      ${s.consideredAndKeptCount},
-      ${s.holdTimeMeanLeft}, ${s.holdTimeMeanRight},
-      ${s.holdTimeStdLeft}, ${s.holdTimeStdRight}, ${s.holdTimeCV},
-      ${s.negativeFlightTimeCount},
-      ${s.ikiSkewness}, ${s.ikiKurtosis},
-      ${s.errorDetectionLatencyMean}, ${s.terminalVelocity},
-      ${s.cursorDistanceDuringPauses}, ${s.cursorFidgetRatio},
-      ${s.cursorStillnessDuringPauses}, ${s.driftToSubmitCount},
-      ${s.cursorPauseSampleCount},
-      ${s.deletionExecutionSpeedMean}, ${s.postcorrectionLatencyMean},
-      ${s.meanRevisionDistance}, ${s.maxRevisionDistance},
-      ${s.punctuationFlightMean}, ${s.punctuationLetterRatio},
-      ${s.deviceType}, ${s.userAgent}, ${s.hourOfDay}, ${s.dayOfWeek}
-    )
-    ON CONFLICT (scheduled_question_id) DO NOTHING
-  `;
 }
 
 // @region corpus -- getCorpusQuestions, getCorpusQuestionById, insertCorpusQuestion, retireCorpusQuestion, getActiveCorpusCount
