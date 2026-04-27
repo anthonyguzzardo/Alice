@@ -254,10 +254,28 @@ function makeBodyText(profile: ProfileFixture, sessionIndex: number): string {
 interface InsertSessionOptions {
   subjectId: number;
   profile: ProfileFixture;
-  scheduledFor: string; // 'YYYY-MM-DD'
+  /**
+   * 'YYYY-MM-DD' for journals; can be null for calibrations to match
+   * production semantics (calibration questions have scheduled_for = NULL
+   * in production — they're triggered, not scheduled). Pass null when
+   * inserting a calibration on the same calendar date as an existing
+   * journal for the same subject — otherwise the (subject_id, scheduled_for)
+   * UNIQUE constraint on tb_questions would conflict.
+   */
+  scheduledFor: string | null;
   sessionIndex: number; // 0-based; used for distinguishing texts
   questionSourceId?: number; // default 1 (journal); 3 = calibration
   deviceType?: string;       // default 'test'; calibration baselines bin by this
+  /**
+   * Override tb_questions.dttm_created_utc (default: CURRENT_TIMESTAMP).
+   * Required for tests whose SQL depends on dttm_created_utc::date matching
+   * a specific calendar date — notably:
+   *   - libDailyDelta EXISTS subquery: c.dttm_created_utc::date = j.scheduled_for
+   *   - getSameDayCalibrationSummary: q.dttm_created_utc::date = $2
+   * Pass an ISO timestamp ('2026-04-10T12:00:00Z') or YYYY-MM-DD; postgres
+   * parses either as TIMESTAMPTZ.
+   */
+  dttmCreatedUtc?: string;
 }
 
 /**
@@ -275,15 +293,24 @@ export async function insertJournalSession(
   const { subjectId, profile, scheduledFor, sessionIndex } = opts;
   const sourceId = opts.questionSourceId ?? 1;
   const deviceType = opts.deviceType ?? 'test';
+  const dttmCreatedUtc = opts.dttmCreatedUtc ?? null;
   const text = makeBodyText(profile, sessionIndex);
 
   // tb_questions. Calibration sessions (sourceId=3) have NULL scheduled_for in
-  // production (they're triggered, not scheduled); we still pass scheduledFor
-  // here for fixture predictability — the libCalibrationDrift baseline reads
-  // tb_session_summaries directly and doesn't gate on scheduled_for.
+  // production (they're triggered, not scheduled); fixtures may follow that
+  // convention by passing scheduledFor=null. dttm_created_utc defaults to
+  // CURRENT_TIMESTAMP unless overridden via dttmCreatedUtc — which the
+  // libDailyDelta hotspots require because their EXISTS subqueries gate on
+  // dttm_created_utc::date matching the journal's scheduled_for.
   const [qRow] = await sql`
-    INSERT INTO tb_questions (subject_id, text, question_source_id, scheduled_for)
-    VALUES (${subjectId}, ${`q for ${profile.signatureWord} session ${sessionIndex}`}, ${sourceId}, ${scheduledFor})
+    INSERT INTO tb_questions (subject_id, text, question_source_id, scheduled_for, dttm_created_utc)
+    VALUES (
+      ${subjectId},
+      ${`q for ${profile.signatureWord} session ${sessionIndex}`},
+      ${sourceId},
+      ${scheduledFor},
+      COALESCE(${dttmCreatedUtc}::timestamptz, CURRENT_TIMESTAMP)
+    )
     RETURNING question_id
   `;
   const questionId = (qRow as { question_id: number }).question_id;
@@ -515,6 +542,7 @@ export const FIXTURE_TABLES = [
   'tb_semantic_baselines',
   'tb_embeddings',
   'tb_semantic_signals',
+  'tb_session_delta',
   'tb_session_summaries',
   'tb_responses',
   'tb_questions',
