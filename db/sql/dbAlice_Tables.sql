@@ -239,7 +239,7 @@ CREATE INDEX IF NOT EXISTS ix_subject_sessions_expires_at
 
 -- --------------------------------------------------------------------------
 
--- @region core -- tb_questions, tb_question_corpus, tb_responses, tb_interaction_events, tb_reflections, tb_question_feedback
+-- @region core -- tb_questions, tb_question_corpus, tb_responses, tb_interaction_events, tb_question_feedback
 -- ============================================================================
 -- CORE MUTABLE TABLES
 -- ============================================================================
@@ -317,7 +317,7 @@ CREATE TABLE IF NOT EXISTS tb_question_corpus (
 -- USE CASE: subject_id identifies which person submitted; question_id stays
 --           unique because question_id is itself a globally-unique surrogate.
 -- MUTABILITY: insert once, never updated (black box)
--- REFERENCED BY: tb_entry_states, tb_embeddings
+-- REFERENCED BY: tb_embeddings
 -- FOOTER: yes
 CREATE TABLE IF NOT EXISTS tb_responses (
    response_id                     INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
@@ -354,26 +354,6 @@ CREATE TABLE IF NOT EXISTS tb_interaction_events (
 );
 
 CREATE INDEX IF NOT EXISTS ix_interaction_events_subject_id ON tb_interaction_events (subject_id);
-
--- --------------------------------------------------------------------------
-
--- PURPOSE: periodic AI-generated reflections over response history
--- USE CASE: weekly/monthly synthesis (per subject)
--- MUTABILITY: insert once, may be regenerated
--- FOOTER: yes
-CREATE TABLE IF NOT EXISTS tb_reflections (
-   reflection_id                INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
-  ,subject_id                   INT NOT NULL                              -- logical FK to tb_subjects
-  -- text encrypted at rest (migration 031). Plaintext column removed.
-  ,text_ciphertext              TEXT NOT NULL
-  ,text_nonce                   TEXT NOT NULL
-  ,reflection_type_id           SMALLINT NOT NULL DEFAULT 1
-  ,coverage_through_response_id INT
-  ,dttm_created_utc             TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-  ,created_by                   TEXT NOT NULL DEFAULT 'system'
-  ,dttm_modified_utc            TIMESTAMPTZ
-  ,modified_by                  TEXT
-);
 
 -- --------------------------------------------------------------------------
 
@@ -609,9 +589,9 @@ CREATE TABLE IF NOT EXISTS tb_embeddings (
 CREATE INDEX IF NOT EXISTS idx_embeddings_vector ON tb_embeddings
   USING hnsw (embedding vector_l2_ops) WITH (m = 16, ef_construction = 64);
 
--- @region state -- tb_entry_states
+-- @region session-data -- tb_burst_sequences, tb_rburst_sequences, tb_session_metadata, tb_calibration_baselines_history, tb_session_events
 -- ============================================================================
--- STATE, DYNAMICS, COUPLING TABLES
+-- SESSION-DATA TABLES (bursts, metadata, event logs, calibration history)
 -- ============================================================================
 --
 -- ALICE NEGATIVE WITNESS RENDERER — REMOVED 2026-04-27
@@ -620,10 +600,12 @@ CREATE INDEX IF NOT EXISTS idx_embeddings_vector ON tb_embeddings
 --   INC-014). Its dedicated table `tb_witness_states` was archived to
 --   `zz_archive_tb_witness_states` via migration 033.
 --
---   The seven tables remaining in this region power general-purpose state /
---   dynamics / coupling computation (PersDyn 7D state engine, semantic 11D
---   space, emotion-behavior coupling). They are NOT witness-specific and
---   stay in active use.
+-- BEHAVIORAL 7D ENTRY-STATES — REMOVED 2026-04-27
+--   `tb_entry_states` (PersDyn 7D state vectors) was archived to
+--   `zz_archive_tb_entry_states` via migration 036 (INC-017). Its producer
+--   was the deleted alice-negative pipeline; its consumer (the entry
+--   detail observatory page) was deleted in the same commit.
+--
 -- ============================================================================
 
 -- PURPOSE: P-burst sequences per session
@@ -756,31 +738,6 @@ CREATE TABLE IF NOT EXISTS tb_session_events (
 );
 
 CREATE INDEX IF NOT EXISTS ix_session_events_subject_id ON tb_session_events (subject_id);
-
--- --------------------------------------------------------------------------
-
--- PURPOSE: 8D behavioral state per journal entry
--- USE CASE: PersDyn state engine output, observatory visualization
--- MUTABILITY: insert once, recomputable from session summaries
--- FOOTER: created only
---
--- All dimensions are DOUBLE PRECISION [0,1] normalized.
--- Rust f64 -> JS number -> PG float8. No conversion loss.
-CREATE TABLE IF NOT EXISTS tb_entry_states (
-   entry_state_id    INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
-  ,subject_id        INT NOT NULL                                         -- logical FK to tb_subjects (Alice Negative deprioritized — column-add only)
-  ,response_id       INT NOT NULL UNIQUE
-  ,fluency           DOUBLE PRECISION NOT NULL
-  ,deliberation      DOUBLE PRECISION NOT NULL
-  ,revision          DOUBLE PRECISION NOT NULL
-  ,commitment        DOUBLE PRECISION NOT NULL
-  ,volatility        DOUBLE PRECISION NOT NULL
-  ,thermal           DOUBLE PRECISION NOT NULL
-  ,presence          DOUBLE PRECISION NOT NULL
-  ,convergence       DOUBLE PRECISION NOT NULL
-  ,dttm_created_utc  TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-  ,created_by        TEXT NOT NULL DEFAULT 'system'
-);
 
 -- @region signals -- tb_dynamical_signals, tb_motor_signals, tb_semantic_signals, tb_process_signals, tb_cross_session_signals
 -- ============================================================================

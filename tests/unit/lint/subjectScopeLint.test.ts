@@ -399,6 +399,8 @@ const ARCHIVED_SINCE_030 = new Set<string>([
   'tb_trait_dynamics',           // archived via migration 035 (2026-04-27, INC-016)
   'tb_coupling_matrix',          // archived via migration 035 (2026-04-27, INC-016)
   'tb_emotion_behavior_coupling',// archived via migration 035 (2026-04-27, INC-016)
+  'tb_entry_states',             // archived via migration 036 (2026-04-27, INC-017)
+  'tb_reflections',              // archived via migration 036 (2026-04-27, INC-017)
 ]);
 
 describe('subjectScopeLint — migration drift', () => {

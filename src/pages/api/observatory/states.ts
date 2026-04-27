@@ -1,10 +1,14 @@
 /**
  * Observatory States API
  *
- * Returns per-entry behavioral 7D state vectors plus session metadata,
- * joined to question text and date. Designer-facing only.
+ * Returns a per-entry envelope keyed on tb_responses, joined to question
+ * text + date and to live signal tables (motor, phase2, process,
+ * cross-session, discourse). Designer-facing only.
  *
- * Pulls from the live PostgreSQL database.
+ * Pre-2026-04-27 this endpoint anchored on tb_entry_states and surfaced
+ * 7D behavioral z-scores. tb_entry_states was archived (migration 036,
+ * INC-017) along with the radar UI that consumed it; the endpoint was
+ * re-anchored on tb_responses to keep the rest of the trajectory page alive.
  */
 import type { APIRoute } from 'astro';
 import sql, { OWNER_SUBJECT_ID } from '../../../lib/libDb.ts';
@@ -16,25 +20,22 @@ export const GET: APIRoute = async () => {
   // TODO(step5): review.
   const subjectId = OWNER_SUBJECT_ID;
   try {
-    // Behavioral 7D states with question + replay availability.
+    // One row per journal response (calibration sessions excluded).
     // Migration 031: question text is encrypted at rest (text_ciphertext +
     // text_nonce). Bulk-select the ciphertext columns and decrypt in JS so
     // we don't fan out to N libDb getQuestionTextById calls.
     const stateRows = await sql`
       SELECT
-         es.response_id
+         r.response_id
         ,r.question_id
         ,q.scheduled_for as date
         ,q.text_ciphertext as "qCt"
         ,q.text_nonce as "qNonce"
-        ,es.fluency, es.deliberation, es.revision
-        ,es.commitment, es.volatility, es.thermal, es.presence
-        ,es.convergence
-      FROM tb_entry_states es
-      JOIN tb_responses r ON es.response_id = r.response_id
+      FROM tb_responses r
       JOIN tb_questions q ON r.question_id = q.question_id
       WHERE q.subject_id = ${subjectId}
-      ORDER BY es.entry_state_id ASC
+        AND q.question_source_id != 3
+      ORDER BY r.response_id ASC
     ` as Array<Record<string, unknown> & { qCt: string; qNonce: string }>;
     const states = stateRows.map(({ qCt, qNonce, ...rest }) => ({
       ...rest,
@@ -142,7 +143,7 @@ export const GET: APIRoute = async () => {
     });
   } catch (err) {
     logError('api.observatory.states', err);
-    return new Response(JSON.stringify({ error: 'Failed to load entry states' }), {
+    return new Response(JSON.stringify({ error: 'Failed to load entries' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });

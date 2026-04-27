@@ -66,7 +66,7 @@ SELECT s.total_duration_ms AS totalDurationMs  -- becomes "totaldurationms"
 
 // WRONG -- assuming cascade delete behavior
 await sql`DELETE FROM tb_questions WHERE question_id = ${id}`;
-// ^^^ orphans rows in tb_responses, tb_session_summaries, tb_entry_states, etc.
+// ^^^ orphans rows in tb_responses, tb_session_summaries, tb_session_events, etc.
 ```
 
 ### Reference Implementation
@@ -78,9 +78,7 @@ See `src/lib/libDb.ts` -- `getCalibrationSessionsWithText()` for the canonical m
 When deleting from a parent table, the following children must be deleted first (or the delete must be skipped). There are no physical FK constraints to enforce this; application code is responsible.
 
 - `tb_questions` -> `tb_responses`, `tb_session_summaries`, `tb_session_events`, `tb_burst_sequences`, `tb_session_metadata`, `tb_dynamical_signals`, `tb_motor_signals`, `tb_semantic_signals`, `tb_process_signals`, `tb_cross_session_signals`, `tb_question_feedback`, `tb_interaction_events`
-- `tb_responses` -> `tb_entry_states`, `tb_semantic_states`, `tb_embeddings` (where `embedding_source_id = 1`)
-- `tb_witness_states` -> no children (leaf table)
-- `tb_entry_states` -> no children (leaf table)
+- `tb_responses` -> `tb_embeddings` (where `embedding_source_id = 1`)
 
 Prefer `sql.begin` for any multi-table delete. When in doubt, do not delete; orphan detection is in the health endpoint.
 
@@ -383,12 +381,14 @@ const original = decrypt(ciphertext, nonce);       // throws on tamper
 ```
 
 **Encrypted columns** (post-031): `tb_responses.text`, `tb_questions.text`,
-`tb_reflections.text`, `tb_embeddings.embedded_text`,
+`tb_embeddings.embedded_text`,
 `tb_session_events.event_log_json`+`keystroke_stream_json`. Each becomes a
 `<col>_ciphertext`+`<col>_nonce` pair of TEXT columns. See
 `db/sql/migrations/030_STEP8_ENCRYPTION.md` for the full inventory and
 rationale. (`tb_calibration_context.value`+`detail` were also encrypted at
-031 but the entire table was archived 2026-04-27 — INC-015 / migration 034.)
+031 but the entire table was archived 2026-04-27 — INC-015 / migration 034.
+`tb_reflections.text` was likewise encrypted at 031 then the whole table was
+archived 2026-04-27 — INC-017 / migration 036.)
 
 **Boundary discipline**: every read of an encrypted column lives inside
 `src/lib/libDb.ts`. Application code above libDb sees plaintext on the way

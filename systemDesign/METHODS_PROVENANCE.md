@@ -8,6 +8,81 @@ Newest first.
 
 ---
 
+## INC-017: Entry states and reflections archived (orphan-table archival, second wave)
+
+**Date:** 2026-04-27
+**Type:** Architectural correction (two orphan tables retained after their producers were deleted; one consumer surface still rendering frozen behavioral data, one with no live readers)
+
+### What was wrong
+
+INC-016 explicitly deferred archival of `tb_entry_states`: writes had stopped on 2026-04-25 along with the rest of the alice-negative pipeline, but the behavioral 7D radar on the entry observatory page still joined on it, and the call was to either rebuild the producer or archive the table and remove the radar. INC-017 makes the call: archive the table and delete the radar.
+
+`tb_reflections` was a separate orphan: its producer was the legacy `runGeneration` reflection-cadence path retired alongside the corpus pivot (INC-014). At INC-017 time, `saveReflection`, `getLatestReflection`, `getAllReflections`, and `getLatestReflectionWithCoverage` had zero callers in `src/`. The only references were one encryption smoke test and the `nextReflectionAt` field in the health endpoint (already cleaned in commit `ed8f692` "health pipeline stale fix"). Also, the `te_embedding_source` enum has a `reflection` (id=3) row, but no live code path was inserting `embedding_source_id = 3` rows.
+
+Tables affected:
+
+| Table             | Producer status                                              | Live readers at archival time |
+|-------------------|--------------------------------------------------------------|--------------------------------|
+| tb_entry_states   | Frozen 2026-04-25 11:58 (alice-negative pipeline scrub)      | observatory entry detail page + states API + trajectory.astro behavioral section |
+| tb_reflections    | No live writer in src/ since corpus-pivot (INC-014)          | encryption smoke test only     |
+
+### Discovery method
+
+`tb_entry_states` was already flagged as deferred in INC-016. `tb_reflections` was caught during a routine "what's stale in the pipeline health menu" inspection: `nextReflectionAt` in `/api/health` was computing a number every request despite no reflection ever being written. A `grep -rn "saveReflection\|getLatestReflection\|getAllReflections" src/ scripts/ | grep -v libDb.ts` returned zero matches, confirming the producer was orphan. The agent that mapped scope initially claimed reflections were "still being written" — direct grep falsified that claim before any cleanup ran.
+
+### Resolution
+
+**Application code removed (per CLAUDE.md "archival means removal"):**
+
+- `src/pages/api/observatory/entry/[id].ts` — entire file (3 queries on `tb_entry_states`; sole consumer of `getEntryStateByResponseId`)
+- `src/pages/observatory/entry/[id].astro` — entire page (behavioral 7D radar)
+- `src/pages/api/observatory/states.ts` — re-anchored on `tb_responses` instead of `tb_entry_states`; behavioral 7D + convergence columns dropped from the SELECT and from the response shape
+- `src/pages/observatory/index.astro` — `BEHAVIORAL_DIMS`, `fmtZ`, `dotColor` constants/helpers removed; the per-entry table dropped its 7 z-score columns and its link wrapper to the deleted entry detail page; remaining columns: date, meta, replay
+- `src/pages/observatory/trajectory.astro` — `BEHAVIORAL_DIMS`, `fmtZ`, `renderSection` removed; the "Behavioral 7D · z-score trajectory" section and "Convergence overlay" deleted; the `BEHAVIORAL_DIMS` and `convergence` entries in `allValues` chart-render loop removed; docstring updated to drop "behavioral and"
+- `src/pages/observatory/replay/[questionId].astro` — entry-meta fetch to `/api/observatory/entry/[id]` removed; the "← back to entry" override on the back-link removed (default "← back to observatory" stays); question-text display dropped (placeholder); meta line simplified to `events · duration`
+- `src/lib/libDb.ts` — `EntryStateRow`, `saveEntryState`, `getAllEntryStates`, `getEntryStateCount`, `getEntryStatesWithDates`, `getEntryStateByResponseId`, `saveReflection`, `getLatestReflection`, `getAllReflections`, `getLatestReflectionWithCoverage` deleted. The `@region state -- tb_entry_states` marker was deleted; `@region queries` and `@region retrieval` markers had their reflection symbols dropped; `@region observatory` had `getEntryStatesWithDates`/`getEntryStateByResponseId` dropped. A consolidated deprecation comment block matching the INC-015 style was added.
+
+**Schema-side work:**
+
+- `db/sql/migrations/036_archive_entry_states_and_reflections.sql` — new migration. One DO block, two idempotent renames to `zz_archive_*`, post-archive verification query. Operator runs `psql "$ALICE_PG_URL" -v ON_ERROR_STOP=1 -f db/sql/migrations/036_archive_entry_states_and_reflections.sql` against Supabase when ready. NOT auto-applied.
+- `db/sql/dbAlice_Tables.sql` — the two `CREATE TABLE` blocks deleted; the `@region state -- tb_entry_states` marker replaced with `@region session-data` covering the five session-related tables that physically live there (bursts, rbursts, metadata, calibration history, session events); the stale `REFERENCED BY: tb_entry_states, tb_embeddings` comment on `tb_responses` corrected to drop `tb_entry_states`; `tb_reflections` dropped from the `@region core` marker.
+- `tests/unit/lint/subjectScopeLint.ts` — `tb_entry_states` and `tb_reflections` removed from `SUBJECT_BEARING_TABLES`.
+- `tests/unit/lint/subjectScopeLint.test.ts` — `tb_entry_states` and `tb_reflections` added to `ARCHIVED_SINCE_030` exemption set.
+- `tests/db/encryption.test.ts` — `tb_reflections.text` round-trip case deleted; `saveReflection` + `getLatestReflectionWithCoverage` imports dropped; `tb_reflections` dropped from the `beforeEach` cleanup table list.
+- `CLAUDE.md` — cascade-dependencies list dropped `tb_entry_states` from the `tb_responses` children entry and dropped the `tb_entry_states -> no children (leaf table)` line; the encrypted-columns paragraph dropped `tb_reflections.text` from the active list and added a parenthetical noting it was archived.
+
+**Enums left intact:** `te_reflection_type` and the `embedding_source_id = 3` row in `te_embedding_source` are preserved. Static dictionary entries; removing them risks orphan rows in archived tables and historical embeddings, with no benefit beyond stylistic cleanup.
+
+### Existing data
+
+`tb_entry_states`: rows frozen at 2026-04-25 11:58. After migration, every row lives in `zz_archive_tb_entry_states` and is inert.
+
+`tb_reflections`: row count was already low (the legacy generator hadn't fired in weeks). Whatever's there moves to `zz_archive_tb_reflections`. No live code reads it.
+
+### Verification
+
+| Check | Pre-fix | Post-fix |
+|---|---|---|
+| Live `src/` references to `tb_entry_states` or `tb_reflections` (excluding the libDb deprecation comment) | non-zero | 0 |
+| `saveEntryState` / `saveReflection` callers | 0 (already orphaned) | 0 (now also deleted) |
+| Files reading either table | 4 (`states.ts`, `entry/[id].ts`, `entry/[id].astro`, encryption test for reflections) | 0 |
+| `to_regclass('alice.tb_entry_states')` and `tb_reflections` | non-NULL | NULL after migration runs |
+| `to_regclass('alice.zz_archive_tb_entry_states')` and `zz_archive_tb_reflections` | NULL | non-NULL with original row counts |
+| Unit tests | 78 passing | 78 passing |
+| Lint test `SUBJECT_BEARING_TABLES covers every BLOCK 1 table in migration 030 (excluding archived)` | passing | passing |
+| TS check on touched files | clean | clean (pre-existing strict-null noise unchanged) |
+
+### What this does NOT fix
+
+- **Migration 036 not yet applied to Supabase.** Until then, both tables remain live in production. No code reads them; the only effect of leaving them un-archived is database surface area.
+- **Migration 035 numbering collision.** Two files in `db/sql/migrations/` are both prefixed `035` (`035_archive_alice_negative_state_tables.sql` and `035_session_telemetry.sql`). Pre-existing; not addressed in this commit. The operator can apply migrations in either order; the file collision is cosmetic but worth resolving before the next archival pass.
+
+### Discipline note
+
+This is the third archival pass in a single day (INC-014, INC-015, INC-016, now INC-017). The pattern is consistent: a producer or consumer is deleted, the other side becomes orphan, an audit catches it. The `feedback_orphan_pipeline_discipline.md` memory captures the rule. The audit pass that catches an orphan should grep for both directions of the dependency edge (producers and consumers) before the cleanup commit lands, not after.
+
+---
+
 ## INC-016: Alice Negative state/dynamics/coupling tables archived (consumer-side scrub)
 
 **Date:** 2026-04-27

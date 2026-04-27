@@ -2,8 +2,8 @@
 /**
  * Observatory · Designer-facing instrument view.
  *
- * Lists all entries with their behavioral 7D state vectors, calibration
- * drift, and per-entry replay links.
+ * Lists all entries with calibration drift, session integrity, and
+ * per-entry replay links.
  *
  * No user surfaces. The /observatory/* tree is for the designer only.
  */
@@ -68,28 +68,12 @@ import '../../styles/styObservatory.css';
       </section>
 
       <section class="panel">
-        <h2>Entries · per-entry state vectors + replay</h2>
+        <h2>Entries · session metadata + replay</h2>
         <div id="entries-table"></div>
       </section>
     </div>
 
     <script type="module">
-      const BEHAVIORAL_DIMS = ['fluency','deliberation','revision','commitment','volatility','thermal','presence'];
-
-      function fmtZ(v) {
-        if (v == null) return '—';
-        const sign = v >= 0 ? '+' : '';
-        return sign + v.toFixed(2);
-      }
-
-      function dotColor(z) {
-        const s = getComputedStyle(document.documentElement);
-        if (z == null) return s.getPropertyValue('--border').trim() || '#ddd';
-        if (Math.abs(z) < 1) return s.getPropertyValue('--text-muted').trim() || '#555';
-        if (z > 0) return s.getPropertyValue('--positive').trim() || '#6b8e6b';
-        return s.getPropertyValue('--negative').trim() || '#b5603f';
-      }
-
       function sparkline(values, color = null) {
         if (!color) color = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#7a5a44';
         const n = values.length;
@@ -112,7 +96,7 @@ import '../../styles/styObservatory.css';
           return;
         }
 
-        const cols = ['date', 'flu', 'del', 'rev', 'com', 'vol', 'thm', 'prs', 'meta', 'replay'];
+        const cols = ['date', 'meta', 'replay'];
         const head = `<thead><tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr></thead>`;
         const rows = states.map(s => {
           const metaParts = [];
@@ -128,12 +112,9 @@ import '../../styles/styObservatory.css';
           const replay = s.replayAvailable
             ? `<a class="action-btn" href="/observatory/replay/${s.question_id}">▶ replay</a>`
             : '<span class="action-btn-muted">—</span>';
-          const link = (content) => `<a href="/observatory/entry/${s.response_id}">${content}</a>`;
-          const behLinked = BEHAVIORAL_DIMS.map(d => `<td class="num" style="color:${dotColor(s[d])}">${link(fmtZ(s[d]))}</td>`).join('');
           return `<tr>
-            <td>${link(s.date)}</td>
-            ${behLinked}
-            <td class="meta">${link(meta)}</td>
+            <td>${s.date}</td>
+            <td class="meta">${meta}</td>
             <td>${replay}</td>
           </tr>`;
         }).join('');

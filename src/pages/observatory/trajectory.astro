@@ -2,8 +2,9 @@
 /**
  * Observatory · Trajectory
  *
- * Time-series view of behavioral and dynamical signals across all entries.
- * Shows how signals move over sessions, not just what they are in one session.
+ * Time-series view of motor, process, cross-session, and discourse signals
+ * across all entries. Shows how signals move over sessions, not just what
+ * they are in one session.
  *
  * No interpretation. Designer-facing only.
  */
@@ -115,16 +116,6 @@ import '../../styles/styObservatory.css';
     </div>
 
     <script type="module">
-      const BEHAVIORAL_DIMS = [
-        { key: 'fluency', label: 'Fluency', color: 'var(--accent)' },
-        { key: 'deliberation', label: 'Deliberation', color: 'var(--accent)' },
-        { key: 'revision', label: 'Revision', color: 'var(--accent)' },
-        { key: 'commitment', label: 'Commitment', color: 'var(--accent)' },
-        { key: 'volatility', label: 'Volatility', color: 'var(--accent)' },
-        { key: 'thermal', label: 'Thermal', color: 'var(--accent)' },
-        { key: 'presence', label: 'Presence', color: 'var(--accent)' },
-      ];
-
       const MOTOR_DIMS = [
         { key: 'ex_gaussian_tau', label: 'Ex-Gaussian tau', color: 'var(--accent)', unit: 'ms' },
         { key: 'tau_proportion', label: 'Tau proportion', color: 'var(--accent)', unit: '%' },
@@ -167,11 +158,6 @@ import '../../styles/styObservatory.css';
         { key: 'vocab_expansion_rate', label: 'Vocab expansion rate', color: 'var(--semantic)', unit: '' },
         { key: 'phase_transition_point', label: 'Phase transition point', color: 'var(--warn)', unit: '' },
       ];
-
-      function fmtZ(v) {
-        if (v == null) return '—';
-        return (v >= 0 ? '+' : '') + Number(v).toFixed(2) + 'σ';
-      }
 
       function fmtRaw(v, unit) {
         if (v == null) return '—';
@@ -321,23 +307,6 @@ import '../../styles/styObservatory.css';
         }
       }
 
-      function renderSection(label, dims, states, getVal) {
-        let html = `<div class="section-label">${label}</div><div class="chart-row">`;
-        for (const dim of dims) {
-          const values = states.map(s => getVal(s, dim.key));
-          const latest = values[values.length - 1];
-          html += `
-            <div class="chart-panel">
-              <h3>${dim.label}</h3>
-              <canvas class="trajectory-chart" data-dim="${dim.key}" data-color="${dim.color}"></canvas>
-              <div class="latest-reading">latest: <span class="val">${fmtZ(latest)}</span></div>
-            </div>
-          `;
-        }
-        html += '</div>';
-        return html;
-      }
-
       function renderRawSection(label, dims, states, getVal) {
         let html = `<div class="section-label">${label}</div><div class="chart-row">`;
         for (const dim of dims) {
@@ -371,25 +340,6 @@ import '../../styles/styObservatory.css';
         const dates = states.map(s => s.date);
 
         let html = '';
-        html += renderSection(
-          'Behavioral 7D · z-score trajectory',
-          BEHAVIORAL_DIMS,
-          states,
-          (s, key) => s[key]
-        );
-
-        // Convergence overlay
-        const behConv = states.map(s => s.convergence);
-        html += `
-          <div class="section-label">Convergence · dimensional agreement</div>
-          <div class="chart-row">
-            <div class="chart-panel">
-              <h3>Behavioral convergence</h3>
-              <canvas class="trajectory-chart" data-dim="convergence" data-color="var(--accent)"></canvas>
-              <div class="latest-reading">latest: <span class="val">${fmtZ(behConv[behConv.length - 1])}</span></div>
-            </div>
-          </div>
-        `;
 
         // Motor signals trajectory (Phase 2)
         const hasMotor = states.some(s => s.motor != null);
@@ -450,10 +400,6 @@ import '../../styles/styObservatory.css';
 
         // Draw all charts
         const allValues = {};
-        for (const dim of BEHAVIORAL_DIMS) {
-          allValues[dim.key] = { values: states.map(s => s[dim.key]), color: dim.color };
-        }
-        allValues['convergence'] = { values: behConv, color: 'var(--accent)' };
         if (hasMotor) {
           for (const dim of MOTOR_DIMS) {
             allValues[dim.key] = { values: states.map(s => s.motor?.[dim.key] ?? null), color: dim.color };

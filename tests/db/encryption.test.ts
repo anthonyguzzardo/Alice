@@ -18,21 +18,20 @@
  *      this re-exercises it through the libDb path to confirm the wiring.)
  *
  * The test exercises the complete column inventory (tb_responses,
- * tb_questions, tb_reflections, tb_embeddings, tb_session_events) so any
- * wiring drift is caught — not just one column. tb_calibration_context was
- * archived 2026-04-27 (INC-015) and dropped from this test.
+ * tb_questions, tb_embeddings, tb_session_events) so any wiring drift is
+ * caught — not just one column. tb_calibration_context was archived
+ * 2026-04-27 (INC-015) and dropped from this test; tb_reflections was
+ * archived 2026-04-27 (INC-017) and dropped likewise.
  */
 
 import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import sql, {
   saveResponse,
   scheduleQuestion,
-  saveReflection,
   saveSessionEvents,
   insertEmbeddingMeta,
   getResponseText,
   getQuestionTextById,
-  getLatestReflectionWithCoverage,
   getEventLogJson,
   getKeystrokeStreamJson,
   getSessionEvents,
@@ -49,7 +48,7 @@ beforeEach(async () => {
   // test files that share the container.
   for (const t of [
     'tb_session_events', 'tb_embeddings',
-    'tb_reflections', 'tb_responses', 'tb_questions', 'tb_subjects',
+    'tb_responses', 'tb_questions', 'tb_subjects',
   ]) {
     await sql.unsafe(`DELETE FROM ${t} WHERE subject_id = $1`, [SUBJECT_ID]);
   }
@@ -106,20 +105,6 @@ describe('migration 031 — encryption round-trip through libDb', () => {
     const info = await getQuestionTextById(SUBJECT_ID, question_id);
     expect(info?.text).toBe('What does honesty cost you today?');
     expect(info?.question_source_id).toBe(1);
-  });
-
-  it('tb_reflections.text — saveReflection / getLatestReflectionWithCoverage', async () => {
-    const plaintext = 'Pattern: avoidance peaks before deadlines.';
-    await saveReflection(SUBJECT_ID, plaintext, 'weekly', 999);
-
-    const rawRows = await sql`
-      SELECT text_ciphertext FROM tb_reflections WHERE subject_id = ${SUBJECT_ID}
-    ` as Array<{ text_ciphertext: string }>;
-    expect(rawRows[0]!.text_ciphertext).not.toContain('avoidance');
-
-    const latest = await getLatestReflectionWithCoverage(SUBJECT_ID);
-    expect(latest?.text).toBe(plaintext);
-    expect(latest?.coverage_through_response_id).toBe(999);
   });
 
   it('tb_embeddings.embedded_text — round-trip via insertEmbeddingMeta path', async () => {

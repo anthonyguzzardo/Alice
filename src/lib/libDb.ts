@@ -78,7 +78,7 @@ function nowStr(): string {
 // No DDL or migration blocks here.
 // ----------------------------------------------------------------------------
 
-// @region queries -- getTodaysQuestion, getTodaysResponse, saveResponse, scheduleQuestion, scheduleSubjectCorpusQuestion, getSubjectScheduledQuestion, getSubjectCorpusHistory, getSubjectUnseenCorpusCount, getAllResponses, getLatestReflection, saveReflection, logInteractionEvent, hasQuestionForDate, countScheduledSeedQuestions
+// @region queries -- getTodaysQuestion, getTodaysResponse, saveResponse, scheduleQuestion, scheduleSubjectCorpusQuestion, getSubjectScheduledQuestion, getSubjectCorpusHistory, getSubjectUnseenCorpusCount, getAllResponses, logInteractionEvent, hasQuestionForDate, countScheduledSeedQuestions
 // ----------------------------------------------------------------------------
 // QUERIES
 // ----------------------------------------------------------------------------
@@ -321,28 +321,6 @@ export async function getAllResponses(subjectId: number): Promise<Array<{ questi
     response: decrypt(r.rCt, r.rNonce),
     date: r.date,
   }));
-}
-
-export async function getLatestReflection(subjectId: number): Promise<{ text: string; dttm_created_utc: string } | null> {
-  const rows = await sql`
-    SELECT text_ciphertext, text_nonce, dttm_created_utc FROM tb_reflections
-    WHERE subject_id = ${subjectId}
-    ORDER BY dttm_created_utc DESC LIMIT 1
-  `;
-  const row = rows[0] as { text_ciphertext: string; text_nonce: string; dttm_created_utc: string } | undefined;
-  if (!row) return null;
-  return { text: decrypt(row.text_ciphertext, row.text_nonce), dttm_created_utc: row.dttm_created_utc };
-}
-
-export async function saveReflection(subjectId: number, text: string, type: 'weekly' | 'monthly' = 'weekly', coverageThroughResponseId?: number): Promise<number> {
-  const typeId = type === 'monthly' ? 2 : 1;
-  const enc = encryptString(text);
-  const [row] = await sql`
-    INSERT INTO tb_reflections (subject_id, text_ciphertext, text_nonce, reflection_type_id, coverage_through_response_id, dttm_created_utc)
-    VALUES (${subjectId}, ${enc.ciphertext}, ${enc.nonce}, ${typeId}, ${coverageThroughResponseId ?? null}, ${nowStr()})
-    RETURNING reflection_id
-  `;
-  return row.reflection_id;
 }
 
 export async function logInteractionEvent(subjectId: number, questionId: number, eventType: string, metadata?: string | Record<string, unknown>): Promise<void> {
@@ -1264,7 +1242,7 @@ export async function getAllQuestionFeedback(subjectId: number): Promise<Array<{
 }
 
 // ----------------------------------------------------------------------------
-// @region retrieval -- getRecentResponses, getResponsesSince, getResponsesSinceId, getAllReflections, getLatestReflectionWithCoverage, getRecentFeedback, getSessionSummariesForQuestions, getMaxResponseId, insertEmbeddingMeta, isRecordEmbedded, getUnembeddedResponses, searchVecEmbeddings, getActiveEmbeddingModelVersionId, savePromptTrace
+// @region retrieval -- getRecentResponses, getResponsesSince, getResponsesSinceId, getRecentFeedback, getSessionSummariesForQuestions, getMaxResponseId, insertEmbeddingMeta, isRecordEmbedded, getUnembeddedResponses, searchVecEmbeddings, getActiveEmbeddingModelVersionId, savePromptTrace
 // SCOPED RETRIEVAL (for RAG-augmented prompts)
 // ----------------------------------------------------------------------------
 
@@ -1342,52 +1320,6 @@ export async function getResponsesSinceId(subjectId: number, sinceResponseId: nu
     response: decrypt(r.rCt, r.rNonce),
     date: r.date,
   }));
-}
-
-export async function getAllReflections(subjectId: number): Promise<Array<{
-  reflection_id: number; text: string; coverage_through_response_id: number | null;
-  dttm_created_utc: string;
-}>> {
-  const rows = await sql`
-    SELECT reflection_id, text_ciphertext, text_nonce, coverage_through_response_id, dttm_created_utc
-    FROM tb_reflections
-    WHERE subject_id = ${subjectId}
-    ORDER BY dttm_created_utc ASC
-  ` as Array<{
-    reflection_id: number; text_ciphertext: string; text_nonce: string;
-    coverage_through_response_id: number | null; dttm_created_utc: string;
-  }>;
-  return rows.map(r => ({
-    reflection_id: r.reflection_id,
-    text: decrypt(r.text_ciphertext, r.text_nonce),
-    coverage_through_response_id: r.coverage_through_response_id,
-    dttm_created_utc: r.dttm_created_utc,
-  }));
-}
-
-export async function getLatestReflectionWithCoverage(subjectId: number): Promise<{
-  reflection_id: number; text: string;
-  coverage_through_response_id: number | null;
-  dttm_created_utc: string;
-} | null> {
-  const rows = await sql`
-    SELECT reflection_id, text_ciphertext, text_nonce, coverage_through_response_id, dttm_created_utc
-    FROM tb_reflections
-    WHERE subject_id = ${subjectId}
-    ORDER BY dttm_created_utc DESC
-    LIMIT 1
-  `;
-  const row = rows[0] as {
-    reflection_id: number; text_ciphertext: string; text_nonce: string;
-    coverage_through_response_id: number | null; dttm_created_utc: string;
-  } | undefined;
-  if (!row) return null;
-  return {
-    reflection_id: row.reflection_id,
-    text: decrypt(row.text_ciphertext, row.text_nonce),
-    coverage_through_response_id: row.coverage_through_response_id,
-    dttm_created_utc: row.dttm_created_utc,
-  };
 }
 
 export async function getRecentFeedback(subjectId: number, limit: number): Promise<Array<{ date: string; landed: boolean }>> {
@@ -1595,52 +1527,6 @@ export async function savePromptTrace(trace: PromptTraceInput): Promise<void> {
   `;
 }
 
-// ----------------------------------------------------------------------------
-// @region state -- EntryStateRow, saveEntryState, getAllEntryStates, getEntryStateCount
-// ----------------------------------------------------------------------------
-// ENTRY STATES (7D deterministic behavioral state vectors)
-// ----------------------------------------------------------------------------
-
-export interface EntryStateRow {
-  entry_state_id: number;
-  subject_id: number;
-  response_id: number;
-  fluency: number;
-  deliberation: number;
-  revision: number;
-  commitment: number;
-  volatility: number;
-  thermal: number;
-  presence: number;
-  convergence: number;
-}
-
-export async function saveEntryState(state: Omit<EntryStateRow, 'entry_state_id'>): Promise<number> {
-  const [row] = await sql`
-    INSERT INTO tb_entry_states (
-       subject_id, response_id, fluency, deliberation, revision,
-       commitment, volatility, thermal, presence, convergence
-    ) VALUES (
-      ${state.subject_id}, ${state.response_id}, ${state.fluency}, ${state.deliberation},
-      ${state.revision}, ${state.commitment},
-      ${state.volatility}, ${state.thermal}, ${state.presence}, ${state.convergence}
-    )
-    RETURNING entry_state_id
-  `;
-  return row.entry_state_id;
-}
-
-export async function getAllEntryStates(subjectId: number): Promise<EntryStateRow[]> {
-  return await sql`
-    SELECT * FROM tb_entry_states WHERE subject_id = ${subjectId} ORDER BY entry_state_id ASC
-  ` as EntryStateRow[];
-}
-
-export async function getEntryStateCount(subjectId: number): Promise<number> {
-  const [row] = await sql`SELECT COUNT(*)::int AS c FROM tb_entry_states WHERE subject_id = ${subjectId}`;
-  return (row as { c: number }).c;
-}
-
 // Predictions, theory confidence, intervention intent, and question candidates
 // were archived 2026-04-16. Data preserved under zz_archive_* tables.
 // Stub functions removed 2026-04-20 — no active callers remain.
@@ -1651,6 +1537,14 @@ export async function getEntryStateCount(subjectId: number): Promise<number> {
 // zz_archive_tb_calibration_context by migration 034. saveCalibrationContext,
 // getCalibrationContextForQuestion, getRecentCalibrationContext,
 // getCalibrationContextNearDate, and CalibrationContextTag are removed.
+
+// Entry states + reflections were archived 2026-04-27 (INC-017). The producer
+// for entry_states (libRenderWitness, deleted in INC-014) and the reflection
+// generator both had zero live callers when archived. tb_entry_states and
+// tb_reflections renamed to zz_archive_* by migration 036. EntryStateRow,
+// saveEntryState, getAllEntryStates, getEntryStateCount, getEntryStatesWithDates,
+// getEntryStateByResponseId, saveReflection, getLatestReflection,
+// getAllReflections, getLatestReflectionWithCoverage are removed.
 
 // ----------------------------------------------------------------------------
 // @region calibration-deltas -- saveSessionDelta, getRecentSessionDeltas, getSameDayCalibrationSummary
@@ -1873,39 +1767,9 @@ export async function getRecentSessionDeltas(subjectId: number, limit: number = 
 }
 
 // ===================================================================
-// @region observatory -- getEntryStatesWithDates, getEntryStateByResponseId, getCommentsForPaper, saveComment
+// @region observatory -- getCommentsForPaper, saveComment
 // OBSERVATORY QUERIES
 // ===================================================================
-
-export async function getEntryStatesWithDates(subjectId: number): Promise<Array<EntryStateRow & { date: string; question_id: number }>> {
-  return await sql`
-    SELECT es.*, q.scheduled_for AS date, q.question_id
-    FROM tb_entry_states es
-    JOIN tb_responses r ON es.response_id = r.response_id
-    JOIN tb_questions q ON r.question_id = q.question_id
-    WHERE es.subject_id = ${subjectId}
-    ORDER BY es.entry_state_id ASC
-  ` as Array<EntryStateRow & { date: string; question_id: number }>;
-}
-
-export async function getEntryStateByResponseId(subjectId: number, responseId: number): Promise<(EntryStateRow & {
-  date: string; question_id: number; question_text: string;
-}) | null> {
-  const rows = await sql`
-    SELECT es.*, q.scheduled_for AS date, q.question_id,
-           q.text_ciphertext, q.text_nonce
-    FROM tb_entry_states es
-    JOIN tb_responses r ON es.response_id = r.response_id
-    JOIN tb_questions q ON r.question_id = q.question_id
-    WHERE es.subject_id = ${subjectId} AND es.response_id = ${responseId}
-  `;
-  const row = rows[0] as (EntryStateRow & {
-    date: string; question_id: number; text_ciphertext: string; text_nonce: string;
-  }) | undefined;
-  if (!row) return null;
-  const { text_ciphertext, text_nonce, ...rest } = row;
-  return { ...rest, question_text: decrypt(text_ciphertext, text_nonce) };
-}
 
 // ===================================================================
 // PAPER COMMENTS
