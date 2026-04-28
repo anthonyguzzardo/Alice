@@ -5,8 +5,8 @@ Files in this directory:
 | File | Where it lives on Hetzner | Purpose |
 |------|---------------------------|---------|
 | `alice.service`        | `/etc/systemd/system/alice.service` | systemd unit running the Astro Node server + signal worker |
-| `Caddyfile`            | `/etc/caddy/Caddyfile`              | Caddy config: TLS via Let's Encrypt, reverse proxy to localhost:4321, HTTP Basic Auth on owner endpoints |
-| `secrets.env.example`  | template for `/etc/alice/secrets.env` | env vars consumed by `alice.service` (encryption key, DB URL, API keys, basic-auth hash) |
+| `Caddyfile`            | `/etc/caddy/Caddyfile`              | Caddy config: TLS via Let's Encrypt + reverse proxy to localhost:4321. Basic-auth was retired 2026-04-28; auth is now end-to-end in the Astro app. |
+| `secrets.env.example`  | template for `/etc/alice/secrets.env` | env vars consumed by `alice.service` (encryption key, DB URL, API keys) |
 | `deploy.sh`            | runs from your laptop                | pushes the latest main + linux-x64 `.node` artifact, restarts the unit |
 
 ## One-time setup (run on the Hetzner host)
@@ -85,9 +85,14 @@ cp /opt/alice/deploy/secrets.env.example /etc/alice/secrets.env
 #   ALICE_ENCRYPTION_KEY  (openssl rand -base64 32)
 #   ALICE_PG_URL          (Supabase pooler URL)
 #   ANTHROPIC_API_KEY
-#   OWNER_BASICAUTH_HASH  (caddy hash-password)
 chown root:alice /etc/alice/secrets.env
 chmod 640 /etc/alice/secrets.env
+
+# 10b. Set the owner password (one-time; the migration leaves the owner
+# row with a placeholder Argon2id hash that fails verification). This
+# is what owner uses to log in at /login.
+ALICE_PG_URL=$(grep -E '^ALICE_PG_URL=' /etc/alice/secrets.env | cut -d= -f2-) \
+  npm run set-owner-password -- '<your-12-char-or-longer-password>'
 
 # 11. Install the systemd unit
 cp /opt/alice/deploy/alice.service /etc/systemd/system/
@@ -96,10 +101,13 @@ systemctl enable alice.service
 systemctl start alice.service
 systemctl status alice.service     # confirm "active (running)"
 
-# 12. Install the Caddyfile + a systemd drop-in so caddy.service loads
-#     /etc/alice/secrets.env (it needs OWNER_BASICAUTH_HASH at boot).
-#     Without the drop-in, basic-auth fails with "username and password
-#     are required" because caddy.service has no env vars by default.
+# 12. Install the Caddyfile.
+#
+# Note: pre-2026-04-28 this directory included a systemd drop-in for
+# caddy.service that loaded /etc/alice/secrets.env so basic-auth could
+# read OWNER_BASICAUTH_HASH at boot. Auth is now end-to-end in the
+# Astro app (see /login + middleware); the drop-in can be removed if
+# present, since Caddy no longer needs any env vars from secrets.env.
 cp /opt/alice/deploy/Caddyfile /etc/caddy/Caddyfile
 
 mkdir -p /etc/systemd/system/caddy.service.d
@@ -154,9 +162,11 @@ forced to reset the password, then land on their daily question.
 - **`ALICE_ENCRYPTION_KEY` is permanent.** Lose it = lose every encrypted
   subject response. Backed up in your password manager AND in
   `/etc/alice/secrets.env`. Both copies must survive.
-- **Owner endpoints are gated by HTTP Basic Auth in Caddy** until session-based
-  owner auth lands. The hash is in `OWNER_BASICAUTH_HASH`; generate via
-  `caddy hash-password`. Never commit the hash.
+- **All auth is end-to-end in the Astro app** (universal session-cookie
+  model since 2026-04-28, INC-020). Owner and subjects share `/login`,
+  the same `tb_subject_sessions` table, and the same Argon2id verify path.
+  Caddy is TLS termination + reverse proxy only — no upstream auth gate.
+  Set the owner password via `npm run set-owner-password -- '<password>'`.
 - **Database migrations are not automated.** Apply by hand against Supabase:
   `psql -d "$ALICE_PG_URL" -f db/sql/migrations/NNN_*.sql`. Audit before running.
 - **Reproducibility flag is mandatory.** The CI's `build-linux-x64` job sets

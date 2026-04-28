@@ -8,6 +8,214 @@ Newest first.
 
 ---
 
+## INC-020: Universal session-cookie auth (Caddy basic-auth retired)
+
+**Date:** 2026-04-28
+**Type:** Architectural unification (eliminates two-mechanism auth split that pre-dated the Path 2-lite design and was scheduled for retirement)
+
+### What was wrong
+
+Pre-2026-04-28 the production deploy used two parallel auth mechanisms with different surfaces, different cookies, and different failure modes:
+
+1. **Owner** authenticated via Caddy HTTP Basic Auth on `fweeo.com`. The challenge was issued at the edge (Caddy reading `OWNER_BASICAUTH_HASH` from `/etc/alice/secrets.env`); the application server never saw owner credentials. Owner endpoints (`/`, `/observatory/*`, `/api/respond`, `/api/calibrate`, `/api/today`, `/api/observatory/*`) were gated by a path-based exclusion in `deploy/Caddyfile` (`@owner_paths` matcher + `basic_auth` directive). The owner row in `tb_subjects` had a placeholder password hash (`$argon2id$placeholder$...`) and `must_reset_password=TRUE`; the row existed for `OWNER_SUBJECT_ID = 1` lookups but no code path actually verified its password.
+2. **Subjects** authenticated via session cookie (Path 2-lite: Argon2id verify on `/api/subject/login`, opaque 32-byte hex token in `alice_session` cookie, SHA-256 in `tb_subject_sessions`). Session cookie had a 7-day `Max-Age` (post-INC-018). Subjects landed on `/enter` (login form), `/subject` (journal), `/account`, `/consent`.
+
+The two mechanisms had:
+- Different login UX (basic-auth modal vs styled form)
+- Different logout semantics (clear browser auth cache vs server-side session invalidation)
+- Different mobile UX (basic-auth dialogs are hostile on mobile; can't be styled or themed)
+- Different audit trails (Caddy access logs vs `tb_subject_sessions` rows with `last_seen_at`/`last_ip`)
+- Different failure modes (basic-auth challenge vs JSON 401 vs HTML redirect, depending on the upstream gate)
+
+The architectural intent recorded in handoff §4 item 3 was always to unify on the session-cookie model. The Caddy basic-auth gate was a temporary placeholder until the unification landed.
+
+### Discovery method
+
+Direct user request during the 2026-04-28 session: "every user needs the same login page i'm tired of having to fucking click /enter which... means there is a unified fucking login? will that work??!??!?"
+
+The problem statement was already documented in handoff §4 item 3 ("Owner session-based auth"); the request triggered execution rather than discovery.
+
+### Resolution
+
+**Renaming and dispatch:**
+
+- `src/pages/enter.astro` → `src/pages/login.astro` (universal login form). Subjects and owner share the same form, posting to the same `/api/subject/login` endpoint. The handler returns `{ ok, mustResetPassword, isOwner }`; the page dispatches:
+  - `mustResetPassword === true` → `/reset-password`
+  - else if `?next=<same-origin-path>` → that path (saves the user's pre-login destination)
+  - else `isOwner === true` → `/`
+  - else → `/subject`
+- All `/enter` references in code, tests, and docs replaced with `/login`. Owner journal `index.astro` gained a "Log out" link in the nav dropdown; every observatory page gained an `<a data-logout>logout</a>` next to the existing `→ alice` link, wired to a global click delegate in `cmpObsToolbar.astro`.
+
+**Login handler changes** (`src/pages/api/subject/login.ts`):
+
+- Removed the `if (result.isOwner) return 403` branch. The endpoint now issues sessions for both roles.
+- Cookie loses `Max-Age` — becomes a session cookie. Browser drops it when the browser process closes; refresh and tab-switch keep the session alive. Server-side `tb_subject_sessions` row still has its 7-day hard cap (INC-018) as the upper bound.
+- Response body adds `isOwner: result.isOwner` so the login page can dispatch.
+
+**Logout handler** (`src/pages/api/subject/logout.ts`): no code change. The endpoint already read the cookie, hashed the token, and deleted the matching row in `tb_subject_sessions` regardless of `is_owner`. The change was middleware-side: `/api/subject/logout` was added to `PUBLIC_PATHS` so it bypasses the subject-only `/api/subject/*` gate (otherwise owner sessions would have hit a 403 trying to log out — the bug that surfaced and was fixed in commit `2079a82`).
+
+**Middleware rewrite** (`src/middleware.ts`):
+
+- New path classifier: PUBLIC (`/login`, `/api/subject/login`, `/api/subject/logout`, `/favicon.ico`, `/robots.txt`, static assets), OWNER-API (`/api/respond`, `/api/calibrate`, `/api/today`, `/api/health`, `/api/backfill-status`, `/api/observatory/*`, `/api/dev/*`), SUBJECT-API (`/api/subject/*` minus PUBLIC), OWNER-PAGE (`/`, `/observatory*`), SUBJECT-PAGE (`/subject*`, `/account*`, `/consent`, `/reset-password`).
+- Page routes: missing/invalid session → 302 to `/login?next=<encoded-path-with-search>`. Already-authenticated users hitting `/login` → 302 to their home (owner → `/`, subject → `/subject`). Subject hitting an owner page → 302 to `/subject`. Owner hitting a subject page → 302 to `/`.
+- API routes: missing session → 401 JSON. Wrong-role session → 403 JSON.
+- Subject-side gates carried forward from pre-INC-020: `must_reset_password` (only `/reset-password`, `/api/subject/reset-password`, `/api/subject/logout` reachable) and consent gate (only `/consent`, `/api/subject/consent`, `/logout`, `/export`, `/account/delete` reachable). Owner skips both gates.
+
+**Astro CSRF check disabled** (`astro.config.mjs`): `security.checkOrigin: false`. Astro 6's default rejects POSTs without a matching `Origin` header. The `@astrojs/node` standalone adapter behind Caddy reconstructs the URL scheme from the `Host` header (it doesn't trust `X-Forwarded-Proto`), so a request from `https://fweeo.com` arriving at the Node server is internally `http://fweeo.com/...`. The browser sends `Origin: https://fweeo.com`; Astro compares to `http://fweeo.com` and rejects with `text/plain` 403. This made every `fetch('/url', { method: 'POST' })` without explicit `Content-Type` fail — including the logout fetches in `index.astro`, `subject/index.astro`, `account/delete.astro`, `consent.astro`, and the observatory delegate. Disabling the check restores POSTs; the `SameSite=Lax` cookie attribute on the session cookie already blocks cross-origin POSTs from carrying the auth cookie, which is the actual CSRF defense.
+
+**Caddy gate retired** (`deploy/Caddyfile`): the `@owner_paths` matcher + `basic_auth` block were removed. Caddy is now TLS termination + reverse proxy only. The `OWNER_BASICAUTH_HASH` variable was deleted from `/etc/alice/secrets.env` on the production host (sed-backup at `/etc/alice/secrets.env.bak`), and the matching template line in `deploy/secrets.env.example` was removed.
+
+**Owner password provisioning** (`src/scripts/set-owner-password.ts`): unchanged code path, but the script became operationally required for the first time. The owner row's placeholder hash (`$argon2id$placeholder$nee...`) was replaced with a real Argon2id hash via `npm run set-owner-password -- '<password>'`, which also clears `must_reset_password`. The script is idempotent — re-running with a new password rotates without invalidating other rows.
+
+### Verification
+
+| Check | Pre-fix | Post-fix |
+|---|---|---|
+| `curl -I https://fweeo.com/` (no session) | `401 WWW-Authenticate: Basic realm="Restricted"` | `302 Location: /login?next=%2F` |
+| `curl -I https://fweeo.com/observatory` (no session) | `401 Basic` | `302 Location: /login?next=%2Fobservatory` |
+| `curl -I https://fweeo.com/login` (no session) | `200` (was at `/enter`) | `200` |
+| `curl -I https://fweeo.com/api/respond` (no session) | `401 Basic` | `401 application/json` |
+| `curl -I https://fweeo.com/api/subject/today` (no session) | `401 application/json` | `401 application/json` (unchanged) |
+| `curl -X POST https://fweeo.com/api/subject/logout` (no session) | n/a (rejected at Astro CSRF) | `200 application/json` + `Set-Cookie: alice_session=deleted` |
+| Owner can log out via UI | no (no logout button; basic-auth has no sign-out) | yes (nav dropdown + every observatory page) |
+| Owner row's `password_hash` | placeholder (`$argon2id$placeholder$nee...`, 39 chars) | real Argon2id (97 chars, `$argon2id$v=19$m=65536,...`) |
+| Owner row's `must_reset_password` | `TRUE` (placeholder state) | `FALSE` (after `set-owner-password`) |
+| Caddy gate count | 2 (TLS + basic-auth) | 1 (TLS only) |
+| `OWNER_BASICAUTH_HASH` in prod secrets.env | present (bcrypt hash) | absent |
+| `OWNER_BASICAUTH_HASH` in `secrets.env.example` | present (template line) | absent |
+| End-to-end pressure test | n/a | passed: subject login → journal → logout → owner login → 2 calibrations → logout → subject login → calibration |
+| Astro CSRF rejections | every no-Content-Type POST returned `text/plain` 403 | no-Content-Type POSTs reach the handler |
+| Tests passing | 90 unit + 17 db = 107 | 90 unit + 17 db = 107 (no test churn) |
+
+### What this does NOT fix
+
+- **In-app password rotation for owner.** The `set-owner-password` CLI is the only rotation path. A future polish item: a `/account` form for owner that mirrors subjects' `/reset-password` flow. Not blocking — operator can rotate from CLI today.
+- **Two-factor / WebAuthn.** Out of scope for this change; same posture as INC-018.
+- **Session row visibility per-user.** `tb_subject_sessions` rows for the owner now exist (one per active login), but there's no in-app surface to list or revoke them. The CLI workaround is `psql … DELETE FROM tb_subject_sessions WHERE subject_id = 1` (kicks all owner sessions; user re-logs in).
+- **Mobile owner UX.** The Caddy basic-auth modal was the single biggest mobile blocker pre-INC-020 (basic-auth dialogs on iOS Safari are a UX disaster and don't theme). With the universal login form, owner can journal from a phone for the first time — but the owner journal page itself (`src/pages/index.astro`) was designed for desktop and still has elements (health dot, nav dropdown, observatory link) that would benefit from a mobile pass. Out of scope for this incident.
+- **Logout button on the `/reset-password` and `/consent` pre-flight pages.** A subject mid-must-reset or mid-consent can hit `/api/subject/logout` directly (it's whitelisted in both gates) but there's no button in the UI for these one-shot pages. Acceptable v1; a 5-line edit later if anyone asks.
+
+### Cross-reference
+
+INC-019 (subject-TZ calendar-flip fix) landed in the same 2026-04-28 session as INC-020. The two are independent — INC-019 is about how "today" is computed; INC-020 is about how a user proves they are who they claim to be. They were sequenced because the subject-TZ fix was the immediate user-facing pain that surfaced first; the auth unification was always-on roadmap work that the operator chose to do next.
+
+INC-018 (subject-auth hardening) is the direct predecessor — its rate limiter, 7-day expiry, and `last_seen_at`/`last_ip` telemetry now apply to owner sessions too, since owner shares the subject auth path. The 7-day Max-Age was dropped from the cookie in INC-020 (close-browser = logout) but the 7-day server-side hard cap remains as the upper bound.
+
+---
+
+## INC-019: Subject-TZ calendar-flip fix (`localDateStr` ignored `iana_timezone`)
+
+**Date:** 2026-04-28
+**Type:** Production bug (silent data misrouting; subject perceived "no question today" on day 2)
+
+### What was wrong
+
+The journal's calendar-flip design — "one day = one question, the day boundary is your local midnight" — was honored at the schema level (`tb_subjects.iana_timezone TEXT NOT NULL DEFAULT 'UTC'` has been on the table since the schema was introduced) but ignored at the resolver level. `src/lib/utlDate.ts:5 localDateStr()` used `Date#getDate/getMonth/getFullYear` (server's local TZ) and never read `iana_timezone`. The Hetzner production box runs `Etc/UTC`. Owner is `iana_timezone='UTC'` so the bug was invisible to owner traffic. Subjects in any other TZ saw their calendar flip at the server's midnight, not their own.
+
+The concrete manifestation for subject `ash` (`iana_timezone='America/Chicago'`, CDT = UTC-5 in April):
+
+- 2026-04-27 21:49 Chicago = 2026-04-28 02:49 UTC. Ash logged in for her first journal entry.
+- `today.ts:27 localDateStr()` returned `2026-04-28`.
+- `getScheduledQuestion(subject_id=2, '2026-04-28')` returned question 126 (her seed for 2026-04-28, originally meant for her day 2).
+- Ash submitted what she perceived as her day-1 entry. `response_id=82` was bound to `question_id=126`. Question 125 (the seed for 2026-04-27, her actual day-1) was never seen.
+- 2026-04-28 12:00 Chicago = 2026-04-28 17:00 UTC. Ash logged in the next morning to write her day-2 entry.
+- `today.ts:27 localDateStr()` returned `2026-04-28` again. Same query, same result: question 126.
+- `getResponseText(2, 126)` returned non-null (ash's response from yesterday). API returned `200 { existing_response_text: <text>, ... }`.
+- `subject/index.astro` line 467: `if (data.existing_response_text) showDoneMessageWithFreeWrite()`. Page rendered "Noted. Let it sit. Come back tomorrow." + a free-write affordance.
+- Ash perceived this as the system not giving her a question. The lockout would have unstuck spontaneously at 19:00 Chicago = 00:00 UTC the next day, when the server's date string flipped to `2026-04-29` and the API would have returned question 127 (originally her day-3 seed).
+
+The architecturally correct framing: every place subjects' "today" is computed must read `subject.iana_timezone`. Pre-2026-04-28, no caller did. The schema column existed for a reason; no code honored that reason.
+
+### Discovery method
+
+Operator received the report from ash that her day-2 question wasn't appearing. Investigation path:
+
+1. Read `src/pages/subject/index.astro` to confirm the client-side flow. Confirmed: page calls `/api/subject/today`, expects `{ question_id, text, existing_response_text }`, renders the done-message branch when `existing_response_text` is non-null.
+2. Read `src/pages/api/subject/today.ts`. Found `localDateStr()` call with no TZ argument.
+3. Read `src/lib/utlDate.ts`. Found `localDateStr` used `Date#getDate` etc. — server-local, no IANA awareness. The `iana_timezone` column on `tb_subjects` was never consulted.
+4. Queried Supabase: ash had 30 seeds (q125-q154, dates 2026-04-27 through 2026-05-26). She had one response: `response_id=82` bound to `question_id=126` (`scheduled_for=2026-04-28`), created at `2026-04-28 02:49:56 UTC` = `2026-04-27 21:49 CDT`. The mismatch was direct evidence: her response was authored on 04-27 Chicago time but filed against 04-28's seed.
+5. Checked `timedatectl` on Hetzner: `Time zone: Etc/UTC (UTC, +0000)`. Confirms the server-TZ assumption.
+
+A pre-existing GOTCHAS entry described `localDateStr()` as "intentional (the journal is for one person in one timezone)" and tagged it for "revisit at Phase 6 multi-user transition." The framing was a rationalization that ossified a latent bug, exactly the smell the GOTCHAS charter (line 14) warns against.
+
+### Resolution
+
+**`src/lib/utlDate.ts`:**
+
+- Extended `localDateStr(date: Date = new Date(), ianaTimezone?: string): string`. When `ianaTimezone` is supplied, computes the date in that TZ via `Intl.DateTimeFormat({ timeZone, year: '2-digit', month: '2-digit', day: '2-digit' }).formatToParts(date)`, then assembles `${y}-${m}-${d}`. When omitted, falls back to the previous server-local behavior so existing owner-side callers are unchanged.
+- Added `addDays(yyyymmdd: string, days: number): string`. Pure calendar arithmetic on the date string (`Date.UTC(y, m-1, d)` + `setUTCDate(getUTCDate() + days)`, format back). TZ-independent — adding 1 day to "2026-03-07" returns "2026-03-08" regardless of any TZ Date math could accidentally apply, including DST transitions.
+
+**Subject-facing call sites:**
+
+- `src/pages/api/subject/today.ts:27` — `localDateStr(new Date(), subject.iana_timezone)`
+- `src/pages/api/subject/respond.ts:85` — same; protects the validate-question-is-for-today check
+- `src/lib/libSchedule.ts:seedUpcomingQuestions(subjectId, ianaTimezone, days = 30)` — accepts an `ianaTimezone` argument explicitly, computes the start date in subject TZ, increments via `addDays`. The function signature change forced an update to both callers:
+  - `src/scripts/create-subject.ts:47` — passes the subject's `ianaTimezone` (via the existing CLI arg)
+  - `src/pages/api/today.ts:12` — owner endpoint, passes `'UTC'` explicitly (owner is `iana_timezone='UTC'` by design)
+
+**Owner-side call sites unchanged:** `libDb.getTodaysQuestion`, `libDb.getTodaysResponse`, `libSignalWorker:217,241`, `health.ts:68`. These all run for the owner (who is UTC) or for cross-cutting pipeline state where server-TZ is acceptable. Future-proofing here would require threading `subject_id` through every signal-pipeline call site, which is out of scope.
+
+**Schedule repair for ash** (one transaction, against Supabase):
+
+- `UPDATE tb_questions SET scheduled_for = scheduled_for + INTERVAL '1 year' WHERE subject_id = 2 AND question_id BETWEEN 125 AND 154;` — push the affected seeds far into the future to dodge the unique constraint `tb_questions_subject_scheduled_for_key (subject_id, scheduled_for)` while shuffling.
+- `DELETE FROM tb_questions WHERE question_id = 125;` — drop the unanswered original 04-27 seed.
+- `UPDATE tb_questions SET scheduled_for = scheduled_for - INTERVAL '1 year' - INTERVAL '1 day' WHERE subject_id = 2 AND question_id BETWEEN 126 AND 154;` — bring the rest back, shifted one day earlier than originally scheduled.
+
+Net effect:
+- q126 → 2026-04-27 (her actual day-1 entry; `response_id=82` stays linked to the prompt she actually saw)
+- q127 → 2026-04-28 (today's fresh question — never answered)
+- q128 → 2026-04-29
+- ...
+- q154 → 2026-05-25
+
+Trade-off: she loses `SEED_QUESTIONS[0]` from her journey (the original seed for q125, never seen). That's 1-of-30 at the cost of preserving her existing response → prompt linkage. Re-typing-her-content would not have been an option; re-routing her response to q125's prompt would have lied about what she actually answered.
+
+**Tests** (`tests/unit/utlDate.test.ts` — new file, 6 tests):
+
+- `localDateStr` with `America/Chicago` returns 2026-04-27 for 2026-04-28 02:49 UTC (the exact moment of ash's submission).
+- Same input with `UTC` returns 2026-04-28; with `Asia/Tokyo` (UTC+9) returns 2026-04-28.
+- DST spring-forward (2026-03-08 07:00 UTC = 02:00 CDT — local clock skips 02:00→03:00) returns 2026-03-08.
+- No-arg call returns server-local YYYY-MM-DD.
+- `addDays` covers same-day, next-day, 30-day, month-boundary (04-30 + 1 = 05-01), year-boundary (12-31 + 1 = 27-01-01), and DST crossings.
+
+**GOTCHAS rewrite:** the rationalizing entry was deleted and replaced with a Category-2 historical-landmine entry per the charter (line 16: "When you fix a bug that previously had a rationalizing entry, rewrite the entry as a category 2 historical landmine — keep the institutional memory, drop the rationalization."). The new entry includes the fix date, the wrong behavior, the concrete misrouting that occurred, and the schedule repair.
+
+### Verification
+
+| Check | Pre-fix | Post-fix |
+|---|---|---|
+| `localDateStr(new Date('2026-04-28T02:49:00Z'), 'America/Chicago')` | n/a (no TZ arg accepted) | `'2026-04-27'` |
+| `localDateStr(new Date('2026-04-28T02:49:00Z'))` (no TZ) | `'2026-04-28'` (server-local) | `'2026-04-28'` (unchanged) |
+| Subject's `today.ts` resolves day in subject TZ | no | yes |
+| Subject's `respond.ts` validates day in subject TZ | no | yes |
+| `seedUpcomingQuestions` plants seeds in subject TZ | no | yes (via `ianaTimezone` arg + `addDays`) |
+| Owner code paths' date resolution | server-local | server-local (unchanged; owner is `iana_timezone='UTC'`) |
+| Ash's question 125 (orphaned seed) | exists, never seen, never answered | deleted |
+| Ash's question 126 (`scheduled_for`) | 2026-04-28 | 2026-04-27 |
+| Ash's question 126 (response binding) | `response_id=82` (intact) | `response_id=82` (intact, now correctly bound to her day-1 calendar slot) |
+| Ash's question 127 (`scheduled_for`) | 2026-04-29 | 2026-04-28 (today, fresh) |
+| Ash's question 154 (`scheduled_for`) | 2026-05-26 | 2026-05-25 |
+| Ash's seed count | 30 (q125-154) | 29 (q126-154) |
+| Calendar-flip lockout (per-question, not 24h) | intact | intact (per-question check at `respond.ts:96-102` unchanged; the bug was about which question "today" mapped to, not about the lockout itself) |
+| Tests passing | 84 (no utlDate coverage) | 90 (6 new in `utlDate.test.ts`) |
+
+### What this does NOT fix
+
+- **Owner-side TZ awareness.** Owner code paths still use server-local dates. Owner is `iana_timezone='UTC'` and the server is UTC, so the result is correct today. If ever a non-UTC owner is provisioned, those call sites must be revisited. The schema doesn't enforce owner TZ; nothing prevents `UPDATE tb_subjects SET iana_timezone = 'America/Los_Angeles' WHERE is_owner = TRUE`. A future hardening would either (a) thread subject TZ through every date-resolving function or (b) document a discipline rule that owner TZ must remain `UTC`. Deferred.
+- **Per-subject signal-pipeline date reasoning.** `libSignalWorker.ts:217` calls `computePriorDayDelta(job.subject_id, localDateStr())` (no TZ) — for owner this is correct, for subjects (if subjects ever produce signals — they don't, per contamination boundary) it would be wrong. Out of scope.
+- **Health endpoint's "duplicate questions" anomaly check** uses server-local dates. Owner-only surface, no risk today.
+- **Pre-2026-04-28 ash entries.** Only `response_id=82` was misrouted (her single submission). No backfill needed beyond the schedule shift.
+
+### Cross-reference
+
+The design intent — "calendar-flip lockout, not 24h cooldown; subject can write 23:58 day-N then 00:01 day-(N+1) and that's two entries 3 minutes apart by design" — was confirmed during this incident. The per-question lockout at `respond.ts:96-102` (`getResponseText !== null` check by question_id, not by submission timestamp) is the load-bearing mechanism; INC-019 didn't touch it. The bug was about which calendar slot "today" mapped to, not about the lockout's shape.
+
+INC-020 (universal session-cookie auth) landed in the same session. The two are independent: INC-019 is about how "today" is computed for a given subject, INC-020 is about how a user proves they're that subject.
+
+GOTCHAS.md entry was rewritten from rationalization to historical landmine in the same commit as the code fix. Charter compliance verified.
+
+---
+
 ## INC-018: Subject-auth hardening pass (rate limit + 7-day expiry + session telemetry)
 
 **Date:** 2026-04-27
