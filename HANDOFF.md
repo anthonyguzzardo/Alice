@@ -99,6 +99,64 @@ The `035` filename collision was resolved this session by renaming `035_session_
 
 ## 4. Open work (ordered by consequence)
 
+### 🚨 HIGH PRIORITY — `tb_responses.dttm_created_utc` is silently wrong on some journal rows
+
+**Symptom:** response 84 (owner journal `q16`, submitted 2026-04-28 morning) was stored as `dttm_created_utc = 2026-04-28 21:26:35+00`, while the matching `tb_session_events` row for the same question (saved in the same transaction in `/api/respond`) is `2026-04-28 16:26:35.651758+00`. The two should match wallclock-second; instead they're 5 hours apart — exactly the CDT offset (UTC-5).
+
+**Surveyed today:** 9 response rows in 2026-04-28. The pattern across them:
+
+| response_id | path                | uses `nowStr()` | sub-second precision | session_events ↔ response timestamp match |
+|-------------|---------------------|-----------------|---------------------|-------------------------------------------|
+| 82  ash    | `/api/subject/respond` (journal) | yes | no (truncated) | match (`02:49:56` UTC both sides) |
+| 83  ash    | `/api/subject/calibrate`          | no  | yes              | match |
+| 84  owner  | `/api/respond` (journal)          | yes | no               | **5h skew (`21:26:35` vs `16:26:35`)** |
+| 85  owner  | `/api/calibrate`                  | no  | yes              | match |
+| 86  owner  | `/api/calibrate`                  | no  | yes              | match |
+| 87  ash    | `/api/subject/respond` (journal)  | yes | no               | match |
+| 88  owner  | `/api/calibrate`                  | no  | yes              | match |
+| 89  owner  | `/api/calibrate`                  | no  | yes              | match |
+| 90  ash    | `/api/subject/calibrate`          | no  | yes              | match |
+
+So out of three journal rows that went through `nowStr()` → only one is skewed. Two are fine. The CSV-grade summary: the bug is **non-deterministic per request, with the wrong-TZ outcome correlated with one specific connection in the pool.**
+
+**Diagnosis (high confidence):**
+
+`saveResponse` in `src/lib/libDb.ts:111-129` interpolates `dttm_created_utc = ${nowStr()}`. `nowStr()` (line 72) returns `new Date().toISOString().replace('T', ' ').slice(0, 19)` — a string like `'2026-04-28 16:26:35'` with **no timezone qualifier**. When postgres.js sends this as a parameter to the `TIMESTAMPTZ` column, PG implicitly casts text → timestamptz **using the connection's session `TimeZone` setting**.
+
+If a connection's session `TimeZone` is `UTC`, the bare timestamp is interpreted as UTC and stored correctly.
+
+If a connection's session `TimeZone` is `America/Chicago`, the bare timestamp `'2026-04-28 16:26:35'` is interpreted as **CDT (UTC-5)** and converted to `2026-04-28 21:26:35+00` for storage. **This is exactly the observed skew.**
+
+The reason the bug is non-deterministic: postgres.js maintains a connection pool (`max: 5` per `libDbPool.ts`). When connecting to Supabase's session pooler, the pool adopts whatever session TZ the upstream backend has. Different backend sessions on Supabase may carry different `TimeZone` settings (a previous client's `SET TIME ZONE` persists for the life of the backend session). Different requests can thus produce timestamps in different timezones.
+
+`saveSessionEvents` (line 938) does NOT specify `dttm_created_utc` — it falls back to the column DEFAULT (`CURRENT_TIMESTAMP`). PG's `CURRENT_TIMESTAMP` always returns the wall-clock time in `+00` regardless of session `TimeZone`. So session_events rows are immune to this bug. The asymmetry between the two paths is what made the skew visible.
+
+`saveCalibrationSession` (line 1162-1213) also relies on the column DEFAULT — calibrations are immune. **Only `saveResponse` is exposed.**
+
+**Blast radius:**
+
+- `tb_responses.dttm_created_utc` for any journal entry written through `saveResponse` may be off by hours (always in the direction `wallclock + offset`, where offset is the connection's session TZ relative to UTC).
+- This is the source of truth for "when did the subject submit." Anything that orders or filters by `tb_responses.dttm_created_utc` (e.g. cross-session signal sequencing, daily-delta cadence inference, observatory entry list ordering, the `/api/subject/export` audit timestamp) sees the wrong value when the bug fires.
+- Today (2026-04-28) only 1 of 3 journal rows is affected (response 84). Older rows are unaudited.
+
+**Fix:** make `nowStr()` return a TZ-qualified value so PG never re-interprets it via session TZ. Cleanest one-liner:
+
+```ts
+function nowStr(): string {
+  return _dateOverride
+    ? `${_dateOverride}T12:00:00+00:00`
+    : new Date().toISOString();  // already +00:00 (Z)
+}
+```
+
+Or: drop `nowStr()` entirely from `saveResponse` and rely on the column DEFAULT (`CURRENT_TIMESTAMP`), matching `saveSessionEvents` and `saveCalibrationSession`. The `_dateOverride` mechanism (used for simulation) is unused in production — would need a separate audit before removing.
+
+**Pre-existing.** The bug has nothing to do with INC-019 / INC-020; both are independent. It pre-dates today's work and is in every journal row written via `saveResponse`. A historical audit of `tb_responses.dttm_created_utc` against `tb_session_events.dttm_created_utc` per question_id would quantify how many rows are affected.
+
+**Owner's reaction:** "HIGH HIGH priority" — write up first, fix in the next pass.
+
+---
+
 ### Verified stale (do NOT readd unless code confirms)
 
 The previous version of this section listed two "real bugs" in the subject path. Both were verified false on 2026-04-27 late-evening:
