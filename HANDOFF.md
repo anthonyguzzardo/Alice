@@ -133,7 +133,9 @@ The schedule-extension flow is intentionally manual and collective, not automate
 
 8. **`data/errors.log.bak.2026-04-27`.** Forensic backup of the stale error log at the moment the time-window filter shipped. Gitignored. Delete with `rm data/errors.log.bak.*` whenever you stop caring about the old debug entries.
 
-9. **Extract IP/UA helpers to `utlRequestContext.ts`.** `extractClientIp` exists privately in `libSubject.ts` and was inlined again in `src/pages/api/subject/consent.ts` (Phase 6c step 4). When `/api/subject/export` and `/api/subject/account/delete` (Phase 6c steps 6 + 7) need the same logic, extract to a shared util — three callers is the right threshold. Until then, two inlined copies is acceptable.
+9. ~~**Extract IP/UA helpers to `utlRequestContext.ts`.**~~ Done 2026-04-28 alongside Phase 6c step 6. `src/lib/utlRequestContext.ts` exports `extractClientIp` + `extractUserAgent`; `libSubject.ts` and `src/pages/api/subject/consent.ts` both import from it. The export endpoint (step 6) and the upcoming delete endpoint (step 7) use the same.
+
+10. **Phase 6c export-audit completion gap.** `/api/subject/export` writes a `{status: 'started'}` row to `tb_data_access_log` BEFORE the stream opens. There is no follow-up `{status: 'completed'}` row. The audit log can therefore distinguish "started + finished" from "started + connection dropped" only by absence-of-completion, not by an explicit success flag. Acceptable for v1 of Phase 6c — the started row is the load-bearing "every access leaves a trace" record — but the consent doc's "audit trail" claim is slightly weaker than it reads. v2 followup: write a second audit row on stream completion, with `notes: {status: 'completed', originalLogId: N, totalRows, bytesWritten}`. Same `data_access_action_id = 1 (export)`, links back to the started row. Append-only invariant preserved.
 
 ---
 

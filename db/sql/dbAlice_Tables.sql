@@ -335,10 +335,19 @@ CREATE INDEX IF NOT EXISTS ix_subject_consent_subject_recent
 -- PURPOSE: append-only audit trail of every data access action
 -- USE CASE: every export, delete, factory-reset, and consent action writes
 --           a row here. The notes field carries action-specific context as
---           a JSON string (e.g. per-table row counts after a delete cascade,
---           bytes streamed during an export). Survives subject deletion so
---           the post-delete tombstone has a verifiable history.
+--           JSONB (e.g. per-table row counts after a delete cascade, schema
+--           version + exportedAt for an export). Survives subject deletion
+--           so the post-delete tombstone has a verifiable history.
 -- MUTABILITY: insert-only (append). Rows are never modified or deleted.
+-- AUDIT POSTURE: most action types record one row at initiation. The
+--           `export` action specifically writes a `{status: 'started'}` row
+--           BEFORE the response stream opens — a connection drop mid-stream
+--           leaves the started row but no completion row. The audit log can
+--           therefore distinguish `started+completed` from `started+aborted`
+--           only by absence-of-completion, not by an explicit failed flag.
+--           Adding a follow-up `{status: 'completed'}` row is a Phase 6c
+--           v2 followup; until then, the started row is the load-bearing
+--           "every access leaves a trace" record.
 -- REFERENCED BY: none (leaf)
 -- FOOTER: created + modified (modified columns unused in practice)
 CREATE TABLE IF NOT EXISTS tb_data_access_log (

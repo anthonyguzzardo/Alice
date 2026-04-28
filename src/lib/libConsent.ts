@@ -192,9 +192,17 @@ export async function recordDataAccess(args: RecordDataAccessArgs): Promise<numb
   const ua       = args.userAgent ? args.userAgent.slice(0, 200) : null;
   const consentVersion = args.consentVersion ?? null;
   const actorSubjectId = args.actorSubjectId ?? null;
-  // postgres.js parses the JSON string into JSONB at the driver boundary.
-  // null stays null. Plain strings would fail post-039 — by design.
-  const notes = args.notes != null ? JSON.stringify(args.notes) : null;
+  // Use sql.json() to mark the parameter as JSON. postgres.js v3 then
+  // serializes the object to JSONB cleanly — passing an object without
+  // the marker fails the TS overload, and JSON.stringify before passing
+  // double-encodes (stores a JSONB string, not a JSONB object). Verified
+  // round-trip: object goes in, object comes back out, pg_typeof = jsonb.
+  // null bypasses sql.json entirely so the SQL parameter stays NULL.
+  // The `as` cast is the boundary between `Record<string, unknown>` (the
+  // ergonomic caller type) and postgres.js's `JSONValue` (which can't
+  // accept `unknown` keys); runtime is unaffected — postgres serializes
+  // objects via JSON.stringify under the hood.
+  const notes = args.notes != null ? sql.json(args.notes as Parameters<typeof sql.json>[0]) : null;
 
   const rows = await q`
     INSERT INTO tb_data_access_log

@@ -390,6 +390,19 @@ rationale. (`tb_calibration_context.value`+`detail` were also encrypted at
 `tb_reflections.text` was likewise encrypted at 031 then the whole table was
 archived 2026-04-27 — INC-017 / migration 036.)
 
+**Encrypted-content table invariant.** Tables that hold subject-authored
+content via the `<col>_ciphertext`+`<col>_nonce` pattern (`tb_responses`,
+`tb_questions`, `tb_session_events`) MUST contain only fields that are
+either subject-authored or subject-derived signals. Operator-side
+annotations (review notes, QA flags, internal triage state) belong in
+separate tables, never as new columns on these. The invariant is
+load-bearing for `/api/subject/export`: the export endpoint uses
+`SELECT *` on these tables and strips the ciphertext pair before writing
+the decrypted plaintext, so any future column flows into the export
+automatically. Add an operator-side column here and you ship operator
+state to the subject by default. Phase 6c, established with step 6
+2026-04-28.
+
 **Boundary discipline**: every read of an encrypted column lives inside
 `src/lib/libDb.ts`. Application code above libDb sees plaintext on the way
 in and plaintext on the way out — never ciphertext. Direct SELECTs of
