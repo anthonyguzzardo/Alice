@@ -22,7 +22,8 @@
  * page are rewritten on DOMContentLoaded so cross-page navigation preserves
  * the active subject.
  *
- * Designer-facing only — Caddy basic-auth gates /observatory/* on prod.
+ * Designer-facing only — `/observatory/*` is gated by the universal
+ * session-cookie middleware in `src/middleware.ts` (owner-only).
  */
 ---
 
@@ -125,6 +126,24 @@
         });
       });
     }
+
+    // Logout delegate. Any nav element with [data-logout] anywhere on the
+    // page wipes the server session row and bounces to /login. Lives in the
+    // toolbar script so every /observatory/* page picks it up automatically
+    // — owner journal has its own logout handler in index.astro.
+    document.addEventListener('click', function (e) {
+      var t = e.target;
+      while (t && t !== document.body) {
+        if (t.dataset && t.dataset.logout != null) {
+          e.preventDefault();
+          fetch('/api/subject/logout', { method: 'POST' })
+            .catch(function () { /* fall through to redirect */ })
+            .finally(function () { window.location.href = '/login'; });
+          return;
+        }
+        t = t.parentElement;
+      }
+    });
   })();
 </script>
 

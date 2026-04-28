@@ -528,6 +528,8 @@
           <a href="/observatory">Observatory</a>
           <div class="nav-divider"></div>
           <a href="/dev/signals">Signal Sandbox</a>
+          <div class="nav-divider"></div>
+          <a href="#" id="nav-logout">Log out</a>
         </div>
       </div>
       <div class="health-wrap">
@@ -573,6 +575,15 @@
         document.documentElement.setAttribute('data-theme', next);
         localStorage.setItem('alice-theme', next);
         themeBtn.textContent = next === 'dark' ? '☀' : '☾';
+      });
+
+      // Logout — wipes the server session row and clears the cookie, then
+      // bounces to /login. The button lives in the nav dropdown.
+      document.getElementById('nav-logout')!.addEventListener('click', async (e) => {
+        e.preventDefault();
+        try { await fetch('/api/subject/logout', { method: 'POST' }); }
+        catch { /* fall through to redirect anyway */ }
+        window.location.href = '/login';
       });
 
       // Presence — the room is dim until you arrive. Pre-arrival is purely

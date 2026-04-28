@@ -164,7 +164,7 @@ END_TIME=$(date +%s)
 DOWNTIME=$((END_TIME - START_TIME))
 echo "[6/6] Post-migration smoke check..."
 if [[ "$DRY_RUN" != "1" ]]; then
-  curl -sf -o /dev/null https://fweeo.com/enter && echo "  ✓ /enter responds 200" || echo "  ✗ /enter check failed — investigate"
+  curl -sf -o /dev/null https://fweeo.com/login && echo "  ✓ /login responds 200" || echo "  ✗ /login check failed — investigate"
 fi
 echo
 echo "=========================================================================="

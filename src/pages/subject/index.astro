@@ -345,7 +345,7 @@
       logoutBtn.addEventListener('click', async () => {
         try { await fetch('/api/subject/logout', { method: 'POST' }); }
         catch { /* fall through to redirect anyway */ }
-        window.location.href = '/enter';
+        window.location.href = '/login';
       });
 
       // ── Presence — the room is dim until you arrive. Any signal of
@@ -439,7 +439,7 @@
         const res = await fetch('/api/subject/today');
 
         if (res.status === 401) {
-          window.location.href = '/enter';
+          window.location.href = '/login';
           return;
         }
 

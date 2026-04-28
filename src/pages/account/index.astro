@@ -30,7 +30,7 @@ import {
 } from '../../lib/libConsent.ts';
 
 const subject = Astro.locals.subject;
-if (!subject) return Astro.redirect('/enter');
+if (!subject) return Astro.redirect('/login');
 if (subject.is_owner) return Astro.redirect('/');
 if (subject.must_reset_password) return Astro.redirect('/reset-password');
 

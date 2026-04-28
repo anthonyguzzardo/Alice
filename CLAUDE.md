@@ -352,14 +352,23 @@ password if needed).
 - `src/pages/api/subject/login.ts` — POST username + password → session cookie
 - `src/pages/api/subject/reset-password.ts` — POST current + new password (also wipes all sessions)
 - `src/pages/api/subject/logout.ts` — POST → invalidates session
-- `src/pages/enter.astro` — login form
+- `src/pages/login.astro` — universal login form (subjects + owner)
 - `src/pages/reset-password.astro` — forced-reset form
 - `src/scripts/create-subject.ts` — `npm run create-subject -- <username> <temp-password> [tz] [display-name]`
 - `src/scripts/set-owner-password.ts` — `npm run set-owner-password -- <password>` (one-time bootstrap)
 
 **Token model:** raw 32-byte hex token in cookie, SHA-256(token) in `tb_subject_sessions`. A DB leak does not grant active sessions because the attacker would also need the live cookie. Sessions expire after 30 days with no sliding-window renewal. A password reset deletes ALL sessions for that subject (forces re-login everywhere).
 
-**Owner endpoints:** `/api/respond`, `/api/calibrate`, `/observatory`, `/` are NOT gated by this middleware. On `fweeo.com` they are protected by HTTP Basic Auth in Caddy via `OWNER_BASICAUTH_HASH` (path-based exclusion in `deploy/Caddyfile`). Session-based owner auth is a future phase.
+**Universal login (2026-04-28):** every protected route — subject and
+owner — flows through `src/middleware.ts`. Both auth paths share the
+same session-cookie infrastructure (Argon2id password verify, opaque
+32-byte hex token in cookie, SHA-256 in DB). HTML routes redirect to
+`/login?next=<path>` when unauth; API routes return 401 JSON. The
+`isOwner` flag in the login response dispatches the post-login redirect
+(owner → `/`, subject → `/subject`). The pre-2026-04-28 Caddy basic-auth
+gate (`OWNER_BASICAUTH_HASH`) was retired in the same change. The
+session cookie has no `Max-Age` — closing the browser drops it; the
+server-side row in `tb_subject_sessions` still has its 7-day hard cap.
 
 **`invite_code` is legacy.** The pre-2026-04-25 auth used a single static `invite_code` per subject; the column still exists on `tb_subjects` (nullable) for backward compat with any unmigrated read paths but new code MUST use session auth. See `GOTCHAS.md` for the historical landmine.
 

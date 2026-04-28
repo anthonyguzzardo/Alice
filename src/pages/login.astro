@@ -1,11 +1,12 @@
 ---
 /**
- * Subject login page.
+ * Universal login page.
  *
- * Subject enters username + password, which POSTs to /api/subject/login.
- * On success, the server sets an HttpOnly session cookie and the page
- * redirects to /reset-password (if must_reset) or /subject (otherwise).
- * Minimal UI — no nav, no chrome.
+ * Subjects and owner enter username + password, which POSTs to
+ * /api/subject/login. The login handler issues the same session cookie
+ * shape regardless of `is_owner`; the response body carries `isOwner` so
+ * this page dispatches: owner → `/`, subject → `/subject` (or
+ * `/reset-password` first if must_reset). Minimal UI — no nav, no chrome.
  */
 ---
 
@@ -179,24 +180,25 @@
           return;
         }
 
-        if (res.status === 403) {
-          // Owner accidentally hit the subject login.
-          window.location.href = '/';
-          return;
-        }
-
         if (!res.ok) {
           errorMsg.textContent = 'server error, try again';
           btn.disabled = false;
           return;
         }
 
-        const body = await res.json() as { mustResetPassword?: boolean };
+        const body = await res.json() as { mustResetPassword?: boolean; isOwner?: boolean };
         if (body.mustResetPassword) {
           window.location.href = '/reset-password';
           return;
         }
-        window.location.href = '/subject';
+        // Honor `?next=` if same-origin, else dispatch by role.
+        const params = new URLSearchParams(window.location.search);
+        const next = params.get('next');
+        if (next && next.startsWith('/') && !next.startsWith('//')) {
+          window.location.href = next;
+          return;
+        }
+        window.location.href = body.isOwner ? '/' : '/subject';
       });
 
       usernameInput.focus();

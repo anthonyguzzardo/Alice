@@ -146,7 +146,7 @@ ALICE_PG_URL='postgres://...supabase...' \
 ```
 
 Hand the username + temp password to the subject through a private channel
-(Signal, in person, etc.). They sign in at `https://fweeo.com/enter`, are
+(Signal, in person, etc.). They sign in at `https://fweeo.com/login`, are
 forced to reset the password, then land on their daily question.
 
 ## Key facts to never forget

@@ -223,7 +223,7 @@ ssh -i ~/.ssh/alice_hetzner root@5.78.203.243 'journalctl -u alice.service -f'
 
 # External health
 curl -I https://fweeo.com/                           # 401 (basic auth challenge)
-curl -I https://fweeo.com/enter                      # 200 (subject login form)
+curl -I https://fweeo.com/login                      # 200 (subject login form)
 
 # DB shell against Supabase
 ALICE_PG_URL=$(awk -F= '/^ALICE_PG_URL=/{sub(/^[^=]*=/,""); print}' .env) && psql "$ALICE_PG_URL"

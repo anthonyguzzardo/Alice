@@ -3,11 +3,17 @@
  *
  * Body: { username: string, password: string }
  *
- * On success: sets the session cookie (HttpOnly, Secure, SameSite=Lax,
- * 7-day Max-Age) and returns `{ ok: true, mustResetPassword }`. On any
- * failure (wrong username, wrong password, deactivated account) returns
- * 401 without distinguishing — auth handlers must not leak which condition
- * failed.
+ * On success: sets the session cookie (HttpOnly, Secure, SameSite=Lax, no
+ * Max-Age — the cookie expires when the browser closes; the server-side
+ * row in `tb_subject_sessions` still has its 7-day hard cap as the upper
+ * bound). Returns `{ ok: true, mustResetPassword, isOwner }`. The same
+ * endpoint serves both subjects and the owner; the response body's
+ * `isOwner` flag tells the login page where to dispatch (owner → `/`,
+ * subject → `/subject`).
+ *
+ * On any failure (wrong username, wrong password, deactivated account)
+ * returns 401 without distinguishing — auth handlers must not leak which
+ * condition failed.
  *
  * No auth required (this is the entry point). Middleware exempts this route
  * via `ALLOW_NO_AUTH`.
@@ -17,8 +23,6 @@ import type { APIRoute } from 'astro';
 import { loginSubject, SESSION_COOKIE } from '../../../lib/libSubjectAuth.ts';
 import { parseBody } from '../../../lib/utlParseBody.ts';
 import { consume, reset as resetRateLimit } from '../../../lib/utlRateLimit.ts';
-
-const SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
 // Rate limit: 10 login attempts per 15 minutes per IP. Argon2id already adds
 // ~100ms per verify, so the absolute upper bound on guesses-per-window is low
@@ -76,32 +80,25 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     });
   }
 
-  if (result.isOwner) {
-    // Owners never log in via the subject endpoint. They use the main path
-    // (today: no auth, single-user; phase 6e: owner-side session). If we
-    // accidentally matched an owner row, refuse to issue a subject session.
-    return new Response(JSON.stringify({ error: 'owner_use_main_path' }), {
-      status: 403,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
   // Successful auth: reset this IP's rate-limit bucket so a legitimate user
   // who mistypes their password a few times before getting it right does not
   // get throttled on their next session.
   resetRateLimit(rateKey);
 
+  // No `maxAge` — this is a session cookie. Browser drops it when it
+  // closes; refreshes and tab-switches keep the session alive. The
+  // server-side `tb_subject_sessions` row still has its 7-day hard cap.
   cookies.set(SESSION_COOKIE, result.token, {
     httpOnly: true,
     secure: import.meta.env.PROD,
     sameSite: 'lax',
     path: '/',
-    maxAge: SESSION_MAX_AGE_SECONDS,
   });
 
   return new Response(JSON.stringify({
     ok: true,
     mustResetPassword: result.mustResetPassword,
+    isOwner: result.isOwner,
   }), {
     headers: { 'Content-Type': 'application/json' },
   });

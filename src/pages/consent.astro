@@ -27,7 +27,7 @@ import {
 
 const subject = Astro.locals.subject;
 if (!subject) {
-  return Astro.redirect('/enter');
+  return Astro.redirect('/login');
 }
 if (subject.is_owner) {
   return Astro.redirect('/');
@@ -339,7 +339,7 @@ const isStaleReload = Astro.url.searchParams.get('stale') === '1';
         declineLink.addEventListener('click', async (e) => {
           e.preventDefault();
           await fetch('/api/subject/logout', { method: 'POST' });
-          window.location.href = '/enter';
+          window.location.href = '/login';
         });
       }
 

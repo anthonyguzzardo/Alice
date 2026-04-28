@@ -28,7 +28,7 @@
 import { getSubjectConsentStatus } from '../../lib/libConsent.ts';
 
 const subject = Astro.locals.subject;
-if (!subject) return Astro.redirect('/enter');
+if (!subject) return Astro.redirect('/login');
 if (subject.is_owner) return Astro.redirect('/');
 if (subject.must_reset_password) return Astro.redirect('/reset-password');
 
@@ -310,7 +310,7 @@ const consentNotCurrent = !status.isCurrent;
           // Success or already-deleted: cookie was wiped server-side.
           // Account is gone; send the subject to the login page so the
           // browser drops the now-invalid cookie naturally.
-          window.location.href = '/enter';
+          window.location.href = '/login';
           return;
         }
 
