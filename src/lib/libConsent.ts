@@ -54,6 +54,12 @@ export function getCurrentConsentVersion(): string {
 export type DataAccessAction = 'export' | 'factory_reset' | 'delete' | 'consent';
 export type DataAccessActor  = 'subject' | 'operator' | 'system';
 
+// MUST stay in sync with the seeded rows of te_data_access_action /
+// te_data_access_actor (dbAlice_Tables.sql + migration 038/039). Adding a
+// new action or actor requires: (1) extend the TS union above, (2) add the
+// matching row to the lookup table via a migration, (3) extend the map
+// below. All three together or the INSERT will silently fail at runtime
+// with a constraint error.
 const ACTION_ID: Record<DataAccessAction, number> = {
   export:        1,
   factory_reset: 2,
@@ -113,19 +119,32 @@ export interface ConsentHistoryEntry {
 }
 
 /**
- * Full append-only consent history for a subject, newest first. Powers the
- * consent-history view on /account.astro. User-agent is intentionally
- * omitted from this view to keep the surface terse — present in the row
- * for the audit log, not surfaced back to the subject.
+ * Append-only consent history for a subject, deduped to one row per
+ * consent_version (the FIRST acknowledgment of each), newest first.
+ * Powers the consent-history view on /account.astro.
+ *
+ * Re-acknowledgments of the same version are noise from a UI perspective —
+ * the audit log (`tb_data_access_log`) still has every individual row for
+ * forensic purposes; this view's job is "which versions have I agreed to
+ * and when did I first agree." User-agent intentionally omitted to keep
+ * the surface terse.
  */
 export async function getSubjectConsentHistory(subjectId: number): Promise<ConsentHistoryEntry[]> {
+  // DISTINCT ON requires the distinct column to lead the ORDER BY, so we
+  // sort by consent_version + acknowledgment-ASC inside, then re-sort the
+  // deduped result by acknowledgment-DESC for display.
   const rows = await sql`
-    SELECT consent_version       AS "version"
-          ,dttm_acknowledged_utc AS "acknowledgedAtUtc"
-          ,ip_address            AS "ipAddress"
-    FROM tb_subject_consent
-    WHERE subject_id = ${subjectId}
-    ORDER BY dttm_acknowledged_utc DESC
+    SELECT version, "acknowledgedAtUtc", "ipAddress"
+    FROM (
+      SELECT DISTINCT ON (consent_version)
+             consent_version       AS "version"
+            ,dttm_acknowledged_utc AS "acknowledgedAtUtc"
+            ,ip_address            AS "ipAddress"
+      FROM tb_subject_consent
+      WHERE subject_id = ${subjectId}
+      ORDER BY consent_version, dttm_acknowledged_utc ASC
+    ) deduped
+    ORDER BY "acknowledgedAtUtc" DESC
   ` as ConsentHistoryEntry[];
   return rows;
 }
@@ -225,14 +244,33 @@ export interface RecordConsentResult {
  * tb_subject_consent — so the consent row landing is what actually flips
  * the gate. The audit row is the forensic trace for the same event.
  *
- * Validates the version against CONSENT_VERSIONS to catch typos at the
- * call site before they create unrecognized acknowledgment rows.
+ * Refuses any version other than `CONSENT_VERSION`. The registry exists
+ * for the *history view* (so older versions stay readable); writes only
+ * ever target the current version. A request to acknowledge an older
+ * version means a stale or malicious client and is rejected at the
+ * boundary rather than allowed to land in the append-only table.
+ *
+ * NOT idempotent at this layer — a double-call writes two consent rows
+ * + two audit rows. Idempotency is the endpoint's responsibility (skip
+ * the call when `getSubjectConsentStatus(subjectId).isCurrent` is true).
+ * Pushing it here would force every caller to handle a "no-op" return
+ * shape; better to keep the helper a single canonical writer.
  */
 export async function recordConsent(args: RecordConsentArgs): Promise<RecordConsentResult> {
+  if (args.version !== CONSENT_VERSION) {
+    throw new Error(
+      `recordConsent: refusing to acknowledge version "${args.version}" — ` +
+      `current is "${CONSENT_VERSION}". Acknowledgments target the current version only.`,
+    );
+  }
+  // Defense in depth: catches the case where CONSENT_VERSION is bumped but
+  // CONSENT_VERSIONS is not — without this, a fresh deploy with a missing
+  // registry entry would silently insert acknowledgments for an unknown
+  // version and the history view would skip them.
   if (!KNOWN_CONSENT_VERSIONS.has(args.version)) {
     throw new Error(
-      `recordConsent: unknown consent version "${args.version}". ` +
-      `Add it to CONSENT_VERSIONS in libConsent.ts before recording.`,
+      `recordConsent: CONSENT_VERSION "${args.version}" is not in CONSENT_VERSIONS. ` +
+      `Add it to the registry in libConsent.ts before deploying.`,
     );
   }
 
