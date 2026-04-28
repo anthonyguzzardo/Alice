@@ -8,10 +8,16 @@
  * session and rejects owner accounts (owners use the main `/api/respond` and
  * `/api/calibrate` paths).
  *
- * `must_reset_password` flow: a freshly-provisioned subject is forced through
- * `/api/subject/reset-password` before any other endpoint will respond. This
- * makes the temp password effectively single-use — the subject must rotate
- * to their own password before doing anything else.
+ * Three-stage gating for authenticated subjects (each stage runs only after
+ * the previous passes):
+ *   1. `must_reset_password` — temp-password subjects rotate before they can
+ *      do anything else; only `/reset-password` and `/logout` are reachable.
+ *   2. consent gate — subjects whose most-recent acknowledgment differs from
+ *      `CONSENT_VERSION` must re-acknowledge; only `/consent`, `/logout`,
+ *      `/export`, and `/account/delete` are reachable. Right to leave (logout,
+ *      export, delete) is unconditional; right to journal (respond, calibrate,
+ *      today) is gated.
+ *   3. (Anything past consent runs through to the handler.)
  *
  * Owner endpoint protection (e.g. `/api/respond`, `/api/calibrate`) is NOT
  * gated by this middleware. The handoff design intentionally defers owner
@@ -22,6 +28,7 @@
 
 import { defineMiddleware } from 'astro:middleware';
 import { SESSION_COOKIE, getRequestSubject } from './lib/libSubject.ts';
+import { getSubjectConsentStatus } from './lib/libConsent.ts';
 
 const ALLOW_NO_AUTH = new Set<string>([
   '/api/subject/login',
@@ -30,6 +37,17 @@ const ALLOW_NO_AUTH = new Set<string>([
 const ALLOW_DURING_MUST_RESET = new Set<string>([
   '/api/subject/reset-password',
   '/api/subject/logout',
+]);
+
+// Whitelist for the consent gate. The right to leave (logout, export, delete)
+// and the right to acknowledge a new consent version are unconditional — a
+// subject who refuses a new version still keeps these. Anything else (today,
+// respond, calibrate) requires a current acknowledgment.
+const ALLOW_DURING_CONSENT_GATE = new Set<string>([
+  '/api/subject/consent',
+  '/api/subject/logout',
+  '/api/subject/export',
+  '/api/subject/account/delete',
 ]);
 
 function jsonError(status: number, error: string): Response {
@@ -68,6 +86,17 @@ export const onRequest = defineMiddleware(async ({ request, locals }, next) => {
 
   if (subject.must_reset_password && !ALLOW_DURING_MUST_RESET.has(path)) {
     return jsonError(403, 'must_reset_password');
+  }
+
+  // Consent gate: subjects whose most-recent acknowledgment isn't the
+  // current `CONSENT_VERSION` are blocked from non-whitelisted endpoints.
+  // The whitelist exists so a subject who refuses to re-acknowledge can
+  // still log out, export their data, or delete their account.
+  if (!ALLOW_DURING_CONSENT_GATE.has(path)) {
+    const consentStatus = await getSubjectConsentStatus(subject.subject_id);
+    if (!consentStatus.isCurrent) {
+      return jsonError(403, 'consent_required');
+    }
   }
 
   return next();
