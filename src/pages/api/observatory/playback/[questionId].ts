@@ -3,11 +3,23 @@
  *
  * Returns the per-keystroke event log for a given questionId so the replay
  * page can render the writing timeline at original tempo.
+ *
+ * Subject content opacity: when the resolved subjectId is not the owner,
+ * every reconstructed text snapshot has its non-whitespace characters
+ * redacted to `•` before leaving this handler. The operator has the
+ * encryption key and could decrypt, but the observatory binds itself not
+ * to surface subjects' written content as plaintext — even via replay.
+ * Whitespace and newlines are preserved so cadence, line breaks, and word
+ * length structure stay visible alongside timing/burst dynamics.
  */
 import type { APIRoute } from 'astro';
-import sql, { getSessionEvents } from '../../../../lib/libDb.ts';
+import sql, { getSessionEvents, OWNER_SUBJECT_ID } from '../../../../lib/libDb.ts';
 import { logError } from '../../../../lib/utlErrorLog.ts';
 import { resolveObservatorySubjectId, badSubjectResponse } from '../../../../lib/libObservatorySubject.ts';
+
+function redactNonWhitespace(text: string): string {
+  return text.replace(/\S/g, '\u2022');
+}
 
 export const GET: APIRoute = async ({ params, request }) => {
   try {
@@ -49,6 +61,12 @@ export const GET: APIRoute = async ({ params, request }) => {
     } else {
       // Legacy snapshot format: pass through
       events = rawEvents;
+    }
+
+    // Redact subject content before it leaves the server. Owner-on-owner
+    // playback returns plaintext (it's the operator's own writing).
+    if (subjectId !== OWNER_SUBJECT_ID) {
+      events = events.map(([ts, text]) => [ts, redactNonWhitespace(text)]);
     }
 
     // Resolve response_id so replay can link back to the correct entry
