@@ -1,0 +1,137 @@
+---
+/**
+ * Observatory · Inbox
+ *
+ * Lists subject submissions since the operator's previous visit. Click a row
+ * to open that entry's detail page; the toolbar's URL rewriter pins the
+ * subjectId into the link so the operator lands in that subject's scope.
+ *
+ * On load, the inbox cursor (localStorage('alice-obs-inbox-cursor')) is
+ * advanced to "now" so the badge resets on next page view. The list shows
+ * everything the inbox API returns regardless of cursor — the cursor only
+ * controls the badge count, not the list contents.
+ *
+ * No interpretation, no response text. Designer-facing only.
+ */
+import '../../styles/styObservatory.css';
+import ObsToolbar from '../../components/cmpObsToolbar.astro';
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Inbox · Observatory · Alice</title>
+    <script is:inline>
+      (function () {
+        var saved = localStorage.getItem('alice-theme');
+        var t = saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', t);
+        document.addEventListener('DOMContentLoaded', function () {
+          var btn = document.getElementById('obs-theme-toggle');
+          if (!btn) return;
+          btn.textContent = t === 'dark' ? '\u2600' : '\u263E';
+          btn.addEventListener('click', function () {
+            var cur = document.documentElement.getAttribute('data-theme');
+            var next = cur === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', next);
+            localStorage.setItem('alice-theme', next);
+            btn.textContent = next === 'dark' ? '\u2600' : '\u263E';
+          });
+        });
+      })();
+    </script>
+  </head>
+  <body>
+    <div class="frame">
+      <header>
+        <h1>Inbox</h1>
+        <nav>
+          <a href="/observatory">overview</a>
+          <a href="/observatory/trajectory">trajectory</a>
+          <a href="/observatory/scales">scales</a>
+          <a href="/observatory/coupling">coupling</a>
+          <a href="/observatory/ghost">ghost</a>
+          <a href="/">→ alice</a>
+          <button class="obs-theme-toggle" id="obs-theme-toggle" aria-label="Toggle theme"></button>
+        </nav>
+      </header>
+
+      <ObsToolbar />
+
+      <div class="meta-row" id="meta-row">
+        <span id="counts">loading…</span>
+      </div>
+
+      <section class="panel">
+        <h2>Subject submissions · most recent first</h2>
+        <div id="inbox-table">loading…</div>
+      </section>
+    </div>
+
+    <script type="module">
+      function fmtTime(iso) {
+        if (!iso) return '—';
+        try {
+          const d = new Date(iso);
+          if (Number.isNaN(d.getTime())) return iso;
+          const now = new Date();
+          const sameDay = d.toDateString() === now.toDateString();
+          const opts = sameDay
+            ? { hour: 'numeric', minute: '2-digit' }
+            : { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' };
+          return d.toLocaleString(undefined, opts);
+        } catch {
+          return iso;
+        }
+      }
+
+      // Fetch the full inbox (cursor = epoch). The cursor logic only controls
+      // the badge count; the page lists everything.
+      const sinceEpoch = '1970-01-01T00:00:00Z';
+      fetch('/api/observatory/inbox?since=' + encodeURIComponent(sinceEpoch))
+        .then(r => r.json())
+        .then(data => {
+          const counts = document.getElementById('counts');
+          const table = document.getElementById('inbox-table');
+
+          if (data.error) {
+            table.innerHTML = `<div class="empty">${data.error}</div>`;
+            return;
+          }
+
+          const rows = data.submissions || [];
+          counts.textContent = `${rows.length} submission${rows.length === 1 ? '' : 's'}`;
+
+          if (rows.length === 0) {
+            table.innerHTML = '<div class="empty">no subject submissions yet</div>';
+          } else {
+            const head = '<thead><tr><th>when</th><th>subject</th><th>scheduled</th><th>response</th></tr></thead>';
+            const body = rows.map(r => {
+              // Build the entry-detail link with this row's subjectId so the
+              // operator lands inside that subject's scope, regardless of
+              // which subject they're currently viewing.
+              const entryHref = '/observatory/entry/' + r.responseId + '?subjectId=' + r.subjectId;
+              const subj = (r.displayName || r.username) + ' #' + r.subjectId;
+              return `<tr>
+                <td>${fmtTime(r.createdAt)}</td>
+                <td>${subj}</td>
+                <td class="meta">${r.scheduledFor ?? '—'}</td>
+                <td><a href="${entryHref}">#${r.responseId}</a></td>
+              </tr>`;
+            }).join('');
+            table.innerHTML = `<table>${head}<tbody>${body}</tbody></table>`;
+          }
+
+          // Advance the cursor so the badge resets on next page load.
+          if (data.cursor) {
+            window.localStorage.setItem('alice-obs-inbox-cursor', data.cursor);
+          }
+        })
+        .catch(err => {
+          document.getElementById('inbox-table').innerHTML =
+            `<div class="empty">load failed: ${err?.message ?? err}</div>`;
+        });
+    </script>
+  </body>
+</html>

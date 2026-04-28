@@ -10,6 +10,7 @@
  * The textarea is read-only and grows with the snapshot text.
  */
 import '../../../styles/styObservatory.css';
+import ObsToolbar from '../../../components/cmpObsToolbar.astro';
 const { questionId } = Astro.params;
 const qId = parseInt(questionId ?? '', 10);
 ---
@@ -48,6 +49,7 @@ const qId = parseInt(questionId ?? '', 10);
         <a href="/observatory">← back to observatory</a>
         <button class="obs-theme-toggle" id="obs-theme-toggle" aria-label="Toggle theme"></button>
       </div>
+      <ObsToolbar />
       <p class="replay-label">Replay</p>
       <div class="replay-question" id="question">loading…</div>
       <div class="replay-label" id="meta" style="margin-bottom:1rem;"></div>
@@ -155,7 +157,7 @@ const qId = parseInt(questionId ?? '', 10);
       });
 
       // Load playback events.
-      fetch(`/api/observatory/playback/${qId}`).then(r => r.json()).then(payload => {
+      fetch(window.__obsUrl(`/api/observatory/playback/${qId}`)).then(r => r.json()).then(payload => {
         if (payload.error) {
           surface.innerHTML = '<div class="empty">no playback available for this session</div>';
           return;

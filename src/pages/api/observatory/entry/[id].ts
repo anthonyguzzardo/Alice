@@ -8,15 +8,14 @@
  *     discourse-coherence subset of semantic, session metadata
  *   - Replay availability flag
  *
- * Anchored on `response_id` from the URL. Subject pinned to OWNER_SUBJECT_ID.
- * Pre-2026-04-27 this endpoint anchored on tb_entry_states; the table was
- * archived (migration 036, INC-017) and the page was deleted. Rebuild
- * recomputes 7D state on every request from existing live tables — no
- * persistence, no backfill, no producer wiring.
+ * Anchored on `response_id` from the URL. Subject scope resolved from
+ * `?subjectId=N` (defaults to owner). Pre-2026-04-27 this endpoint anchored
+ * on tb_entry_states; the table was archived (migration 036, INC-017) and
+ * the page was deleted. Rebuild recomputes 7D state on every request from
+ * existing live tables — no persistence, no backfill, no producer wiring.
  */
 import type { APIRoute } from 'astro';
 import sql, {
-  OWNER_SUBJECT_ID,
   getQuestionTextById,
   getSessionSummary,
   getMotorSignals,
@@ -28,12 +27,11 @@ import sql, {
 } from '../../../../lib/libDb.ts';
 import { computeEntryStates } from '../../../../lib/libStateEngine.ts';
 import { logError } from '../../../../lib/utlErrorLog.ts';
+import { resolveObservatorySubjectId, badSubjectResponse } from '../../../../lib/libObservatorySubject.ts';
 
-export const GET: APIRoute = async ({ params }) => {
-  // Owner-only observatory endpoint.
-  // TODO(step5): review.
-  const subjectId = OWNER_SUBJECT_ID;
+export const GET: APIRoute = async ({ params, request }) => {
   try {
+    const subjectId = await resolveObservatorySubjectId(request);
     const responseId = parseInt(params.id ?? '', 10);
     if (Number.isNaN(responseId)) {
       return new Response(JSON.stringify({ error: 'Invalid response id' }), {
@@ -125,6 +123,8 @@ export const GET: APIRoute = async ({ params }) => {
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (err) {
+    const r = badSubjectResponse(err);
+    if (r) return r;
     logError('api.observatory.entry', err);
     return new Response(JSON.stringify({ error: 'Failed to load entry' }), {
       status: 500,

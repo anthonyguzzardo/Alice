@@ -1,0 +1,205 @@
+---
+/**
+ * Observatory toolbar: subject picker + inbox badge.
+ *
+ * Inserted after the nav in every /observatory/* page header. Provides:
+ *   - A <select> dropdown of active subjects (loaded from /api/observatory/subjects).
+ *   - An inbox badge counting subject submissions since the operator's last visit.
+ *
+ * Synchronizes the active subject with `?subjectId=N` URL query param +
+ * localStorage('alice-obs-subject'). When the operator changes the picker
+ * the page reloads with the new param so all server-side handlers see the
+ * scoped subject. Owner (subject_id = 1) is the default; URLs stay clean
+ * for owner so links shared between operators do not pin a stale subject.
+ *
+ * Exposes a global helper `window.__obsUrl(path)` for client-side scripts
+ * that build fetch URLs or navigation hrefs — appends `?subjectId=N` when
+ * viewing a non-owner subject. Static <a href> links inside the rendered
+ * page are rewritten on DOMContentLoaded so cross-page navigation preserves
+ * the active subject.
+ *
+ * Designer-facing only — Caddy basic-auth gates /observatory/* on prod.
+ */
+---
+
+<div class="obs-toolbar">
+  <label class="obs-pick">
+    <span class="k">subject</span>
+    <select id="obs-subject-pick" disabled>
+      <option value="">…</option>
+    </select>
+  </label>
+  <a id="obs-inbox-link" href="/observatory/inbox" class="obs-inbox" data-count="0" hidden>
+    <span class="k">inbox</span>
+    <span class="v" id="obs-inbox-count">0</span>
+  </a>
+</div>
+
+<script is:inline>
+  // Sync subjectId BEFORE any page module runs. Pages call window.__obsUrl()
+  // to propagate the active subject through fetches and dynamic hrefs.
+  (function () {
+    var url = new URL(window.location.href);
+    var fromUrl = url.searchParams.get('subjectId');
+    var fromLs = window.localStorage.getItem('alice-obs-subject');
+    var sid = null;
+
+    if (fromUrl) {
+      var parsed = parseInt(fromUrl, 10);
+      if (Number.isFinite(parsed) && parsed > 0) sid = parsed;
+    }
+
+    // Bare URL with a non-owner subject in localStorage: redirect so the
+    // server-side handlers see the scoped subjectId without the operator
+    // having to manually re-pick after every navigation.
+    if (sid == null && fromLs && fromLs !== '1') {
+      var lsParsed = parseInt(fromLs, 10);
+      if (Number.isFinite(lsParsed) && lsParsed > 0) {
+        url.searchParams.set('subjectId', String(lsParsed));
+        window.location.replace(url.toString());
+        return;
+      }
+    }
+
+    // Persist the current pick so cross-page nav remembers it. Clear the
+    // localStorage entry when the operator is back on owner so we don't
+    // re-redirect them next time they visit a bare URL.
+    if (sid != null) {
+      window.localStorage.setItem('alice-obs-subject', String(sid));
+    } else if (fromLs === '1') {
+      window.localStorage.removeItem('alice-obs-subject');
+    }
+
+    window.__obsSubjectId = sid;
+    window.__obsUrl = function (path) {
+      if (sid == null) return path;
+      var u = new URL(path, window.location.origin);
+      if (!u.searchParams.has('subjectId')) {
+        u.searchParams.set('subjectId', String(sid));
+      }
+      return path.startsWith('/') ? u.pathname + u.search + u.hash : u.toString();
+    };
+
+    // Rewrite static observatory hrefs to carry the active subject. Runs
+    // once on DOMContentLoaded; dynamically-rendered links must use
+    // window.__obsUrl() explicitly.
+    if (sid != null) {
+      document.addEventListener('DOMContentLoaded', function () {
+        var anchors = document.querySelectorAll('a[href^="/observatory"], a[href="/"]');
+        anchors.forEach(function (a) {
+          var href = a.getAttribute('href');
+          if (!href || href.indexOf('subjectId=') !== -1) return;
+          // Don't tag the cross-link back to the owner-side journal at "/".
+          if (href === '/') return;
+          var au = new URL(href, window.location.origin);
+          au.searchParams.set('subjectId', String(sid));
+          a.setAttribute('href', au.pathname + au.search + au.hash);
+        });
+      });
+    }
+  })();
+</script>
+
+<script type="module">
+  // Populate dropdown + inbox badge once the toolbar markup is in the DOM.
+  (async function () {
+    const pick = document.getElementById('obs-subject-pick');
+    const inboxLink = document.getElementById('obs-inbox-link');
+    const inboxCount = document.getElementById('obs-inbox-count');
+    if (!pick) return;
+
+    const current = window.__obsSubjectId ?? 1;
+
+    try {
+      const res = await fetch('/api/observatory/subjects');
+      const data = await res.json();
+      const subjects = data.subjects || [];
+      pick.innerHTML = subjects.map((s) => {
+        const label = (s.display_name || s.username) + ' #' + s.subject_id + (s.is_owner ? ' (owner)' : '');
+        const sel = s.subject_id === current ? ' selected' : '';
+        return '<option value="' + s.subject_id + '"' + sel + '>' + label + '</option>';
+      }).join('');
+      pick.disabled = false;
+    } catch {
+      pick.innerHTML = '<option>load failed</option>';
+    }
+
+    pick.addEventListener('change', () => {
+      const newId = parseInt(pick.value, 10);
+      if (!Number.isFinite(newId) || newId <= 0) return;
+      window.localStorage.setItem('alice-obs-subject', String(newId));
+      const u = new URL(window.location.href);
+      if (newId === 1) u.searchParams.delete('subjectId');
+      else u.searchParams.set('subjectId', String(newId));
+      window.location.href = u.toString();
+    });
+
+    // Inbox badge: count subject submissions since the cursor.
+    try {
+      const since = window.localStorage.getItem('alice-obs-inbox-cursor') || '1970-01-01T00:00:00Z';
+      const resI = await fetch('/api/observatory/inbox?since=' + encodeURIComponent(since));
+      const dataI = await resI.json();
+      const count = dataI.count || 0;
+      if (count > 0 && inboxLink && inboxCount) {
+        inboxCount.textContent = String(count);
+        inboxLink.dataset.count = String(count);
+        inboxLink.removeAttribute('hidden');
+      }
+    } catch {
+      // inbox is non-critical; fail silently
+    }
+  })();
+</script>
+
+<style is:global>
+  .obs-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin: 0 0 0.75rem;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    flex-wrap: wrap;
+  }
+  .obs-pick {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .obs-pick .k {
+    color: var(--text-faint);
+    text-transform: uppercase;
+    font-size: 9px;
+    letter-spacing: 0.16em;
+  }
+  .obs-pick select {
+    background: var(--bg-panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 0.2rem 0.5rem;
+    font-family: var(--mono);
+    font-size: 11px;
+    border-radius: 2px;
+  }
+  .obs-pick select:disabled { opacity: 0.5; }
+  .obs-inbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    text-decoration: none;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    padding: 0.2rem 0.6rem;
+    border-radius: 2px;
+  }
+  .obs-inbox .k {
+    text-transform: uppercase;
+    font-size: 9px;
+    letter-spacing: 0.16em;
+  }
+  .obs-inbox .v {
+    font-weight: 500;
+  }
+  .obs-inbox:hover { background: var(--bg-panel); }
+</style>

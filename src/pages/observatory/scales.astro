@@ -13,6 +13,7 @@
  * No interpretation. Designer-facing only.
  */
 import '../../styles/styObservatory.css';
+import ObsToolbar from '../../components/cmpObsToolbar.astro';
 ---
 <!doctype html>
 <html lang="en">
@@ -126,6 +127,8 @@ import '../../styles/styObservatory.css';
           <button class="obs-theme-toggle" id="obs-theme-toggle" aria-label="Toggle theme"></button>
         </nav>
       </header>
+
+      <ObsToolbar />
 
       <div id="scales-content">
         <div class="empty">loading…</div>
@@ -407,7 +410,7 @@ import '../../styles/styObservatory.css';
       }
 
       // ── Main ────────────────────────────────────────────────────────
-      fetch('/api/observatory/scales').then(r => r.json()).then(data => {
+      fetch(window.__obsUrl('/api/observatory/scales')).then(r => r.json()).then(data => {
         if (data.error) {
           document.getElementById('scales-content').innerHTML = `<div class="empty">${data.error}</div>`;
           return;

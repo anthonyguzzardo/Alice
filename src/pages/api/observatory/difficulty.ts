@@ -9,14 +9,13 @@
  * for day N+1 → reconstruction residual for that question.
  */
 import type { APIRoute } from 'astro';
-import sql, { OWNER_SUBJECT_ID } from '../../../lib/libDb.ts';
+import sql from '../../../lib/libDb.ts';
 import { logError } from '../../../lib/utlErrorLog.ts';
+import { resolveObservatorySubjectId, badSubjectResponse } from '../../../lib/libObservatorySubject.ts';
 
-export const GET: APIRoute = async () => {
-  // Owner-only observatory endpoint.
-  // TODO(step5): review.
-  const subjectId = OWNER_SUBJECT_ID;
+export const GET: APIRoute = async ({ request }) => {
   try {
+    const subjectId = await resolveObservatorySubjectId(request);
     const rows = await sql`
       SELECT
         pt.difficulty_level        AS "difficultyLevel",
@@ -71,6 +70,8 @@ export const GET: APIRoute = async () => {
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (err) {
+    const r = badSubjectResponse(err);
+    if (r) return r;
     logError('api.observatory.difficulty', err);
     return new Response(JSON.stringify({ error: 'failed to load difficulty data' }), {
       status: 500,

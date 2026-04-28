@@ -11,15 +11,14 @@
  * re-anchored on tb_responses to keep the rest of the trajectory page alive.
  */
 import type { APIRoute } from 'astro';
-import sql, { OWNER_SUBJECT_ID } from '../../../lib/libDb.ts';
+import sql from '../../../lib/libDb.ts';
 import { decrypt } from '../../../lib/libCrypto.ts';
 import { logError } from '../../../lib/utlErrorLog.ts';
+import { resolveObservatorySubjectId, badSubjectResponse } from '../../../lib/libObservatorySubject.ts';
 
-export const GET: APIRoute = async () => {
-  // Owner-only observatory endpoint.
-  // TODO(step5): review.
-  const subjectId = OWNER_SUBJECT_ID;
+export const GET: APIRoute = async ({ request }) => {
   try {
+    const subjectId = await resolveObservatorySubjectId(request);
     // One row per journal response (calibration sessions excluded).
     // Migration 031: question text is encrypted at rest (text_ciphertext +
     // text_nonce). Bulk-select the ciphertext columns and decrypt in JS so
@@ -142,6 +141,8 @@ export const GET: APIRoute = async () => {
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (err) {
+    const r = badSubjectResponse(err);
+    if (r) return r;
     logError('api.observatory.states', err);
     return new Response(JSON.stringify({ error: 'Failed to load entries' }), {
       status: 500,

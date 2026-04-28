@@ -10,8 +10,9 @@
  *   ?variant=1..5           - returns data for a single variant
  */
 import type { APIRoute } from 'astro';
-import sql, { OWNER_SUBJECT_ID } from '../../../lib/libDb.ts';
+import sql from '../../../lib/libDb.ts';
 import { logError } from '../../../lib/utlErrorLog.ts';
+import { resolveObservatorySubjectId, badSubjectResponse } from '../../../lib/libObservatorySubject.ts';
 
 const VARIANT_NAMES: Record<number, string> = {
   1: 'baseline',
@@ -69,10 +70,8 @@ function buildSummary(sessions: any[]) {
 }
 
 export const GET: APIRoute = async ({ request }) => {
-  // Owner-only observatory endpoint.
-  // TODO(step5): review.
-  const subjectId = OWNER_SUBJECT_ID;
   try {
+    const subjectId = await resolveObservatorySubjectId(request);
     const url = new URL(request.url);
     const variantParam = url.searchParams.get('variant') ?? 'all';
 
@@ -177,6 +176,8 @@ export const GET: APIRoute = async ({ request }) => {
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (err) {
+    const r = badSubjectResponse(err);
+    if (r) return r;
     logError('api.observatory.ghost', err);
     return new Response(JSON.stringify({ error: 'failed to load ghost data' }), {
       status: 500,

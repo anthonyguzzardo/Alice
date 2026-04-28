@@ -9,6 +9,7 @@
  * No interpretation. Designer-facing only.
  */
 import '../../styles/styObservatory.css';
+import ObsToolbar from '../../components/cmpObsToolbar.astro';
 ---
 <!doctype html>
 <html lang="en">
@@ -109,6 +110,8 @@ import '../../styles/styObservatory.css';
           <button class="obs-theme-toggle" id="obs-theme-toggle" aria-label="Toggle theme"></button>
         </nav>
       </header>
+
+      <ObsToolbar />
 
       <div id="trajectory-content">
         <div class="empty">loading…</div>
@@ -324,7 +327,7 @@ import '../../styles/styObservatory.css';
         return html;
       }
 
-      fetch('/api/observatory/states').then(r => r.json()).then(data => {
+      fetch(window.__obsUrl('/api/observatory/states')).then(r => r.json()).then(data => {
         if (data.error) {
           document.getElementById('trajectory-content').innerHTML = `<div class="empty">${data.error}</div>`;
           return;

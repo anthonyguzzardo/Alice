@@ -8,6 +8,7 @@
  * No user surfaces. The /observatory/* tree is for the designer only.
  */
 import '../../styles/styObservatory.css';
+import ObsToolbar from '../../components/cmpObsToolbar.astro';
 ---
 <!doctype html>
 <html lang="en">
@@ -52,6 +53,8 @@ import '../../styles/styObservatory.css';
           <button class="obs-theme-toggle" id="obs-theme-toggle" aria-label="Toggle theme"></button>
         </nav>
       </header>
+
+      <ObsToolbar />
 
       <div class="meta-row" id="meta-row">
         <span id="counts">loading…</span>
@@ -110,10 +113,10 @@ import '../../styles/styObservatory.css';
             metaParts.push(`hr:${s.metadata.hour_typicality > 0 ? 'typical' : 'unusual'}`);
           const meta = metaParts.length ? metaParts.join(' · ') : '—';
           const replay = s.replayAvailable
-            ? `<a class="action-btn" href="/observatory/replay/${s.question_id}">▶ replay</a>`
+            ? `<a class="action-btn" href="${window.__obsUrl('/observatory/replay/' + s.question_id)}">▶ replay</a>`
             : '<span class="action-btn-muted">—</span>';
           return `<tr>
-            <td><a href="/observatory/entry/${s.response_id}">${s.date}</a></td>
+            <td><a href="${window.__obsUrl('/observatory/entry/' + s.response_id)}">${s.date}</a></td>
             <td class="meta">${meta}</td>
             <td>${replay}</td>
           </tr>`;
@@ -219,9 +222,9 @@ import '../../styles/styObservatory.css';
       }
 
       Promise.all([
-        fetch('/api/observatory/states').then(r => r.json()),
-        fetch('/api/observatory/calibration-drift').then(r => r.json()),
-        fetch('/api/observatory/integrity').then(r => r.json()),
+        fetch(window.__obsUrl('/api/observatory/states')).then(r => r.json()),
+        fetch(window.__obsUrl('/api/observatory/calibration-drift')).then(r => r.json()),
+        fetch(window.__obsUrl('/api/observatory/integrity')).then(r => r.json()),
       ]).then(([st, cd, integ]) => {
         const states = st.states ?? [];
         document.getElementById('counts').textContent =

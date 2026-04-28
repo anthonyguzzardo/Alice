@@ -6,14 +6,13 @@
  * Never surfaces raw signal values or response text.
  */
 import type { APIRoute } from 'astro';
-import sql, { OWNER_SUBJECT_ID } from '../../../lib/libDb.ts';
+import sql from '../../../lib/libDb.ts';
 import { logError } from '../../../lib/utlErrorLog.ts';
+import { resolveObservatorySubjectId, badSubjectResponse } from '../../../lib/libObservatorySubject.ts';
 
-export const GET: APIRoute = async () => {
-  // Owner-only observatory endpoint.
-  // TODO(step5): review.
-  const subjectId = OWNER_SUBJECT_ID;
+export const GET: APIRoute = async ({ request }) => {
   try {
+    const subjectId = await resolveObservatorySubjectId(request);
     const sessions = await sql`
       SELECT
         si.question_id          AS "questionId",
@@ -76,6 +75,8 @@ export const GET: APIRoute = async () => {
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (err) {
+    const r = badSubjectResponse(err);
+    if (r) return r;
     logError('api.observatory.integrity', err);
     return new Response(JSON.stringify({ error: 'failed to load integrity data' }), {
       status: 500,

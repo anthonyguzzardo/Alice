@@ -5,14 +5,13 @@
  * page can render the writing timeline at original tempo.
  */
 import type { APIRoute } from 'astro';
-import sql, { getSessionEvents, OWNER_SUBJECT_ID } from '../../../../lib/libDb.ts';
+import sql, { getSessionEvents } from '../../../../lib/libDb.ts';
 import { logError } from '../../../../lib/utlErrorLog.ts';
+import { resolveObservatorySubjectId, badSubjectResponse } from '../../../../lib/libObservatorySubject.ts';
 
-export const GET: APIRoute = async ({ params }) => {
-  // Owner-only observatory endpoint.
-  // TODO(step5): review — per-subject playback if subjects ever surface here.
-  const subjectId = OWNER_SUBJECT_ID;
+export const GET: APIRoute = async ({ params, request }) => {
   try {
+    const subjectId = await resolveObservatorySubjectId(request);
     const questionId = parseInt(params.questionId ?? '', 10);
     if (isNaN(questionId)) {
       return new Response(JSON.stringify({ error: 'Invalid questionId' }), {
@@ -68,6 +67,8 @@ export const GET: APIRoute = async ({ params }) => {
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (err) {
+    const r = badSubjectResponse(err);
+    if (r) return r;
     logError('api.observatory.playback', err);
     return new Response(JSON.stringify({ error: 'Failed to load playback' }), {
       status: 500,

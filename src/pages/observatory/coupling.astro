@@ -7,6 +7,7 @@
  * characteristic. Computed live from raw signals, not from frozen tables.
  */
 import '../../styles/styObservatory.css';
+import ObsToolbar from '../../components/cmpObsToolbar.astro';
 ---
 <!doctype html>
 <html lang="en">
@@ -48,6 +49,8 @@ import '../../styles/styObservatory.css';
           <button class="obs-theme-toggle" id="obs-theme-toggle" aria-label="Toggle theme"></button>
         </nav>
       </header>
+
+      <ObsToolbar />
 
       <section class="panel" id="stability-section">
         <h2>Coupling stability · within-person convergence</h2>
@@ -145,7 +148,7 @@ import '../../styles/styObservatory.css';
         }
       }
 
-      fetch('/api/observatory/coupling-stability').then(r => r.json()).then(data => {
+      fetch(window.__obsUrl('/api/observatory/coupling-stability')).then(r => r.json()).then(data => {
         const el = document.getElementById('stability-content');
         if (data.error) {
           el.innerHTML = `<div class="empty">${data.error}</div>`;

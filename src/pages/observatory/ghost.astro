@@ -10,6 +10,7 @@
  * gap, perplexity comparison, PE spectrum residuals, per-signal breakdown.
  */
 import '../../styles/styObservatory.css';
+import ObsToolbar from '../../components/cmpObsToolbar.astro';
 ---
 <!doctype html>
 <html lang="en">
@@ -176,6 +177,8 @@ import '../../styles/styObservatory.css';
           <button class="obs-theme-toggle" id="obs-theme-toggle" aria-label="Toggle theme"></button>
         </nav>
       </header>
+
+      <ObsToolbar />
 
       <div class="meta-row" id="meta-row">
         <span id="counts">loading…</span>
@@ -1260,7 +1263,7 @@ import '../../styles/styObservatory.css';
       });
 
       // ── Initial fetch ─────────────────────────────────────────────
-      fetch('/api/observatory/ghost?variant=all').then(r => r.json()).then(data => {
+      fetch(window.__obsUrl('/api/observatory/ghost?variant=all')).then(r => r.json()).then(data => {
         if (data.error) {
           document.getElementById('ghost-content').innerHTML = `<div class="empty">${data.error}</div>`;
           return;
@@ -1306,7 +1309,7 @@ import '../../styles/styObservatory.css';
       });
 
       // ── Difficulty-residual correlation (second fetch) ──────────────
-      fetch('/api/observatory/difficulty').then(r => r.json()).then(data => {
+      fetch(window.__obsUrl('/api/observatory/difficulty')).then(r => r.json()).then(data => {
         const el = document.getElementById('difficulty-section');
         if (!el || data.error) return;
 

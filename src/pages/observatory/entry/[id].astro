@@ -11,6 +11,7 @@
  * archived in INC-016). Designer-facing only.
  */
 import '../../../styles/styObservatory.css';
+import ObsToolbar from '../../../components/cmpObsToolbar.astro';
 const { id } = Astro.params;
 const responseId = parseInt(id ?? '', 10);
 ---
@@ -77,6 +78,8 @@ const responseId = parseInt(id ?? '', 10);
           <button class="obs-theme-toggle" id="obs-theme-toggle" aria-label="Toggle theme"></button>
         </nav>
       </header>
+
+      <ObsToolbar />
 
       <div id="entry-content">loading…</div>
     </div>
@@ -209,13 +212,13 @@ const responseId = parseInt(id ?? '', 10);
 
       function renderHeader(d) {
         const replay = d.replayAvailable
-          ? `<a class="btn primary" href="/observatory/replay/${d.questionId}">▶ replay</a>`
+          ? `<a class="btn primary" href="${window.__obsUrl('/observatory/replay/' + d.questionId)}">▶ replay</a>`
           : '<span class="btn" style="opacity:0.5;cursor:default;">no replay</span>';
         const meta = `<div class="entry-meta">${d.date ?? '—'}<span class="sep">·</span>response ${d.responseId}<span class="sep">·</span>question ${d.questionId}</div>`;
         const question = d.question
           ? `<div class="question-box">${d.question}</div>`
           : '';
-        return `<section class="panel">${meta}${question}<div style="margin-top:0.75rem;">${replay} <a class="btn" href="/observatory" style="margin-left:0.5rem;">← back</a></div></section>`;
+        return `<section class="panel">${meta}${question}<div style="margin-top:0.75rem;">${replay} <a class="btn" href="${window.__obsUrl('/observatory')}" style="margin-left:0.5rem;">← back</a></div></section>`;
       }
 
       const BEHAVIORAL_DIMS = ['fluency', 'deliberation', 'revision', 'commitment', 'volatility', 'thermal', 'presence'];
@@ -355,7 +358,7 @@ const responseId = parseInt(id ?? '', 10);
         }
       }
 
-      fetch(`/api/observatory/entry/${responseId}`)
+      fetch(window.__obsUrl(`/api/observatory/entry/${responseId}`))
         .then(r => r.json())
         .then(data => {
           if (data.error) {

@@ -7,14 +7,12 @@
  */
 import type { APIRoute } from 'astro';
 import sql from '../../../lib/libDbPool.ts';
-import { OWNER_SUBJECT_ID } from '../../../lib/libDb.ts';
 import { logError } from '../../../lib/utlErrorLog.ts';
+import { resolveObservatorySubjectId, badSubjectResponse } from '../../../lib/libObservatorySubject.ts';
 
-export const GET: APIRoute = async () => {
-  // Owner-only observatory endpoint.
-  // TODO(step5): review.
-  const subjectId = OWNER_SUBJECT_ID;
+export const GET: APIRoute = async ({ request }) => {
   try {
+    const subjectId = await resolveObservatorySubjectId(request);
     const sessions = await sql`
       SELECT
         cs.question_id,
@@ -41,6 +39,8 @@ export const GET: APIRoute = async () => {
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (err) {
+    const r = badSubjectResponse(err);
+    if (r) return r;
     logError('api.observatory.crossSession', err);
     return new Response(JSON.stringify({ error: 'Failed to fetch cross-session data' }), {
       status: 500,

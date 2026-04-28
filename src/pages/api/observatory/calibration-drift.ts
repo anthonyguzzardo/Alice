@@ -6,14 +6,13 @@
  * reference frame has been stable or drifting over time.
  */
 import type { APIRoute } from 'astro';
-import { getCalibrationHistory, OWNER_SUBJECT_ID } from '../../../lib/libDb.ts';
+import { getCalibrationHistory } from '../../../lib/libDb.ts';
 import { logError } from '../../../lib/utlErrorLog.ts';
+import { resolveObservatorySubjectId, badSubjectResponse } from '../../../lib/libObservatorySubject.ts';
 
-export const GET: APIRoute = async () => {
-  // Owner-only observatory endpoint (Caddy basic-auth gated).
-  // TODO(step5): review — per-subject drift view if subjects ever surface here.
-  const subjectId = OWNER_SUBJECT_ID;
+export const GET: APIRoute = async ({ request }) => {
   try {
+    const subjectId = await resolveObservatorySubjectId(request);
     const history = await getCalibrationHistory(subjectId);
 
     // Split into global and per-device tracks
@@ -34,6 +33,8 @@ export const GET: APIRoute = async () => {
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (err) {
+    const r = badSubjectResponse(err);
+    if (r) return r;
     logError('api.observatory.calibrationDrift', err);
     return new Response(JSON.stringify({ error: 'Failed to compute drift' }), {
       status: 500,
