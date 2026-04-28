@@ -55,7 +55,7 @@ SET search_path TO alice, public;
 -- pgvector extension installs in public (shared across schemas)
 CREATE EXTENSION IF NOT EXISTS vector;
 
--- @region enums -- te_question_source, te_reflection_type, te_interaction_event_type, te_prompt_trace_type, te_embedding_source, te_context_dimension, te_adversary_variants, te_signal_job_status, te_signal_job_kind, te_data_access_actor
+-- @region enums -- te_question_source, te_reflection_type, te_interaction_event_type, te_prompt_trace_type, te_embedding_source, te_context_dimension, te_adversary_variants, te_signal_job_status, te_signal_job_kind, te_data_access_actor, te_data_access_action
 -- ============================================================================
 -- ENUM TABLES (static, no footer)
 -- ============================================================================
@@ -199,6 +199,29 @@ INSERT INTO te_data_access_actor (data_access_actor_id, enum_code, name, descrip
   ,(3, 'system',   'System',   'Automated system action (cron, worker, deploy hook)')
 ON CONFLICT (data_access_actor_id) DO NOTHING;
 
+-- --------------------------------------------------------------------------
+
+-- PURPOSE: which data-access action a tb_data_access_log row records
+-- USE CASE: FK from tb_data_access_log.data_access_action_id. Replaces the
+--           free-text action_type column dropped in migration 039 — a typo
+--           at the call site can no longer corrupt the append-only audit
+--           trail.
+-- MUTABILITY: static after deploy
+-- REFERENCED BY: tb_data_access_log.data_access_action_id
+CREATE TABLE IF NOT EXISTS te_data_access_action (
+   data_access_action_id  SMALLINT PRIMARY KEY
+  ,enum_code              TEXT UNIQUE NOT NULL
+  ,name                   TEXT NOT NULL
+  ,description            TEXT
+);
+
+INSERT INTO te_data_access_action (data_access_action_id, enum_code, name, description) VALUES
+   (1, 'export',         'Export',         'Subject downloaded their data as JSON')
+  ,(2, 'factory_reset',  'Factory reset',  'Operator wiped a subject''s journal data while preserving account + seeds')
+  ,(3, 'delete',         'Delete',         'Subject closed their account or operator initiated a full delete')
+  ,(4, 'consent',        'Consent',        'Subject acknowledged a consent version')
+ON CONFLICT (data_access_action_id) DO NOTHING;
+
 -- @region identity -- tb_subjects, tb_subject_sessions
 -- ============================================================================
 -- IDENTITY
@@ -321,11 +344,11 @@ CREATE INDEX IF NOT EXISTS ix_subject_consent_subject_recent
 CREATE TABLE IF NOT EXISTS tb_data_access_log (
    data_access_log_id    INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
   ,subject_id            INT NOT NULL                                   -- whose data was accessed (logical FK)
-  ,actor_subject_id      INT                                             -- who initiated; NULL when actor was operator pre-session-auth or system
-  ,data_access_actor_id  SMALLINT NOT NULL                              -- te_data_access_actor.data_access_actor_id
-  ,action_type           TEXT NOT NULL                                  -- 'export' | 'factory_reset' | 'delete' | 'consent'
-  ,consent_version       TEXT                                            -- populated when action_type = 'consent'
-  ,notes                 TEXT                                            -- JSON string with action-specific context
+  ,actor_subject_id      INT                                             -- subject identity of the actor when known; NULL for operator-via-CLI and system actions. Disambiguate via data_access_actor_id.
+  ,data_access_actor_id  SMALLINT NOT NULL                              -- te_data_access_actor.data_access_actor_id (subject/operator/system)
+  ,data_access_action_id SMALLINT NOT NULL                              -- te_data_access_action.data_access_action_id (export/factory_reset/delete/consent)
+  ,consent_version       TEXT                                            -- populated when action = 'consent'
+  ,notes                 JSONB                                           -- action-specific context (e.g. cascade row counts, bytes streamed)
   ,ip_address            TEXT
   ,user_agent            TEXT
   ,dttm_created_utc      TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -341,7 +364,7 @@ CREATE INDEX IF NOT EXISTS ix_data_access_log_actor
   ON tb_data_access_log (actor_subject_id, dttm_created_utc DESC);
 
 CREATE INDEX IF NOT EXISTS ix_data_access_log_action
-  ON tb_data_access_log (action_type, dttm_created_utc DESC);
+  ON tb_data_access_log (data_access_action_id, dttm_created_utc DESC);
 
 -- --------------------------------------------------------------------------
 
