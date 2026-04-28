@@ -289,6 +289,38 @@ npm run corpus:approve data/corpus-candidates-YYYY-MM-DD.md
 
 ---
 
+## 11. Substrate decisions for methods section
+
+Procedural-level architectural decisions that don't show up in CLAUDE.md's stack list but are load-bearing for the methodology section of paper one. Each is a sentence; new decisions append as they land. When paper one drafting starts, the methods substrate paragraph writes itself from this list.
+
+- **Append-only audit + consent.** Every subject-data access (export, factory_reset, delete, consent acknowledgment) writes exactly one row to `tb_data_access_log`. Rows are never modified or deleted, including when the subject closes their account; the audit log + consent history are retained forever as the research-integrity record described in `docs/consent-v1.md`.
+
+- **Single canonical writer for audit rows.** All inserts to `tb_data_access_log` flow through `libConsent.recordDataAccess`. Application code never INSERTs into the audit table directly. This is the discipline that keeps the "every action leaves a forensic trace" guarantee from drifting as the codebase grows.
+
+- **Audit-row write inside the same transaction as the action it describes.** A failed cascade rolls back the audit too (subject retries cleanly); a successful cascade with a failed audit-write also rolls back. The asymmetry is deliberate: failed delete is recoverable, successful delete with no audit row is not. Applies to delete + factory-reset + consent — wherever an action and its audit need to land atomically.
+
+- **Cascade-leaves-inward order.** Delete operations traverse the logical-FK dependency graph leaves-first (children of `tb_questions`, then `tb_responses` children, then `tb_responses`, then `tb_questions`, then sessions, then soft-delete the subject). Inside a single transaction the order doesn't change observable state to outside readers, but it documents intent and matches the schema's documented dependency graph.
+
+- **Soft-delete-tombstone with permanent audit + consent retention.** Subject deletion is soft (`tb_subjects` row renamed to `_deleted_<ts>_<id>_<original>`, deactivated, `subject_id` preserved). All subject-bearing data is wiped from the active system; the audit log + consent acknowledgments survive forever and continue to reference the tombstoned `subject_id`. Hard-delete is never used.
+
+- **Started-only export audit posture (v1).** `/api/subject/export` writes one audit row (`{status: 'started'}`) before the response stream opens. No follow-up completion row in v1 — the audit log distinguishes "started + finished" from "started + dropped" only by absence of a corresponding row. Acceptable for v1; v2 may add `{status: 'completed'}` follow-ups for full streamed-byte accountability.
+
+- **Encrypted-content-table invariant.** Tables that hold subject-authored content via the `<col>_ciphertext`+`<col>_nonce` pattern (`tb_responses`, `tb_questions`, `tb_session_events`) must contain only subject-authored or subject-derived columns. Operator-side annotations live in separate tables. Makes the export endpoint's `SELECT *` safe by construction — any future column flows into the export automatically without exposing operator state.
+
+- **At-rest encryption boundary inside libDb.** Every read of an encrypted column happens through libDb. Application code above libDb sees plaintext on the way in and plaintext on the way out — never ciphertext. Direct SELECTs of encrypted columns outside libDb are forbidden by convention. This is what lets the methodology paragraph honestly claim "the database stores ciphertext only."
+
+- **JSONB shape contract: two-tier, opportunistic migration.** Tier A (legacy) writers stringify before insert, readers re-stringify if needed; Tier B (correct) writers use `sql.json(...)`, readers consume objects. New tables default to Tier B. Tier A columns migrate opportunistically as surrounding code is touched, never as a standalone migration. Documented per-column in schema-file header comments where the shape isn't obvious.
+
+- **Subject content opacity to the operator.** The operator holds the encryption key (one shared key, since the system needs to compute signals across subjects), but the observatory binds itself never to display subject-authored plaintext. Replay reconstructs keystrokes server-side then redacts non-whitespace to `•` before the response leaves the handler. The discipline is UI-side; the technical capability to read is not the rule.
+
+- **Production data lands only via real subject actions through the UI.** Smoke tests against Supabase always clean up after themselves: every test subject, session, audit row, and consent row inserted for verification gets `DELETE`'d before the test exits. This rule is the reason every bug found during Phase 6c (JSONB double-encoding, Date-vs-string contract, JSON.stringify-into-JSONB scope) didn't corrupt any production data.
+
+- **Migrations are operator-applied with pre-flight guards.** No automated migration runner — every migration runs by hand against Supabase via `psql -v ON_ERROR_STOP=1 -f db/sql/migrations/NNN_*.sql`. Migrations that change column types or constraints include `DO $$` pre-flight blocks that abort with a clear error if assumed pre-state isn't true (e.g. `RAISE EXCEPTION '039 expects 0 rows'...`). Forces the operator to re-read the migration before clobbering unexpected state.
+
+- **Confirmation friction for destructive subject actions.** HTTP `POST /api/subject/account/delete` requires `body.confirmation === subject.username`; CLI scripts (`factory-reset`, `delete-subject`) prompt for the same string at the terminal. No y/N — typing the username is the slow-down signal that survives muscle memory.
+
+---
+
 ## 10. Recent provenance trail (for cross-reference)
 
 - **2026-04-27 late-evening (post-Phase 6e polish)**: `npm run drain-subjects` orchestrator landed at `src/scripts/drain-subjects.ts`. Subprocess fan-out across the routine backfills (embeddings, signals, reconstruction, daily-deltas, profile); default loops all active subjects; `--subject-id N` and `--skip A,B` flags. Verified end-to-end against both subjects.
