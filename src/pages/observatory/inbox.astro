@@ -59,14 +59,43 @@ import ObsToolbar from '../../components/cmpObsToolbar.astro';
 
       <ObsToolbar />
 
-      <div class="meta-row" id="meta-row">
+      <div class="meta-row inbox-meta-row" id="meta-row">
         <span id="counts">loading…</span>
+        <a class="inbox-back" href="/observatory">← back to overview</a>
       </div>
 
       <section class="panel">
         <h2>Subject submissions · most recent first</h2>
         <div id="inbox-table">loading…</div>
       </section>
+
+    <style is:global>
+      .inbox-meta-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+      }
+      .inbox-back {
+        font-family: var(--mono);
+        font-size: 10px;
+        font-weight: 500;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        text-decoration: none;
+        padding: 0.32rem 0.7rem;
+        border: 1px solid var(--border);
+        border-radius: 2px;
+        background: var(--bg-panel);
+        transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+      }
+      .inbox-back:hover {
+        color: var(--text);
+        border-color: var(--border-focus);
+        background: var(--bg-panel-hover);
+      }
+    </style>
     </div>
 
     <script type="module">

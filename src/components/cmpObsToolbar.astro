@@ -25,9 +25,11 @@
 <div class="obs-toolbar">
   <label class="obs-pick">
     <span class="k">subject</span>
-    <select id="obs-subject-pick" disabled>
-      <option value="">…</option>
-    </select>
+    <span class="obs-pick-select">
+      <select id="obs-subject-pick" disabled>
+        <option value="">…</option>
+      </select>
+    </span>
   </label>
   <a id="obs-inbox-link" href="/observatory/inbox" class="obs-inbox" data-count="0" hidden>
     <span class="k">inbox</span>
@@ -139,19 +141,22 @@
       window.location.href = u.toString();
     });
 
-    // Inbox badge: count subject submissions since the cursor.
-    try {
-      const since = window.localStorage.getItem('alice-obs-inbox-cursor') || '1970-01-01T00:00:00Z';
-      const resI = await fetch('/api/observatory/inbox?since=' + encodeURIComponent(since));
-      const dataI = await resI.json();
-      const count = dataI.count || 0;
-      if (count > 0 && inboxLink && inboxCount) {
-        inboxCount.textContent = String(count);
-        inboxLink.dataset.count = String(count);
-        inboxLink.removeAttribute('hidden');
+    // Inbox badge: count subject submissions since the cursor. Suppress on
+    // the inbox page itself — the operator is already there.
+    if (window.location.pathname !== '/observatory/inbox') {
+      try {
+        const since = window.localStorage.getItem('alice-obs-inbox-cursor') || '1970-01-01T00:00:00Z';
+        const resI = await fetch('/api/observatory/inbox?since=' + encodeURIComponent(since));
+        const dataI = await resI.json();
+        const count = dataI.count || 0;
+        if (count > 0 && inboxLink && inboxCount) {
+          inboxCount.textContent = String(count);
+          inboxLink.dataset.count = String(count);
+          inboxLink.removeAttribute('hidden');
+        }
+      } catch {
+        // inbox is non-critical; fail silently
       }
-    } catch {
-      // inbox is non-critical; fail silently
     }
   })();
 </script>
@@ -160,51 +165,109 @@
   .obs-toolbar {
     display: flex;
     align-items: center;
-    gap: 1rem;
-    margin: 0 0 0.75rem;
-    font-family: var(--mono);
-    font-size: 11px;
-    letter-spacing: 0.08em;
+    gap: 1.25rem;
+    margin: 0 0 1rem;
     flex-wrap: wrap;
   }
+
+  /* Subject picker --------------------------------------------------- */
   .obs-pick {
     display: inline-flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.6rem;
   }
-  .obs-pick .k {
+  .obs-pick > .k {
+    font-family: var(--mono);
+    font-size: 9px;
+    font-weight: 500;
     color: var(--text-faint);
     text-transform: uppercase;
-    font-size: 9px;
-    letter-spacing: 0.16em;
+    letter-spacing: 0.18em;
   }
+  .obs-pick-select {
+    position: relative;
+    display: inline-block;
+  }
+  .obs-pick-select::after {
+    content: '';
+    position: absolute;
+    right: 0.65rem;
+    top: 50%;
+    width: 6px;
+    height: 6px;
+    border-right: 1px solid var(--text-faint);
+    border-bottom: 1px solid var(--text-faint);
+    transform: translateY(-65%) rotate(45deg);
+    pointer-events: none;
+    transition: border-color 0.15s ease;
+  }
+  .obs-pick-select:hover::after { border-color: var(--text-muted); }
   .obs-pick select {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
     background: var(--bg-panel);
     color: var(--text);
     border: 1px solid var(--border);
-    padding: 0.2rem 0.5rem;
+    border-radius: 2px;
+    padding: 0.32rem 1.7rem 0.32rem 0.65rem;
     font-family: var(--mono);
     font-size: 11px;
-    border-radius: 2px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+    line-height: 1.2;
+    min-width: 9rem;
   }
-  .obs-pick select:disabled { opacity: 0.5; }
+  .obs-pick select:hover {
+    border-color: var(--border-focus);
+    background: var(--bg-panel-hover);
+  }
+  .obs-pick select:focus-visible {
+    outline: none;
+    border-color: var(--border-focus);
+    box-shadow: 0 0 0 1px var(--border-focus);
+  }
+  .obs-pick select:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+  .obs-pick select:disabled + ::after,
+  .obs-pick-select:has(select:disabled)::after { opacity: 0.45; }
+  /* Native dropdown menu rendering uses system colors; override the option
+     background so the menu doesn't flash white in dark mode. */
+  .obs-pick select option {
+    background: var(--bg-panel);
+    color: var(--text);
+    font-family: var(--mono);
+  }
+
+  /* Inbox badge ------------------------------------------------------ */
   .obs-inbox {
     display: inline-flex;
     align-items: center;
-    gap: 0.4rem;
+    gap: 0.5rem;
     text-decoration: none;
     border: 1px solid var(--accent);
     color: var(--accent);
-    padding: 0.2rem 0.6rem;
+    padding: 0.32rem 0.7rem;
     border-radius: 2px;
+    font-family: var(--mono);
+    line-height: 1.2;
+    transition: background-color 0.15s ease;
   }
   .obs-inbox .k {
-    text-transform: uppercase;
     font-size: 9px;
-    letter-spacing: 0.16em;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
   }
   .obs-inbox .v {
-    font-weight: 500;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
   }
-  .obs-inbox:hover { background: var(--bg-panel); }
+  .obs-inbox:hover { background: var(--bg-panel-hover); }
 </style>
