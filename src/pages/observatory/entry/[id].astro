@@ -84,6 +84,83 @@ const responseId = parseInt(id ?? '', 10);
     <script type="module" define:vars={{ responseId }}>
       const root = document.getElementById('entry-content');
 
+      function resolveCssVar(el, v) {
+        return getComputedStyle(el).getPropertyValue(v.replace('var(', '').replace(')', '').trim()) || v;
+      }
+
+      function drawRadar(canvas, dims, values, color) {
+        const dpr = window.devicePixelRatio || 1;
+        const size = 300;
+        canvas.width = size * dpr;
+        canvas.height = size * dpr;
+        canvas.style.width = size + 'px';
+        canvas.style.height = size + 'px';
+        const ctx = canvas.getContext('2d');
+        ctx.scale(dpr, dpr);
+
+        const colBorder = resolveCssVar(canvas, 'var(--border)');
+        const colBorderFocus = resolveCssVar(canvas, 'var(--border-focus)');
+        const colFaint = resolveCssVar(canvas, 'var(--text-faint)');
+
+        const cx = size / 2, cy = size / 2, maxR = 110;
+        const n = dims.length;
+        const angle = (2 * Math.PI) / n;
+        const maxZ = 3;
+        const r = (z) => ((Math.max(-maxZ, Math.min(maxZ, z)) + maxZ) / (2 * maxZ)) * maxR;
+
+        // Reference rings (z = -2, -1, 0, +1, +2). The 0 ring is the personal baseline.
+        for (const ring of [-2, -1, 0, 1, 2]) {
+          ctx.strokeStyle = ring === 0 ? colBorderFocus : colBorder;
+          ctx.lineWidth = ring === 0 ? 1 : 0.5;
+          ctx.beginPath();
+          for (let i = 0; i <= n; i++) {
+            const a = -Math.PI / 2 + i * angle;
+            const rr = r(ring);
+            const x = cx + Math.cos(a) * rr;
+            const y = cy + Math.sin(a) * rr;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
+          ctx.stroke();
+        }
+
+        // Axes + labels
+        for (let i = 0; i < n; i++) {
+          const a = -Math.PI / 2 + i * angle;
+          ctx.strokeStyle = colBorder;
+          ctx.lineWidth = 0.5;
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(cx + Math.cos(a) * maxR, cy + Math.sin(a) * maxR);
+          ctx.stroke();
+          ctx.fillStyle = colFaint;
+          ctx.font = '9px SF Mono, monospace';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          const lx = cx + Math.cos(a) * (maxR + 16);
+          const ly = cy + Math.sin(a) * (maxR + 16);
+          ctx.fillText(dims[i].slice(0, 7), lx, ly);
+        }
+
+        // Polygon for the entry's 7D vector
+        ctx.fillStyle = color + '20';
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (let i = 0; i < n; i++) {
+          const a = -Math.PI / 2 + i * angle;
+          const v = values[i] ?? 0;
+          const rr = r(v);
+          const x = cx + Math.cos(a) * rr;
+          const y = cy + Math.sin(a) * rr;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+
       function fmtZ(v) {
         if (v == null || Number.isNaN(v)) return '—';
         const sign = v >= 0 ? '+' : '';
@@ -141,15 +218,17 @@ const responseId = parseInt(id ?? '', 10);
         return `<section class="panel">${meta}${question}<div style="margin-top:0.75rem;">${replay} <a class="btn" href="/observatory" style="margin-left:0.5rem;">← back</a></div></section>`;
       }
 
+      const BEHAVIORAL_DIMS = ['fluency', 'deliberation', 'revision', 'commitment', 'volatility', 'thermal', 'presence'];
+
       function renderState(state) {
         if (!state) {
           return panel('Behavioral 7D · z-scores', '<div class="empty">insufficient history (≥3 entries required for personal baseline)</div>');
         }
-        const dims = ['fluency', 'deliberation', 'revision', 'commitment', 'volatility', 'thermal', 'presence'];
-        const cells = dims.map(d => kpi(d, fmtZ(state[d]), dotColor(state[d]))).join('');
+        const cells = BEHAVIORAL_DIMS.map(d => kpi(d, fmtZ(state[d]), dotColor(state[d]))).join('');
         const tag = `<span class="convergence-tag ${state.convergenceLevel}">${state.convergenceLevel}</span>`;
         const conv = kpi('convergence', fmtNum(state.convergence) + tag);
-        return panel('Behavioral 7D · z-scores (vs. personal baseline)', `<div class="kpi-row">${cells}${conv}</div>`);
+        const radar = `<div style="display:flex;justify-content:center;margin:0.5rem 0 1rem;"><canvas id="radar-beh"></canvas></div>`;
+        return panel('Behavioral 7D · z-scores (vs. personal baseline)', `${radar}<div class="kpi-row">${cells}${conv}</div>`);
       }
 
       function renderMotor(m) {
@@ -263,6 +342,17 @@ const responseId = parseInt(id ?? '', 10);
         html += renderDiscourse(d.discourse);
         html += renderMetadata(d.metadata);
         root.innerHTML = html;
+
+        // Paint the radar after the DOM lands. accent ≈ var(--accent) — picked
+        // to match the rest of the observatory palette.
+        if (d.entryState) {
+          const canvas = document.getElementById('radar-beh');
+          if (canvas) {
+            const accent = resolveCssVar(canvas, 'var(--accent)') || '#7a5a44';
+            const vals = BEHAVIORAL_DIMS.map(k => d.entryState[k]);
+            drawRadar(canvas, BEHAVIORAL_DIMS, vals, accent.trim());
+          }
+        }
       }
 
       fetch(`/api/observatory/entry/${responseId}`)
