@@ -8,8 +8,9 @@ export const GET: APIRoute = async () => {
   // TODO(step5): review.
   const subjectId = OWNER_SUBJECT_ID;
   try {
-    // Ensure questions are seeded
-    await seedUpcomingQuestions(subjectId);
+    // Ensure questions are seeded. Owner is the only caller of this owner
+    // endpoint; owner's iana_timezone is 'UTC' by design.
+    await seedUpcomingQuestions(subjectId, 'UTC');
 
     const question = await getTodaysQuestion(subjectId);
     const response = await getTodaysResponse(subjectId);

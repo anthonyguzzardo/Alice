@@ -24,7 +24,7 @@ export const GET: APIRoute = async ({ locals }) => {
   // Middleware guarantees this is non-null + non-owner + reset complete.
   const subject = locals.subject!;
 
-  const today = localDateStr();
+  const today = localDateStr(new Date(), subject.iana_timezone);
   const scheduled = await getScheduledQuestion(subject.subject_id, today);
 
   if (!scheduled) {

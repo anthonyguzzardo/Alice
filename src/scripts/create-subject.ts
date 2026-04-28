@@ -32,19 +32,22 @@ async function main() {
     process.exit(3);
   }
 
+  const tz = ianaTimezone || 'UTC';
+
   const subjectId = await createSubject({
     username,
     tempPassword,
-    ianaTimezone: ianaTimezone || 'UTC',
+    ianaTimezone: tz,
     displayName: displayName ?? null,
   });
 
-  // Plant the 30 seed questions starting today. Every subject gets the same
-  // first 30 days of journey — non-negotiable. Without this they would log in
-  // and see `no_question_scheduled` from /api/subject/today and have nothing
-  // to do. seedUpcomingQuestions is idempotent, so a re-run on an existing
-  // subject is a no-op.
-  await seedUpcomingQuestions(subjectId, 30);
+  // Plant the 30 seed questions starting today (in the subject's local TZ —
+  // day-1 must align with the subject's local midnight, not the server's).
+  // Every subject gets the same first 30 days of journey — non-negotiable.
+  // Without this they would log in and see `no_question_scheduled` from
+  // /api/subject/today and have nothing to do. seedUpcomingQuestions is
+  // idempotent, so a re-run on an existing subject is a no-op.
+  await seedUpcomingQuestions(subjectId, tz, 30);
 
   console.log(`Created subject_id ${subjectId} (username "${username}", tz ${ianaTimezone || 'UTC'}).`);
   console.log(`Seeded 30 starting-day questions for the next 30 days.`);

@@ -81,8 +81,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
   }
 
   // Validate: the corpus-drawn scheduled question exists, belongs to this
-  // subject, and is for today.
-  const today = localDateStr();
+  // subject, and is for today (in the subject's local TZ — calendar flip
+  // happens at subject midnight, not server midnight).
+  const today = localDateStr(new Date(), subject.iana_timezone);
   const scheduled = await getScheduledQuestion(subject.subject_id, today);
 
   if (!scheduled || scheduled.question_id !== question_id) {
