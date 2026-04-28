@@ -2,7 +2,7 @@
 
 Single source of truth for system state, open work, and operational facts. Replaces the prior `HANDOFF_*.md` + `RESUME.md` pair.
 
-Updated 2026-04-28 mid-day. **Read this top-to-bottom before doing anything.**
+Updated 2026-04-28 evening (post INC-021 `nowStr()` TZ fix). **Read this top-to-bottom before doing anything.**
 
 **Trust the code, not this file.** §4 below has burned twice — it's drifted ahead of the codebase faster than these notes get edited. Before claiming any item in §4 is broken, grep the relevant handler. The handoff is a hint, not the source of truth.
 
@@ -99,65 +99,10 @@ The `035` filename collision was resolved this session by renaming `035_session_
 
 ## 4. Open work (ordered by consequence)
 
-### 🚨 HIGH PRIORITY — `tb_responses.dttm_created_utc` is silently wrong on some journal rows
-
-**Symptom:** response 84 (owner journal `q16`, submitted 2026-04-28 morning) was stored as `dttm_created_utc = 2026-04-28 21:26:35+00`, while the matching `tb_session_events` row for the same question (saved in the same transaction in `/api/respond`) is `2026-04-28 16:26:35.651758+00`. The two should match wallclock-second; instead they're 5 hours apart — exactly the CDT offset (UTC-5).
-
-**Surveyed today:** 9 response rows in 2026-04-28. The pattern across them:
-
-| response_id | path                | uses `nowStr()` | sub-second precision | session_events ↔ response timestamp match |
-|-------------|---------------------|-----------------|---------------------|-------------------------------------------|
-| 82  ash    | `/api/subject/respond` (journal) | yes | no (truncated) | match (`02:49:56` UTC both sides) |
-| 83  ash    | `/api/subject/calibrate`          | no  | yes              | match |
-| 84  owner  | `/api/respond` (journal)          | yes | no               | **5h skew (`21:26:35` vs `16:26:35`)** |
-| 85  owner  | `/api/calibrate`                  | no  | yes              | match |
-| 86  owner  | `/api/calibrate`                  | no  | yes              | match |
-| 87  ash    | `/api/subject/respond` (journal)  | yes | no               | match |
-| 88  owner  | `/api/calibrate`                  | no  | yes              | match |
-| 89  owner  | `/api/calibrate`                  | no  | yes              | match |
-| 90  ash    | `/api/subject/calibrate`          | no  | yes              | match |
-
-So out of three journal rows that went through `nowStr()` → only one is skewed. Two are fine. The CSV-grade summary: the bug is **non-deterministic per request, with the wrong-TZ outcome correlated with one specific connection in the pool.**
-
-**Diagnosis (high confidence):**
-
-`saveResponse` in `src/lib/libDb.ts:111-129` interpolates `dttm_created_utc = ${nowStr()}`. `nowStr()` (line 72) returns `new Date().toISOString().replace('T', ' ').slice(0, 19)` — a string like `'2026-04-28 16:26:35'` with **no timezone qualifier**. When postgres.js sends this as a parameter to the `TIMESTAMPTZ` column, PG implicitly casts text → timestamptz **using the connection's session `TimeZone` setting**.
-
-If a connection's session `TimeZone` is `UTC`, the bare timestamp is interpreted as UTC and stored correctly.
-
-If a connection's session `TimeZone` is `America/Chicago`, the bare timestamp `'2026-04-28 16:26:35'` is interpreted as **CDT (UTC-5)** and converted to `2026-04-28 21:26:35+00` for storage. **This is exactly the observed skew.**
-
-The reason the bug is non-deterministic: postgres.js maintains a connection pool (`max: 5` per `libDbPool.ts`). When connecting to Supabase's session pooler, the pool adopts whatever session TZ the upstream backend has. Different backend sessions on Supabase may carry different `TimeZone` settings (a previous client's `SET TIME ZONE` persists for the life of the backend session). Different requests can thus produce timestamps in different timezones.
-
-`saveSessionEvents` (line 938) does NOT specify `dttm_created_utc` — it falls back to the column DEFAULT (`CURRENT_TIMESTAMP`). PG's `CURRENT_TIMESTAMP` always returns the wall-clock time in `+00` regardless of session `TimeZone`. So session_events rows are immune to this bug. The asymmetry between the two paths is what made the skew visible.
-
-`saveCalibrationSession` (line 1162-1213) also relies on the column DEFAULT — calibrations are immune. **Only `saveResponse` is exposed.**
-
-**Blast radius:**
-
-- `tb_responses.dttm_created_utc` for any journal entry written through `saveResponse` may be off by hours (always in the direction `wallclock + offset`, where offset is the connection's session TZ relative to UTC).
-- This is the source of truth for "when did the subject submit." Anything that orders or filters by `tb_responses.dttm_created_utc` (e.g. cross-session signal sequencing, daily-delta cadence inference, observatory entry list ordering, the `/api/subject/export` audit timestamp) sees the wrong value when the bug fires.
-- Today (2026-04-28) only 1 of 3 journal rows is affected (response 84). Older rows are unaudited.
-
-**Fix:** make `nowStr()` return a TZ-qualified value so PG never re-interprets it via session TZ. Cleanest one-liner:
-
-```ts
-function nowStr(): string {
-  return _dateOverride
-    ? `${_dateOverride}T12:00:00+00:00`
-    : new Date().toISOString();  // already +00:00 (Z)
-}
-```
-
-Or: drop `nowStr()` entirely from `saveResponse` and rely on the column DEFAULT (`CURRENT_TIMESTAMP`), matching `saveSessionEvents` and `saveCalibrationSession`. The `_dateOverride` mechanism (used for simulation) is unused in production — would need a separate audit before removing.
-
-**Pre-existing.** The bug has nothing to do with INC-019 / INC-020; both are independent. It pre-dates today's work and is in every journal row written via `saveResponse`. A historical audit of `tb_responses.dttm_created_utc` against `tb_session_events.dttm_created_utc` per question_id would quantify how many rows are affected.
-
-**Owner's reaction:** "HIGH HIGH priority" — write up first, fix in the next pass.
-
----
-
 ### Verified stale (do NOT readd unless code confirms)
+
+- ~~🚨 HIGH PRIORITY — `tb_responses.dttm_created_utc` silently wrong on a non-deterministic subset of journal rows.~~ Fixed 2026-04-28 evening as INC-021. `nowStr()` now returns `Date#toISOString()` directly (Z-qualified) for production and `${_dateOverride}T12:00:00+00:00` for the simulation override; PG no longer re-interprets via the connection's session TZ. Both `saveResponse` and `saveComment` (the two `nowStr()` callers) covered by the same one-liner. See §10 INC-021 for the full mechanism, blast radius, and historical-audit pointer (the audit itself — joining `tb_responses` to `tb_session_events` on `question_id` and flagging rows whose timestamps differ by > 30s — has NOT been run yet; do that whenever cadence-dependent analysis next matters).
+
 
 The previous version of this section listed two "real bugs" in the subject path. Both were verified false on 2026-04-27 late-evening:
 
@@ -241,7 +186,7 @@ From CLAUDE.md, memory, and the discipline established across INC-014 through IN
 - **Ash** (subject_id=2): provisioned, active, pressure-tested across the full universal-login matrix (subject login → journal → logout → owner login → 2 calibrations → logout → ash login → calibration). Day-1 schedule repaired in INC-019 — q126→2026-04-27 (existing response stays linked) and q127→2026-04-28 (today's fresh question).
 - **TEI**: Qwen3-Embedding-0.6B at `localhost:8090` when running locally. Not on prod.
 - **ANTHROPIC_API_KEY**: in `.env` and `/etc/alice/secrets.env`. Used only by local LLM workflows (corpus refresh, etc.) — never on prod.
-- **Tests**: 10 test files / 107 tests passing on local Node 25 unit + DB suites (was 9/90 mid-session before subjectAuth tests ran with the new flow). 6 new tests in `tests/unit/utlDate.test.ts` cover the TZ-aware date resolver.
+- **Tests**: 29 test files / 176 tests passing on local Node 25 (full unit + DB suites; testcontainers-backed DB tests run against an ephemeral PG17 + pgvector image). Includes the 6 `tests/unit/utlDate.test.ts` tests that cover the TZ-aware date resolver.
 - **TS check**: clean on every file touched in recent sessions. Pre-existing strict-null noise tracked in §4 item 7.
 - **Working tree**: typically clean after handoff lands; the user has automation that auto-commits work in progress. Verify with `git status --short` and look for unstaged hardening edits.
 - **Hetzner secrets.env**: `OWNER_BASICAUTH_HASH` removed 2026-04-28 (orphaned after Caddy basic-auth retired). Backup left at `/etc/alice/secrets.env.bak` from `sed -i.bak` — delete when comfortable.
@@ -392,6 +337,7 @@ Procedural-level architectural decisions that don't show up in CLAUDE.md's stack
 
 ## 10. Recent provenance trail (for cross-reference)
 
+- **INC-021** (2026-04-28): `tb_responses.dttm_created_utc` TZ-skew via bare-timestamp implicit cast. `nowStr()` returned a TZ-unqualified string (`'YYYY-MM-DD HH:MM:SS'`) which PG cast to TIMESTAMPTZ via the connection's session `TimeZone`; non-deterministic skew across the postgres.js pool against Supabase's session pooler (1 of 3 journal rows on 2026-04-28 was 5h off, exactly the CDT offset). `saveSessionEvents` / `saveCalibrationSession` relied on the column DEFAULT and were immune — the same-transaction asymmetry is what made the bug visible. Fix: `nowStr()` returns `Date#toISOString()` directly (Z-qualified) in production, `${_dateOverride}T12:00:00+00:00` in simulation; both call sites (`saveResponse`, `saveComment`) covered. GOTCHAS entry rewritten from a "discipline note" into the historical-landmine pattern. Historical audit not yet run.
 - **INC-020** (2026-04-28): Universal session-cookie auth. One `/login` form for owner + subjects. `/api/subject/login` returns `isOwner` so the page dispatches; `/api/subject/logout` is universal (PUBLIC_PATHS). Cookie loses `Max-Age` (close-browser = logout). Middleware rewritten to gate owner pages/APIs (`/`, `/observatory/*`, `/api/respond`, `/api/calibrate`, `/api/today`, `/api/observatory/*`) with HTML-302-to-`/login?next=` vs JSON-401 by path classifier. Caddy basic-auth gate retired (`@owner_paths` block + `OWNER_BASICAUTH_HASH` removed from Caddyfile and prod secrets.env). Astro `security.checkOrigin` disabled — Node adapter behind Caddy reconstructs URL scheme from Host header (no X-Forwarded-Proto trust), so even matching Origin headers fail the check; SameSite=Lax cookie already blocks cross-origin POSTs. Logout button added to owner journal nav dropdown + every observatory page (via `[data-logout]` delegate in cmpObsToolbar). All `/enter` references → `/login`. Owner password set 2026-04-28 via `set-owner-password` (`must_reset_password` cleared). Pressure-tested end-to-end across owner + ash + multiple sessions.
 - **INC-019** (2026-04-28): Subject-TZ calendar-flip fix. `localDateStr()` ignored `tb_subjects.iana_timezone` and used the server's local TZ (Hetzner = UTC). Ash submitted at 21:49 Chicago = 02:49 UTC the next day, so the server filed her day-1 entry under day-2's seed (q126 instead of q125). She perceived "no question today" the next morning because q126 came back with `existing_response_text != null`. Fix: extended `localDateStr(date, ianaTimezone?)` to use `Intl.DateTimeFormat({timeZone})`, plus a TZ-independent `addDays(yyyymmdd, days)` helper. Subject paths (`api/subject/today`, `api/subject/respond`, `seedUpcomingQuestions` via `create-subject`) pass `subject.iana_timezone`. Owner paths keep server-local behavior (owner is `iana_timezone='UTC'`). Ash's schedule repaired in-place: q125 deleted, q126-154 shifted back one day. 6 new tests in `tests/unit/utlDate.test.ts`. GOTCHAS entry rewritten from rationalization to historical landmine. Calendar-flip-at-subject-midnight is the design (per-question lockout, not 24h cooldown — adjacent days adjacent in time still count as separate entries by design).
 - **2026-04-28 (Phase 6c — consent + export + delete + tests)**: Complete. Eleven build steps landed across three sessions. Migrations 038 (consent + audit tables, te_data_access_actor enum) + 039 (audit schema tightening: te_data_access_action lookup, action_type FK, notes JSONB). New code: `libConsent.ts` (recordConsent/recordDataAccess with sql.json for proper JSONB writes; getSubjectConsentStatus/getSubjectConsentHistory with DISTINCT ON dedup), `libDelete.ts` (deleteSubjectAndData full cascade across 23 tables + soft-delete + audit-inside-transaction; factoryResetSubject preserves seeds + sessions + account; OwnerProtectedError + AlreadyDeletedError + SubjectNotFoundError), `utlRequestContext.ts` (extracted IP/UA helpers when third caller landed). New endpoints: `/api/subject/consent`, `/api/subject/export` (NDJSON streaming, per-row decrypt, audit-row-before-stream, 25-table umbrella), `/api/subject/account/delete`. New CLI: `npm run factory-reset` and `npm run delete-subject` (both username-confirmation prompts, share libDelete with `actor='operator'`). New pages: `/consent.astro` (server-side marked-rendered, stale-version banner, decline-or-acknowledge), `/account.astro` (identity card + actions + DISTINCT ON consent history with expandable doc-per-version), `/account/delete.astro` (typed-username form). Journal footer links (settings + consent, fade with deepening cadence). Middleware consent gate with whitelist (`/consent`, `/logout`, `/export`, `/account/delete` reachable; everything else 403 consent_required). Consent doc edited in-place after backup verification (Hetzner 7d, Supabase Pro 7d → "up to 7 days"). Tests: 19 new (consent.test.ts + delete.test.ts), 170 total passing. Bugs found and fixed during smoke testing: JSONB double-encoding (libConsent — switched to `sql.json()`), TIMESTAMPTZ vs string contract drift (added `::text` casts in consent helpers), JSON.stringify-into-JSONB anti-pattern scope (12 columns documented in handoff §4 item 11 as Tier A; opportunistic migration policy locked).

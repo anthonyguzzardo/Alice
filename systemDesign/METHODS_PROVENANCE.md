@@ -8,6 +8,32 @@ Newest first.
 
 ---
 
+## INC-021: `tb_responses.dttm_created_utc` TZ-skew via bare-timestamp implicit cast
+
+**Date:** 2026-04-28
+**Severity:** produces-wrong-number on a non-deterministic subset of journal rows (but only for `tb_responses.dttm_created_utc` — not signals, not encryption, not session events).
+**Discovery method:** Cross-check of `tb_responses.dttm_created_utc` vs the same-question, same-transaction `tb_session_events.dttm_created_utc`. Response 84 (owner journal, 2026-04-28 morning) was stored at `21:26:35+00`; the matching session_events row was `16:26:35.651758+00`. The 5h gap = the CDT offset (UTC-5), which made the mechanism fall out cleanly.
+
+### What was wrong
+
+`saveResponse` (`src/lib/libDb.ts`) interpolated `dttm_created_utc = ${nowStr()}`. `nowStr()` returned `new Date().toISOString().replace('T', ' ').slice(0, 19)` — a string like `'2026-04-28 16:26:35'` with **no `Z` and no `+00:00`**. When postgres.js sent that bare text as a parameter for a TIMESTAMPTZ column, PG implicitly cast text → timestamptz **using the connection's session `TimeZone` setting**. Sessions whose upstream backend carried `TimeZone = UTC` stored the value correctly; sessions whose backend had `TimeZone = America/Chicago` (or any other non-UTC value) interpreted the bare timestamp as local time and added the corresponding offset before storing. The bug was non-deterministic per request because postgres.js holds a connection pool against Supabase's session pooler, and any prior client's `SET TIME ZONE` persists for the life of an upstream backend session — adjacent requests in the same Node process could therefore land on backends with different session TZs.
+
+`saveSessionEvents` and `saveCalibrationSession` were immune because they rely on the column DEFAULT (`CURRENT_TIMESTAMP`), which always returns `+00` regardless of session TZ. That asymmetry — same transaction, two timestamps, only one of them skewed — is what made the bug visible. A quick survey of nine response rows from 2026-04-28 found 1 of 3 journal rows skewed (`/api/respond` → response 84 owner journal); the other 2 journal rows and all 6 calibration rows were correct.
+
+### Resolution
+
+`nowStr()` now returns `new Date().toISOString()` directly for the production path (already `Z`-qualified, parses unambiguously to UTC regardless of session TZ) and `${_dateOverride}T12:00:00+00:00` for the simulation override (also TZ-qualified). Both `saveResponse` and `saveComment` (the two callers) are fixed by the same one-line change. The `_dateOverride` mechanism — production never sets it, used historically by archived simulation scripts — is preserved as exported scaffolding so the simulation handoff in `riffing/archive/` doesn't bit-rot.
+
+### Scope of impact
+
+`tb_responses.dttm_created_utc` for any journal row written through `saveResponse` (i.e. via `/api/respond` and `/api/subject/respond`) since the column was introduced may be off by hours, in the direction `wallclock + offset` where `offset` is the connection's session TZ relative to UTC. Calibration rows are unaffected (different code path). Signal computation, encryption, and audit logs are unaffected (they use `CURRENT_TIMESTAMP` defaults or take their timestamps from session-event sources that compute UTC at write time without going through `nowStr()`).
+
+The skew is observable only by inter-table comparison or by an explicit `(dttm_created_utc - tb_session_events.dttm_created_utc) > tolerance` audit per `question_id`. It does not manifest as an obvious user-facing bug (the journal flow ignores `tb_responses.dttm_created_utc`), but it does corrupt any analysis that orders or filters journal entries by their submission timestamp — cross-session signal sequencing, daily-delta cadence inference, observatory entry-list ordering, the Phase 6c export endpoint's audit-trail timestamp.
+
+No historical reprocessing performed in this commit. A future audit can quantify the affected subset by joining `tb_responses` to `tb_session_events` on `question_id` and flagging rows where the absolute time delta exceeds (say) 30 seconds — anything bigger is the bug.
+
+---
+
 ## INC-020: Universal session-cookie auth (Caddy basic-auth retired)
 
 **Date:** 2026-04-28

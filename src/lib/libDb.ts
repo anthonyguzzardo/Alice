@@ -68,9 +68,16 @@ export function setDateOverride(dateStr: string | null): void {
   _dateOverride = dateStr;
 }
 
-/** Get the current datetime string -- override if set, otherwise ISO now. */
+/** Get the current datetime string -- override if set, otherwise ISO now.
+ *
+ * Both branches are TZ-qualified. Production returns `Date#toISOString` ("...Z"),
+ * the simulation override appends `+00:00`. PG's TIMESTAMPTZ implicit-cast from
+ * text uses the connection's session `TimeZone` setting if the input is bare;
+ * in a pooled connection the session TZ is whatever the upstream backend
+ * inherited, so a bare timestamp lands skewed-and-non-deterministic. See
+ * GOTCHAS.md `nowStr()` entry. */
 function nowStr(): string {
-  return _dateOverride ? `${_dateOverride}T12:00:00` : new Date().toISOString().replace('T', ' ').slice(0, 19);
+  return _dateOverride ? `${_dateOverride}T12:00:00+00:00` : new Date().toISOString();
 }
 
 // ----------------------------------------------------------------------------
