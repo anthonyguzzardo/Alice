@@ -38,6 +38,11 @@
 <script is:inline>
   // Sync subjectId BEFORE any page module runs. Pages call window.__obsUrl()
   // to propagate the active subject through fetches and dynamic hrefs.
+  // Define __obsUrl unconditionally up-front so module scripts that fire
+  // during the redirect window (below) don't crash on undefined.
+  window.__obsSubjectId = null;
+  window.__obsUrl = function (p) { return p; };
+
   (function () {
     var url = new URL(window.location.href);
     var fromUrl = url.searchParams.get('subjectId');
