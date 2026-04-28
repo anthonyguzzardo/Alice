@@ -55,7 +55,7 @@ SET search_path TO alice, public;
 -- pgvector extension installs in public (shared across schemas)
 CREATE EXTENSION IF NOT EXISTS vector;
 
--- @region enums -- te_question_source, te_reflection_type, te_interaction_event_type, te_prompt_trace_type, te_embedding_source, te_context_dimension, te_adversary_variants, te_signal_job_status, te_signal_job_kind
+-- @region enums -- te_question_source, te_reflection_type, te_interaction_event_type, te_prompt_trace_type, te_embedding_source, te_context_dimension, te_adversary_variants, te_signal_job_status, te_signal_job_kind, te_data_access_actor
 -- ============================================================================
 -- ENUM TABLES (static, no footer)
 -- ============================================================================
@@ -177,6 +177,28 @@ INSERT INTO te_signal_job_kind (signal_job_kind_id, enum_code, name, description
   ,(2, 'calibration_pipeline', 'Calibration pipeline', 'Calibration session: tag extraction + derived signals + drift snapshot')
 ON CONFLICT (signal_job_kind_id) DO NOTHING;
 
+-- --------------------------------------------------------------------------
+
+-- PURPOSE: who initiated a data access action (export / delete / consent / etc)
+-- USE CASE: discriminator on tb_data_access_log so we can distinguish
+--           subject-initiated, operator-initiated, and system-initiated actions
+--           even when actor_subject_id is NULL (e.g. operator CLI before
+--           owner-session-auth ships).
+-- MUTABILITY: static after deploy
+-- REFERENCED BY: tb_data_access_log.data_access_actor_id
+CREATE TABLE IF NOT EXISTS te_data_access_actor (
+   data_access_actor_id  SMALLINT PRIMARY KEY
+  ,enum_code             TEXT UNIQUE NOT NULL
+  ,name                  TEXT NOT NULL
+  ,description           TEXT
+);
+
+INSERT INTO te_data_access_actor (data_access_actor_id, enum_code, name, description) VALUES
+   (1, 'subject',  'Subject',  'A subject acted on their own data')
+  ,(2, 'operator', 'Operator', 'The operator acted on a subject''s data (CLI script or owner endpoint)')
+  ,(3, 'system',   'System',   'Automated system action (cron, worker, deploy hook)')
+ON CONFLICT (data_access_actor_id) DO NOTHING;
+
 -- @region identity -- tb_subjects, tb_subject_sessions
 -- ============================================================================
 -- IDENTITY
@@ -236,6 +258,90 @@ CREATE INDEX IF NOT EXISTS ix_subject_sessions_subject_id
 
 CREATE INDEX IF NOT EXISTS ix_subject_sessions_expires_at
   ON tb_subject_sessions (expires_at);
+
+-- --------------------------------------------------------------------------
+
+-- @region audit -- tb_subject_consent, tb_data_access_log
+-- ============================================================================
+-- AUDIT (Phase 6c, migration 038)
+-- ============================================================================
+-- Append-only governance tables. Survive subject deletion: the tombstone
+-- (subject_id, consent acknowledgments, deletion timestamp) is the
+-- research-integrity record promised by docs/consent-v1.md. Never modified
+-- in place; never truncated; never garbage-collected.
+--
+-- The middleware consent gate reads `tb_subject_consent` to determine
+-- whether a subject's most-recent acknowledgment matches the current
+-- CONSENT_VERSION constant. The export, delete, factory-reset, and consent
+-- endpoints write to `tb_data_access_log` so every plaintext-egress and
+-- destructive action leaves a forensic trace.
+
+-- PURPOSE: append-only record of every consent acknowledgment per subject
+-- USE CASE: middleware queries the most-recent row per subject_id; if its
+--           consent_version != server's CONSENT_VERSION constant, the
+--           subject is gated until they re-acknowledge. Older rows are
+--           retained so the subject's account page can show full history.
+-- MUTABILITY: insert-only (append). Rows are never modified or deleted —
+--             not even when the subject deletes their account, since the
+--             consent timeline is part of the research integrity record.
+-- REFERENCED BY: none (leaf)
+-- FOOTER: created + modified (modified_by/dttm_modified_utc are unused
+--         in practice — kept for schema-shape consistency with other
+--         mutable tables)
+CREATE TABLE IF NOT EXISTS tb_subject_consent (
+   subject_consent_id    INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,subject_id            INT NOT NULL                                   -- logical FK to tb_subjects
+  ,consent_version       TEXT NOT NULL                                  -- e.g. 'v1'
+  ,dttm_acknowledged_utc TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ,ip_address            TEXT                                            -- truncated to 45 chars (IPv6 max)
+  ,user_agent            TEXT                                            -- truncated to 200 chars
+  ,dttm_created_utc      TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ,created_by            TEXT NOT NULL DEFAULT 'system'
+  ,dttm_modified_utc     TIMESTAMPTZ
+  ,modified_by           TEXT
+);
+
+CREATE INDEX IF NOT EXISTS ix_subject_consent_subject_version
+  ON tb_subject_consent (subject_id, consent_version);
+
+CREATE INDEX IF NOT EXISTS ix_subject_consent_subject_recent
+  ON tb_subject_consent (subject_id, dttm_acknowledged_utc DESC);
+
+-- --------------------------------------------------------------------------
+
+-- PURPOSE: append-only audit trail of every data access action
+-- USE CASE: every export, delete, factory-reset, and consent action writes
+--           a row here. The notes field carries action-specific context as
+--           a JSON string (e.g. per-table row counts after a delete cascade,
+--           bytes streamed during an export). Survives subject deletion so
+--           the post-delete tombstone has a verifiable history.
+-- MUTABILITY: insert-only (append). Rows are never modified or deleted.
+-- REFERENCED BY: none (leaf)
+-- FOOTER: created + modified (modified columns unused in practice)
+CREATE TABLE IF NOT EXISTS tb_data_access_log (
+   data_access_log_id    INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,subject_id            INT NOT NULL                                   -- whose data was accessed (logical FK)
+  ,actor_subject_id      INT                                             -- who initiated; NULL when actor was operator pre-session-auth or system
+  ,data_access_actor_id  SMALLINT NOT NULL                              -- te_data_access_actor.data_access_actor_id
+  ,action_type           TEXT NOT NULL                                  -- 'export' | 'factory_reset' | 'delete' | 'consent'
+  ,consent_version       TEXT                                            -- populated when action_type = 'consent'
+  ,notes                 TEXT                                            -- JSON string with action-specific context
+  ,ip_address            TEXT
+  ,user_agent            TEXT
+  ,dttm_created_utc      TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ,created_by            TEXT NOT NULL DEFAULT 'system'
+  ,dttm_modified_utc     TIMESTAMPTZ
+  ,modified_by           TEXT
+);
+
+CREATE INDEX IF NOT EXISTS ix_data_access_log_subject
+  ON tb_data_access_log (subject_id, dttm_created_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_data_access_log_actor
+  ON tb_data_access_log (actor_subject_id, dttm_created_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_data_access_log_action
+  ON tb_data_access_log (action_type, dttm_created_utc DESC);
 
 -- --------------------------------------------------------------------------
 
