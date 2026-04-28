@@ -15,9 +15,18 @@ function record(timestamp: string, job: string, message = 'something failed'): s
 
 describe('readRecentErrors — time window + limit', () => {
   // Capture the pre-test state ONCE so per-test mutations don't poison the restore.
+  // CI workspaces don't ship with data/ (it's gitignored), so ensure the dir
+  // exists before any writeFileSync calls. Tracks whether we created it so
+  // afterAll can clean up after itself when the dir wasn't there to begin with.
   let originalContent: string | null = null;
+  let createdDataDir = false;
 
   beforeAll(() => {
+    const dataDir = path.dirname(LOG_PATH);
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+      createdDataDir = true;
+    }
     originalContent = fs.existsSync(LOG_PATH) ? fs.readFileSync(LOG_PATH, 'utf8') : null;
   });
 
@@ -26,6 +35,13 @@ describe('readRecentErrors — time window + limit', () => {
       if (fs.existsSync(LOG_PATH)) fs.unlinkSync(LOG_PATH);
     } else {
       fs.writeFileSync(LOG_PATH, originalContent);
+    }
+    if (createdDataDir && fs.existsSync(path.dirname(LOG_PATH))) {
+      try {
+        fs.rmdirSync(path.dirname(LOG_PATH));
+      } catch {
+        // dir not empty (something else wrote there); leave it
+      }
     }
   });
 
