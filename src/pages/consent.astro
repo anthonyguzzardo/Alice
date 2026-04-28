@@ -54,6 +54,15 @@ const status = await getSubjectConsentStatus(subject.subject_id);
 const alreadyAcknowledged = status.isCurrent;
 const previousVersion = !alreadyAcknowledged && status.currentVersion ? status.currentVersion : null;
 const previousAcknowledgedAt = status.acknowledgedAtUtc ? status.acknowledgedAtUtc.slice(0, 10) : null;
+
+// `?stale=1` means the page is rendering after a stale-version reload (the
+// subject opened the page under an older version, the operator bumped, and
+// the endpoint rejected with `stale_version`). The acknowledge button starts
+// disabled and a banner asks the subject to re-read before clicking again —
+// otherwise silent-reload-then-acknowledge means a subject acknowledges a
+// version they didn't actually read. Click-through on the banner enables
+// the button.
+const isStaleReload = Astro.url.searchParams.get('stale') === '1';
 ---
 
 <html lang="en">
@@ -223,10 +232,57 @@ const previousAcknowledgedAt = status.acknowledgedAtUtc ? status.acknowledgedAtU
         min-height: 1.4em;
         text-align: center;
       }
+
+      .consent-stale {
+        background: #f5e9d8;
+        border: 1px solid #c9a55e;
+        color: #4a3517;
+        padding: 1rem 1.25rem;
+        border-radius: 4px;
+        margin-bottom: 2rem;
+        font-size: 1rem;
+        line-height: 1.5;
+      }
+      [data-theme="dark"] .consent-stale {
+        background: #2a2218;
+        color: #c9a55e;
+        border-color: #6b5532;
+      }
+      .consent-stale strong {
+        font-weight: 500;
+      }
+      .consent-stale-action {
+        display: inline-block;
+        margin-top: 0.6rem;
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-size: 1rem;
+        background: transparent;
+        border: 1px solid currentColor;
+        color: inherit;
+        padding: 0.4rem 1rem;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .consent-stale-action:hover {
+        background: rgba(0, 0, 0, 0.04);
+      }
     </style>
   </head>
   <body>
     <div class="consent-wrap">
+      {isStaleReload && (
+        <div class="consent-stale" id="consent-stale-banner">
+          <strong>Terms updated since you opened this page.</strong>
+          The version you tried to acknowledge is no longer current. Please
+          re-read the version below before continuing.
+          <div>
+            <button type="button" class="consent-stale-action" id="consent-reviewed-btn">
+              I have re-read
+            </button>
+          </div>
+        </div>
+      )}
+
       {previousVersion && (
         <div class="consent-prior">
           You previously acknowledged version <code>{previousVersion}</code>
@@ -248,7 +304,12 @@ const previousAcknowledgedAt = status.acknowledgedAtUtc ? status.acknowledgedAtU
       ) : (
         <div class="consent-actions">
           <span class="consent-version">version {CONSENT_VERSION}</span>
-          <button class="consent-btn" id="consent-btn" data-version={CONSENT_VERSION}>I acknowledge</button>
+          <button
+            class="consent-btn"
+            id="consent-btn"
+            data-version={CONSENT_VERSION}
+            disabled={isStaleReload}
+          >I acknowledge</button>
           <a href="#" class="consent-decline" id="consent-decline">decline + log out</a>
           <div class="consent-error" id="error-msg"></div>
         </div>
@@ -259,6 +320,20 @@ const previousAcknowledgedAt = status.acknowledgedAtUtc ? status.acknowledgedAtU
       const btn = document.getElementById('consent-btn') as HTMLButtonElement | null;
       const errorMsg = document.getElementById('error-msg');
       const declineLink = document.getElementById('consent-decline') as HTMLAnchorElement | null;
+      const staleBanner = document.getElementById('consent-stale-banner');
+      const reviewedBtn = document.getElementById('consent-reviewed-btn') as HTMLButtonElement | null;
+
+      // Stale-version reload: the acknowledge button starts disabled (set
+      // server-side via the `disabled={isStaleReload}` attribute). Clicking
+      // "I have re-read" removes the banner and enables the button. Subject
+      // must take an explicit action acknowledging that the doc changed
+      // before they can post the new version.
+      if (staleBanner && reviewedBtn && btn) {
+        reviewedBtn.addEventListener('click', () => {
+          staleBanner.remove();
+          btn.disabled = false;
+        });
+      }
 
       if (declineLink) {
         declineLink.addEventListener('click', async (e) => {
@@ -285,7 +360,11 @@ const previousAcknowledgedAt = status.acknowledgedAtUtc ? status.acknowledgedAtU
             const body = await res.json().catch(() => ({})) as { error?: string; current?: string };
             if (body.error === 'stale_version' && body.current) {
               if (errorMsg) errorMsg.textContent = `terms updated to ${body.current}; reloading…`;
-              setTimeout(() => window.location.reload(), 1200);
+              // Reload with `?stale=1` so the page renders the new version
+              // with a banner + disabled-acknowledge state. Otherwise a
+              // silent reload would let the subject re-click without
+              // re-reading.
+              setTimeout(() => { window.location.href = '/consent?stale=1'; }, 1200);
               return;
             }
             if (errorMsg) errorMsg.textContent = body.error ?? 'consent failed; try again';

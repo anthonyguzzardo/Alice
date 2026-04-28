@@ -31,23 +31,8 @@ import {
   getSubjectConsentStatus,
   recordConsent,
 } from '../../../lib/libConsent.ts';
+import { extractClientIp, extractUserAgent } from '../../../lib/utlRequestContext.ts';
 import { logError } from '../../../lib/utlErrorLog.ts';
-
-function extractClientIp(request: Request): string | null {
-  const xff = request.headers.get('x-forwarded-for');
-  if (xff) {
-    const first = xff.split(',')[0]?.trim();
-    if (first) return first.slice(0, 45);
-  }
-  const real = request.headers.get('x-real-ip');
-  if (real) return real.trim().slice(0, 45);
-  return null;
-}
-
-function extractUserAgent(request: Request): string | null {
-  const ua = request.headers.get('user-agent');
-  return ua ? ua.slice(0, 200) : null;
-}
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const subject = locals.subject;

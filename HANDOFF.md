@@ -133,6 +133,8 @@ The schedule-extension flow is intentionally manual and collective, not automate
 
 8. **`data/errors.log.bak.2026-04-27`.** Forensic backup of the stale error log at the moment the time-window filter shipped. Gitignored. Delete with `rm data/errors.log.bak.*` whenever you stop caring about the old debug entries.
 
+9. **Extract IP/UA helpers to `utlRequestContext.ts`.** `extractClientIp` exists privately in `libSubject.ts` and was inlined again in `src/pages/api/subject/consent.ts` (Phase 6c step 4). When `/api/subject/export` and `/api/subject/account/delete` (Phase 6c steps 6 + 7) need the same logic, extract to a shared util — three callers is the right threshold. Until then, two inlined copies is acceptable.
+
 ---
 
 ## 5. Critical architectural rules (do not violate)
@@ -255,7 +257,14 @@ npm run corpus:approve data/corpus-candidates-YYYY-MM-DD.md
 - Resurrect alice-negative artistic rendering. Witness states / semantic 11D / trait dynamics / coupling matrices / emotion-behavior coupling / 7D entry-state persistence are all archived and stay archived.
 - Stub functions for archived features. Archival means removal, not stubbing.
 - Touch the `te_*` enum tables that reference archived data (`te_reflection_type`, `embedding_source_id = 3` on `te_embedding_source`) — they're harmless static dictionary entries; removing them risks orphaning archived rows.
-- Ship the consent-gate middleware (Phase 6c step 5) without the consent endpoint + page (step 4). Ship steps 4 and 5 in the same deploy, or 4 first then 5. **Never 5 alone** — middleware-without-the-consent-endpoint locks every non-owner subject out of `/api/subject/*` with no acknowledgment path. The whitelist (`/api/subject/consent`, `/logout`, `/export`, `/account/delete`) is what closes that hole, and it's part of the middleware change — so the dangerous state is "middleware without whitelist" or "whitelist routes that don't exist yet."
+- Ship the consent-gate middleware (Phase 6c step 5) without the consent endpoint + page (step 4). Ship step 4 first, smoke-test live with ash, leave a 24–48h verification gap, then ship step 5. **Never 5 alone** — middleware-without-the-consent-endpoint locks every non-owner subject out of `/api/subject/*` with no acknowledgment path. The whitelist (`/api/subject/consent`, `/logout`, `/export`, `/account/delete`) is what closes that hole, and it's part of the middleware change — the dangerous state is "middleware without whitelist" or "whitelist routes that don't exist yet." Failure asymmetry justifies the gap: 4-broken is a soft fail (subject hits an error on consent click), 5-without-working-4 is a lockout.
+
+**Pre-step-5 checklist (do not ship middleware until ALL five are checked):**
+1. Hetzner snapshot retention verified in console (consent doc says "up to 30 days")
+2. Supabase backup window verified in console (same)
+3. Consent doc updated if either number above differs from "up to 30 days"
+4. Ash smoke test on step 4 complete: log in → /consent renders → byte-for-byte check rendered HTML against `docs/consent-v1.md` → click acknowledge → verify journal redirect → query `tb_subject_consent` + `tb_data_access_log` directly to confirm both rows landed atomically
+5. Stale-version reload UX (banner + disabled-button-until-reviewed) decided implemented (was: implemented in step 4, in `consent.astro` via `?stale=1` query param) OR explicitly deferred with a known-issue note
 
 ---
 

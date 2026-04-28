@@ -23,6 +23,7 @@ import {
   verifySubjectSession,
   type SubjectAuthRow,
 } from './libSubjectAuth.ts';
+import { extractClientIp } from './utlRequestContext.ts';
 
 // ----------------------------------------------------------------------------
 // Types
@@ -68,23 +69,6 @@ export async function getRequestSubject(request: Request): Promise<Subject | nul
   const ip = extractClientIp(request);
   const auth = await verifySubjectSession(token, ip);
   return auth ? authRowToSubject(auth) : null;
-}
-
-/**
- * Extract the client IP from forwarded-for headers (Caddy sets these on the
- * proxied request). Falls back to the first hop of x-forwarded-for, then
- * x-real-ip. Returns null when neither is present (local dev without a proxy).
- * Truncated to 45 chars to fit IPv6 textual maximum and resist log injection.
- */
-function extractClientIp(request: Request): string | null {
-  const xff = request.headers.get('x-forwarded-for');
-  if (xff) {
-    const first = xff.split(',')[0]?.trim();
-    if (first) return first.slice(0, 45);
-  }
-  const real = request.headers.get('x-real-ip');
-  if (real) return real.trim().slice(0, 45);
-  return null;
 }
 
 function authRowToSubject(row: SubjectAuthRow): Subject {
