@@ -1,0 +1,316 @@
+---
+/**
+ * /account/delete — username-confirmation page for full account deletion.
+ *
+ * UX flow: subject reads the warning (what gets wiped, what's preserved
+ * forever as research-integrity audit), types their current username
+ * verbatim into the input, the submit button enables, click triggers
+ * `POST /api/subject/account/delete` with `{confirmation: <username>}`.
+ *
+ * Server-side gate: the API endpoint re-checks `confirmation === username`
+ * (defense in depth — the client-side enable is a UX signal only). Wipe
+ * cookie on success or 410.
+ *
+ * Consent gate: this page is reachable even when the consent gate engages.
+ * Right to leave is unconditional. The middleware whitelist
+ * (`/api/subject/account/delete`) is what closes the loop server-side;
+ * here we just don't redirect to /consent.
+ */
+import { getSubjectConsentStatus } from '../../lib/libConsent.ts';
+
+const subject = Astro.locals.subject;
+if (!subject) return Astro.redirect('/enter');
+if (subject.is_owner) return Astro.redirect('/');
+if (subject.must_reset_password) return Astro.redirect('/reset-password');
+
+// Surface "you haven't acknowledged current consent" so the subject knows
+// they're choosing delete instead of acknowledging. Don't redirect — right
+// to leave is unconditional.
+const status = await getSubjectConsentStatus(subject.subject_id);
+const consentNotCurrent = !status.isCurrent;
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Alice — close account</title>
+    <script is:inline>
+      (function () {
+        var t = localStorage.getItem('alice-theme') || 'light';
+        document.documentElement.setAttribute('data-theme', t);
+      })();
+    </script>
+    <style is:global>
+      @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap');
+
+      :root {
+        --bg: #f5f2ed;
+        --text: #1a1a1a;
+        --text-muted: #6b6560;
+        --text-faint: #9a9590;
+        --border: #ccc5bc;
+        --border-focus: #8a8580;
+        --bg-input: #ebe7e1;
+        --btn-bg: #e0dbd5;
+        --btn-hover: #ccc5bc;
+        --danger: #b5603f;
+        --warn-bg: #f5e9d8;
+        --warn-border: #c9a55e;
+        --warn-text: #4a3517;
+      }
+
+      [data-theme="dark"] {
+        --bg: #141210;
+        --text: #ffffff;
+        --text-muted: #7a7570;
+        --text-faint: #555;
+        --border: #333;
+        --border-focus: #666;
+        --bg-input: #1a1816;
+        --btn-bg: #222;
+        --btn-hover: #333;
+        --danger: #c2635f;
+        --warn-bg: #2a2218;
+        --warn-border: #6b5532;
+        --warn-text: #c9a55e;
+      }
+
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body {
+        font-family: 'EB Garamond', Georgia, serif;
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+        padding: 3rem 1.5rem 5rem;
+      }
+      .delete-wrap { max-width: 600px; margin: 0 auto; }
+
+      h1 {
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-weight: 300;
+        font-size: 2rem;
+        color: var(--danger);
+        margin-bottom: 1.5rem;
+      }
+
+      .consent-notice {
+        background: var(--warn-bg);
+        border: 1px solid var(--warn-border);
+        color: var(--warn-text);
+        padding: 0.85rem 1rem;
+        border-radius: 4px;
+        margin-bottom: 1.5rem;
+        font-size: 0.95rem;
+        line-height: 1.5;
+      }
+
+      .warning {
+        background: var(--bg-input);
+        border: 1px solid var(--border);
+        border-left: none;
+        padding: 1.25rem 1.5rem;
+        margin-bottom: 2rem;
+        font-size: 1rem;
+        line-height: 1.6;
+      }
+      .warning h2 {
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-weight: 400;
+        font-size: 1.2rem;
+        margin: 0 0 0.5rem;
+      }
+      .warning ul { margin: 0.4rem 0 1rem 1.4rem; }
+      .warning li { margin: 0.25rem 0; }
+      .warning .preserved-note {
+        font-size: 0.95rem;
+        color: var(--text-muted);
+        margin-top: 0.5rem;
+      }
+
+      .form-block { margin-top: 2rem; }
+      .form-block label {
+        display: block;
+        margin-bottom: 0.4rem;
+        font-size: 1rem;
+        color: var(--text);
+      }
+      .form-block label code {
+        font-family: 'SF Mono', Menlo, monospace;
+        font-size: 0.95em;
+        background: var(--bg-input);
+        padding: 0.1em 0.3em;
+        border-radius: 2px;
+      }
+      .form-block input {
+        font-family: 'EB Garamond', Georgia, serif;
+        font-size: 1.1rem;
+        width: 100%;
+        padding: 0.7rem 0.9rem;
+        background: var(--bg-input);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        color: var(--text);
+        outline: none;
+        margin-bottom: 1rem;
+      }
+      .form-block input:focus { border-color: var(--border-focus); }
+
+      .form-actions {
+        display: flex;
+        gap: 0.75rem;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .delete-btn {
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-size: 1.05rem;
+        padding: 0.65rem 1.4rem;
+        background: var(--danger);
+        border: 1px solid var(--danger);
+        color: #fff;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .delete-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+        background: transparent;
+        color: var(--danger);
+      }
+      .delete-btn:not(:disabled):hover {
+        filter: brightness(0.95);
+      }
+
+      .cancel-link {
+        color: var(--text-muted);
+        text-decoration: none;
+        font-size: 1rem;
+      }
+      .cancel-link:hover { color: var(--text); }
+
+      .export-suggest {
+        margin-top: 1rem;
+        padding: 0.65rem 1rem;
+        background: var(--bg-input);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        font-size: 0.95rem;
+        color: var(--text-muted);
+      }
+      .export-suggest a {
+        color: var(--text);
+        text-decoration: underline;
+      }
+
+      .error-msg {
+        color: var(--danger);
+        font-size: 0.95rem;
+        margin-top: 0.6rem;
+        min-height: 1.2em;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="delete-wrap">
+      <h1>Close your account</h1>
+
+      {consentNotCurrent && (
+        <div class="consent-notice">
+          You haven't acknowledged the current consent version. Closing your
+          account here is your right; you don't need to acknowledge to leave.
+        </div>
+      )}
+
+      <div class="export-suggest">
+        Want a copy of your data first?
+        <a href="/api/subject/export">↓ Download my data (JSON)</a>
+        before deleting.
+      </div>
+
+      <div class="warning" style="margin-top: 1.5rem;">
+        <h2>What gets wiped</h2>
+        <ul>
+          <li>All your journal responses + calibration entries</li>
+          <li>All keystroke timing data + behavioral signals derived from your sessions</li>
+          <li>The prompts the system generated for you</li>
+          <li>All active sessions (you'll be logged out)</li>
+        </ul>
+        <h2>What stays (forever, as a research integrity record)</h2>
+        <ul>
+          <li>Your subject ID (a number, no personal information)</li>
+          <li>The dates you acknowledged consent versions</li>
+          <li>An audit log entry recording this deletion</li>
+        </ul>
+        <p class="preserved-note">
+          Data is removed from the active system immediately and from
+          encrypted backups within ~30 days as the normal backup rotation
+          overwrites them.
+        </p>
+        <p class="preserved-note" style="margin-top: 0.6rem;">
+          This action cannot be undone.
+        </p>
+      </div>
+
+      <div class="form-block">
+        <label>
+          Type your username (<code>{subject.username}</code>) to confirm:
+        </label>
+        <input
+          type="text"
+          id="confirmation-input"
+          autocomplete="off"
+          autocorrect="off"
+          autocapitalize="off"
+          spellcheck="false"
+        />
+        <div class="form-actions">
+          <button id="delete-btn" class="delete-btn" disabled>
+            Delete my account permanently
+          </button>
+          <a class="cancel-link" href="/account">cancel</a>
+        </div>
+        <div class="error-msg" id="error-msg"></div>
+      </div>
+    </div>
+
+    <script define:vars={{ username: subject.username }}>
+      const input = document.getElementById('confirmation-input');
+      const btn = document.getElementById('delete-btn');
+      const err = document.getElementById('error-msg');
+
+      input.addEventListener('input', () => {
+        btn.disabled = input.value !== username;
+        err.textContent = '';
+      });
+
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        if (input.value !== username) return;
+
+        btn.disabled = true;
+        err.textContent = '';
+
+        const res = await fetch('/api/subject/account/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ confirmation: input.value }),
+        });
+
+        if (res.ok || res.status === 410) {
+          // Success or already-deleted: cookie was wiped server-side.
+          // Account is gone; send the subject to the login page so the
+          // browser drops the now-invalid cookie naturally.
+          window.location.href = '/enter';
+          return;
+        }
+
+        const body = await res.json().catch(() => ({}));
+        err.textContent = body.error ?? 'delete failed; try again';
+        btn.disabled = false;
+      });
+
+      input.focus();
+    </script>
+  </body>
+</html>

@@ -92,9 +92,13 @@ export interface ConsentStatus {
  * state). The middleware consent gate engages whenever `isCurrent` is false.
  */
 export async function getSubjectConsentStatus(subjectId: number): Promise<ConsentStatus> {
+  // Cast TIMESTAMPTZ → text in SQL so postgres.js doesn't auto-parse to a
+  // Date object. The type contract says `acknowledgedAtUtc: string` and
+  // callers (consent.astro, account/index.astro) call `.slice(0, 10)` on
+  // it — Date has no `.slice` method, so the cast keeps the contract honest.
   const rows = await sql`
-    SELECT consent_version       AS "currentVersion"
-          ,dttm_acknowledged_utc AS "acknowledgedAtUtc"
+    SELECT consent_version           AS "currentVersion"
+          ,dttm_acknowledged_utc::text AS "acknowledgedAtUtc"
     FROM tb_subject_consent
     WHERE subject_id = ${subjectId}
     ORDER BY dttm_acknowledged_utc DESC
@@ -132,14 +136,17 @@ export interface ConsentHistoryEntry {
 export async function getSubjectConsentHistory(subjectId: number): Promise<ConsentHistoryEntry[]> {
   // DISTINCT ON requires the distinct column to lead the ORDER BY, so we
   // sort by consent_version + acknowledgment-ASC inside, then re-sort the
-  // deduped result by acknowledgment-DESC for display.
+  // deduped result by acknowledgment-DESC for display. TIMESTAMPTZ is cast
+  // to text in SQL so callers receive a string (ConsentHistoryEntry says so);
+  // postgres.js auto-parses TIMESTAMPTZ to Date otherwise, breaking
+  // `.slice(0, 10)` calls in pages.
   const rows = await sql`
     SELECT version, "acknowledgedAtUtc", "ipAddress"
     FROM (
       SELECT DISTINCT ON (consent_version)
-             consent_version       AS "version"
-            ,dttm_acknowledged_utc AS "acknowledgedAtUtc"
-            ,ip_address            AS "ipAddress"
+             consent_version             AS "version"
+            ,dttm_acknowledged_utc::text AS "acknowledgedAtUtc"
+            ,ip_address                  AS "ipAddress"
       FROM tb_subject_consent
       WHERE subject_id = ${subjectId}
       ORDER BY consent_version, dttm_acknowledged_utc ASC

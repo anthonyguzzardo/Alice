@@ -1,0 +1,301 @@
+---
+/**
+ * /account — subject's account page.
+ *
+ * Three sections:
+ *   1. Identity card (username, display_name, joined date)
+ *   2. Actions: Export my data (downloads NDJSON via /api/subject/export),
+ *      Delete my account (links to /account/delete)
+ *   3. Consent history: deduped list (DISTINCT ON consent_version) of every
+ *      version the subject has acknowledged. Each entry expandable to show
+ *      the doc text for that version, rendered server-side from the
+ *      CONSENT_VERSIONS registry. Versions whose docPath has been removed
+ *      (e.g. doc deleted in a future cleanup) render the date only.
+ *
+ * Gating: redirects to /enter (anon), / (owner), /reset-password (must
+ * reset), /consent (consent not current). The page is NOT in the
+ * consent-gate whitelist — subjects re-acknowledge before browsing
+ * account state. /account/delete IS whitelisted (right to leave is
+ * unconditional).
+ */
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+import { marked } from 'marked';
+import {
+  CONSENT_VERSIONS,
+  getSubjectConsentStatus,
+  getSubjectConsentHistory,
+  type ConsentHistoryEntry,
+} from '../../lib/libConsent.ts';
+
+const subject = Astro.locals.subject;
+if (!subject) return Astro.redirect('/enter');
+if (subject.is_owner) return Astro.redirect('/');
+if (subject.must_reset_password) return Astro.redirect('/reset-password');
+
+const status = await getSubjectConsentStatus(subject.subject_id);
+if (!status.isCurrent) return Astro.redirect('/consent');
+
+const history: ConsentHistoryEntry[] = await getSubjectConsentHistory(subject.subject_id);
+
+// Pre-render all known consent doc versions to HTML so the history view
+// can show the doc text for each acknowledged version inline.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const projectRoot = path.resolve(__dirname, '../../../');
+const versionDocs = new Map<string, string>();
+for (const v of CONSENT_VERSIONS) {
+  try {
+    const md = readFileSync(path.resolve(projectRoot, v.docPath), 'utf-8');
+    versionDocs.set(v.version, await marked.parse(md));
+  } catch {
+    // Doc file missing — render the date only for this version.
+  }
+}
+
+const joinedDate = subject.dttm_created_utc ? subject.dttm_created_utc.slice(0, 10) : '—';
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Alice — your account</title>
+    <script is:inline>
+      (function () {
+        var t = localStorage.getItem('alice-theme') || 'light';
+        document.documentElement.setAttribute('data-theme', t);
+      })();
+    </script>
+    <style is:global>
+      @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap');
+
+      :root {
+        --bg: #f5f2ed;
+        --text: #1a1a1a;
+        --text-muted: #6b6560;
+        --text-faint: #9a9590;
+        --border: #ccc5bc;
+        --border-focus: #8a8580;
+        --bg-input: #ebe7e1;
+        --btn-bg: #e0dbd5;
+        --btn-hover: #ccc5bc;
+        --accent: #7a5a44;
+        --danger: #b5603f;
+      }
+
+      [data-theme="dark"] {
+        --bg: #141210;
+        --text: #ffffff;
+        --text-muted: #7a7570;
+        --text-faint: #555;
+        --border: #333;
+        --border-focus: #666;
+        --bg-input: #1a1816;
+        --btn-bg: #222;
+        --btn-hover: #333;
+        --accent: #a08a6e;
+        --danger: #c2635f;
+      }
+
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body {
+        font-family: 'EB Garamond', Georgia, serif;
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+        padding: 3rem 1.5rem 5rem;
+      }
+      .account-wrap { max-width: 680px; margin: 0 auto; }
+
+      .account-title {
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-weight: 300;
+        font-size: 2rem;
+        margin-bottom: 2rem;
+      }
+      .account-section { margin-bottom: 2.5rem; }
+      .account-section h2 {
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-weight: 400;
+        font-size: 1.4rem;
+        margin-bottom: 0.75rem;
+        color: var(--text);
+      }
+
+      .id-card {
+        background: var(--bg-input);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 1rem 1.25rem;
+        font-size: 1rem;
+      }
+      .id-card .row {
+        display: grid;
+        grid-template-columns: 10rem 1fr;
+        padding: 0.4rem 0;
+      }
+      .id-card .row + .row { border-top: 1px solid var(--border); }
+      .id-card .label { color: var(--text-muted); font-size: 0.95rem; }
+      .id-card .val { color: var(--text); font-size: 1.05rem; }
+
+      .actions {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+      }
+      .action-btn {
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-size: 1.05rem;
+        padding: 0.6rem 1.2rem;
+        background: var(--btn-bg);
+        border: 1px solid var(--border);
+        color: var(--text);
+        border-radius: 4px;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-block;
+      }
+      .action-btn:hover { background: var(--btn-hover); }
+      .action-btn.danger { color: var(--danger); border-color: var(--danger); }
+      .action-btn.danger:hover { background: var(--danger); color: var(--bg); }
+
+      .history-empty {
+        font-size: 1rem;
+        color: var(--text-muted);
+        font-style: italic;
+        padding: 0.6rem 0;
+      }
+
+      details.history-entry {
+        background: var(--bg-input);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        margin-bottom: 0.5rem;
+      }
+      details.history-entry > summary {
+        padding: 0.7rem 1rem;
+        cursor: pointer;
+        font-size: 1rem;
+        list-style: none;
+      }
+      details.history-entry > summary::-webkit-details-marker { display: none; }
+      details.history-entry > summary::before {
+        content: '▸ ';
+        color: var(--text-faint);
+        margin-right: 0.4rem;
+      }
+      details.history-entry[open] > summary::before {
+        content: '▾ ';
+      }
+      details.history-entry .when {
+        font-family: 'SF Mono', Menlo, monospace;
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        margin-left: 0.5rem;
+      }
+      details.history-entry .doc {
+        padding: 0.5rem 1.25rem 1.25rem;
+        border-top: 1px solid var(--border);
+        font-size: 0.95rem;
+        line-height: 1.6;
+      }
+      details.history-entry .doc h1,
+      details.history-entry .doc h2 {
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-weight: 400;
+        margin-top: 0.8rem;
+      }
+      details.history-entry .doc h1 { font-size: 1.4rem; margin-bottom: 0.5rem; }
+      details.history-entry .doc h2 { font-size: 1.15rem; margin: 1rem 0 0.4rem; }
+      details.history-entry .doc p { margin: 0.5rem 0; }
+      details.history-entry .doc ul { margin: 0.5rem 0 0.5rem 1.4rem; }
+      details.history-entry .doc strong { font-weight: 500; }
+      details.history-entry .doc code {
+        font-family: 'SF Mono', Menlo, monospace;
+        font-size: 0.85em;
+        background: var(--bg);
+        padding: 0.1em 0.3em;
+        border-radius: 2px;
+      }
+      details.history-entry .doc-missing {
+        padding: 0.6rem 1.25rem 1rem;
+        font-style: italic;
+        color: var(--text-muted);
+        font-size: 0.9rem;
+        border-top: 1px solid var(--border);
+      }
+
+      .footer-back {
+        margin-top: 3rem;
+        font-size: 1rem;
+      }
+      .footer-back a {
+        color: var(--text-muted);
+        text-decoration: none;
+      }
+      .footer-back a:hover { color: var(--text); }
+    </style>
+  </head>
+  <body>
+    <div class="account-wrap">
+      <h1 class="account-title">Your account</h1>
+
+      <section class="account-section">
+        <div class="id-card">
+          <div class="row">
+            <span class="label">username</span>
+            <span class="val">{subject.username}</span>
+          </div>
+          <div class="row">
+            <span class="label">display name</span>
+            <span class="val">{subject.display_name ?? '(none)'}</span>
+          </div>
+          <div class="row">
+            <span class="label">timezone</span>
+            <span class="val">{subject.iana_timezone}</span>
+          </div>
+          <div class="row">
+            <span class="label">member since</span>
+            <span class="val">{joinedDate}</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="account-section">
+        <h2>Your data</h2>
+        <div class="actions">
+          <a class="action-btn" href="/api/subject/export">↓ Download my data (JSON)</a>
+          <a class="action-btn danger" href="/account/delete">Delete my account…</a>
+        </div>
+      </section>
+
+      <section class="account-section">
+        <h2>Consent history</h2>
+        {history.length === 0 ? (
+          <p class="history-empty">No acknowledgments recorded.</p>
+        ) : (
+          history.map((entry) => (
+            <details class="history-entry">
+              <summary>
+                version <code>{entry.version}</code>
+                <span class="when">acknowledged {entry.acknowledgedAtUtc.slice(0, 10)}</span>
+              </summary>
+              {versionDocs.has(entry.version) ? (
+                <div class="doc" set:html={versionDocs.get(entry.version)}></div>
+              ) : (
+                <div class="doc-missing">
+                  Document text for <code>{entry.version}</code> is no longer
+                  available. The acknowledgment timestamp is preserved in
+                  the audit log.
+                </div>
+              )}
+            </details>
+          ))
+        )}
+      </section>
+
+      <p class="footer-back"><a href="/subject">← back to journal</a></p>
+    </div>
+  </body>
+</html>
