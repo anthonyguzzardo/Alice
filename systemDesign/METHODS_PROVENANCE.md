@@ -8,6 +8,73 @@ Newest first.
 
 ---
 
+## INC-018: Subject-auth hardening pass (rate limit + 7-day expiry + session telemetry)
+
+**Date:** 2026-04-27
+**Type:** Defensive hardening (no broken behavior; threat-model tightening)
+
+### What was wrong
+
+Pre-2026-04-27 the subject auth surface had three latent gaps that were acceptable for a single-owner deploy but became weaknesses once a second subject (`ash`) was provisioned and the surface stopped being effectively private:
+
+1. **No rate limit on `/api/subject/login`.** Argon2id verification already adds ~100ms per attempt, but with no IP-keyed cap an automated credential-stuffing run could still issue thousands of attempts per minute. Argon2's cost-per-guess is a floor on the attacker's compute, not a cap on their attempt rate.
+2. **30-day session expiry with no sliding-window renewal.** A stolen cookie was usable for a full month before forced re-login. The original setting traded security for convenience on the assumption of a single trusted user; the assumption stops holding once arbitrary subjects can authenticate.
+3. **No session-row visibility.** `tb_subject_sessions` recorded only `subject_id`, `token_hash`, `expires_at`, and `dttm_created_utc`. There was no way to detect a stale-but-valid session, identify a cookie-on-new-IP situation, or audit "when did this subject last actually use their session" without joining external logs.
+
+### Discovery method
+
+Self-audit during the auth-mig session (2026-04-27, evening). The threat-model walkthrough listed each gap explicitly; each fix is independent and additive.
+
+### Resolution
+
+**Migration 037 — session telemetry columns** (originally landed as `035_session_telemetry.sql`; renamed to `037` in INC-017 to resolve a filename collision with `035_archive_alice_negative_state_tables.sql`):
+
+- Adds two nullable columns to `tb_subject_sessions`:
+  - `last_seen_at TIMESTAMPTZ` — refreshed on each successful `verifySubjectSession`
+  - `last_ip TEXT` — captured from `x-forwarded-for` / `x-real-ip` (Caddy sets these on the proxied request)
+- Pure ADD COLUMN with IF NOT EXISTS. Idempotent. Zero data movement.
+- Existing rows get NULL on both columns; the application populates them organically on the next verify per session.
+- Applied to Supabase 2026-04-27.
+
+**Application changes:**
+
+- `src/lib/utlRateLimit.ts` — new in-memory fixed-window rate limiter. `consume(key, limit, windowMs)` returns `{ allowed, remaining, retryAfterSeconds }`; `reset(key)` clears a bucket on success. Bucket map is process-scoped (single-process Astro/Node host = no cross-process coordination needed). Boundary effect at window rollover is acceptable for the threat model (slow brute-force, not coordinated burst).
+- `src/pages/api/subject/login.ts` — gates POST with `consume('login:<ip>', 10, 15 * 60 * 1000)`. Returns `429` with `Retry-After` header when rate-limited. Successful auth calls `reset('login:<ip>')` so a legitimate user who fat-fingers their password a few times before getting it right does not get throttled on their next session.
+- `src/lib/libSubjectAuth.ts` — `SESSION_DURATION_MS` reduced from 30 days to 7 days. `verifySubjectSession(token, ip?)` now takes an optional client-IP arg and, on a successful verify, fires a throttled UPDATE setting `last_seen_at = CURRENT_TIMESTAMP` and `last_ip = ${ip ?? null}`. The throttle is implemented in the WHERE clause: `last_seen_at IS NULL OR last_seen_at < CURRENT_TIMESTAMP - INTERVAL '5 minutes'`. A chatty client (every page load) generates one telemetry write per 5 minutes per session, not one per request.
+- `src/lib/libSubject.ts` — `getRequestSubject` now extracts the client IP via `x-forwarded-for` (first hop) / `x-real-ip` fallback, truncated to 45 chars (IPv6 textual maximum, also resists log injection). The IP is passed through to `verifySubjectSession`.
+- `src/pages/api/subject/login.ts` — cookie `Max-Age` reduced from 30 days to 7 days to match the server-side expiry. Without this the browser would keep sending the cookie for 23 days after it stopped being valid, causing silent re-auth prompts.
+
+**Tests:**
+
+- `tests/unit/rateLimit.test.ts` — six unit tests covering: first call passes with full remaining; blocks after limit hit; continues to block past 2× limit; different keys do not share counters; `reset` clears a specific key; window expiry resets the counter (uses `vi.useFakeTimers`).
+
+### Verification
+
+| Check | Pre-fix | Post-fix |
+|---|---|---|
+| Rate-limited login attempts beyond 10/15min/IP | unbounded | 429 with `Retry-After` |
+| Stolen-cookie usable window | 30 days | 7 days |
+| Successful re-auth resets the IP's bucket | n/a | yes (bucket cleared on `loginSubject` success) |
+| `tb_subject_sessions.last_seen_at` write rate per chatty session | n/a | ≤ 1 per 5 minutes (DB-side throttle in WHERE clause) |
+| `last_seen_at` column on Supabase | absent | present (verified via `information_schema.columns` query in INC-017 audit) |
+| `last_ip` column on Supabase | absent | present (verified same audit) |
+| Cookie `Max-Age` matches server expiry | 30d cookie / 30d server | 7d cookie / 7d server |
+| Unit tests | 78 passing | 84 passing (six new for rate limiter) |
+
+### What this does NOT fix
+
+- **Owner session-based auth.** Owner endpoints (`/`, `/observatory/*`, `/api/respond`, `/api/calibrate`) are still gated by Caddy basic-auth on `fweeo.com` via `OWNER_BASICAUTH_HASH`. The Phase 6 roadmap calls for replacing this with the same session-cookie model used for subjects; this incident does not advance that work. Tracked separately under "Owner session-based auth (replace Caddy basic-auth)" in the followup queue.
+- **Distributed rate-limit state.** `utlRateLimit` is in-memory and process-local. State is lost on restart and not shared across replicas. Single-process Hetzner deploy makes this acceptable today; if the deploy ever fans out to multiple processes or hosts, the limiter must be moved into Postgres or a shared store. The threat-model assumption (single-process host) is documented in `utlRateLimit.ts`.
+- **Token rotation on verify.** Sessions still bind to one opaque 32-byte token for their full 7-day life. Rotating the token on each verify (issuing a fresh cookie + invalidating the old one) would shrink the stolen-cookie window further but introduces complexity around concurrent-tab races. Deferred.
+- **Geo / device-fingerprint anomaly detection.** The `last_ip` column captures raw IP only — there is no automatic flag when a session's IP changes mid-life, no geo-IP lookup, no device-fingerprint. Telemetry is recorded so that future tooling can build the detection on top; the detection itself is out of scope.
+- **2FA / WebAuthn.** Not in v1. Owner-managed provisioning is still the recovery channel.
+
+### Cross-reference
+
+This incident dovetails with INC-017's "Side cleanups" section, which performed the related Supabase migration audit and the `035` filename-collision rename to `037`. INC-018 documents the threat-model substance of the auth pass; INC-017 documents the structural cleanup that landed alongside it.
+
+---
+
 ## INC-017: Entry states and reflections archived (orphan-table archival, second wave)
 
 **Date:** 2026-04-27
