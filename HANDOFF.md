@@ -2,7 +2,9 @@
 
 Single source of truth for system state, open work, and operational facts. Replaces the prior `HANDOFF_*.md` + `RESUME.md` pair.
 
-Updated 2026-04-27 evening. **Read this top-to-bottom before doing anything.**
+Updated 2026-04-27 late-evening. **Read this top-to-bottom before doing anything.**
+
+**Trust the code, not this file.** §4 below has burned twice — it's drifted ahead of the codebase faster than these notes get edited. Before claiming any item in §4 is broken, grep the relevant handler. The handoff is a hint, not the source of truth.
 
 ---
 
@@ -33,7 +35,7 @@ Production runs at https://fweeo.com on a Hetzner CCX13 (Hillsboro), backed by S
 
 ### Subject auth state
 - **Owner** (`subject_id=1`, username=`owner`): logs in via Caddy basic-auth on `fweeo.com`, no in-app login form. `set-owner-password` CLI is idempotent if rotation needed
-- **`ash`** (`subject_id=2`, tz=America/Chicago): provisioned. Subject-side onboarding bug — first-day login returns "no question today" because the scheduling script writes tomorrow only, not today. Tracked in §4
+- **`ash`** (`subject_id=2`, tz=America/Chicago): provisioned and submitting. Day-one journal entry + calibration entry confirmed 2026-04-27 late-evening. `seedUpcomingQuestions(id, 30)` plants today + 29 forward at provisioning (`libSchedule.ts:19`, i starts at 0), so first-day login is not blocked. The earlier handoff claim that subjects got "no question today" was stale — verified false by reading `subject/respond.ts` + `libSchedule.ts`
 - **Auth hardening (2026-04-27, INC-018):** sessions expire after 7 days (was 30); login rate-limited to 10 attempts / 15 min / IP via `utlRateLimit.ts`; `tb_subject_sessions.last_seen_at` + `last_ip` populated on each verify (throttled to one write per 5 minutes per session)
 
 ### Local laptop state
@@ -95,14 +97,18 @@ The `035` filename collision was resolved this session by renaming `035_session_
 
 ## 4. Open work (ordered by consequence)
 
-### Operational gaps in the subject path (real bugs)
+### Verified stale (do NOT readd unless code confirms)
 
-1. **Subject journal event-log parity.** `src/pages/api/subject/respond.ts` saves `tb_responses` + `tb_session_summaries` but NOT `tb_session_events` (the encrypted `event_log_json` + `keystroke_stream_json`). Calibration path saves them. Without parity, signals can't be recomputed offline for subject journals; the operator's offline rebuilds will silently skip subject data. Fix: mirror the calibration code's event-log save into respond.ts. ~30 min.
+The previous version of this section listed two "real bugs" in the subject path. Both were verified false on 2026-04-27 late-evening:
 
-2. **TZ scheduling for subjects.** `src/scripts/schedule-questions.ts` schedules tomorrow only; there's no nightly cron; `create-subject.ts` doesn't seed a today-scheduled question. Result: a subject who logs in on day-of-provisioning gets "no question today." Fix has three sub-tasks:
-   - Extend `create-subject.ts` to also schedule today + tomorrow at provision time, OR extend `/api/subject/today` to lazy-schedule on first request
-   - Wire `schedule-questions.ts` into systemd as `alice-schedule.timer` + `alice-schedule.service` on Hetzner (daily, fires per `iana_timezone` boundary)
-   - Verify on Supabase that `tb_question_corpus` is non-empty (else seed with curated set from owner's question history)
+- ~~Subject journal event-log parity.~~ `subject/respond.ts:134-147` already calls `saveSessionEvents` inside the transaction with both `event_log_json` and `keystroke_stream_json`, encrypted via libDb. The contamination-boundary docstring at the top of the file confirms the intent. Calibration path mirrors it (`subject/calibrate.ts:101-126`).
+- ~~TZ scheduling: subject gets "no question today" on day one.~~ `create-subject.ts` calls `seedUpcomingQuestions(id, 30)`. The seeder loops `for (i = 0; i < 30)` starting at `today` (`libSchedule.ts:19-22`), so today is `i=0`. Day-one login resolves a question. Empirically confirmed when `ash` submitted journal + calibration on her first day.
+
+### Subject path — actual remaining gaps
+
+1. **Schedule extension beyond day 30.** `create-subject.ts` plants 30 days; nothing on Hetzner extends past that. `src/scripts/schedule-questions.ts` exists but isn't wired to systemd. Once a subject hits day 31 they'll start hitting empty-schedule states unless the corpus-refresh path drains for them. Wire `schedule-questions.ts` into `alice-schedule.timer` + `.service`, fired daily, iterates active subjects and tops up to N days ahead per their `iana_timezone`. Verify `tb_question_corpus` is non-empty before relying on it (the corpus refresh workflow runs locally via `npm run corpus:refresh`).
+
+2. **Subject signals/embeddings drain is manual.** By design (contamination boundary), subject submissions do NOT trigger `embedResponse`, `computeAndPersistDerivedSignals`, `enqueueSignalJob`, or the daily delta on prod. The owner drains these LOCALLY via `npm run dev:full` + `npm run backfill -- --subject-id N` + signal backfill scripts. This is the "prod is signal-store-only" architecture, not a bug — but the operational ritual needs a checklist or a single `npm run drain-subjects` aggregator script. Right now the operator has to remember which scripts to run for each subject. Low-priority polish.
 
 ### Phase 6 future work (not bugs, just unbuilt)
 
@@ -112,7 +118,7 @@ The `035` filename collision was resolved this session by renaming `035_session_
 
 5. **Phase 6d — embedder queue.** Move `embedResponse` from inline-in-pipeline to its own `tb_signal_jobs` job kind (`embed`). Today, when TEI is offline, embeds skip and `npm run backfill` drains them later. With its own job kind, retries become automatic per job (quadratic backoff already implemented in `libSignalWorker`).
 
-6. **Phase 6e — observatory subject toggle + decrypt + notifications.** Owner can view any subject's data at `/observatory/?subjectId=N`. Subject can never see another subject's data. Owner gets a notification when a subject submits.
+6. ~~**Phase 6e — observatory subject toggle + decrypt + notifications.**~~ Shipped 2026-04-27 late-evening. Subject toggle on every observatory page (`?subjectId=N`), in-app inbox badge for new subject submissions, custom-styled subject picker (replaces native `<select>`), `/observatory/inbox` page. Replay redacts non-whitespace to `•` for non-owner subjects (subject content stays opaque to the operator, even though the operator holds the key). See `cmpObsToolbar.astro`, `libObservatorySubject.ts`, `playback/[questionId].ts:redactNonWhitespace`.
 
 ### Cosmetic / low-priority
 
@@ -129,6 +135,7 @@ From CLAUDE.md, memory, and the discipline established across INC-014 through IN
 1. **Single source of truth for measurements.** Rust signal engine. No TypeScript fallback. Health endpoint exposes `rustEngine: true/false`. A measurement instrument cannot have two implementations.
 2. **Logical foreign keys only.** No physical FK constraints. Application code is responsible for cascade deletes. See CLAUDE.md "Cascade Dependencies per Parent Table".
 3. **The black box is sacred.** Never surface to the user: their own response text, future-day question text, raw signal values, trait floats, behavioral metrics. The observatory is designer-facing; the journal is the user surface; never cross the streams.
+3a. **Subject content stays opaque to the operator.** Even though the operator holds the encryption key (one shared key, by design, so signals can be computed), the observatory binds itself not to display subject-authored plaintext — including via replay reconstruction. Server-side redaction in the playback handler (`playback/[questionId].ts`) replaces non-whitespace with `•` when `subjectId !== OWNER_SUBJECT_ID`. Do NOT add a "show body" or `?reveal=1` affordance. Subject content is meant to leave the encrypted store only via the future Phase 6c export endpoint, which lives behind explicit consent + audit rows.
 4. **Archival means removal, not stubbing.** When a feature is deprecated, all code goes; data is preserved under `zz_archive_*` tables. Both producer AND consumer sides of the dependency edge must be cut in the archival commit (the lesson from INC-014/015/016/017).
 5. **Prod is signal-store-only.** Embedding (TEI/Qwen) and LLM (Anthropic) work happen LOCALLY only via `npm run dev:full`. Never on prod.
 6. **Contamination boundary.** Subject submissions NEVER trigger LLM/embed/signal jobs. The boundary docstrings in `src/pages/api/subject/respond.ts` and `src/pages/api/subject/calibrate.ts` are load-bearing.
@@ -142,12 +149,12 @@ From CLAUDE.md, memory, and the discipline established across INC-014 through IN
 ## 6. Operational state (2026-04-27 session end)
 
 - **Owner** (subject_id=1): 73+ historical responses, working through corpus.
-- **Ash** (subject_id=2): provisioned, blocked on TZ scheduling (§4 item 2).
+- **Ash** (subject_id=2): provisioned and active. Day-one journal + calibration submitted 2026-04-27. Signals/embeds drain locally (see §4 item 2).
 - **TEI**: Qwen3-Embedding-0.6B at `localhost:8090` when running locally. Not on prod.
 - **ANTHROPIC_API_KEY**: in `.env` and `/etc/alice/secrets.env`. Used only by local LLM workflows (corpus refresh, etc.) — never on prod.
-- **Tests**: 8 unit suites, 84 unit tests, all passing. DB tests run on CI only (Docker required).
+- **Tests**: 26 test files / 151 tests passing on local Node 25 (was 8/84 on prior handoff — count grew with the schema-unification + auth-hardening + observatory work). DB tests use testcontainers and run on CI / local Docker.
 - **TS check**: clean on every file touched in recent sessions. Pre-existing strict-null noise tracked in §4 item 7.
-- **Working tree**: should be clean after this handoff lands. Verify with `git status --short`.
+- **Working tree**: typically clean after handoff lands; the user has automation that auto-commits work in progress. Verify with `git status --short` and look for unstaged hardening edits.
 
 ---
 
@@ -246,6 +253,7 @@ npm run corpus:approve data/corpus-candidates-YYYY-MM-DD.md
 
 ## 10. Recent provenance trail (for cross-reference)
 
+- **2026-04-27 late-evening (Phase 6e)**: Observatory subject toggle + inbox + replay redaction. New: `libObservatorySubject.ts` resolver (400/404 on bad input), `cmpObsToolbar.astro` with custom button+listbox dropdown (CSS-themable, full keyboard support), `/api/observatory/{subjects,inbox}.ts`, `/observatory/inbox.astro`. All 11 observatory API handlers + 7 pages now propagate `?subjectId=N`. Subject-content opacity rule established and saved to memory: when `subjectId !== OWNER_SUBJECT_ID`, the playback handler redacts non-whitespace in reconstructed text to `•` server-side so plaintext never crosses the wire (operator holds the key but the UI binds itself not to surface subject content). May be promoted to INC-019 in METHODS_PROVENANCE.md if you want the formal record.
 - **INC-018** (2026-04-27): Subject-auth hardening (rate limit + 7-day expiry + session telemetry + IP capture)
 - **INC-017** (2026-04-27): Entry states + reflections archive (this session); migration 035 collision resolved → 037
 - **INC-016** (2026-04-27): Alice-negative state/dynamics/coupling tables archived (consumer-side scrub)
