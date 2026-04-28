@@ -106,9 +106,16 @@ The previous version of this section listed two "real bugs" in the subject path.
 
 ### Subject path — actual remaining gaps
 
-1. **Schedule extension beyond day 30.** `create-subject.ts` plants 30 days; nothing on Hetzner extends past that. `src/scripts/schedule-questions.ts` exists but isn't wired to systemd. Once a subject hits day 31 they'll start hitting empty-schedule states unless the corpus-refresh path drains for them. Wire `schedule-questions.ts` into `alice-schedule.timer` + `.service`, fired daily, iterates active subjects and tops up to N days ahead per their `iana_timezone`. Verify `tb_question_corpus` is non-empty before relying on it (the corpus refresh workflow runs locally via `npm run corpus:refresh`).
+The schedule-extension flow is intentionally manual and collective, not automated. Do NOT wire `schedule-questions.ts` into systemd. The design (per CLAUDE.md "seed questions" + memory "Subject creation contract"):
 
-2. **Subject signals/embeddings drain is manual.** By design (contamination boundary), subject submissions do NOT trigger `embedResponse`, `computeAndPersistDerivedSignals`, `enqueueSignalJob`, or the daily delta on prod. The owner drains these LOCALLY via `npm run dev:full` + `npm run backfill -- --subject-id N` + signal backfill scripts. This is the "prod is signal-store-only" architecture, not a bug — but the operational ritual needs a checklist or a single `npm run drain-subjects` aggregator script. Right now the operator has to remember which scripts to run for each subject. Low-priority polish.
+- Each subject gets 30 personal seeds at creation (`seedUpcomingQuestions`, additive, idempotent).
+- Once any subject's unanswered-seed count drops to ≤ 5, the health endpoint flags the alert (`api/health.ts:208`) and the owner navbar surfaces a pending-work badge (`pages/index.astro:663`).
+- Owner runs `npm run corpus:refresh` → reviews `data/corpus-candidates-YYYY-MM-DD.md` → marks approved with `[x]` → runs `npm run corpus:approve <file>`. New questions are inserted into the shared `tb_question_corpus` (additive, never overwrites a subject's personal queue). Subjects pull from corpus once their personal seeds run out.
+- Owner approves all — nothing is automatic on prod.
+
+So the only "subject-path" follow-up is operational polish, not a bug:
+
+1. **Subject signals/embeddings drain is manual.** By design (contamination boundary), subject submissions do NOT trigger `embedResponse`, `computeAndPersistDerivedSignals`, `enqueueSignalJob`, or the daily delta on prod. The owner drains these LOCALLY via `npm run dev:full` + `npm run backfill -- --subject-id N` + signal backfill scripts. This is the "prod is signal-store-only" architecture, not a bug — but the operational ritual needs a checklist or a single `npm run drain-subjects` aggregator script. Right now the operator has to remember which scripts to run for each subject. Low-priority polish.
 
 ### Phase 6 future work (not bugs, just unbuilt)
 
