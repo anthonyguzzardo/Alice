@@ -113,9 +113,9 @@ The schedule-extension flow is intentionally manual and collective, not automate
 - Owner runs `npm run corpus:refresh` → reviews `data/corpus-candidates-YYYY-MM-DD.md` → marks approved with `[x]` → runs `npm run corpus:approve <file>`. New questions are inserted into the shared `tb_question_corpus` (additive, never overwrites a subject's personal queue). Subjects pull from corpus once their personal seeds run out.
 - Owner approves all — nothing is automatic on prod.
 
-So the only "subject-path" follow-up is operational polish, not a bug:
+~~So the only "subject-path" follow-up is operational polish, not a bug:~~
 
-1. **Subject signals/embeddings drain is manual.** By design (contamination boundary), subject submissions do NOT trigger `embedResponse`, `computeAndPersistDerivedSignals`, `enqueueSignalJob`, or the daily delta on prod. The owner drains these LOCALLY via `npm run dev:full` + `npm run backfill -- --subject-id N` + signal backfill scripts. This is the "prod is signal-store-only" architecture, not a bug — but the operational ritual needs a checklist or a single `npm run drain-subjects` aggregator script. Right now the operator has to remember which scripts to run for each subject. Low-priority polish.
+1. ~~**Subject signals/embeddings drain is manual.**~~ Shipped 2026-04-27 late-evening as `npm run drain-subjects`. Composes embeddings → signals → reconstruction → daily-deltas → profile via subprocess fan-out. Default = loop all active subjects; `--subject-id N` scopes to one; `--skip A,B` bypasses named stages (e.g. when TEI is down). Each existing backfill is already idempotent so the orchestrator inherits that — re-runs skip already-correct rows. Verified: full drain across owner (41 sessions caught up, 5 new reconstructions, 1 new daily delta) and ash (2 sessions backfilled, profile created), 158.6s total, 0 failures. See `src/scripts/drain-subjects.ts`.
 
 ### Phase 6 future work (not bugs, just unbuilt)
 
@@ -260,6 +260,7 @@ npm run corpus:approve data/corpus-candidates-YYYY-MM-DD.md
 
 ## 10. Recent provenance trail (for cross-reference)
 
+- **2026-04-27 late-evening (post-Phase 6e polish)**: `npm run drain-subjects` orchestrator landed at `src/scripts/drain-subjects.ts`. Subprocess fan-out across the routine backfills (embeddings, signals, reconstruction, daily-deltas, profile); default loops all active subjects; `--subject-id N` and `--skip A,B` flags. Verified end-to-end against both subjects.
 - **2026-04-27 late-evening (Phase 6e)**: Observatory subject toggle + inbox + replay redaction. New: `libObservatorySubject.ts` resolver (400/404 on bad input), `cmpObsToolbar.astro` with custom button+listbox dropdown (CSS-themable, full keyboard support), `/api/observatory/{subjects,inbox}.ts`, `/observatory/inbox.astro`. All 11 observatory API handlers + 7 pages now propagate `?subjectId=N`. Subject-content opacity rule established and saved to memory: when `subjectId !== OWNER_SUBJECT_ID`, the playback handler redacts non-whitespace in reconstructed text to `•` server-side so plaintext never crosses the wire (operator holds the key but the UI binds itself not to surface subject content). May be promoted to INC-019 in METHODS_PROVENANCE.md if you want the formal record.
 - **INC-018** (2026-04-27): Subject-auth hardening (rate limit + 7-day expiry + session telemetry + IP capture)
 - **INC-017** (2026-04-27): Entry states + reflections archive (this session); migration 035 collision resolved → 037
