@@ -52,7 +52,7 @@ underlying data and aren't separately meaningful.
 
 **Delete.** You can close your account at any time. Your journal content
 and behavioral signals are removed from the active system immediately
-and from encrypted backups within up to 30 days as the normal backup
+and from encrypted backups within up to 7 days as the normal backup
 rotation overwrites them. After that, no copy remains. A minimal record
 (subject ID, consent acknowledgments, deletion timestamp) is retained
 indefinitely as a research integrity audit trail.

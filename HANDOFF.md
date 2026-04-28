@@ -281,11 +281,11 @@ npm run corpus:approve data/corpus-candidates-YYYY-MM-DD.md
 - Land production data via test scripts. Smoke tests against Supabase always clean up after themselves: every fake subject, every test session, every audit row inserted for verification gets `DELETE`'d before the script exits. Production data only lands when a real subject performs a real action through the UI. This rule is the reason the JSONB-double-encoding bug (discovered 2026-04-28 during step 7 smoke testing) didn't corrupt any production audit data — every test row that hit the bug was deleted before it could matter. Don't erode this. If you find yourself thinking "I'll clean it up later" during a smoke test, stop and clean it up now.
 
 **Pre-step-5 checklist (do not ship middleware until ALL five are checked):**
-1. Hetzner snapshot retention verified in console (consent doc says "up to 30 days")
-2. Supabase backup window verified in console (same)
-3. Consent doc updated if either number above differs from "up to 30 days"
+1. ~~Hetzner snapshot retention verified in console~~ Done 2026-04-28 via Hetzner Cloud panel: **7 days** (Backups add-on, fixed 7-slot rolling rotation; 2 of 7 slots filled at time of check).
+2. ~~Supabase backup window verified in console~~ Done 2026-04-28 via Supabase dashboard: **7 days** (Pro tier daily backups, no PITR add-on).
+3. ~~Consent doc updated if either number differs~~ Done 2026-04-28: edited `docs/consent-v1.md` and `src/pages/account/delete.astro` from "up to 30 days" to "up to 7 days" — both numbers are 7, so 7 is honest for both copies. **In-place edit, NOT a version bump**, because v1 has no real acknowledgments yet (ash hasn't smoke-tested; the only `tb_subject_consent` rows that ever existed were synthetic test rows that were cleaned up). See substrate decision §11 about pre-publication consent edits.
 4. Ash smoke test on step 4 complete: log in → /consent renders → byte-for-byte check rendered HTML against `docs/consent-v1.md` → click acknowledge → verify journal redirect → query `tb_subject_consent` + `tb_data_access_log` directly to confirm both rows landed atomically
-5. Stale-version reload UX (banner + disabled-button-until-reviewed) decided implemented (was: implemented in step 4, in `consent.astro` via `?stale=1` query param) OR explicitly deferred with a known-issue note
+5. ~~Stale-version reload UX (banner + disabled-button-until-reviewed)~~ Done in step 4 via `?stale=1` query param.
 
 ---
 
@@ -318,6 +318,8 @@ Procedural-level architectural decisions that don't show up in CLAUDE.md's stack
 - **Migrations are operator-applied with pre-flight guards.** No automated migration runner — every migration runs by hand against Supabase via `psql -v ON_ERROR_STOP=1 -f db/sql/migrations/NNN_*.sql`. Migrations that change column types or constraints include `DO $$` pre-flight blocks that abort with a clear error if assumed pre-state isn't true (e.g. `RAISE EXCEPTION '039 expects 0 rows'...`). Forces the operator to re-read the migration before clobbering unexpected state.
 
 - **Confirmation friction for destructive subject actions.** HTTP `POST /api/subject/account/delete` requires `body.confirmation === subject.username`; CLI scripts (`factory-reset`, `delete-subject`) prompt for the same string at the terminal. No y/N — typing the username is the slow-down signal that survives muscle memory.
+
+- **Consent doc lifecycle: pre-publication is mutable, post-acknowledgment is immutable.** A consent version is "published" the moment the first real subject acknowledges it (i.e. a non-test row lands in `tb_subject_consent`). Before that, the doc text can be edited in place — the registry version stays the same, no v2 bump needed. After that, any text change requires a new version (v2) added to `CONSENT_VERSIONS`, and the previous version's text stays readable forever from the consent-history view on `/account`. The 2026-04-28 backup-window edit (30 days → 7 days) was an in-place pre-publication edit, honest because no real acknowledgments existed yet. Operationally: check `SELECT count(*) FROM tb_subject_consent WHERE consent_version = 'vN'` before editing — if zero, in-place is fine; if non-zero, bump to v(N+1).
 
 ---
 
