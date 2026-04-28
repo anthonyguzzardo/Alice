@@ -113,7 +113,7 @@ import '../../styles/styObservatory.css';
             ? `<a class="action-btn" href="/observatory/replay/${s.question_id}">▶ replay</a>`
             : '<span class="action-btn-muted">—</span>';
           return `<tr>
-            <td>${s.date}</td>
+            <td><a href="/observatory/entry/${s.response_id}">${s.date}</a></td>
             <td class="meta">${meta}</td>
             <td>${replay}</td>
           </tr>`;
