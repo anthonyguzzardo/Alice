@@ -271,6 +271,44 @@
         border-color: var(--border-focus);
         color: var(--text);
       }
+
+      /* Footer links — settings + consent. Small, muted, bottom-right.
+         Two italic text links so the chrome stays out of the way of the
+         journal interface. Hidden on the deepening fades so they don't
+         compete with the writing surface as the room dims. */
+      .footer-links {
+        position: fixed;
+        bottom: 1.5rem;
+        right: 2rem;
+        display: flex;
+        gap: 1.25rem;
+        align-items: center;
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-size: 0.95rem;
+        font-style: italic;
+        font-weight: 300;
+        z-index: 10;
+        opacity: 1;
+        transition: opacity 2s ease;
+      }
+      body.deepening-2 .footer-links { opacity: 0.45; }
+      body.deepening-3 .footer-links { opacity: 0.18; }
+      .footer-links a {
+        color: var(--text-faint);
+        text-decoration: none;
+        transition: color 0.3s ease;
+      }
+      .footer-links a:hover {
+        color: var(--text-muted);
+      }
+      @media (max-width: 600px) {
+        .footer-links {
+          bottom: 1rem;
+          right: 1.25rem;
+          font-size: 0.85rem;
+          gap: 1rem;
+        }
+      }
     </style>
   </head>
   <body>
@@ -282,6 +320,10 @@
       <div class="date" id="date"></div>
       <div class="question loading" id="question">...</div>
       <div id="input-area"></div>
+    </div>
+    <div class="footer-links">
+      <a href="/account">settings</a>
+      <a href="/consent">consent</a>
     </div>
 
     <script>

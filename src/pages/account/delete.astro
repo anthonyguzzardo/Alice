@@ -15,6 +15,15 @@
  * Right to leave is unconditional. The middleware whitelist
  * (`/api/subject/account/delete`) is what closes the loop server-side;
  * here we just don't redirect to /consent.
+ *
+ * Policy note (becomes load-bearing on the first v2 consent bump):
+ * delete BEHAVIOR is governed by current code, not by the consent version
+ * the subject acknowledged. The "What gets wiped" and "What stays" lists
+ * below are the operational truth at delete-time — they describe what
+ * `deleteSubjectAndData` actually does today, not what consent-v1 (or
+ * whichever version the subject last acknowledged) promised. If a future
+ * consent version changes the retention policy, both this page's copy
+ * AND the cascade implementation in libDelete.ts must be updated together.
  */
 import { getSubjectConsentStatus } from '../../lib/libConsent.ts';
 
