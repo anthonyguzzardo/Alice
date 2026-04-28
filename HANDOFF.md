@@ -255,6 +255,7 @@ npm run corpus:approve data/corpus-candidates-YYYY-MM-DD.md
 - Resurrect alice-negative artistic rendering. Witness states / semantic 11D / trait dynamics / coupling matrices / emotion-behavior coupling / 7D entry-state persistence are all archived and stay archived.
 - Stub functions for archived features. Archival means removal, not stubbing.
 - Touch the `te_*` enum tables that reference archived data (`te_reflection_type`, `embedding_source_id = 3` on `te_embedding_source`) — they're harmless static dictionary entries; removing them risks orphaning archived rows.
+- Ship the consent-gate middleware (Phase 6c step 5) without the consent endpoint + page (step 4). Ship steps 4 and 5 in the same deploy, or 4 first then 5. **Never 5 alone** — middleware-without-the-consent-endpoint locks every non-owner subject out of `/api/subject/*` with no acknowledgment path. The whitelist (`/api/subject/consent`, `/logout`, `/export`, `/account/delete`) is what closes that hole, and it's part of the middleware change — so the dangerous state is "middleware without whitelist" or "whitelist routes that don't exist yet."
 
 ---
 

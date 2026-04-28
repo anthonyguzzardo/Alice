@@ -1,0 +1,303 @@
+---
+/**
+ * /consent — subject reads and acknowledges the current consent version.
+ *
+ * Server-side renders the current consent doc (markdown → HTML via marked).
+ * The page embeds CONSENT_VERSION as a `data-version` attribute on the
+ * acknowledge button so the POST sends back the version the subject
+ * actually saw rendered, not a hardcoded client-side string. Stale-cache
+ * scenarios (subject has the page open when operator bumps to v2) are
+ * caught by the endpoint's version check, which returns 400 + the current
+ * version; the client reloads to show the new doc.
+ *
+ * Reachable to any authenticated subject. Gets added to the consent-gate
+ * whitelist in step 5 so subjects can acknowledge even when otherwise
+ * gated. Owner skips this — they bypass subject middleware via Caddy
+ * basic-auth and don't need to consent (this is the operator's instrument).
+ */
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+import { marked } from 'marked';
+import {
+  CONSENT_VERSION,
+  CONSENT_VERSIONS,
+  getSubjectConsentStatus,
+} from '../lib/libConsent.ts';
+
+const subject = Astro.locals.subject;
+if (!subject) {
+  return Astro.redirect('/enter');
+}
+if (subject.is_owner) {
+  return Astro.redirect('/');
+}
+if (subject.must_reset_password) {
+  return Astro.redirect('/reset-password');
+}
+
+const currentVersion = CONSENT_VERSIONS.find((v) => v.version === CONSENT_VERSION);
+if (!currentVersion) {
+  throw new Error(`CONSENT_VERSION "${CONSENT_VERSION}" missing from CONSENT_VERSIONS registry`);
+}
+
+// Anchor the docs path to this file's location, then climb to project root.
+// Mirrors the pattern in libDocs.ts / libPapers.ts so behavior is consistent
+// across dev, build, and the systemd-launched node server on Hetzner.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const projectRoot = path.resolve(__dirname, '../../');
+const docPath = path.resolve(projectRoot, currentVersion.docPath);
+const md = readFileSync(docPath, 'utf-8');
+const html = await marked.parse(md);
+
+const status = await getSubjectConsentStatus(subject.subject_id);
+const alreadyAcknowledged = status.isCurrent;
+const previousVersion = !alreadyAcknowledged && status.currentVersion ? status.currentVersion : null;
+const previousAcknowledgedAt = status.acknowledgedAtUtc ? status.acknowledgedAtUtc.slice(0, 10) : null;
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Alice — consent</title>
+    <script is:inline>
+      (function () {
+        var t = localStorage.getItem('alice-theme') || 'light';
+        document.documentElement.setAttribute('data-theme', t);
+      })();
+    </script>
+    <style is:global>
+      @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap');
+
+      :root {
+        --bg: #f5f2ed;
+        --text: #1a1a1a;
+        --text-muted: #6b6560;
+        --text-faint: #9a9590;
+        --border: #ccc5bc;
+        --border-focus: #8a8580;
+        --bg-input: #ebe7e1;
+        --btn-bg: #e0dbd5;
+        --btn-hover: #ccc5bc;
+        --accent: #7a5a44;
+      }
+
+      [data-theme="dark"] {
+        --bg: #141210;
+        --text: #ffffff;
+        --text-muted: #7a7570;
+        --text-faint: #555;
+        --border: #333;
+        --border-focus: #666;
+        --bg-input: #161514;
+        --btn-bg: #222;
+        --btn-hover: #444;
+        --accent: #a08a6e;
+      }
+
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      body {
+        font-family: 'EB Garamond', Georgia, serif;
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+        padding: 3rem 1.5rem 5rem;
+      }
+
+      .consent-wrap {
+        max-width: 680px;
+        width: 100%;
+        margin: 0 auto;
+      }
+
+      .consent-prior {
+        font-size: 0.95rem;
+        color: var(--text-muted);
+        background: var(--bg-input);
+        padding: 0.85rem 1rem;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        margin-bottom: 2rem;
+        line-height: 1.5;
+      }
+      .consent-prior code {
+        font-family: 'SF Mono', Menlo, monospace;
+        font-size: 0.85em;
+      }
+
+      .consent-doc {
+        font-size: 1.05rem;
+        line-height: 1.7;
+        color: var(--text);
+      }
+      .consent-doc h1 {
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-size: 2rem;
+        font-weight: 400;
+        margin: 0 0 1.5rem;
+        text-align: center;
+      }
+      .consent-doc h2 {
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-size: 1.4rem;
+        font-weight: 400;
+        margin: 1.8rem 0 0.5rem;
+      }
+      .consent-doc p { margin: 0.7rem 0; }
+      .consent-doc ul { margin: 0.7rem 0 0.7rem 1.4rem; }
+      .consent-doc li { margin: 0.3rem 0; }
+      .consent-doc strong { font-weight: 500; color: var(--text); }
+      .consent-doc em { font-style: italic; color: var(--text-muted); }
+      .consent-doc code {
+        font-family: 'SF Mono', Menlo, monospace;
+        font-size: 0.9em;
+        background: var(--bg-input);
+        padding: 0.1em 0.3em;
+        border-radius: 3px;
+      }
+      .consent-doc a { color: var(--accent); text-decoration: underline; }
+
+      .consent-actions {
+        margin-top: 2.5rem;
+        text-align: center;
+      }
+      .consent-version {
+        display: block;
+        font-family: 'SF Mono', Menlo, monospace;
+        font-size: 0.85rem;
+        color: var(--text-faint);
+        margin-bottom: 1rem;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+      .consent-btn {
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-size: 1.15rem;
+        padding: 0.7rem 2.2rem;
+        background: var(--btn-bg);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        color: var(--text);
+        cursor: pointer;
+        transition: background 0.2s ease;
+      }
+      .consent-btn:hover { background: var(--btn-hover); }
+      .consent-btn:disabled { opacity: 0.4; cursor: default; }
+      .consent-decline {
+        display: inline-block;
+        margin-left: 1rem;
+        color: var(--text-muted);
+        text-decoration: none;
+        font-size: 1.05rem;
+      }
+      .consent-decline:hover { color: var(--text); }
+
+      .consent-status {
+        text-align: center;
+        margin-top: 2.5rem;
+        font-size: 1rem;
+        color: var(--text-muted);
+        padding: 1.5rem;
+        background: var(--bg-input);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+      }
+      .consent-status code {
+        font-family: 'SF Mono', Menlo, monospace;
+        font-size: 0.9em;
+      }
+      .consent-status .when {
+        font-family: 'SF Mono', Menlo, monospace;
+        font-size: 0.85rem;
+      }
+      .consent-status a {
+        color: var(--text);
+        text-decoration: underline;
+      }
+      .consent-error {
+        color: #b5603f;
+        font-size: 0.95rem;
+        margin-top: 0.8rem;
+        min-height: 1.4em;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="consent-wrap">
+      {previousVersion && (
+        <div class="consent-prior">
+          You previously acknowledged version <code>{previousVersion}</code>
+          on <span class="when">{previousAcknowledgedAt}</span>. The terms have
+          been updated; please review and re-acknowledge below.
+        </div>
+      )}
+
+      <div class="consent-doc" set:html={html}></div>
+
+      {alreadyAcknowledged ? (
+        <div class="consent-status">
+          You acknowledged version <code>{status.currentVersion}</code> on
+          <span class="when">{previousAcknowledgedAt}</span>.
+          <div style="margin-top: 1rem;">
+            <a href="/subject">→ back to journal</a>
+          </div>
+        </div>
+      ) : (
+        <div class="consent-actions">
+          <span class="consent-version">version {CONSENT_VERSION}</span>
+          <button class="consent-btn" id="consent-btn" data-version={CONSENT_VERSION}>I acknowledge</button>
+          <a href="#" class="consent-decline" id="consent-decline">decline + log out</a>
+          <div class="consent-error" id="error-msg"></div>
+        </div>
+      )}
+    </div>
+
+    <script>
+      const btn = document.getElementById('consent-btn') as HTMLButtonElement | null;
+      const errorMsg = document.getElementById('error-msg');
+      const declineLink = document.getElementById('consent-decline') as HTMLAnchorElement | null;
+
+      if (declineLink) {
+        declineLink.addEventListener('click', async (e) => {
+          e.preventDefault();
+          await fetch('/api/subject/logout', { method: 'POST' });
+          window.location.href = '/enter';
+        });
+      }
+
+      if (btn) {
+        btn.addEventListener('click', async () => {
+          const version = btn.dataset.version;
+          if (!version) return;
+          btn.disabled = true;
+          if (errorMsg) errorMsg.textContent = '';
+
+          const res = await fetch('/api/subject/consent', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ version }),
+          });
+
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({})) as { error?: string; current?: string };
+            if (body.error === 'stale_version' && body.current) {
+              if (errorMsg) errorMsg.textContent = `terms updated to ${body.current}; reloading…`;
+              setTimeout(() => window.location.reload(), 1200);
+              return;
+            }
+            if (errorMsg) errorMsg.textContent = body.error ?? 'consent failed; try again';
+            btn.disabled = false;
+            return;
+          }
+
+          // Whether newly acknowledged or already current, the next step is
+          // the journal — same client behavior either branch.
+          window.location.href = '/subject';
+        });
+      }
+    </script>
+  </body>
+</html>
