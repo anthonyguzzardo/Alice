@@ -39,11 +39,16 @@ import { defineMiddleware } from 'astro:middleware';
 import { SESSION_COOKIE, getRequestSubject } from './lib/libSubject.ts';
 import { getSubjectConsentStatus } from './lib/libConsent.ts';
 
-// Routes that do not require auth at all. Login itself, plus the static
-// assets Astro serves out of the build (handled below by extension).
+// Routes that do not require auth at all. Login itself, the static
+// assets Astro serves out of the build (handled below by extension), and
+// logout (works for owner + subject; idempotent if no session exists).
+// `/api/subject/logout` lives under `/api/subject/*` for path consistency
+// with login but is universal — owner must be able to call it without
+// hitting the subject-only gate downstream.
 const PUBLIC_PATHS = new Set<string>([
   '/login',
   '/api/subject/login',
+  '/api/subject/logout',
   '/favicon.ico',
   '/robots.txt',
 ]);
