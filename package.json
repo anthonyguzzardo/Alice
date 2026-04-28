@@ -22,7 +22,9 @@
     "test:coverage": "vitest run --coverage",
     "smoke": "tsx scripts/smokeTestPhase23.ts",
     "create-subject": "tsx src/scripts/create-subject.ts",
-    "set-owner-password": "tsx src/scripts/set-owner-password.ts"
+    "set-owner-password": "tsx src/scripts/set-owner-password.ts",
+    "factory-reset": "tsx src/scripts/factory-reset.ts",
+    "delete-subject": "tsx src/scripts/delete-subject.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.88.0",

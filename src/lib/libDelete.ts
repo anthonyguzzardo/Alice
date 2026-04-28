@@ -148,6 +148,83 @@ export interface DeleteSubjectResult {
   originalUsername: string;
 }
 
+export interface FactoryResetArgs {
+  subjectId: number;
+  /** Who initiated. Factory reset is operator-only by design (memory rule). */
+  actor: DataAccessActor;
+  actorSubjectId?: number | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+}
+
+export interface FactoryResetResult {
+  dataAccessLogId: number;
+  rowCounts: Record<string, number>;
+  /** Subject's current username (unchanged by reset; kept here for the CLI summary). */
+  username: string;
+}
+
+/**
+ * Operator-driven factory reset. Wipes the subject's response history +
+ * derived signals + events + embeddings + profile + residuals + deltas,
+ * but PRESERVES the account, the seed/corpus schedule (`tb_questions`),
+ * the active sessions (`tb_subject_sessions`), the consent acknowledgments,
+ * and the audit log. The subject can rejourney from the same seed sequence
+ * on next login — preserving onboarding state per the memory rule
+ * `feedback_factory_reset_semantics`.
+ *
+ * Operator-only by design. Subjects who want a clean slate close their
+ * account (full delete) and the operator re-provisions them; that path is
+ * cleaner than letting a subject self-erase content while keeping the
+ * same identity.
+ */
+export async function factoryResetSubject(args: FactoryResetArgs): Promise<FactoryResetResult> {
+  if (args.subjectId === OWNER_SUBJECT_ID) {
+    throw new OwnerProtectedError();
+  }
+
+  return await sql.begin(async (tx) => {
+    const lookup = await tx`
+      SELECT subject_id, username, is_owner
+      FROM tb_subjects
+      WHERE subject_id = ${args.subjectId}
+      LIMIT 1
+    ` as Array<{ subject_id: number; username: string; is_owner: boolean }>;
+
+    const subj = lookup[0];
+    if (!subj) throw new SubjectNotFoundError(args.subjectId);
+    if (subj.is_owner) throw new OwnerProtectedError();
+    if (subj.username.startsWith('_deleted_')) {
+      throw new AlreadyDeletedError(args.subjectId, subj.username);
+    }
+
+    const rowCounts: Record<string, number> = {};
+    for (const table of FACTORY_RESET_TABLES) {
+      const result = await tx.unsafe(
+        `DELETE FROM alice.${table} WHERE subject_id = $1`,
+        [args.subjectId],
+      );
+      rowCounts[table] = result.count ?? 0;
+    }
+
+    const dataAccessLogId = await recordDataAccess({
+      subjectId: args.subjectId,
+      action: 'factory_reset',
+      actor: args.actor,
+      actorSubjectId: args.actorSubjectId ?? null,
+      notes: {
+        rowCounts,
+        username: subj.username,
+      },
+      ipAddress: args.ipAddress ?? null,
+      userAgent: args.userAgent ?? null,
+      tx,
+    });
+
+    return { dataAccessLogId, rowCounts, username: subj.username };
+  });
+}
+
 /**
  * Full-account delete cascade. Wipes all subject-bearing rows in 23
  * tables, soft-deletes the tb_subjects row, writes one audit row. All

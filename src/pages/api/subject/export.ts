@@ -307,6 +307,13 @@ export const GET: APIRoute = async ({ request, locals }) => {
   const subject = locals.subject;
   if (!subject) return jsonError(401, 'unauthorized');
 
+  // Defense-in-depth: middleware's verifySubjectSession already filters by
+  // `s.is_active = TRUE`, so a soft-deleted subject's cookie would resolve
+  // to `null` (and would be caught by the !subject check above). Restating
+  // the rule at the data-access boundary protects against a future auth
+  // refactor that accidentally lets a deleted subject through.
+  if (!subject.is_active) return jsonError(403, 'account_deleted');
+
   const exportedAt = new Date().toISOString();
   const ipAddress = extractClientIp(request);
   const userAgent = extractUserAgent(request);
