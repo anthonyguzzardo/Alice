@@ -8,6 +8,36 @@ Newest first.
 
 ---
 
+## INC-022: Export-audit completion row (v2)
+
+**Date:** 2026-04-29
+**Type:** Audit-trail strengthening (closes a documented v1 gap; no data-correctness issue, no historical reprocessing).
+
+### What was wrong
+
+`/api/subject/export` (Phase 6c, shipped 2026-04-28) wrote exactly one `tb_data_access_log` row per export request: a `{status: 'started'}` entry inserted BEFORE the response stream opens. No partner row was written at stream completion. The audit log could therefore distinguish "subject downloaded successfully" from "stream died after 30%" only by *absence* of a corresponding completion row, not by an explicit success flag. The consent doc's "audit trail" promise reads slightly stronger than the v1 implementation honored: an analyst inspecting the log six months later would have to infer state from row absence rather than read it from a notes field.
+
+### Discovery method
+
+Documented gap in HANDOFF §4 item 10 from the day Phase 6c shipped, not a bug surfaced from the field. Closed when the punch list got down to it.
+
+### Resolution
+
+`/api/subject/export` now writes a second `tb_data_access_log` row at the end of the stream's `start` callback, immediately before `controller.close()`. The completion row carries the same `data_access_action_id = 1 (export)` and a `notes` object linking back to the start row:
+
+- Success path: `{status: 'completed', startedLogId, schemaVersion, totalRows, tableRowCounts}`.
+- Error path (caught inside `start`): `{status: 'error', startedLogId, schemaVersion, totalRows, tableRowCounts, errorMessage}`. The same line that writes the in-stream `{type: 'error'}` marker now also writes this audit row.
+
+Both writes are wrapped in their own try/catch so an audit-write failure never masquerades as a stream failure — the rows already streamed are valid, and the worst-case "no completion row" state degrades to v1 behavior (still recoverable by absence-inference). Append-only invariant on `tb_data_access_log` is preserved: no UPDATEs on the started row.
+
+### Scope of impact
+
+No production data was wrong — this is audit-trail strengthening, not correction. No historical reprocessing. Future exports leave a complete forensic trace; legacy "started-only" rows from 2026-04-28 are untouched and remain interpretable by their own v1 absence-of-completion convention.
+
+The only gap v2 does NOT close: mid-stream consumer disconnect (the client closes the socket between the start row and the end marker) still falls into "started + no completion" because the disconnect never enters the `start` callback's catch block. A `cancel()` handler on the ReadableStream is the v3 extension if that ever becomes a load-bearing forensic question.
+
+---
+
 ## INC-021: `tb_responses.dttm_created_utc` TZ-skew via bare-timestamp implicit cast
 
 **Date:** 2026-04-28

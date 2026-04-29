@@ -22,12 +22,19 @@
  * row decryption (not batch) means plaintext exists only long enough to
  * `JSON.stringify` and `controller.enqueue` before the row is GC'able.
  *
- * Audit ordering: the `tb_data_access_log` row lands BEFORE the response
- * stream starts. A connection drop mid-export still leaves a "subject
- * exported at T" trace; the `notes` JSON on the audit row carries
- * `status: 'started'` so a future analyst can distinguish started-but-
- * incomplete from started-and-completed (we don't currently write a
- * completion row — adding one is fine when there's a use case).
+ * Audit ordering (v2, INC-022 2026-04-29): a `status: 'started'` row in
+ * `tb_data_access_log` lands BEFORE the stream opens; a `status: 'completed'`
+ * (or `status: 'error'`) row lands AFTER the end-marker line is enqueued and
+ * BEFORE `controller.close()`. Both rows share `data_access_action_id = 1`
+ * and link by `notes.startedLogId`. The append-only invariant is preserved
+ * (no UPDATEs on the started row).
+ *
+ * Mid-stream consumer disconnect (the client closes the socket between the
+ * start row and the end marker) still falls into the v1 absence-of-completion
+ * case — we don't intercept the disconnect to write a `cancelled` row. That
+ * path remains "started + no completion" and is distinguishable only from the
+ * absence of a partner row. Adding a `cancel()` handler to the ReadableStream
+ * to cover that case is a v3 extension if it ever matters.
  *
  * Excluded tables (per consent doc, locked spec):
  *   - tb_embeddings, tb_reconstruction_residuals: derived numerical
@@ -380,6 +387,32 @@ export const GET: APIRoute = async ({ request, locals }) => {
           tableRowCounts,
         });
 
+        // v2 completion row. Wrapped in its own try/catch so a failed audit
+        // write doesn't masquerade as a stream failure — the rows already
+        // streamed are valid, and the worst-case "no completion row" state
+        // is the same shape v1 already had to tolerate.
+        try {
+          await recordDataAccess({
+            subjectId,
+            action: 'export',
+            actor: 'subject',
+            actorSubjectId: subjectId,
+            notes: {
+              status: 'completed',
+              startedLogId: dataAccessLogId,
+              schemaVersion: SCHEMA_VERSION,
+              totalRows,
+              tableRowCounts,
+            },
+            ipAddress,
+            userAgent,
+          });
+        } catch (auditErr) {
+          logError('subject-export.completion-audit-failed', auditErr, {
+            subjectId, dataAccessLogId, totalRows,
+          });
+        }
+
         controller.close();
       } catch (err) {
         logError('subject-export.stream', err, {
@@ -395,6 +428,30 @@ export const GET: APIRoute = async ({ request, locals }) => {
           });
         } catch {
           // controller might already be closed; nothing to do
+        }
+        // v2 completion row marking the failure path. Same fall-through
+        // discipline as the success path: best-effort, never cascade.
+        try {
+          await recordDataAccess({
+            subjectId,
+            action: 'export',
+            actor: 'subject',
+            actorSubjectId: subjectId,
+            notes: {
+              status: 'error',
+              startedLogId: dataAccessLogId,
+              schemaVersion: SCHEMA_VERSION,
+              totalRows,
+              tableRowCounts,
+              errorMessage: (err as Error).message ?? 'export_failed',
+            },
+            ipAddress,
+            userAgent,
+          });
+        } catch (auditErr) {
+          logError('subject-export.error-audit-failed', auditErr, {
+            subjectId, dataAccessLogId, totalRows,
+          });
         }
         try { controller.close(); } catch { /* already closed */ }
       }
