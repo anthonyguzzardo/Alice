@@ -1,16 +1,16 @@
 import type { APIRoute } from 'astro';
 import { getTodaysQuestion, getTodaysResponse, OWNER_SUBJECT_ID } from '../../lib/libDb.ts';
 import { seedUpcomingQuestions } from '../../lib/libSchedule.ts';
+import { getSubjectById } from '../../lib/libSubject.ts';
 import { logError } from '../../lib/utlErrorLog.ts';
 
 export const GET: APIRoute = async () => {
   // Owner journal endpoint (Caddy basic-auth gated). Subject path is /api/subject/today.
-  // TODO(step5): review.
   const subjectId = OWNER_SUBJECT_ID;
   try {
-    // Ensure questions are seeded. Owner is the only caller of this owner
-    // endpoint; owner's iana_timezone is 'UTC' by design.
-    await seedUpcomingQuestions(subjectId, 'UTC');
+    const owner = await getSubjectById(subjectId);
+    if (!owner) throw new Error(`api.today: no tb_subjects row for owner subject_id=${subjectId}`);
+    await seedUpcomingQuestions(subjectId, owner.iana_timezone);
 
     const question = await getTodaysQuestion(subjectId);
     const response = await getTodaysResponse(subjectId);

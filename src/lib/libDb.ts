@@ -90,8 +90,15 @@ function nowStr(): string {
 // QUERIES
 // ----------------------------------------------------------------------------
 
+async function getSubjectTimezone(subjectId: number): Promise<string> {
+  const rows = await sql`SELECT iana_timezone FROM tb_subjects WHERE subject_id = ${subjectId}`;
+  const row = rows[0] as { iana_timezone: string } | undefined;
+  if (!row) throw new Error(`getSubjectTimezone: no tb_subjects row for subject_id=${subjectId}`);
+  return row.iana_timezone;
+}
+
 export async function getTodaysQuestion(subjectId: number): Promise<{ question_id: number; text: string } | null> {
-  const today = localDateStr();
+  const today = localDateStr(new Date(), await getSubjectTimezone(subjectId));
   const rows = await sql`
     SELECT question_id, text_ciphertext, text_nonce
     FROM tb_questions
@@ -103,7 +110,7 @@ export async function getTodaysQuestion(subjectId: number): Promise<{ question_i
 }
 
 export async function getTodaysResponse(subjectId: number): Promise<{ response_id: number; text: string } | null> {
-  const today = localDateStr();
+  const today = localDateStr(new Date(), await getSubjectTimezone(subjectId));
   const rows = await sql`
     SELECT r.response_id, r.text_ciphertext, r.text_nonce
     FROM tb_responses r
