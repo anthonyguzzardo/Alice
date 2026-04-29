@@ -136,8 +136,6 @@ The schedule-extension flow is intentionally manual and collective, not automate
 
 7. **Pre-existing TS strict-null noise.** Lingering "possibly undefined" / "not assignable" errors in `libDb`, `libCrossSessionSignals`, `libSemanticSignals`, `libDynamics`, `libDocs`, `libEmotionProfile`, `scripts/archive/*`. Not breaking; discrete cleanup pass when convenient.
 
-8. **`data/errors.log.bak.2026-04-27`.** Forensic backup of the stale error log at the moment the time-window filter shipped. Gitignored. Delete with `rm data/errors.log.bak.*` whenever you stop caring about the old debug entries.
-
 9. ~~**Extract IP/UA helpers to `utlRequestContext.ts`.**~~ Done 2026-04-28 alongside Phase 6c step 6. `src/lib/utlRequestContext.ts` exports `extractClientIp` + `extractUserAgent`; `libSubject.ts` and `src/pages/api/subject/consent.ts` both import from it. The export endpoint (step 6) and the upcoming delete endpoint (step 7) use the same.
 
 10. ~~**Phase 6c export-audit completion gap.**~~ Closed 2026-04-29 as INC-022. `/api/subject/export` now writes a second `tb_data_access_log` row at stream end: `notes.status = 'completed' | 'error'`, with `startedLogId`, `totalRows`, `tableRowCounts`, and (on error) `errorMessage`. Wrapped in its own try/catch so an audit-write failure never masquerades as a stream failure. Mid-stream consumer-disconnect is NOT covered by v2 — that path still falls into "started + no completion" and is distinguishable only from absence of a partner row. A v3 `cancel()` handler on the ReadableStream could close that gap if it ever matters.
