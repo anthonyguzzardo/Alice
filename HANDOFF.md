@@ -128,7 +128,7 @@ The schedule-extension flow is intentionally manual and collective, not automate
 
 4. ~~**Phase 6c — consent + delete + export.**~~ Complete 2026-04-28. See §10 provenance trail.
 
-5. **Phase 6d — embedder queue.** Move `embedResponse` from inline-in-pipeline to its own `tb_signal_jobs` job kind (`embed`). Today, when TEI is offline, embeds skip and `npm run backfill` drains them later. With its own job kind, retries become automatic per job (quadratic backoff already implemented in `libSignalWorker`).
+5. ~~**Phase 6d — embedder queue.**~~ Deferred 2026-04-29 by owner. Manual `npm run backfill` / `npm run drain-subjects` is preferred over an automated `tb_signal_jobs` `embed` kind for now. Rationale: operator-controlled drainage matches the monastic philosophy (commands run deliberately, scope visible at the terminal, owner sees what gets embedded). Architectural fit was sound — the queue machinery in `libSignalWorker` already supports it — but the problem (manual catch-up after TEI restart) isn't painful enough to justify the moving parts. Revisit only if manual cadence becomes a friction point in practice.
 
 6. ~~**Phase 6e — observatory subject toggle + decrypt + notifications.**~~ Shipped 2026-04-27 late-evening. Subject toggle on every observatory page (`?subjectId=N`), in-app inbox badge for new subject submissions, custom-styled subject picker (replaces native `<select>`), `/observatory/inbox` page. Replay redacts non-whitespace to `•` for non-owner subjects (subject content stays opaque to the operator, even though the operator holds the key). See `cmpObsToolbar.astro`, `libObservatorySubject.ts`, `playback/[questionId].ts:redactNonWhitespace`.
 
