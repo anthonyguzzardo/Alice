@@ -27,11 +27,11 @@ These do not need rework. They are listed so future audits do not waste time re-
 - **Generic 401 on every auth failure**: no username enumeration via error message.
 - **Argon2id verify wrapped in try/catch**: malformed hash returns false rather than throwing. See `libSubjectAuth.ts:54`.
 - **Three-stage gating for subjects**: `must_reset_password` → consent gate → handler. Each gate has an explicit allow-list (logout, export, account/delete, consent acknowledge are unconditional rights). See `src/middleware.ts`.
-- **No third-party plaintext from the journal pipeline**:
+- **No third-party plaintext from the journal pipeline (locked)**:
   - Embeddings: local TEI on `localhost:8090` with SHA-pinned Qwen3-Embedding-0.6B (INC-010). Voyage is dead; the `voyageai` npm package remains as cleanup debt only.
-  - LLM: `ANTHROPIC_API_KEY` is intentionally not on prod. Per-submission generation removed in INC-014. The only Anthropic call site is `src/scripts/expand-corpus.ts` (manual `npm run corpus:refresh`), and it sends existing corpus questions, not journal text.
+  - LLM: `ANTHROPIC_API_KEY` is intentionally not on prod. Per-submission generation removed in INC-014. The only remaining Anthropic call site is `src/scripts/expand-corpus.ts` (manual `npm run corpus:refresh`), which sends existing corpus questions and is **user-agnostic by construction** — no subject text, no signals, no traits, no per-subject context crosses the API boundary. Data-bearing AI calls are done; question generation is the only AI-facing surface and it does not see user data.
   - Supabase: only ever sees ciphertext. Encryption happens at the app layer before INSERT.
-  - Therefore the only third party that sees journal plaintext today is **Cloudflare** (proxy ON in front of fweeo.com).
+  - **Therefore the only third party that sees journal plaintext today is Cloudflare** (proxy ON in front of fweeo.com). This is now the single largest data-exposure surface in the stack.
 - **Browser hygiene on the journal surface**: textareas have `autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"` set on both render paths in `src/pages/index.astro`. No localStorage drafts (text only in DOM until submit). No service worker, no manifest, no source maps in `dist/`. Theme is the only thing in `localStorage`.
 - **Background work is durable, not fire-and-forget**: signal jobs in `tb_signal_jobs` with crash recovery, atomic claim, quadratic backoff, dead-letter. See `src/lib/libSignalWorker.ts`.
 
@@ -71,7 +71,7 @@ Severity is "what does it cost if exploited," not "how easy is it to fix." A 30-
 | 16 | systemd journal captures Node stdout | `src/lib/utlErrorLog.ts:40` calls `console.error` after writing to `data/errors.log` | journald is plaintext at rest unless full-disk encryption is on. Confirm FDE on the Hetzner volume. |
 | 17 | Logs and encrypted DB share storage | host filesystem | Disk seizure recovers logs (timing/IP traces) plus encrypted DB. Ship logs to a remote sink (Tailscale to personal box) and zero local logs nightly. |
 | 18 | AES-GCM 12-byte random nonces | `libCrypto.ts:79` | Birthday-bounded at ~2⁴⁸ encryptions per key. Fine at Alice's volume. For long-term posture switch to AES-GCM-SIV (RFC 8452) or XChaCha20-Poly1305. |
-| 19 | INC-021 historical TZ-skew on `tb_responses.dttm_created_utc` | fixed forward; legacy rows not backfilled | Not a security issue. Listed here as a correctness debt that affects audit-trail timestamps. See "Open verifications / debts" below. |
+| 19 | ~~INC-021 historical TZ-skew on `tb_responses.dttm_created_utc`~~ | ~~fixed forward; legacy rows not backfilled~~ | **CLOSED 2026-04-28.** Audit + repair landed: 9 confirmed skewed rows updated in single transaction, post-repair audit returns 0 skewed. 3 indeterminate rows left as-is (no second-source timestamp). Persisted signal rows unaffected. Not a security issue; closed as correctness debt. |
 
 ### Low (nation-state class)
 
@@ -84,11 +84,11 @@ Severity is "what does it cost if exploited," not "how easy is it to fix." A 30-
 
 ## Class II punch list
 
-The single-week jump from "lab tool" (Class III) to "publishable research instrument" (Class II) is now down to three items.
+The single-week jump from "lab tool" (Class III) to "publishable research instrument" (Class II) is down to three items, **ranked by data-exposure impact**:
 
-1. **Cloudflare proxy off (or Tunnel with origin auth tokens you control).** Removes the only third party that sees journal plaintext today.
-2. **Caddy security-header bundle.** HSTS preload, CSP with nonces, Referrer-Policy `no-referrer`, Permissions-Policy lockdown, X-Frame-Options DENY, X-Content-Type-Options nosniff, `Cache-Control: no-store` on `/`, `/subject`, `/api/respond`, `/api/subject/respond`, `/api/calibrate`, `/api/subject/calibrate`, `/api/event`.
-3. **Constant-time login dummy verify.** Hardcode an Argon2id hash; run `verifyPassword` against it on missing-user before returning null.
+1. **Cloudflare proxy off (or Tunnel with origin auth tokens you control).** **HIGHEST PRIORITY.** Now that data-bearing AI API calls are eliminated (embeddings local, Anthropic only sees user-agnostic corpus questions, Supabase only sees ciphertext), Cloudflare is the **single remaining third party that sees journal plaintext**. Closing this is the largest single posture win in the stack — it removes the last subpoenable plaintext path.
+2. **Caddy security-header bundle.** HSTS preload, CSP with nonces, Referrer-Policy `no-referrer`, Permissions-Policy lockdown, X-Frame-Options DENY, X-Content-Type-Options nosniff, `Cache-Control: no-store` on `/`, `/subject`, `/api/respond`, `/api/subject/respond`, `/api/calibrate`, `/api/subject/calibrate`, `/api/event`. Cheap (30m), zero risk, closes Critical #2 + #3 in one Caddyfile edit.
+3. **Constant-time login dummy verify.** Hardcode an Argon2id hash; run `verifyPassword` against it on missing-user before returning null. ~20m, self-contained.
 
 After these three land, every IRB-defensible posture claim about Alice as a research instrument is either true or one DNS record away.
 
@@ -110,12 +110,12 @@ Stop after item 5. Past that the marginal return on platform hardening is below 
 
 | # | Item | Where | Effort | Risk |
 |---|---|---|---|---|
-| 1 | INC-021 backfill audit. Join `tb_responses ↔ tb_session_events` on `question_id`. Flag rows with abs(time-delta) > 30s. Migration overwrites `tb_responses.dttm_created_utc` with the matching `tb_session_events.dttm_created_utc`. Keep a copy of the pre-fix value in a migration-temporary column for forensic recovery. | new migration `db/sql/migrations/NNN_*.sql` | 1-2h | low |
+| 1 | ~~INC-021 backfill audit.~~ **CLOSED 2026-04-28.** Single-transaction `UPDATE` against the 9 confirmed skewed rows; post-repair audit returns 0 skewed. See gap #19. | — | done | — |
 | 2 | Caddy security-header bundle + Cache-Control no-store on the journal flow | `deploy/Caddyfile` | 30m | low |
 | 3 | Constant-time login: hardcoded Argon2id dummy hash, run `verifyPassword` against it on missing-user before returning null. Unit test asserts the timing distribution. | `src/lib/libSubjectAuth.ts` | 20m | low |
 | 4 | CAA DNS record pinning Let's Encrypt; verify DNSSEC enabled at Cloudflare | DNS only | 10m | none |
 | 5 | Cloudflare decision: DNS-only, or Cloudflare Tunnel with origin auth | Cloudflare dashboard + `Caddyfile` if Tunnel | 1-2h | medium (test login + journal submit + observatory + export end-to-end) |
-| 6 | Per-subject NDJSON export audit. Read `/api/subject/export` end-to-end. Verify it auths via session, scopes to `subject.subject_id`, and that no operator-side column drift has accumulated since the encrypted-content invariant landed. Add a test that exporting subject A never returns subject B's rows. | reading + 1 test in `tests/db/` | 30m | low |
+| 6 | Per-subject NDJSON export audit. **Partially closed by INC-022 (2026-04-29)**: completion row + per-table row counts now written at stream end. **Remaining**: add a test that exporting subject A never returns subject B's rows (cross-subject leak guard). | 1 test in `tests/db/` | 15m | low |
 | 7 | Argon2id 256MB / 4 iter — only after a quick benchmark on Hetzner CCX13 confirms login latency stays under 500ms. Rotate by running `npm run set-owner-password` and instructing each subject to use the password reset flow (which automatically re-hashes at the new params). | `src/lib/libSubjectAuth.ts:35` | 30m | low |
 | 8 | Belt-and-suspenders Origin check at middleware for state-changing requests. Reject mutating requests whose `Origin` is not `https://fweeo.com`. Complements `SameSite=Lax` now that Astro's check is off. | `src/middleware.ts` | 30m | low |
 | 9 | Per-endpoint rate limit on `/api/respond`, `/api/calibrate`, `/api/subject/respond`, `/api/subject/calibrate`. Per-subject key (not per-IP) since these are all post-auth. Reasonable: 60/hour. | new wrappers in API handlers | 30m | low |

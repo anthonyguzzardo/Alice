@@ -190,9 +190,16 @@ describe('migration 031 — encryption round-trip through libDb', () => {
     await saveResponse(SUBJECT_ID, question_id, 'pristine plaintext');
 
     // Flip a byte in the ciphertext — base64 stays valid but the auth tag fails.
+    // Use a conditional replacement so the char is guaranteed to actually change
+    // (otherwise on a ~1/64 chance the original first char already equals our
+    // replacement and GCM auth would pass).
     await sql`
       UPDATE tb_responses
-      SET text_ciphertext = OVERLAY(text_ciphertext PLACING 'A' FROM 1 FOR 1)
+      SET text_ciphertext = OVERLAY(
+        text_ciphertext
+        PLACING CASE WHEN substring(text_ciphertext FROM 1 FOR 1) = 'A' THEN 'B' ELSE 'A' END
+        FROM 1 FOR 1
+      )
       WHERE subject_id = ${SUBJECT_ID} AND question_id = ${question_id}
     `;
 
