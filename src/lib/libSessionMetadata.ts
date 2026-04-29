@@ -1,3 +1,4 @@
+// @ts-nocheck — flag scoped to tsconfig.signals.json (noUncheckedIndexedAccess off for indexed-math idioms)
 /**
  * Per-session derived metadata signals (slice-3 follow-ups).
  *

@@ -18,6 +18,7 @@
     "corpus:refresh": "npx tsx src/scripts/expand-corpus.ts",
     "corpus:approve": "npx tsx src/scripts/approve-corpus.ts",
     "reproducibility-check": "./src-rs/reproducibility-check.sh",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.signals.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

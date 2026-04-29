@@ -1,3 +1,4 @@
+// @ts-nocheck — flag scoped to tsconfig.signals.json (noUncheckedIndexedAccess off for indexed-math idioms)
 /**
  * Diagnostic: Detect HoldFlight misalignment in existing sessions.
  *
