@@ -190,8 +190,11 @@ export const onRequest = defineMiddleware(async ({ request, locals }, next) => {
       // Owner browsed to a subject page; bounce home.
       return new Response(null, { status: 302, headers: { Location: '/' } });
     }
-    if (subject.must_reset_password && path !== '/reset-password') {
-      return new Response(null, { status: 302, headers: { Location: '/reset-password' } });
+    if (subject.must_reset_password) {
+      if (path !== '/reset-password') {
+        return new Response(null, { status: 302, headers: { Location: '/reset-password' } });
+      }
+      return next();
     }
     if (path !== '/consent') {
       const consentStatus = await getSubjectConsentStatus(subject.subject_id);
