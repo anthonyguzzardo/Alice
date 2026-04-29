@@ -340,23 +340,32 @@ function getTrend(history: SessionDeltaRow[], dim: DeltaDimension): 'rising' | '
 }
 
 // ----------------------------------------------------------------------------
-// REGULAR FLOW: Compute prior day's delta on journal submission
+// REGULAR FLOW: Compute every eligible prior-day delta on journal submission
 // ----------------------------------------------------------------------------
 
 /**
- * Compute the daily delta for the most recent completed prior day.
+ * Compute the daily delta for every eligible prior day in one pass.
  *
- * Called from respond.ts on every journal submission. When you submit
- * today's journal, yesterday is finished -- its journal and calibrations
- * are all in the database. This function finds that day and computes its
- * delta. If no eligible prior day exists, it returns null silently.
+ * Called from the signal worker on every journal submission. "Eligible"
+ * means: scheduled_for < today, has a journal with a session summary,
+ * has at least one calibration with a session summary on the same date,
+ * and does not already have a delta row. Returns the most recent date
+ * processed, or null if nothing was eligible.
  *
- * "Eligible" means: has a journal with a session summary, has at least
- * one calibration with a session summary on the same date, and does not
- * already have a delta row.
+ * Pre-INC-024 (2026-04-29) this used `ORDER BY DESC LIMIT 1`. That was a
+ * pileup trap: if a compute ever failed on day N (worker swallows daily-
+ * delta errors so the rest of the pipeline can still run), a more-recent
+ * eligible day on day N+2's submission would shadow day N under LIMIT 1
+ * and day N's delta stayed missing forever. The only path to recovery
+ * was the standalone `runDailyDeltaBackfill`. Now the same loop runs
+ * inline on every submission: missed days self-heal at the next entry,
+ * not at the next operator-driven backfill.
  *
- * Self-healing: if a prior delta save failed, the next journal submission
- * finds that date as the most recent eligible and retries it.
+ * Idempotent via the NOT EXISTS guard (already-computed days are filtered
+ * out). Per-iteration try/catch so one corrupt day doesn't block sibling
+ * days in the same loop. Iteration order is oldest-first so each delta's
+ * `deltaMagnitude` is computed against the most accurate history window
+ * available at that point.
  */
 export async function computePriorDayDelta(subjectId: number, currentDate: string): Promise<string | null> {
   const rows = await sql`
@@ -379,29 +388,31 @@ export async function computePriorDayDelta(subjectId: number, currentDate: strin
         WHERE d.subject_id = ${subjectId}
           AND d.session_date::date = j.scheduled_for
       )
-    ORDER BY j.scheduled_for DESC
-    LIMIT 1
-  `;
+    ORDER BY j.scheduled_for ASC
+  ` as unknown as Array<{ date: string; journalQuestionId: number }>;
 
   if (rows.length === 0) return null;
 
-  const { date, journalQuestionId } = rows[0] as unknown as { date: string; journalQuestionId: number };
-
-  const calibrationSummary = await getSameDayCalibrationSummary(subjectId, date);
-  if (!calibrationSummary) return null;
-
-  const journalSummary = await getSessionSummary(subjectId, journalQuestionId);
-  if (!journalSummary) return null;
-
-  const history = await getRecentSessionDeltas(subjectId, 30);
-  const delta = computeSessionDelta(subjectId, calibrationSummary, journalSummary, date);
-  delta.deltaMagnitude = computeDeltaMagnitude(delta, history);
-  await saveSessionDelta(delta);
-
-  console.log(
-    `[daily-delta] ${date}: magnitude=${delta.deltaMagnitude?.toFixed(2) ?? 'insufficient history'}`
-  );
-  return date;
+  let lastProcessed: string | null = null;
+  for (const { date, journalQuestionId } of rows) {
+    try {
+      const calibrationSummary = await getSameDayCalibrationSummary(subjectId, date);
+      if (!calibrationSummary) continue;
+      const journalSummary = await getSessionSummary(subjectId, journalQuestionId);
+      if (!journalSummary) continue;
+      const history = await getRecentSessionDeltas(subjectId, 30);
+      const delta = computeSessionDelta(subjectId, calibrationSummary, journalSummary, date);
+      delta.deltaMagnitude = computeDeltaMagnitude(delta, history);
+      await saveSessionDelta(delta);
+      console.log(
+        `[daily-delta] ${date}: magnitude=${delta.deltaMagnitude?.toFixed(2) ?? 'insufficient history'}`
+      );
+      lastProcessed = date;
+    } catch (err) {
+      console.error(`[daily-delta] ${date} failed:`, err instanceof Error ? err.message : err);
+    }
+  }
+  return lastProcessed;
 }
 
 // ----------------------------------------------------------------------------

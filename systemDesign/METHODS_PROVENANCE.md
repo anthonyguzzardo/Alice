@@ -8,6 +8,52 @@ Newest first.
 
 ---
 
+## INC-024: Daily-delta self-heal (drop LIMIT 1, loop oldest-first)
+
+**Date:** 2026-04-29
+**Type:** Correctness fix (closes a documented pileup mechanism in the on-submission daily-delta path; no historical reprocessing needed because the very next journal submission for any subject will now sweep up everything missing).
+
+### What was wrong
+
+`computePriorDayDelta` (`src/lib/libDailyDelta.ts:361-405` pre-INC-024) used `ORDER BY j.scheduled_for DESC LIMIT 1` to pick the single most-recent eligible prior day. The header docstring claimed "Self-healing: if a prior delta save failed, the next journal submission finds that date as the most recent eligible and retries it." That claim was load-bearing wrong in the multi-day case:
+
+- Day N submits, computes day N-1's delta. OK.
+- Day N+1 submits, calls `computePriorDayDelta`, but the worker's wrapping try/catch swallows daily-delta errors (line 217-218 of `libSignalWorker.ts`) so the rest of the pipeline can still run if delta-save fails. Day N stays un-deltaed.
+- Day N+2 submits. The query finds two eligible prior days (N-1 wait that's done, and N which still has no delta). Wait — actually it finds day N+1 (just-finished, eligible) and day N (older, still un-deltaed). `LIMIT 1` with `DESC` returns day N+1. Day N+1's delta computed. Day N still piled up.
+- Day N+3 submits. Same shape: most recent eligible is N+2, that's processed, day N stays piled.
+
+In steady state every subsequent submission shadowed the older missing day with a more-recent eligible one. The only escape was the operator running `npm run drain-subjects` (which calls `runDailyDeltaBackfill`, the loop-without-LIMIT variant). Subjects post-INC-023 inherited this exact failure mode from owner — the asymmetry fix made them symmetric on the bug, not free of it.
+
+### Discovery method
+
+Surfaced when reviewing INC-023 (subject pipeline symmetry). The asymmetry fix prompted reading the pipeline end-to-end, which revealed that even the owner's "every submission heals" claim was only true for the immediately-prior day. Filed as a deferred follow-up in INC-023's "What didn't change" section. Owner pushed back ("why didn't you set up this process dude?") and the deferral wasn't justified — same context, same files, same blast radius. Closed in the same session.
+
+### Resolution
+
+`computePriorDayDelta` rewritten to loop:
+
+- Drop `LIMIT 1`. Drop `DESC`, replace with `ASC`.
+- Process every eligible row, oldest-first. Oldest-first matters because `computeDeltaMagnitude(delta, history)` reads `getRecentSessionDeltas(subjectId, 30)` — each saved delta updates the magnitude history seen by later iterations, so processing chronologically gives the most accurate per-day magnitudes.
+- Per-iteration `try/catch` so a corrupt session_summary on one day can't block sibling days in the same loop. Each iteration logs `[daily-delta] <date> failed: <message>` and continues.
+- Return value remains `Promise<string | null>` — last-processed date or null. Existing call sites (`libSignalWorker.ts:217`, `tests/db/aggregation_scoping/libDailyDelta_correlated_subqueries_scoping.test.ts:238`) read it as a smoke-test signal, not a count, so the contract is preserved.
+- The `j.scheduled_for < ${currentDate}::date` filter is preserved (load-bearing — today's calibration may not be the last-of-day yet; computing today's delta now would lock in stale state). Today is computed by the *next* journal submission, just like before.
+
+### What changed observable behavior
+
+- Owner missing-day pileups (any day where the daily-delta stage failed mid-pipeline pre-INC-024) heal automatically on the next journal submission. Prior path: required operator-run `npm run drain-subjects`. Now: filled in by the next normal entry.
+- Subjects (post-INC-023) inherit the same self-heal property automatically.
+- Steady-state cost: in the no-pileup case, the loop sees one row and behaves identically to pre-INC-024 (single iteration, returns the date). Hot path latency unchanged.
+- Pileup case: loop processes N rows in oldest-first order, each iteration is sub-100ms (DB read + math), so a 30-day pileup catches up in ~3s on the worker's out-of-band path. No user-facing latency.
+
+### What didn't change
+
+- `runDailyDeltaBackfill` (the standalone backfill called from `npm run drain-subjects`) is unchanged; it has always looped without a LIMIT. It remains the right tool for cross-subject + cross-stage drainage.
+- The wrapping try/catch in `libSignalWorker.runResponsePipeline:217-218` stays. It guards against catastrophic delta-stage failure (e.g. DB transient) without blocking embed + signal stages from running. The new per-iteration try/catch inside `computePriorDayDelta` is a finer-grained safety net underneath that.
+- The scoping test (`libDailyDelta_correlated_subqueries_scoping.test.ts:144-272`) seeds exactly one eligible day-pair for OWNER (2026-04-10) and asserts the returned date plus a single saved delta. Both assertions still hold under the loop semantics — one eligible row, one iteration, one delta, returns its date. Re-verified.
+- `computePriorDayDelta`'s name kept despite the function now processing multiple prior days. Renaming would ripple into the scoping test + the worker call site for no behavioral gain. The docstring documents the plurality.
+
+---
+
 ## INC-023: Subject submission pipeline symmetry
 
 **Date:** 2026-04-29
@@ -59,7 +105,7 @@ Docs:
 - Encryption-at-rest, raw-input capture (`tb_session_events.event_log_json` + `keystroke_stream_json`), and the v1 contamination attestation (`docs/contamination-boundary-v1.md`) are unaffected. The v1 attestation has always been about the *keystroke→storage* path being unmediated; the asymmetry between owner and subject pipelines was never part of v1's claims.
 - `runGeneration` is still removed (INC-014). No new LLM call introduced.
 - Prod still has no TEI, no Anthropic key. Both remain operator-laptop-only.
-- The `LIMIT 1` shadow-bug in `computePriorDayDelta` (above) was deliberately not fixed in this commit. Tracked as follow-up.
+- The `LIMIT 1` shadow-bug in `computePriorDayDelta` (above) was initially deferred from this commit; closed in INC-024 the same session.
 
 ---
 
