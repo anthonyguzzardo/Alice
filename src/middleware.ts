@@ -159,8 +159,11 @@ export const onRequest = defineMiddleware(async ({ request, locals }, next) => {
     if (!subject) return jsonError(401, 'unauthorized');
     if (subject.is_owner) return jsonError(403, 'owner_use_main_path');
 
-    if (subject.must_reset_password && !ALLOW_DURING_MUST_RESET.has(path)) {
-      return jsonError(403, 'must_reset_password');
+    if (subject.must_reset_password) {
+      if (!ALLOW_DURING_MUST_RESET.has(path)) {
+        return jsonError(403, 'must_reset_password');
+      }
+      return next();
     }
 
     if (!ALLOW_DURING_CONSENT_GATE.has(path)) {
