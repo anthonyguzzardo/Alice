@@ -30,7 +30,8 @@ async function main(): Promise<void> {
     const match = line.match(/^-\s*\[[xX]\]\s*(.+)$/);
     if (!match) continue;
 
-    const text = match[1].trim();
+    // match[1] is the (.+) capture group; defined whenever match itself is.
+    const text = match[1]!.trim();
     if (!text) continue;
 
     const id = await insertCorpusQuestion({ text, added_by: 'expand-corpus' });

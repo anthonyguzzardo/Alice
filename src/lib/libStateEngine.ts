@@ -407,6 +407,10 @@ export async function computeEntryStates(subjectId: number, sessions?: SessionRa
     let volatility = 0;
     if (index > 0) {
       const prev = sessions[index - 1];
+      // Narrows prev for the rest of the block. The bounds check above
+      // guarantees prev is defined; tsc with noUncheckedIndexedAccess can't
+      // see the relationship, so we assert once here instead of 26 times below.
+      if (!prev) throw new Error('unreachable: index > 0 implies prev exists');
 
       // Recompute previous entry's 4D coordinates using the same logic
       let prevFluency: number;

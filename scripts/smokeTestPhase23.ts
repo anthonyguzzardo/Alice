@@ -64,6 +64,7 @@ async function setupTestSession(subjectId: number): Promise<number> {
       VALUES (${subjectId}, ${promptText}, 3)
       RETURNING question_id
     `;
+    if (!q) throw new Error('smoke test: question insert returned no row');
     const qid = q.question_id as number;
 
     await saveResponse(subjectId, qid, responseText, tx, {

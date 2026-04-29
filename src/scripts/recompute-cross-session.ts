@@ -36,6 +36,7 @@ async function main() {
 
     await saveCrossSessionSignals(subjectId, row.question_id, {
       self_perplexity: cs.selfPerplexity,
+      motor_self_perplexity: cs.motorSelfPerplexity,
       ncd_lag_1: cs.ncdLag1,
       ncd_lag_3: cs.ncdLag3,
       ncd_lag_7: cs.ncdLag7,

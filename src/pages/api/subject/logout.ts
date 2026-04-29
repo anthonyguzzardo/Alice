@@ -19,7 +19,8 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   const cookieHeader = request.headers.get('cookie');
   const match = cookieHeader?.match(new RegExp(`(?:^|;\\s*)${SESSION_COOKIE}=([^;]+)`));
   if (match) {
-    const token = decodeURIComponent(match[1]).trim();
+    // match[1] is the cookie value capture group; defined whenever match itself is.
+    const token = decodeURIComponent(match[1]!).trim();
     if (token) {
       await logoutSubject(token);
     }

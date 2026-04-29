@@ -89,8 +89,8 @@ function estimateAttractorForce(deviations: number[]): number {
   const m = avg(deviations);
   let num = 0;
   let denom = 0;
-  for (let i = 0; i < n; i++) {
-    denom += (deviations[i] - m) ** 2;
+  for (const d of deviations) {
+    denom += (d - m) ** 2;
   }
   if (denom < 1e-10) return 0.5; // no variance, moderate default
 

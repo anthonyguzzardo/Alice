@@ -192,7 +192,9 @@ async function fetchCalibrationSeries(subjectId: number, sig: SignalMeta): Promi
      ORDER BY q.dttm_created_utc ASC`,
     [subjectId]
   );
-  return rows as { date: string; value: number }[];
+  // postgres.js's RowList<Row[]> generic doesn't narrow to a concrete shape;
+  // the SELECT projection matches by construction.
+  return rows as unknown as { date: string; value: number }[];
 }
 
 /** Fetch paired signal values for all matched day-pairs */
@@ -214,8 +216,9 @@ async function fetchPairedValues(
     );
 
     if (jRows.length === 0 || cRows.length === 0) continue;
-    const jv = (jRows[0] as { value: number | null }).value;
-    const cv = (cRows[0] as { value: number | null }).value;
+    // postgres.js Row generic; bounds-checked length above guarantees [0] exists.
+    const jv = (jRows[0] as unknown as { value: number | null }).value;
+    const cv = (cRows[0] as unknown as { value: number | null }).value;
     if (jv == null || cv == null || !Number.isFinite(jv) || !Number.isFinite(cv)) continue;
 
     results.push({

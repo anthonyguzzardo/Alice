@@ -22,7 +22,8 @@ export function getDoc(slug: string): Doc | null {
 
   // Extract title from first H1
   const titleMatch = raw.match(/^#\s+(.+)$/m);
-  const title = titleMatch ? titleMatch[1] : slug;
+  // titleMatch[1] is the (.+) capture group; defined whenever titleMatch itself is.
+  const title = titleMatch ? titleMatch[1]! : slug;
 
   return { slug, title, html };
 }

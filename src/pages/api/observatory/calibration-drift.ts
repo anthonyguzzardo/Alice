@@ -20,8 +20,10 @@ export const GET: APIRoute = async ({ request }) => {
     const deviceTracks: Record<string, typeof history> = {};
     for (const h of history) {
       if (h.device_type) {
+        // Record key access reads as `T | undefined` under noUncheckedIndexedAccess,
+        // but the line above seeds the bucket so it is defined here.
         if (!deviceTracks[h.device_type]) deviceTracks[h.device_type] = [];
-        deviceTracks[h.device_type].push(h);
+        deviceTracks[h.device_type]!.push(h);
       }
     }
 

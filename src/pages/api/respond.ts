@@ -77,16 +77,18 @@ export const POST: APIRoute = async ({ request }) => {
         }
 
         if (Array.isArray(sessionSummary.eventLog) && sessionSummary.eventLog.length > 0) {
+          // sessionSummary fields are Record<string, unknown> from parseBody —
+          // narrow at the access site rather than at the parseBody type.
           await saveSessionEvents({
             subject_id: subjectId,
             question_id: questionId,
             event_log_json: JSON.stringify(sessionSummary.eventLog),
             total_events: sessionSummary.eventLog.length,
-            session_duration_ms: sessionSummary.totalDurationMs ?? 0,
+            session_duration_ms: (sessionSummary.totalDurationMs as number | null | undefined) ?? 0,
             keystroke_stream_json: Array.isArray(sessionSummary.keystrokeStream) && sessionSummary.keystrokeStream.length > 0
               ? JSON.stringify(sessionSummary.keystrokeStream)
               : null,
-            total_input_events: sessionSummary.eventLogTotalInputs ?? null,
+            total_input_events: (sessionSummary.eventLogTotalInputs as number | null | undefined) ?? null,
             decimation_count: 0,
           }, tx);
         }

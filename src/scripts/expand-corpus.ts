@@ -19,7 +19,8 @@ const DEFAULT_COUNT = 30;
 function parseCount(): number {
   const idx = process.argv.indexOf('--count');
   if (idx === -1 || idx + 1 >= process.argv.length) return DEFAULT_COUNT;
-  const n = parseInt(process.argv[idx + 1], 10);
+  // bounds-checked above; argv[idx+1] exists.
+  const n = parseInt(process.argv[idx + 1]!, 10);
   if (isNaN(n) || n < 1 || n > 50) {
     console.error('--count must be between 1 and 50');
     process.exit(1);

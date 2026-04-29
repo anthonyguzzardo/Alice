@@ -174,8 +174,9 @@ export const GET: APIRoute = async () => {
   const recentErrors = readRecentErrors(20);
   const recentErrorJobs: string[] = [];
   for (const record of recentErrors) {
+    // match[1] is the ([^\]]+) capture group; defined whenever match itself is.
     const match = record.match(/\] \[([^\]]+)\]/);
-    if (match) recentErrorJobs.push(match[1]);
+    if (match) recentErrorJobs.push(match[1]!);
   }
   const uniqueErrorJobs = Array.from(new Set(recentErrorJobs));
 

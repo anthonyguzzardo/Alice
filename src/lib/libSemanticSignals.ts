@@ -329,8 +329,8 @@ export async function computeDiscourseCoherence(text: string): Promise<Discourse
   // Global coherence: cosine of each sentence to the first
   const firstVec = valid[0].vec;
   const globalSims: number[] = [];
-  for (let i = 1; i < valid.length; i++) {
-    globalSims.push(cosine(valid[i].vec, firstVec));
+  for (const v of valid.slice(1)) {
+    globalSims.push(cosine(v.vec, firstVec));
   }
   const globalCoherence = globalSims.reduce((s, v) => s + v, 0) / globalSims.length;
 

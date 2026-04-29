@@ -36,9 +36,13 @@ export default sql;
 /**
  * Transaction handle type. Both the pool connection (sql) and the transaction
  * handle (tx from sql.begin callback) can execute tagged-template queries.
- * This type captures that common capability so write functions can accept either.
+ * Union covers postgres.js's two distinct shapes — Sql<{}> (full pool) and
+ * TransactionSql<{}> (the narrower handle the begin() callback receives).
+ * Without the union, every `saveX(payload, tx)` call inside `sql.begin` errors
+ * because TransactionSql lacks CLOSE/END/etc. Both share ISql for the tagged-
+ * template capability, which is all our write functions actually use.
  */
-export type TxSql = typeof sql;
+export type TxSql = postgres.Sql<{}> | postgres.TransactionSql<{}>;
 
 export async function close(): Promise<void> {
   await sql.end();

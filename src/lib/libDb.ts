@@ -139,6 +139,7 @@ export async function saveResponse(
     VALUES (${subjectId}, ${questionId}, ${enc.ciphertext}, ${enc.nonce}, ${bv}, ${ref}, ${hash}, ${nowStr()})
     RETURNING response_id
   `;
+  if (!row) throw new Error('saveResponse: insert returned no row');
   return row.response_id;
 }
 
@@ -343,9 +344,15 @@ export async function logInteractionEvent(subjectId: number, questionId: number,
   `;
   const typeRow = typeRows[0] as { interaction_event_type_id: number } | undefined;
   if (!typeRow) return;
+  // postgres.js parameter binder rejects Record<string, unknown> directly; the
+  // metadata column is JSONB, so stringify object inputs and pass strings/null
+  // straight through. Tier A JSONB convention (see HANDOFF §4 item 11).
+  const metadataParam = metadata == null
+    ? null
+    : typeof metadata === 'string' ? metadata : JSON.stringify(metadata);
   await sql`
     INSERT INTO tb_interaction_events (subject_id, question_id, interaction_event_type_id, metadata)
-    VALUES (${subjectId}, ${questionId}, ${typeRow.interaction_event_type_id}, ${metadata ?? null})
+    VALUES (${subjectId}, ${questionId}, ${typeRow.interaction_event_type_id}, ${metadataParam})
   `;
 }
 
@@ -734,19 +741,23 @@ export interface BurstEntry {
 
 export async function saveBurstSequence(subjectId: number, questionId: number, bursts: BurstEntry[], tx?: TxSql): Promise<void> {
   if (tx) {
-    for (let i = 0; i < bursts.length; i++) {
+    let i = 0;
+    for (const burst of bursts) {
       await tx`
         INSERT INTO tb_burst_sequences (subject_id, question_id, burst_index, burst_char_count, burst_duration_ms, burst_start_offset_ms)
-        VALUES (${subjectId}, ${questionId}, ${i}, ${bursts[i].chars}, ${bursts[i].durationMs}, ${bursts[i].startOffsetMs})
+        VALUES (${subjectId}, ${questionId}, ${i}, ${burst.chars}, ${burst.durationMs}, ${burst.startOffsetMs})
       `;
+      i++;
     }
   } else {
     await sql.begin(async (sql) => {
-      for (let i = 0; i < bursts.length; i++) {
+      let i = 0;
+      for (const burst of bursts) {
         await sql`
           INSERT INTO tb_burst_sequences (subject_id, question_id, burst_index, burst_char_count, burst_duration_ms, burst_start_offset_ms)
-          VALUES (${subjectId}, ${questionId}, ${i}, ${bursts[i].chars}, ${bursts[i].durationMs}, ${bursts[i].startOffsetMs})
+          VALUES (${subjectId}, ${questionId}, ${i}, ${burst.chars}, ${burst.durationMs}, ${burst.startOffsetMs})
         `;
+        i++;
       }
     });
   }
@@ -778,19 +789,23 @@ export interface RBurstEntry {
 export async function saveRburstSequence(subjectId: number, questionId: number, rbursts: RBurstEntry[], tx?: TxSql): Promise<void> {
   if (rbursts.length === 0) return;
   if (tx) {
-    for (let i = 0; i < rbursts.length; i++) {
+    let i = 0;
+    for (const rb of rbursts) {
       await tx`
         INSERT INTO tb_rburst_sequences (subject_id, question_id, burst_index, deleted_char_count, total_char_count, burst_duration_ms, burst_start_offset_ms, is_leading_edge)
-        VALUES (${subjectId}, ${questionId}, ${i}, ${rbursts[i].deletedCharCount}, ${rbursts[i].totalCharCount}, ${rbursts[i].durationMs}, ${rbursts[i].startOffsetMs}, ${rbursts[i].isLeadingEdge})
+        VALUES (${subjectId}, ${questionId}, ${i}, ${rb.deletedCharCount}, ${rb.totalCharCount}, ${rb.durationMs}, ${rb.startOffsetMs}, ${rb.isLeadingEdge})
       `;
+      i++;
     }
   } else {
     await sql.begin(async (sql) => {
-      for (let i = 0; i < rbursts.length; i++) {
+      let i = 0;
+      for (const rb of rbursts) {
         await sql`
           INSERT INTO tb_rburst_sequences (subject_id, question_id, burst_index, deleted_char_count, total_char_count, burst_duration_ms, burst_start_offset_ms, is_leading_edge)
-          VALUES (${subjectId}, ${questionId}, ${i}, ${rbursts[i].deletedCharCount}, ${rbursts[i].totalCharCount}, ${rbursts[i].durationMs}, ${rbursts[i].startOffsetMs}, ${rbursts[i].isLeadingEdge})
+          VALUES (${subjectId}, ${questionId}, ${i}, ${rb.deletedCharCount}, ${rb.totalCharCount}, ${rb.durationMs}, ${rb.startOffsetMs}, ${rb.isLeadingEdge})
         `;
+        i++;
       }
     });
   }
@@ -845,6 +860,7 @@ export async function saveSessionMetadata(row: Omit<SessionMetadataRow, 'session
     )
     RETURNING session_metadata_id
   `;
+  if (!result) throw new Error('saveSessionMetadata: insert returned no row');
   return result.session_metadata_id;
 }
 
@@ -909,6 +925,7 @@ export async function saveCalibrationBaselineSnapshot(row: Omit<CalibrationHisto
     )
     RETURNING calibration_history_id
   `;
+  if (!result) throw new Error('saveCalibrationBaselineSnapshot: insert returned no row');
   return result.calibration_history_id;
 }
 
@@ -970,6 +987,7 @@ export async function saveSessionEvents(row: Omit<SessionEventsRow, 'session_eve
     )
     RETURNING session_event_id
   `;
+  if (!result) throw new Error('saveSessionEvents: insert returned no row');
   return result.session_event_id;
 }
 
@@ -1191,6 +1209,7 @@ export async function saveCalibrationSession(
       VALUES (${subjectId}, ${promptEnc.ciphertext}, ${promptEnc.nonce}, 3)
       RETURNING question_id
     `;
+    if (!qRow) throw new Error('saveCalibrationSession: question insert returned no row');
     const questionId = qRow.question_id as number;
 
     await tx`
@@ -1814,6 +1833,7 @@ export async function saveComment(slug: string, authorName: string, commentText:
     VALUES (${slug}, ${authorName}, ${commentText}, ${nowStr()})
     RETURNING paper_comment_id
   `;
+  if (!row) throw new Error('saveComment: insert returned no row');
   return row.paper_comment_id;
 }
 
@@ -1838,7 +1858,10 @@ export async function getCorpusQuestions(): Promise<CorpusQuestion[]> {
     FROM tb_question_corpus
     ORDER BY corpus_question_id ASC
   `;
-  return rows as CorpusQuestion[];
+  // postgres.js's RowList<Row[]> generic doesn't structurally narrow to a
+  // concrete row type without going through unknown. The shape matches by
+  // construction (SELECT columns mirror the interface).
+  return rows as unknown as CorpusQuestion[];
 }
 
 /** Single corpus question by ID, or null. */
@@ -2348,7 +2371,7 @@ export async function saveReconstructionResidual(
       ,${s.real_integrative_complexity}, ${s.avatar_integrative_complexity}, ${s.residual_integrative_complexity}
       ,${s.real_deep_cohesion}, ${s.avatar_deep_cohesion}, ${s.residual_deep_cohesion}
       ,${s.real_text_compression_ratio}, ${s.avatar_text_compression_ratio}, ${s.residual_text_compression_ratio}
-      ,${s.extended_residuals_json}
+      ,${s.extended_residuals_json == null ? null : JSON.stringify(s.extended_residuals_json)}
       ,${s.dynamical_l2_norm}, ${s.motor_l2_norm}, ${s.semantic_l2_norm}, ${s.total_l2_norm}
       ,${s.residual_count}
       ,${s.behavioral_l2_norm}, ${s.behavioral_residual_count}

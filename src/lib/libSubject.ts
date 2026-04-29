@@ -63,7 +63,8 @@ export async function getRequestSubject(request: Request): Promise<Subject | nul
   const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${SESSION_COOKIE}=([^;]+)`));
   if (!match) return null;
 
-  const token = decodeURIComponent(match[1]).trim();
+  // match[1] is the cookie-value capture group; defined whenever match itself is.
+  const token = decodeURIComponent(match[1]!).trim();
   if (!token) return null;
 
   const ip = extractClientIp(request);

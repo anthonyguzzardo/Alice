@@ -41,6 +41,12 @@ async function main() {
       const eventLogJson = row.event_log_json;
 
       const ps = computeProcessSignals(eventLogJson);
+      if (!ps) {
+        // null = Rust engine unavailable (no .node binary) or compute threw.
+        // Either way, no values to write — count as failed and continue.
+        failed++;
+        continue;
+      }
 
       await sql`
         UPDATE tb_process_signals SET

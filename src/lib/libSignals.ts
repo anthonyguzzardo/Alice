@@ -421,7 +421,9 @@ async function computeCalibrationKTFloor(subjectId: number, allSummaries: Sessio
   // Use the 75th percentile as the floor (generous — most calibration writing
   // should be below this, so anything above it in a real session is meaningful)
   scores.sort((a, b) => a - b);
-  return scores[Math.floor(scores.length * 0.75)];
+  // 75th-percentile index is in-bounds because scores.length > 0 was implied
+  // by the caller (`usable` is non-empty above).
+  return scores[Math.floor(scores.length * 0.75)]!;
 }
 
 /**

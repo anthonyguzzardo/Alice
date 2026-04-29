@@ -6,7 +6,7 @@
  */
 import 'dotenv/config';
 import sql from '../lib/libDbPool.ts';
-import { computeSemanticSignals } from '../lib/libSemanticSignals.ts';
+import { computeSemanticSignals, computeDiscourseCoherence } from '../lib/libSemanticSignals.ts';
 import { saveSemanticSignals, listResponseTexts } from '../lib/libDb.ts';
 import { parseSubjectIdArg } from '../lib/utlSubjectIdArg.ts';
 
@@ -39,6 +39,10 @@ async function main() {
     }
 
     const ss = computeSemanticSignals(row.text, row.paste_count, row.drop_count);
+    // Discourse coherence requires TEI (sentence embeddings). Returns all
+    // nulls cleanly when TEI is offline — operator must verify TEI is up
+    // before re-running this script or those four columns stay NULL.
+    const dc = await computeDiscourseCoherence(row.text);
     await saveSemanticSignals(subjectId, row.question_id, {
       idea_density: ss.ideaDensity,
       lexical_sophistication: ss.lexicalSophistication,
@@ -48,6 +52,10 @@ async function main() {
       referential_cohesion: ss.referentialCohesion,
       emotional_valence_arc: ss.emotionalValenceArc,
       text_compression_ratio: ss.textCompressionRatio,
+      discourse_global_coherence: dc.globalCoherence,
+      discourse_local_coherence: dc.localCoherence,
+      discourse_global_local_ratio: dc.globalLocalRatio,
+      discourse_coherence_decay_slope: dc.coherenceDecaySlope,
       lexicon_version: ss.lexiconVersion,
       paste_contaminated: ss.pasteContaminated,
     });

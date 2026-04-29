@@ -19,6 +19,7 @@ import {
   computeDynamicalSignals,
   computeMotorSignals,
   regenerateAvatar,
+  profileFromLegacyJson,
   type DynamicalSignals,
   type MotorSignals,
 } from '../lib/libSignalsNative.ts';
@@ -94,7 +95,12 @@ async function main() {
   });
   const textRows = corpusRows.map(r => ({ text: r.text }));
 
-  const corpusJson = JSON.stringify(textRows.map(r => r.text));
+  // corpusArr is the array form regenerateAvatar's napi binding requires
+  // (post-2026-04-25 signature change from `corpus_json: String` to
+  // `corpus: Vec<String>`). corpusJson stays for the SHA-256 reproducibility
+  // check — that hash is computed on the JSON-stringified form by design.
+  const corpusArr = textRows.map(r => r.text);
+  const corpusJson = JSON.stringify(corpusArr);
   const corpusSha256 = createHash('sha256').update(corpusJson).digest('hex');
 
   let updated = 0;
@@ -117,9 +123,13 @@ async function main() {
       continue;
     }
 
-    // Regenerate avatar from stored seed
+    // Regenerate avatar from stored seed. Post-2026-04-25 the napi binding
+    // expects an AvatarProfileInput object, not the legacy JSON string
+    // stored in profile_snapshot_json. profileFromLegacyJson handles either
+    // shape (parses then maps to the typed struct).
     const resolvedProfile = typeof profileJson === 'string' ? profileJson : JSON.stringify(profileJson);
-    const avatar = regenerateAvatar(corpusJson, topic ?? '', resolvedProfile, realWordCount, vid, seed);
+    const profileObj = profileFromLegacyJson(resolvedProfile);
+    const avatar = regenerateAvatar(corpusArr, topic ?? '', profileObj, realWordCount, vid, seed);
     if (!avatar) {
       console.warn(`  q${qid} v${vid}: avatar regeneration failed, skipping`);
       skipped++;
@@ -235,9 +245,12 @@ async function main() {
 
     // UPDATE the row
     // alice-lint-disable-next-query subject-scope -- PK update on reconstruction_residual_id; the row was selected via a subject-scoped SELECT above
+    // extended_residuals_json is a Record (Tier A JSONB convention per
+    // HANDOFF §4 item 11); stringify before parameter binding.
+    const extendedJsonParam = JSON.stringify(extendedJson);
     await sql`
       UPDATE tb_reconstruction_residuals SET
-        extended_residuals_json = ${extendedJson},
+        extended_residuals_json = ${extendedJsonParam},
         dynamical_l2_norm = ${dynNorm},
         motor_l2_norm = ${motNorm},
         semantic_l2_norm = ${semNorm},

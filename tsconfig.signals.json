@@ -1,0 +1,17 @@
+{
+  "//": "Signal-processing files where indexed math (a[i]*b[i], adjacent-pair access, parallel-array iteration) is the legitimate idiom. The flag's signal-to-noise ratio is bad here, so it is locally disabled. All other strict checks remain on. Run `tsc -p tsconfig.signals.json` to typecheck this slice; the main `tsconfig.json` excludes these files.",
+  "extends": "astro/tsconfigs/strict",
+  "compilerOptions": {
+    "noUncheckedIndexedAccess": false
+  },
+  "include": [
+    "src/lib/libDynamics.ts",
+    "src/lib/libSemanticSignals.ts",
+    "src/lib/libCrossSessionSignals.ts",
+    "src/lib/libSessionMetadata.ts",
+    "src/lib/libEmotionProfile.ts",
+    "src/lib/libSignalFamilies.ts",
+    "src/lib/libProfile.ts",
+    "scripts/diagnose-holdlight-alignment.ts"
+  ]
+}
