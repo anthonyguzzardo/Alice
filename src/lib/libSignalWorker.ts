@@ -206,9 +206,9 @@ async function runJob(job: SignalJobRow): Promise<void> {
 }
 
 /**
- * Owner journal pipeline. Each stage is wrapped in try/catch so one stage's
- * failure doesn't fail the whole job (preserving the existing IIFE semantics
- * from respond.ts). Only catastrophic failures (DB unavailable etc.) propagate
+ * Journal response pipeline (owner + subject; symmetric since INC-023).
+ * Each stage is wrapped in try/catch so one stage's failure doesn't fail
+ * the whole job. Only catastrophic failures (DB unavailable etc.) propagate
  * out of this function and trigger a retry.
  */
 async function runResponsePipeline(job: SignalJobRow): Promise<void> {
@@ -217,10 +217,11 @@ async function runResponsePipeline(job: SignalJobRow): Promise<void> {
   try { await computePriorDayDelta(job.subject_id, localDateStr()); }
   catch (err) { logError('worker.daily-delta', err, ctx); }
 
-  // Embed: defer cleanly if TEI is offline (e.g. running `npm run dev` instead
-  // of `npm run dev:full`). The submission's response is preserved; the embed
-  // gets backfilled later via `npm run backfill`. We skip without throwing so
-  // the job completes and other stages aren't blocked.
+  // Embed: defer cleanly if TEI is offline. Owner local dev runs TEI via
+  // `npm run dev:full`; prod has no TEI by design (no Anthropic / no embed
+  // service on prod). On prod the worker logs and skips here; operator drains
+  // pending embeds later from the laptop via `npm run embed` (all subjects)
+  // or `npm run backfill -- --subject-id N` (one). Other stages aren't blocked.
   try {
     if (!(await isTeiAvailable())) {
       console.log(
@@ -250,8 +251,8 @@ async function runResponsePipeline(job: SignalJobRow): Promise<void> {
 }
 
 /**
- * Calibration pipeline. Mirrors the post-save sequence from /api/calibrate:
- * compute derived signals, snapshot drift baseline.
+ * Calibration pipeline (owner + subject; symmetric since INC-023). Computes
+ * derived signals + snapshots the drift baseline.
  */
 async function runCalibrationPipeline(job: SignalJobRow): Promise<void> {
   const ctx = { signal_job_id: job.signal_job_id, subject_id: job.subject_id, question_id: job.question_id };

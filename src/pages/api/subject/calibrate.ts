@@ -1,30 +1,20 @@
 /**
  * GET  /api/subject/calibrate  — returns a random calibration prompt for the subject.
- * POST /api/subject/calibrate  — saves a calibration session (prompt + response).
+ * POST /api/subject/calibrate  — saves a calibration session and enqueues the pipeline.
  *
- * ============================================================================
- * CONTAMINATION BOUNDARY — READ BEFORE EDITING
- * ============================================================================
- * This handler must NEVER trigger:
- *   - embedResponse()                        — TEI/Qwen, owner-only (local-mode draining)
- *   - computeAndPersistDerivedSignals()      — Rust pipeline, owner-only on prod
- *   - snapshotCalibrationBaselinesAfterSubmit() — owner drift signal
- *   - enqueueSignalJob()                     — would drive any of the above via the worker
+ * Symmetric with `/api/calibrate` (owner) as of INC-023 (2026-04-29). The
+ * prior asymmetric "no derivation for subjects" rule was an over-stated
+ * boundary that produced perpetual drift-snapshot pileup for every non-owner
+ * subject. The actual contamination constraint is narrower:
  *
- * The subject calibration path does EXACTLY:
- *   1. Validate identity (must be active non-owner subject)
- *   2. Pick or accept a calibration prompt
- *   3. Save tb_questions (source_id=3) + tb_responses + tb_session_summaries
- *      + tb_session_events (raw keystroke + event log, encrypted) atomically
- *   4. Return success
+ *   - NO synchronous LLM/Anthropic call (none exist in any submission path).
+ *   - Embed defers when TEI is offline (prod has no TEI; the worker logs
+ *     and skips, drained later via `npm run embed`).
  *
- * NO LLM. NO embedding. NO signal pipeline. NO drift snapshot.
- *
- * Architectural note: subjects must always have unlimited calibration access.
- * Raw measurement input (event log + keystroke stream) is persisted encrypted
- * so the owner can drain pending signal computation later via local-mode
- * `npm run dev:full` — that runs off-prod.
- * ============================================================================
+ * Calibration pipeline (`runCalibrationPipeline` in libSignalWorker) computes
+ * derived signals + drift baseline. Both pure compute. Subjects always have
+ * unlimited calibration access — UI surfaces it from the journal done-screen
+ * and the "no question today" fallback.
  */
 
 import type { APIRoute } from 'astro';
@@ -32,11 +22,15 @@ import {
   saveCalibrationSession,
   getUsedCalibrationPrompts,
   getCalibrationPromptsByRecency,
+  SIGNAL_JOB_KIND,
 } from '../../../lib/libDb.ts';
 import { CALIBRATION_PROMPTS } from '../../../lib/libCalibrationPrompts.ts';
 import { parseBody } from '../../../lib/utlParseBody.ts';
 import { coerceSessionSummary } from '../../../lib/utlSessionSummary.ts';
 import { logError } from '../../../lib/utlErrorLog.ts';
+import { ensureWorkerStarted } from '../../../lib/libSignalWorker.ts';
+
+void ensureWorkerStarted();
 
 export const GET: APIRoute = async ({ locals }) => {
   // Middleware guarantees this is non-null + non-owner + reset complete.
@@ -113,9 +107,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   let questionId: number;
   try {
-    // No `signalJob` — the contamination boundary forbids enqueueing on prod
-    // for subjects. Owner local-mode picks up these rows via the pending-work
-    // notification flow (separate feature) and drains them off-prod.
     questionId = await saveCalibrationSession(subject.subject_id, prompt, trimmedText, coerced, {
       attestation: {
         boundaryVersion: 'v1',
@@ -123,6 +114,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
         commitHash: 'pre-attestation',
       },
       events,
+      signalJob: {
+        kindId: SIGNAL_JOB_KIND.CALIBRATION_PIPELINE,
+        params: { deviceType: (sessionSummary as { deviceType?: string | null }).deviceType ?? null },
+      },
     });
   } catch (err) {
     logError('subject-calibrate.transaction', err, {

@@ -1,44 +1,24 @@
 /**
  * POST /api/subject/respond
  *
- * Saves a subject's journal response and session summary.
- * Subjects only — owner gets 403.
+ * Saves a subject's journal response and session summary, then enqueues the
+ * signal pipeline. Symmetric with `/api/respond` (owner) as of INC-023
+ * (2026-04-29) — the prior asymmetric "no derivation for subjects" rule was
+ * an over-stated boundary that produced perpetual daily-delta pileup for
+ * every non-owner subject. The actual contamination constraint is narrower:
  *
- * ============================================================================
- * CONTAMINATION BOUNDARY — READ BEFORE EDITING
- * ============================================================================
- * This handler must NEVER trigger:
- *   - embedResponse()          — writes to owner RAG corpus, owner-only
- *   - computeAndPersistDerivedSignals() — writes to owner signal tables, owner-only
- *   - computePriorDayDelta()   — owner signal pipeline, owner-only
- *   - enqueueSignalJob()       — drives the same pipelines via the worker
+ *   - NO synchronous LLM/Anthropic call (none exist in any submission path
+ *     anyway; question generation lives in the operator-run corpus refresh).
+ *   - Embed defers when TEI is offline. Prod has no TEI; the worker logs
+ *     and skips, then `npm run embed` drains later from the operator's
+ *     laptop. Same behavior owner has had since Phase 4.
  *
- * The subject response path does EXACTLY:
- *   1. Validate identity (must be active non-owner subject)
- *   2. Validate scheduled question (must be this subject's corpus draw for today)
- *   3. Save text to tb_responses (subject_id-scoped, encrypted at rest)
- *   4. Save session summary to tb_session_summaries
- *   5. Save raw event log + keystroke stream to tb_session_events (encrypted)
- *   6. Return success
+ * Daily delta + Rust signal compute run on prod for everyone. Both are pure
+ * (DB + math, or napi-loaded `.node` binary) — no external services, no
+ * privacy or contamination cost.
  *
- * Step 5 is a pure write. It captures the raw input so signal recomputation
- * is possible later from local-mode owner draining (no LLM, no embed, no
- * pipeline trigger). Without it, subject journals would be forever
- * derived-only — every formula change would lose the past.
- *
- * NO background tasks. NO fire-and-forget. NO LLM calls. NO signal writes.
- * No `enqueueSignalJob` call: subject sessions deliberately do not produce
- * derived signals, embeddings, or daily deltas. If you are adding code after
- * the transaction commit, you are probably violating this boundary. Stop and
- * verify.
- *
- * Storage (post migration 032): writes hit unified `tb_responses` and
- * `tb_session_summaries` tables (each carrying `subject_id NOT NULL` from
- * migration 030). The legacy `tb_subject_responses` and
- * `tb_subject_session_summaries` tables were dropped in Step 9. The wire
- * field carrying the question key was renamed `scheduled_question_id →
- * question_id` to match the unified schema.
- * ============================================================================
+ * Subjects only — middleware guarantees this is a non-owner active session
+ * past the consent + must-reset gates. Owner posts to `/api/respond`.
  */
 import type { APIRoute } from 'astro';
 import sql from '../../../lib/libDbPool.ts';
@@ -48,11 +28,20 @@ import {
   saveSessionSummary,
   saveSessionEvents,
   getResponseText,
+  enqueueSignalJob,
+  SIGNAL_JOB_KIND,
 } from '../../../lib/libDb.ts';
 import { localDateStr } from '../../../lib/utlDate.ts';
 import { parseBody } from '../../../lib/utlParseBody.ts';
 import { coerceSessionSummary } from '../../../lib/utlSessionSummary.ts';
 import { logError } from '../../../lib/utlErrorLog.ts';
+import { ensureWorkerStarted } from '../../../lib/libSignalWorker.ts';
+
+// Boot the durable signal worker on first import. Idempotent (HMR-safe via
+// globalThis flag in libSignalWorker). The worker drains tb_signal_jobs and
+// runs the response pipeline (daily delta → embed-when-TEI-up → derived
+// signals) for both owner and subject jobs.
+void ensureWorkerStarted();
 
 export const POST: APIRoute = async ({ request, locals }) => {
   // Middleware guarantees this is non-null + non-owner + reset complete.
@@ -122,12 +111,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
         );
 
         // Persist raw measurement input (event log + keystroke stream,
-        // encrypted at rest via libDb). Mirrors the owner journal path
-        // (`api/respond.ts`) and the subject calibration path
-        // (`subject/calibrate.ts`). Without this, subject journals would be
-        // forever derived-only — no way to recompute signals offline if a
-        // formula changes. Pure write, no pipeline trigger; contamination
-        // boundary unaffected.
+        // encrypted at rest via libDb). Mirrors the owner journal path.
+        // Required so signal recomputation is possible if a formula changes.
         const eventLog = (sessionSummary as Record<string, unknown>).eventLog;
         const keystrokeStream = (sessionSummary as Record<string, unknown>).keystrokeStream;
         const totalDurationMs = (sessionSummary as Record<string, unknown>).totalDurationMs;
@@ -148,6 +133,18 @@ export const POST: APIRoute = async ({ request, locals }) => {
         }
       }
 
+      // Enqueue the durable signal pipeline job inside the same transaction
+      // as the response save. Either both land or neither — no orphaned
+      // submission without its job, no orphan job without its session.
+      await enqueueSignalJob(
+        {
+          subjectId: subject.subject_id,
+          questionId: question_id,
+          kindId: SIGNAL_JOB_KIND.RESPONSE_PIPELINE,
+        },
+        tx,
+      );
+
       return rid;
     });
   } catch (err) {
@@ -160,8 +157,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
       headers: { 'Content-Type': 'application/json' },
     });
   }
-
-  // NO BACKGROUND TASKS. The response ends here. See contamination boundary above.
 
   return new Response(JSON.stringify({
     response_id: responseId,

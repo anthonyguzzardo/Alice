@@ -6,10 +6,14 @@
  * `--subject-id N`. Each individual backfill is idempotent — sessions that
  * already have a derived row are skipped, so this script is safe to re-run.
  *
- * The contamination boundary forbids triggering these on prod when a subject
- * submits, so this is the operator's local-mode catch-up tool. Run with
- * `npm run dev:full` companions up (TEI on localhost:8090, ANTHROPIC_API_KEY
- * loaded for any LLM-dependent stages).
+ * Post-INC-023 (2026-04-29) submissions enqueue the signal pipeline for both
+ * owner and subjects, so derived signals + daily delta + drift baselines land
+ * on prod automatically. This script remains useful for: backfilling sessions
+ * that submitted before INC-023, draining embed debt (TEI never runs on prod),
+ * recomputing reconstruction/profile when a formula changes, and one-shot
+ * catch-ups after extended TEI downtime. Run with `npm run dev:full`
+ * companions up (TEI on localhost:8090, ANTHROPIC_API_KEY loaded if any
+ * LLM-dependent stages are added in the future).
  *
  * Stage failures are non-fatal: one crashed stage doesn't block the next, and
  * the final summary lists per-stage / per-subject success. Exit code is 1 if

@@ -169,8 +169,8 @@ From CLAUDE.md, memory, and the discipline established across INC-014 through IN
 3. **The black box is sacred.** Never surface to the user: their own response text, future-day question text, raw signal values, trait floats, behavioral metrics. The observatory is designer-facing; the journal is the user surface; never cross the streams.
 3a. **Subject content stays opaque to the operator.** Even though the operator holds the encryption key (one shared key, by design, so signals can be computed), the observatory binds itself not to display subject-authored plaintext — including via replay reconstruction. Server-side redaction in the playback handler (`playback/[questionId].ts`) replaces non-whitespace with `•` when `subjectId !== OWNER_SUBJECT_ID`. Do NOT add a "show body" or `?reveal=1` affordance. Subject content is meant to leave the encrypted store only via the future Phase 6c export endpoint, which lives behind explicit consent + audit rows.
 4. **Archival means removal, not stubbing.** When a feature is deprecated, all code goes; data is preserved under `zz_archive_*` tables. Both producer AND consumer sides of the dependency edge must be cut in the archival commit (the lesson from INC-014/015/016/017).
-5. **Prod is signal-store-only.** Embedding (TEI/Qwen) and LLM (Anthropic) work happen LOCALLY only via `npm run dev:full`. Never on prod.
-6. **Contamination boundary.** Subject submissions NEVER trigger LLM/embed/signal jobs. The boundary docstrings in `src/pages/api/subject/respond.ts` and `src/pages/api/subject/calibrate.ts` are load-bearing.
+5. **Prod runs Rust signals + daily delta; embed/LLM are local-only.** TEI (Qwen) and Anthropic never run on prod. Submission pipelines log "TEI offline" and skip the embed stage on prod; the operator drains the debt later via `npm run embed`. Daily delta + Rust signal compute are pure (DB+math, napi `.node` binary) and run on prod for everyone.
+6. **Contamination boundary (post-INC-023, 2026-04-29).** The constraint is "no synchronous LLM/Anthropic call in the submission path" — which is satisfied by the *absence* of LLM calls in any current pipeline, not by gating who can enqueue. Subject submissions enqueue signal jobs symmetrically with owner. The pre-INC-023 docstrings forbidding `enqueueSignalJob` in subject paths were over-stated and produced perpetual daily-delta + drift-snapshot pileup for every non-owner subject. Pipelines run; embed defers when TEI is offline.
 7. **Every subject gets 30 personal seeds at account creation** via `seedUpcomingQuestions` called from `create-subject.ts`. Seeds are sacred — never overwritten. Corpus refresh is ADDITIVE.
 8. **No DEV_MODE.** Every journal/calibration submission is real prod data. Discipline, not feature flag.
 9. **Encryption key (`ALICE_ENCRYPTION_KEY`) is permanent.** Lose it = lose every encrypted row across all in-scope tables. Backed up in operator's password manager AND in `/etc/alice/secrets.env`.
@@ -260,7 +260,8 @@ npm run dev:full
 npm run dev
 
 # Drain any pending embeds after dev:full + TEI startup
-npm run backfill
+npm run embed                                  # all active subjects (default)
+npm run backfill -- --subject-id N             # one subject only (owner if no flag)
 
 # Refresh shared question corpus (operator-curated)
 npm run corpus:refresh
@@ -290,7 +291,7 @@ npm run corpus:approve data/corpus-candidates-YYYY-MM-DD.md
 1. ~~Hetzner snapshot retention verified in console~~ Done 2026-04-28 via Hetzner Cloud panel: **7 days** (Backups add-on, fixed 7-slot rolling rotation; 2 of 7 slots filled at time of check).
 2. ~~Supabase backup window verified in console~~ Done 2026-04-28 via Supabase dashboard: **7 days** (Pro tier daily backups, no PITR add-on).
 3. ~~Consent doc updated if either number differs~~ Done 2026-04-28: edited `docs/consent-v1.md` and `src/pages/account/delete.astro` from "up to 30 days" to "up to 7 days" — both numbers are 7, so 7 is honest for both copies. **In-place edit, NOT a version bump**, because v1 has no real acknowledgments yet (ash hasn't smoke-tested; the only `tb_subject_consent` rows that ever existed were synthetic test rows that were cleaned up). See substrate decision §11 about pre-publication consent edits.
-4. Ash smoke test on step 4 complete: log in → /consent renders → byte-for-byte check rendered HTML against `docs/consent-v1.md` → click acknowledge → verify journal redirect → query `tb_subject_consent` + `tb_data_access_log` directly to confirm both rows landed atomically
+4. ~~Ash smoke test on step 4 complete~~ Reconciled 2026-04-29: `tb_subject_consent` + `tb_data_access_log` carry ash's v1 acknowledgment rows landed atomically; the middleware gate at `src/middleware.ts:169-174, 202-207` matches the whitelist documented above. All five pre-step-5 conditions satisfied; step 5 (consent middleware gate) shipped 2026-04-28 per §10.
 5. ~~Stale-version reload UX (banner + disabled-button-until-reviewed)~~ Done in step 4 via `?stale=1` query param.
 
 ---

@@ -8,6 +8,61 @@ Newest first.
 
 ---
 
+## INC-023: Subject submission pipeline symmetry
+
+**Date:** 2026-04-29
+**Type:** Boundary correction (closes a documented asymmetry that produced perpetual daily-delta + drift-snapshot pileup for every non-owner subject; no historical reprocessing needed — pipelines re-run idempotently on each subsequent submission).
+
+### What was wrong
+
+Owner journal/calibration submissions enqueued a `tb_signal_jobs` row inside the response transaction (`api/respond.ts:130-133`, `api/calibrate.ts:99-102`). Subject submissions did not (`subject/respond.ts`, `subject/calibrate.ts`). The asymmetry was justified in those files' header docstrings as a "contamination boundary": subject sessions "deliberately do not produce derived signals, embeddings, or daily deltas." The rule was further reinforced in HANDOFF.md §5 #6, GOTCHAS.md, and the `project_prod_is_signal_store_only` memory.
+
+The justification did not survive examination. The signal worker pipeline (`libSignalWorker.ts:214-271`) calls only three things on submission:
+
+1. `computePriorDayDelta` — pure SQL + math, no external services.
+2. `embed` via `embedResponse` — needs TEI; the worker already had a "TEI offline → log and skip" branch (line 225-229) so owner-on-prod (where TEI isn't installed) had been exercising the defer path for months.
+3. `computeAndPersistDerivedSignals` — Rust compute via the `.node` binary, which is already on prod (`/opt/alice/src-rs/alice-signals.linux-x64-gnu.node`) and used by every owner submission.
+
+No LLM/Anthropic call exists in any submission pipeline. `runGeneration` was removed in INC-014 (corpus pivot); question generation now lives in the operator-run `npm run corpus:refresh`. The actual contamination constraint — "no synchronous LLM call in the submission path" — was satisfied by the *absence* of LLM calls, not by gating who could enqueue.
+
+The cost: every non-owner subject accumulated perpetual daily-delta + drift-baseline pileup. The only catch-up path was the operator running `npm run drain-subjects` on the laptop. For ash (the only provisioned subject through 2026-04-29), this meant signals existed only after operator-run drain, never automatically. The handoff documented this as "the operator's local-mode catch-up tool" — the cost was filed as a feature rather than recognized as the symptom of an over-stated boundary.
+
+A second, separate hole exists in `computePriorDayDelta` itself (`libDailyDelta.ts:382-383` — `ORDER BY j.scheduled_for DESC LIMIT 1`): even owner's on-submission pipeline computes only the most-recent eligible prior day. If a compute fails on day N and submissions resume on day N+2, day N+1's delta gets computed but day N's stays piled forever (any later eligible day shadows it under `LIMIT 1`). Out of scope for INC-023; the asymmetry fix below makes this symmetric for both roles, which means subjects now share owner's failure mode rather than having no auto-compute at all. Real fix is to drop the `LIMIT 1` and loop, or to call `runDailyDeltaBackfill` from the worker; deferred to a future increment so this commit's blast radius stays narrow.
+
+### Discovery method
+
+Surfaced from a routine question about whether a cron job runs daily deltas at midnight. Investigating "what runs the prior day on each submission" revealed the asymmetry. Confirmed by reading `subject/respond.ts:8-33` (boundary docstring) against `libSignalWorker.ts:214-250` (actual pipeline) — the docstring forbade enqueuing because "the pipeline contaminates," but the pipeline contained no contamination.
+
+### Resolution
+
+Code:
+
+- `src/pages/api/subject/respond.ts` — added `void ensureWorkerStarted()` at module load. Inside the response-save transaction, after `saveSessionEvents`, added `await enqueueSignalJob({ subjectId, questionId, kindId: SIGNAL_JOB_KIND.RESPONSE_PIPELINE }, tx)`. Header docstring rewritten: drops the "must NEVER trigger" list; replaces with "symmetric with `/api/respond` since INC-023; the actual contamination constraint is no synchronous LLM call (none exist in any submission pipeline anyway)."
+- `src/pages/api/subject/calibrate.ts` — added `void ensureWorkerStarted()` at module load. Existing call to `saveCalibrationSession` now passes `signalJob: { kindId: SIGNAL_JOB_KIND.CALIBRATION_PIPELINE, params: { deviceType } }` (which is the parameter shape the libDb helper has supported since the calibration pipeline landed). Header docstring rewritten parallel to respond.
+- `src/lib/libSignalWorker.ts` — `runResponsePipeline` and `runCalibrationPipeline` header comments neutralized ("Owner journal pipeline" → "Journal response pipeline (owner + subject; symmetric since INC-023)"). The functions themselves required no logic change: they have always operated on `job.subject_id` correctly, and every internal SQL was scoped by `subject_id` during INC-008/009's hotspot scoping work. The TEI-offline defer comment now points to `npm run embed` (the all-subjects drain) alongside `npm run backfill -- --subject-id N`.
+- `src/scripts/embed.ts` — header docstring fixed: prior wording said "never on prod (per the contamination boundary — subject submissions never trigger embed jobs)" which was load-bearing wrong post-INC-023. New wording: "Prod has no TEI by design — submission pipelines on prod log 'TEI offline' and skip the embed stage; this script drains the accumulated debt."
+
+Docs:
+
+- HANDOFF.md §5 #5 + #6 — rule #5 split into prod-component-by-component (Rust signals + daily delta on prod; TEI/Anthropic local-only). Rule #6 rewritten to reflect post-INC-023 boundary: subjects enqueue, pipelines run, embed defers when TEI offline. Cross-references to the prior over-stated docstrings dropped.
+- GOTCHAS.md — added a new historical-landmine entry: "Pre-2026-04-29, subject submissions did NOT enqueue signal pipeline jobs." Sibling to the existing 2026-04-27 raw-input-capture entry. Both end with a "this is a regression" callout pinning the four-submission-paths-symmetric invariant.
+- Memory `project_prod_is_signal_store_only` updated: still accurate that TEI/Anthropic never run on prod, but the "subject pipelines forbid LLM/embed/witness/signals on prod" line is removed (only LLM/embed are forbidden; signals + daily delta are not).
+
+### What changed observable behavior
+
+- Subjects' `tb_session_delta`, `tb_motor_signals`, `tb_dynamical_signals`, `tb_process_signals`, `tb_cross_session_signals`, `tb_semantic_signals`, `tb_calibration_baseline` rows now land automatically inside seconds of submission (same latency owner has seen since Phase 4). Pre-INC-023 these were `NULL` until the operator ran `npm run drain-subjects` on the laptop.
+- `tb_embeddings` rows still don't land on prod for either role — TEI lives on the operator's laptop only. `npm run embed` (added 2026-04-29) is the drain.
+- The signal worker's existing idempotency guards (`if (!(await getXSignals(qid)))` per stage) mean re-running for already-derived sessions is a no-op. Operators who run `npm run drain-subjects` after this lands will see "0 sessions to backfill" for both roles in steady state.
+
+### What didn't change
+
+- Encryption-at-rest, raw-input capture (`tb_session_events.event_log_json` + `keystroke_stream_json`), and the v1 contamination attestation (`docs/contamination-boundary-v1.md`) are unaffected. The v1 attestation has always been about the *keystroke→storage* path being unmediated; the asymmetry between owner and subject pipelines was never part of v1's claims.
+- `runGeneration` is still removed (INC-014). No new LLM call introduced.
+- Prod still has no TEI, no Anthropic key. Both remain operator-laptop-only.
+- The `LIMIT 1` shadow-bug in `computePriorDayDelta` (above) was deliberately not fixed in this commit. Tracked as follow-up.
+
+---
+
 ## INC-022: Export-audit completion row (v2)
 
 **Date:** 2026-04-29
