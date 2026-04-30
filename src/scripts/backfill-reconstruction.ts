@@ -79,7 +79,7 @@ async function main() {
     ORDER BY d.question_id ASC
   ` as Array<{ question_id: number }>;
 
-  console.log(`Found ${questionIds.length} sessions with signal data.`);
+  console.log(`Inspecting ${questionIds.length} sessions with signal data.`);
 
   // Check prerequisites
   const [{ c: responseCount }] = await sql`SELECT COUNT(*)::int AS c FROM tb_responses WHERE subject_id = ${subjectId}` as [{ c: number }];
@@ -94,31 +94,41 @@ async function main() {
     return;
   }
 
-  let success = 0;
-  let skipped = 0;
+  // Snapshot row count to report actual writes vs attempts. computeReconstructionResidual
+  // can silently bail (calibration, <3 prior journals, missing avatar) without throwing,
+  // so an "attempted" counter on no-throw alone is misleading. Truth is the delta.
+  const beforeCount = await getReconstructionResidualCount(subjectId);
+
+  let attempted = 0;
+  let alreadyExisting = 0;
   let failed = 0;
 
   for (const { question_id } of questionIds) {
     try {
-      // Check if already exists (the function also checks, but we want to count skips)
       const [existing] = await sql`
         SELECT 1 FROM tb_reconstruction_residuals WHERE subject_id = ${subjectId} AND question_id = ${question_id}
       `;
       if (existing) {
-        skipped++;
+        alreadyExisting++;
         continue;
       }
 
       await computeReconstructionResidual(subjectId, question_id);
-      success++;
-      process.stdout.write(`\r  ${success + skipped}/${questionIds.length} processed (${success} new, ${skipped} existing)`);
+      attempted++;
+      process.stdout.write(`\r  ${attempted + alreadyExisting}/${questionIds.length} processed (${attempted} attempted, ${alreadyExisting} existing)`);
     } catch (err) {
       failed++;
       console.error(`\n  Failed question_id=${question_id}:`, (err as Error).message);
     }
   }
 
-  console.log(`\n\nBackfill complete. New: ${success}, Skipped: ${skipped}, Failed: ${failed}`);
+  const afterCount = await getReconstructionResidualCount(subjectId);
+  const newRows = afterCount - beforeCount;
+
+  console.log(`\n\nExisting: ${alreadyExisting}, Attempted: ${attempted}, New rows: ${newRows}, Failed: ${failed}`);
+  if (attempted > 0 && newRows === 0) {
+    console.log(`  Note: every attempt produced zero rows. Common silent-bail causes: session is a calibration (excluded by design), <3 prior journal responses for the Markov chain, or thin profile/corpus data.`);
+  }
 
   // Report final state
   const residualCount = await getReconstructionResidualCount(subjectId);
