@@ -11,6 +11,7 @@ import { parseBody } from '../../lib/utlParseBody.ts';
 import { coerceSessionSummary } from '../../lib/utlSessionSummary.ts';
 import { computeSessionMetadata } from '../../lib/libSessionMetadata.ts';
 import { ensureWorkerStarted } from '../../lib/libSignalWorker.ts';
+import { consumeSubmissionLimit, rateLimited } from '../../lib/utlRateLimit.ts';
 
 // Background pipeline (prior-day delta, generation, embed, derived signals)
 // is enqueued as a durable job in tb_signal_jobs and executed by
@@ -21,9 +22,12 @@ import { ensureWorkerStarted } from '../../lib/libSignalWorker.ts';
 void ensureWorkerStarted();
 
 export const POST: APIRoute = async ({ request }) => {
-  // Owner journal write path (Caddy basic-auth gated). Subject journal flow is /api/subject/respond.
-  // TODO(step5): review — subject-aware journal under unified path lands in Step 9 cutover.
+  // Owner journal write path (gated upstream by middleware session check).
+  // Subject journal flow is /api/subject/respond.
   const subjectId = OWNER_SUBJECT_ID;
+
+  const limit = consumeSubmissionLimit(subjectId, 'respond');
+  if (!limit.allowed) return rateLimited(limit);
 
   const body = await parseBody<{ questionId: number; text: string; sessionSummary?: Record<string, unknown> }>(request);
   if (!body) {

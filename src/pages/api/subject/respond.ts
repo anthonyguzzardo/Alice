@@ -36,6 +36,7 @@ import { parseBody } from '../../../lib/utlParseBody.ts';
 import { coerceSessionSummary } from '../../../lib/utlSessionSummary.ts';
 import { logError } from '../../../lib/utlErrorLog.ts';
 import { ensureWorkerStarted } from '../../../lib/libSignalWorker.ts';
+import { consumeSubmissionLimit, rateLimited } from '../../../lib/utlRateLimit.ts';
 
 // Boot the durable signal worker on first import. Idempotent (HMR-safe via
 // globalThis flag in libSignalWorker). The worker drains tb_signal_jobs and
@@ -46,6 +47,9 @@ void ensureWorkerStarted();
 export const POST: APIRoute = async ({ request, locals }) => {
   // Middleware guarantees this is non-null + non-owner + reset complete.
   const subject = locals.subject!;
+
+  const limit = consumeSubmissionLimit(subject.subject_id, 'subject:respond');
+  if (!limit.allowed) return rateLimited(limit);
 
   const body = await parseBody<{
     question_id: number;

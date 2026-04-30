@@ -29,6 +29,7 @@ import { parseBody } from '../../../lib/utlParseBody.ts';
 import { coerceSessionSummary } from '../../../lib/utlSessionSummary.ts';
 import { logError } from '../../../lib/utlErrorLog.ts';
 import { ensureWorkerStarted } from '../../../lib/libSignalWorker.ts';
+import { consumeSubmissionLimit, rateLimited } from '../../../lib/utlRateLimit.ts';
 
 void ensureWorkerStarted();
 
@@ -62,6 +63,9 @@ export const GET: APIRoute = async ({ locals }) => {
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const subject = locals.subject!;
+
+  const limit = consumeSubmissionLimit(subject.subject_id, 'subject:calibrate');
+  if (!limit.allowed) return rateLimited(limit);
 
   const body = await parseBody<{
     prompt: string;

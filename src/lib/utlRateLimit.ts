@@ -78,6 +78,35 @@ export function reset(key: string): void {
   buckets.delete(key);
 }
 
+// ─── Submission limits ─────────────────────────────────────────────────────
+
+/**
+ * Per-subject submission-endpoint rate limit. 60 requests / hour / subject is
+ * comfortably above any plausible legitimate use of the journal/calibration
+ * write paths (these endpoints take seconds-of-typing-then-submit, not
+ * sub-second polling) and tightly bounds a hijacked-session abuser.
+ *
+ * Key is per-(subject, endpoint) so a hijacked session can't drain the budget
+ * of one endpoint to lock the subject out of others.
+ */
+const SUBMISSION_LIMIT = 60;
+const SUBMISSION_WINDOW_MS = 60 * 60 * 1000;
+
+export function consumeSubmissionLimit(subjectId: number, endpoint: string): RateLimitResult {
+  return consume(`submit:${subjectId}:${endpoint}`, SUBMISSION_LIMIT, SUBMISSION_WINDOW_MS);
+}
+
+/** Build a 429 response with a Retry-After header. Shared by the submission handlers. */
+export function rateLimited(result: RateLimitResult): Response {
+  return new Response(JSON.stringify({ error: 'rate_limited', retryAfterSeconds: result.retryAfterSeconds }), {
+    status: 429,
+    headers: {
+      'Content-Type': 'application/json',
+      'Retry-After': String(result.retryAfterSeconds),
+    },
+  });
+}
+
 /** Test-only: clear all buckets. */
 export function _clearAll(): void {
   buckets.clear();

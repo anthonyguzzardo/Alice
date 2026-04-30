@@ -61,6 +61,24 @@ export async function verifyPassword(hash: string, plaintext: string): Promise<b
   }
 }
 
+/**
+ * Lazily-cached Argon2id hash used to equalize the timing cost of "user does
+ * not exist" against "user exists, wrong password." Without this, the missing-user
+ * path returns in microseconds while the wrong-password path eats the ~100ms
+ * Argon2 verify cost — observable as a username-enumeration side channel. We
+ * always run one verify before deciding.
+ *
+ * The dummy plaintext is never accepted as a real password (login flow only
+ * checks the verify result against the real stored hash; the dummy is discarded).
+ */
+let dummyHashPromise: Promise<string> | null = null;
+async function getDummyHash(): Promise<string> {
+  if (!dummyHashPromise) {
+    dummyHashPromise = hashPassword('alice-constant-time-dummy-never-matches-anything');
+  }
+  return dummyHashPromise;
+}
+
 export interface IssuedToken {
   /** Raw token value. Set this as the cookie value sent to the client. */
   token: string;
@@ -108,7 +126,13 @@ export async function loginSubject(
     WHERE username = ${username} AND is_active = TRUE
   `;
   const subject = rows[0] as SubjectAuthRow | undefined;
-  if (!subject) return null;
+  if (!subject) {
+    // Constant-time path: run a verify against a dummy hash so the missing-user
+    // branch takes the same wall-clock time as the wrong-password branch.
+    // Defeats username enumeration via login-latency side channel.
+    await verifyPassword(await getDummyHash(), password);
+    return null;
+  }
   const ok = await verifyPassword(subject.password_hash, password);
   if (!ok) return null;
 

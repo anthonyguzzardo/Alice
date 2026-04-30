@@ -11,6 +11,7 @@ import { parseBody } from '../../lib/utlParseBody.ts';
 import { getGitCommitHash } from '../../lib/utlGitCommit.ts';
 import { coerceSessionSummary } from '../../lib/utlSessionSummary.ts';
 import { ensureWorkerStarted } from '../../lib/libSignalWorker.ts';
+import { consumeSubmissionLimit, rateLimited } from '../../lib/utlRateLimit.ts';
 
 // Background pipeline (extraction + derived signals + drift snapshot) is
 // enqueued in tb_signal_jobs by saveCalibrationSession and executed by
@@ -49,9 +50,11 @@ export const GET: APIRoute = async () => {
 };
 
 export const POST: APIRoute = async ({ request }) => {
-  // Owner-only endpoint (Caddy basic-auth gated). Subject calibration not yet wired.
-  // TODO(step5): review — when subject calibration lands, derive subjectId from auth.
+  // Owner-only endpoint (gated upstream by middleware session check).
   const subjectId = OWNER_SUBJECT_ID;
+
+  const limit = consumeSubmissionLimit(subjectId, 'calibrate');
+  if (!limit.allowed) return rateLimited(limit);
 
   const body = await parseBody<{ prompt: string; text: string; sessionSummary: Record<string, unknown> }>(request);
   if (!body) {

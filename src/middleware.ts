@@ -127,6 +127,33 @@ function isStaticAsset(path: string): boolean {
     || /\.(?:js|mjs|css|png|jpg|jpeg|svg|ico|woff2?|webp|map)$/.test(path);
 }
 
+/**
+ * Belt-and-suspenders Origin check for state-changing requests. Astro's
+ * built-in `security.checkOrigin` is disabled because the Node adapter
+ * behind Caddy reconstructs URL scheme from Host header (X-Forwarded-Proto
+ * is not trusted by default), so even matching Origin headers fail the
+ * check. SameSite=Lax cookies already block cross-origin POSTs, but a
+ * second layer here costs nothing.
+ *
+ * Allowed origins:
+ *   - https://fweeo.com (production canonical)
+ *   - http://localhost:4321 (local dev)
+ *   - missing Origin (browsers omit Origin on top-level navigation; Lax
+ *     cookies handle the rest, and same-origin GETs from the page are fine)
+ */
+const ALLOWED_ORIGINS = new Set<string>([
+  'https://fweeo.com',
+  'http://localhost:4321',
+]);
+
+function failsOriginCheck(request: Request): boolean {
+  const method = request.method.toUpperCase();
+  if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return false;
+  const origin = request.headers.get('origin');
+  if (!origin) return false;
+  return !ALLOWED_ORIGINS.has(origin);
+}
+
 export const onRequest = defineMiddleware(async ({ request, locals }, next) => {
   const subject = await getRequestSubject(request);
   locals.subject = subject;
@@ -144,8 +171,11 @@ export const onRequest = defineMiddleware(async ({ request, locals }, next) => {
   }
 
   if (PUBLIC_PATHS.has(path) || isStaticAsset(path)) {
+    if (failsOriginCheck(request)) return jsonError(403, 'bad_origin');
     return next();
   }
+
+  if (failsOriginCheck(request)) return jsonError(403, 'bad_origin');
 
   // ───── Owner-only APIs ─────────────────────────────────────────────────
   if (isOwnerApi(path)) {
