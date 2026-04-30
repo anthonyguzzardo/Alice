@@ -60,7 +60,7 @@ import PublicLayout from '../layouts/layPublic.astro';
   <section class="i-section" id="signals">
     <h2>The signal engine</h2>
 
-    <p>The behavioral channel runs in a native Rust engine compiled to a platform-specific binary. Rust is the single source of truth for motor, dynamical, and process measurements. There is no fallback implementation. A measurement instrument cannot have two sources of truth. The semantic channel runs server-side via deterministic word-list methods, with no LLM in the computation path.</p>
+    <p>Every signal family — behavioral and semantic, including cross-session comparisons — is computed by a single native Rust engine compiled to a platform-specific binary. Rust is the single source of truth. There is no fallback implementation, no TypeScript shadow path, and no LLM anywhere in the signal pipeline. A measurement instrument cannot have two sources of truth.</p>
 
     <div class="i-families">
       <div class="i-family">
@@ -108,7 +108,7 @@ import PublicLayout from '../layouts/layPublic.astro';
       </div>
       <div class="i-family">
         <span class="i-family-label">Semantic signals</span>
-        <span class="i-family-engine">TypeScript</span>
+        <span class="i-family-engine">Rust</span>
         <p>What you wrote, measured as density metrics. Propositional content, lexical choice, epistemic stance, cohesion structure.</p>
         <div class="i-signals">
           <span>Idea density</span>
@@ -122,7 +122,7 @@ import PublicLayout from '../layouts/layPublic.astro';
       </div>
       <div class="i-family">
         <span class="i-family-label">Cross-session signals</span>
-        <span class="i-family-engine">TypeScript</span>
+        <span class="i-family-engine">Rust</span>
         <p>How your current session relates to your own history. Longitudinal consistency and drift.</p>
         <div class="i-signals">
           <span>Self-perplexity</span>
@@ -137,7 +137,7 @@ import PublicLayout from '../layouts/layPublic.astro';
       </div>
       <div class="i-family">
         <span class="i-family-label">Behavioral state</span>
-        <span class="i-family-engine">TypeScript</span>
+        <span class="i-family-engine">Rust</span>
         <p>Seven-dimensional state vector derived from session summaries. Fluency, deliberation, revision, commitment, volatility, thermal, presence. Convergence is a derived composite (Euclidean distance from personal center in 7D space).</p>
         <div class="i-signals">
           <span>PersDyn dynamics (baseline, variability, attractor force)</span>
@@ -225,7 +225,7 @@ import PublicLayout from '../layouts/layPublic.astro';
       </div>
       <div class="i-stack-row">
         <span class="i-stack-label">AI</span>
-        <span class="i-stack-value">Claude API (question generation, pattern observation)</span>
+        <span class="i-stack-value">Claude API (user-agnostic question generation only — never invoked on user response data)</span>
       </div>
       <div class="i-stack-row">
         <span class="i-stack-label">Embeddings</span>
@@ -233,7 +233,7 @@ import PublicLayout from '../layouts/layPublic.astro';
       </div>
       <div class="i-stack-row">
         <span class="i-stack-label">Signal families</span>
-        <span class="i-stack-value">Dynamical, Motor, Process (Rust) + Semantic, Cross-session, Behavioral State (TypeScript)</span>
+        <span class="i-stack-value">All families — Dynamical, Motor, Process, Semantic, Cross-session, Behavioral State — computed in Rust</span>
       </div>
       <div class="i-stack-row">
         <span class="i-stack-label">Status</span>

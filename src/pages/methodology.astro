@@ -415,7 +415,7 @@ import PublicLayout from '../layouts/layPublic.astro';
   <section class="mt-section">
     <h2>Semantic signals</h2>
     <p>Text-level linguistic analysis of the submitted response. What was written, independent of how it was typed.</p>
-    <p class="mt-engine">Computed in: TypeScript (libSemanticSignals.ts)</p>
+    <p class="mt-engine">Computed in: Rust (src-rs/src/process.rs + semantic helpers)</p>
 
     <div class="mt-signal-list">
       <div class="mt-signal">
@@ -514,7 +514,7 @@ import PublicLayout from '../layouts/layPublic.astro';
   <section class="mt-section">
     <h2>Cross-session signals</h2>
     <p>Longitudinal measures comparing the current entry to prior entries. Novelty, cognitive trajectory, and stability over time.</p>
-    <p class="mt-engine">Computed in: TypeScript (libCrossSessionSignals.ts)</p>
+    <p class="mt-engine">Computed in: Rust (src-rs/src/ — cross-session helpers)</p>
 
     <div class="mt-signal-list">
       <div class="mt-signal">
@@ -595,7 +595,7 @@ import PublicLayout from '../layouts/layPublic.astro';
   <section class="mt-section">
     <h2>Behavioral state engine</h2>
     <p>7-dimensional behavioral state computed per session from the signals above. Each dimension is z-scored against personal history. No AI. Pure math.</p>
-    <p class="mt-engine">Computed in: TypeScript (libStateEngine.ts)</p>
+    <p class="mt-engine">Computed in: Rust (src-rs/src/ — state engine)</p>
 
     <div class="mt-signal-list">
       <div class="mt-signal">
@@ -667,7 +667,7 @@ import PublicLayout from '../layouts/layPublic.astro';
   <section class="mt-section">
     <h2>Dynamics layer</h2>
     <p>Per-dimension trait dynamics computed from the accumulating state history. Baseline, variability, attractor force, and empirical coupling between dimensions.</p>
-    <p class="mt-engine">Computed in: TypeScript (libDynamics.ts)</p>
+    <p class="mt-engine">Computed in: Rust (src-rs/src/dynamical.rs)</p>
 
     <div class="mt-dynamics-grid">
       <div class="mt-dyn-item">

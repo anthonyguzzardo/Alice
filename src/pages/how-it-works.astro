@@ -188,7 +188,7 @@ import PublicLayout from '../layouts/layPublic.astro';
             <details class="hw-family">
               <summary>
                 <span class="hw-family-tag hw-tag-semantic">Semantic</span>
-                <span class="hw-family-engine">TypeScript</span>
+                <span class="hw-family-engine">Rust</span>
                 <span class="hw-family-count">14 signals</span>
               </summary>
               <div class="hw-family-body">
@@ -214,7 +214,7 @@ import PublicLayout from '../layouts/layPublic.astro';
             <details class="hw-family">
               <summary>
                 <span class="hw-family-tag hw-tag-cross">Cross-session</span>
-                <span class="hw-family-engine">TypeScript</span>
+                <span class="hw-family-engine">Rust</span>
                 <span class="hw-family-count">11 signals</span>
               </summary>
               <div class="hw-family-body">
@@ -270,7 +270,7 @@ import PublicLayout from '../layouts/layPublic.astro';
             </div>
             <div class="hw-downstream-item">
               <span class="hw-downstream-label">Question generation</span>
-              <p>RAG assembly (recent + similar + contrarian entries) + behavioral signals + dynamics context + life context, sent to Claude to generate tomorrow's question.</p>
+              <p>Operator-run, off-band corpus refresh against a user-agnostic prompt set. The LLM is invoked only to populate a shared question corpus and never receives or analyzes any subject's response data, signals, or profile. Subjects pull from the shared corpus once their personal seeds run out.</p>
             </div>
           </div>
         </div>
