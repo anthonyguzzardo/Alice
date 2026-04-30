@@ -243,15 +243,17 @@ Second, to validate reproducibility of reconstruction residuals as scientific ar
 | tempo_drift | motor | -9.7296811544 | -9.7296811544 | EXACT |
 | perplexity | perplexity | 83.2449181719 | 83.2449181719 | EXACT |
 
-This guarantee rests on three independently verified properties, each enforced by CI:
+This guarantee rests on four independently verified properties:
 
-1. **Signal computation is build-stable.** Neumaier compensated summation, deterministic iteration (BTreeMap for entropy computation, sorted vecs for Markov chain sampling), and toolchain pinning (Rust 1.95.0, LLVM 22.1.2, aarch64-apple-darwin) eliminate floating-point nondeterminism. Two-clean-build snapshot diffing verifies bit-identity on every commit touching the signal engine.
+1. **Signal computation is build-stable.** Neumaier compensated summation, deterministic iteration (BTreeMap for entropy computation, sorted vecs for Markov chain sampling), and toolchain pinning (Rust 1.95.0, LLVM 22.1.2, aarch64-apple-darwin) eliminate floating-point nondeterminism. Two-clean-build snapshot diffing verifies bit-identity on every commit touching the signal engine. CI-enforced.
 
-2. **Ghost generation is seed-deterministic and build-stable.** All randomness flows from a single u64 PRNG seed via SplitMix64 (Steele, Lea, and Flood 2014). Markov chain and PPM trie data structures use sorted vecs (constructed from HashMaps, then frozen and sorted by key) to ensure deterministic sampling order. Cross-build snapshot tests verify bit-identical ghost output for all five adversary variants. This is CI-enforced (METHODS_PROVENANCE.md INC-006), not merely manually checked.
+2. **Ghost generation is seed-deterministic and build-stable.** All randomness flows from a single u64 PRNG seed via SplitMix64 (Steele, Lea, and Flood 2014). Markov chain and PPM trie data structures use sorted vecs (constructed from HashMaps, then frozen and sorted by key) to ensure deterministic sampling order. Cross-build snapshot tests verify bit-identical ghost output for all five adversary variants. CI-enforced (METHODS_PROVENANCE.md INC-006).
 
 3. **Residual inputs are persisted.** Every residual computed after the reproducibility migration stores the exact PRNG seed, profile snapshot (the JSON passed to the ghost engine), corpus integrity hash (SHA-256), and topic string. Given these stored inputs, any build of the instrument on the pinned toolchain can regenerate the identical ghost and verify the residual.
 
-Pre-reproducibility-era residuals (computed before seed and profile persistence) are frozen artifacts whose stored values are the permanent record. They cannot be independently regenerated.
+4. **Every production measurement carries binary provenance.** Each row written to a Rust-derived signal table records an `engine_provenance_id` linking to a `tb_engine_provenance` row that identifies the `(binary_sha256, cpu_model, host_arch, rustc_version, napi_rs_version)` tuple of the binary that wrote it. Provenance is captured once per process via SHA-256 of the `.node` binary actually loaded by napi-rs (resolved from the same path the loader used, so dev, bundled, and systemd-cwd layouts converge on the right file), upserted to the provenance table, and stamped onto every signal row a worker job writes. The stamp identifies the binary that ran the pipeline that wrote the row, not the binary that ran the most recent CI check. This converts the build-stability guarantee from a property of the codebase into a property of each individual measurement: any signal row in production can be traced to the binary that produced it. Production binaries are built with `RUSTFLAGS="-C target-cpu=x86-64-v3"` (AVX2, FMA, and BMI2 baseline) to guarantee bit-identical output across the heterogeneous production fleet (AMD EPYC Milan and Genoa).
+
+Pre-reproducibility-era residuals (computed before seed and profile persistence) are frozen artifacts whose stored values are the permanent record. They cannot be independently regenerated. Pre-provenance-era signal rows (computed before binary stamping was added) carry NULL `engine_provenance_id` by design. Their values remain valid measurements; they simply lack the per-row attribution that later rows acquired.
 
 ---
 

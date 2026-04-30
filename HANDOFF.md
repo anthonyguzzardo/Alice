@@ -8,6 +8,7 @@ What needs doing. Nothing else.
 - Supabase password decision: no rotation. `.env` never left the disk (no iCloud/Dropbox/Time Machine sync; no untrusted physical access).
 - Provenance stamping verified on prod. 5 affected questions ({126, 127, 157, 162, 194}, subjects 2 + 9) reprocessed via prod's worker; 18 rows now stamped with prod binary (engine_provenance_id = 6). Remaining NULLs on prod are pre-provenance-era rows — NULL by design.
 - `npm run drain-subjects` and its 5 child backfill scripts deleted. They wrote signal rows from the laptop without stamping provenance; that path is gone. Surviving laptop-only flow: `npm run embed` (TEI embeddings, by design).
+- 6 same-class backfill scripts deleted (process-signals, rburst-sequences, hold-flight-corr, adversary-variants, extended-residuals, integrity). All wrote Rust-derived signals from the laptop without stamping; the prod worker handles all of these on submission.
 
 ---
 
@@ -50,15 +51,6 @@ drain-subjects + 5 child backfills + backfill-embeddings already deleted. ~24 sc
 - `confound-analysis.ts` (774 lines)
 - `describe-session-pairs.ts`
 - `schedule-questions.ts`
-
-**Same-class concern:** other `backfill-*` scripts that write Rust-derived signals from the laptop without stamping provenance — same bug class as the now-deleted ones. Review before any future invocation:
-
-- `backfill-process-signals.ts`
-- `backfill-rburst-sequences.ts`
-- `backfill-hold-flight-corr.ts`
-- `backfill-adversary-variants.ts`
-- `backfill-extended-residuals.ts`
-- `backfill-integrity.ts`
 
 (`backfill-encryption.ts` is encryption migration, not signal compute — keep.)
 
