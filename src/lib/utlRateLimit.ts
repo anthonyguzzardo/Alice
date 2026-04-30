@@ -11,7 +11,7 @@
  * rollover lets a burst of up to 2× the limit through; for a 10-per-15-min
  * login limit that's fine.
  *
- * Use case: gate `/api/auth/login` and `/api/auth/reset-password` against
+ * Use case: gate `/api/subject/login` and `/api/subject/reset-password` against
  * credential stuffing. Argon2id verification is already ~100ms per attempt,
  * but this caps how many shots an attacker gets per IP per window.
  */
