@@ -70,21 +70,37 @@ export async function getReconstructionSourceSplit(subjectId: number): Promise<S
 async function main() {
   const subjectId = parseSubjectIdArg();
 
-  // All question_ids with signal data + a response (required for reconstruction)
+  // Journal sessions with signal data. Calibrations (question_source_id = 3)
+  // are excluded at the candidate-set level because computeReconstructionResidual
+  // skips them by design (line 394) — keeping them in the candidate set just
+  // burns Supabase roundtrips per-session for guaranteed-skip work.
   const questionIds = await sql`
     SELECT d.question_id
     FROM tb_dynamical_signals d
     JOIN tb_responses r ON d.question_id = r.question_id
+    JOIN tb_questions q ON d.question_id = q.question_id
     WHERE d.subject_id = ${subjectId}
+      AND q.question_source_id != 3
     ORDER BY d.question_id ASC
   ` as Array<{ question_id: number }>;
 
-  console.log(`Inspecting ${questionIds.length} sessions with signal data.`);
+  console.log(`Inspecting ${questionIds.length} journal sessions with signal data.`);
 
-  // Check prerequisites
-  const [{ c: responseCount }] = await sql`SELECT COUNT(*)::int AS c FROM tb_responses WHERE subject_id = ${subjectId}` as [{ c: number }];
-  if (responseCount < 3) {
-    console.log(`Only ${responseCount} responses in corpus (need >= 3 for Markov chain). Exiting.`);
+  // Prerequisite: ≥3 prior journal responses. The Markov chain inside the
+  // avatar engine needs that minimum corpus, and calibrations are excluded
+  // from the corpus at libReconstruction's `listResponseTextsExcludingCalibration`
+  // call. Counting all responses (including calibrations) gives a false
+  // positive — a subject with 1 journal + 4 calibrations would pass a
+  // raw-count check and then bail per-session inside the lib.
+  const [{ c: journalCount }] = await sql`
+    SELECT COUNT(*)::int AS c
+    FROM tb_responses r
+    JOIN tb_questions q ON r.question_id = q.question_id
+    WHERE r.subject_id = ${subjectId}
+      AND q.question_source_id != 3
+  ` as [{ c: number }];
+  if (journalCount < 3) {
+    console.log(`Only ${journalCount} journal responses in corpus (need >= 3 for Markov chain). Exiting.`);
     return;
   }
 
