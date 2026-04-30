@@ -243,11 +243,11 @@ async function main() {
     const totalNorm = l2(allResiduals);
     const residualCount = allResiduals.filter(isFiniteNum).length;
 
-    // UPDATE the row
-    // alice-lint-disable-next-query subject-scope -- PK update on reconstruction_residual_id; the row was selected via a subject-scoped SELECT above
     // extended_residuals_json is a Record (Tier A JSONB convention per
     // HANDOFF §4 item 11); stringify before parameter binding.
     const extendedJsonParam = JSON.stringify(extendedJson);
+    // UPDATE the row
+    // alice-lint-disable-next-query subject-scope -- PK update on reconstruction_residual_id; the row was selected via a subject-scoped SELECT above
     await sql`
       UPDATE tb_reconstruction_residuals SET
         extended_residuals_json = ${extendedJsonParam},
