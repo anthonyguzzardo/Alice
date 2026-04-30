@@ -107,6 +107,8 @@ function l2(values: (number | null)[]): number | null {
 
 // ─── Per-variant computation ───────────────────────────────────────
 
+type VariantOutcome = 'saved' | 'existing' | 'avatar_null' | 'save_failed';
+
 async function computeForVariant(
   subjectId: number,
   questionId: number,
@@ -123,9 +125,9 @@ async function computeForVariant(
   realDyn: Awaited<ReturnType<typeof getDynamicalSignals>>,
   realMot: Awaited<ReturnType<typeof getMotorSignals>>,
   realSem: Awaited<ReturnType<typeof getSemanticSignals>>,
-): Promise<void> {
+): Promise<VariantOutcome> {
   // Gate: idempotent per variant
-  if (await getReconstructionResidual(subjectId, questionId, variantId)) return;
+  if (await getReconstructionResidual(subjectId, questionId, variantId)) return 'existing';
 
   // Generate avatar for this variant. Inputs cross the napi boundary as typed
   // values (Vec<String> corpus, AvatarProfileInput profile). corpusJson and
@@ -135,7 +137,7 @@ async function computeForVariant(
   const corpus = JSON.parse(corpusJson) as string[];
   const profile = profileFromLegacyJson(profileJson);
   const avatar = generateAvatar(corpus, questionText, profile, realWordCount, variantId);
-  if (!avatar) return;
+  if (!avatar) return 'avatar_null';
 
   // Compute avatar total duration from keystroke stream
   const avatarDurationMs = avatar.keystrokeStream.length > 0
@@ -376,14 +378,50 @@ async function computeForVariant(
 
   try {
     await saveReconstructionResidual(subjectId, questionId, row);
+    return 'saved';
   } catch (err) {
     logError('reconstruction.save', err, { subjectId, questionId, variantId });
+    return 'save_failed';
   }
 }
 
 // ─── Main ──────────────────────────────────────────────────────────
 
-export async function computeReconstructionResidual(subjectId: number, questionId: number): Promise<void> {
+/**
+ * Per-call outcome record. `skippedReason` is non-null only when the entire
+ * call short-circuited (no variants run); otherwise the per-variant counters
+ * report what each of the 5 variants did. `saved + variantsAlreadySaved +
+ * variantsBailed + variantsErrored` sums to ALL_VARIANTS.length unless
+ * `skippedReason` is set.
+ */
+export interface ReconstructionOutcome {
+  saved: number;
+  variantsAlreadySaved: number;
+  variantsBailed: number;
+  variantsErrored: number;
+  skippedReason:
+    | 'calibration'
+    | 'corpus_too_small'
+    | 'question_missing'
+    | 'response_missing'
+    | 'profile_missing'
+    | null;
+}
+
+const NO_OP_OUTCOME = (
+  reason: NonNullable<ReconstructionOutcome['skippedReason']>,
+): ReconstructionOutcome => ({
+  saved: 0,
+  variantsAlreadySaved: 0,
+  variantsBailed: 0,
+  variantsErrored: 0,
+  skippedReason: reason,
+});
+
+export async function computeReconstructionResidual(
+  subjectId: number,
+  questionId: number,
+): Promise<ReconstructionOutcome> {
   // Calibration sessions (question_source_id = 3) are prompted neutral writing.
   // Ghost comparison is journal-only; calibration reconstruction requires a
   // parallel calibration engine (see systemDesign/CALIBRATION_ENGINE.md).
@@ -391,7 +429,7 @@ export async function computeReconstructionResidual(subjectId: number, questionI
     SELECT question_source_id FROM tb_questions
     WHERE question_id = ${questionId} AND subject_id = ${subjectId}
   `;
-  if ((sourceRows[0] as { question_source_id: number }).question_source_id === 3) return;
+  if ((sourceRows[0] as { question_source_id: number }).question_source_id === 3) return NO_OP_OUTCOME('calibration');
 
   // Fetch corpus (shared across all variants) via libDb's decryption boundary.
   // Exclude calibration responses (question_source_id = 3): calibrations are
@@ -401,11 +439,11 @@ export async function computeReconstructionResidual(subjectId: number, questionI
   });
   const textRows = corpusRows.map(r => ({ text: r.text }));
 
-  if (textRows.length < 3) return;
+  if (textRows.length < 3) return NO_OP_OUTCOME('corpus_too_small');
 
   // Fetch question text + source
   const qInfo = await getQuestionTextById(subjectId, questionId);
-  if (!qInfo) return;
+  if (!qInfo) return NO_OP_OUTCOME('question_missing');
   const questionText = qInfo.text;
   const questionSourceId = qInfo.question_source_id;
 
@@ -420,7 +458,7 @@ export async function computeReconstructionResidual(subjectId: number, questionI
   ` as Array<{ word_count: number | null }>;
   const realWordCount = summaryRows[0]?.word_count ?? 150;
   const realText = await getResponseText(subjectId, questionId);
-  if (!realText) return;
+  if (!realText) return NO_OP_OUTCOME('response_missing');
 
   // Fetch personal profile (extended with variant-specific fields)
   const profileRows = await sql`
@@ -442,7 +480,7 @@ export async function computeReconstructionResidual(subjectId: number, questionI
     LIMIT 1
   `;
   const p = profileRows[0] as Record<string, unknown> | undefined;
-  if (!p) return;
+  if (!p) return NO_OP_OUTCOME('profile_missing');
 
   const corpusJson = JSON.stringify(textRows.map(r => r.text));
   const profileJson = JSON.stringify({
@@ -485,18 +523,30 @@ export async function computeReconstructionResidual(subjectId: number, questionI
   // Compute corpus hash ONCE per session (shared across all 5 variants)
   const corpusSha256 = createHash('sha256').update(corpusJson).digest('hex');
 
-  // Run all 5 variants sequentially
+  // Run all 5 variants sequentially. Track per-variant outcomes so the caller
+  // can see why nothing landed (avatar generator bailed, save failed, etc.)
+  // instead of guessing from a row-count delta.
+  let saved = 0;
+  let variantsAlreadySaved = 0;
+  let variantsBailed = 0;
+  let variantsErrored = 0;
   for (const variantId of ALL_VARIANTS) {
     try {
-      await computeForVariant(
+      const outcome = await computeForVariant(
         subjectId, questionId, variantId, corpusJson, questionText, questionSourceId,
         realWordCount, realText, profileJson, corpusSize, sessionCount,
         corpusSha256, realDyn, realMot, realSem,
       );
+      if (outcome === 'saved') saved++;
+      else if (outcome === 'existing') variantsAlreadySaved++;
+      else if (outcome === 'avatar_null') variantsBailed++;
+      else if (outcome === 'save_failed') variantsErrored++;
     } catch (err) {
+      variantsErrored++;
       logError('reconstruction.variant', err, { subjectId, questionId, variantId });
     }
   }
+  return { saved, variantsAlreadySaved, variantsBailed, variantsErrored, skippedReason: null };
 }
 
 // ─── Verification ─────────────────────────────────────────────────

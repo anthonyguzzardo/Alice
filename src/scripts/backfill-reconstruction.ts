@@ -94,14 +94,18 @@ async function main() {
     return;
   }
 
-  // Snapshot row count to report actual writes vs attempts. computeReconstructionResidual
-  // can silently bail (calibration, <3 prior journals, missing avatar) without throwing,
-  // so an "attempted" counter on no-throw alone is misleading. Truth is the delta.
+  // Snapshot row count to report actual writes. computeReconstructionResidual
+  // returns a structured ReconstructionOutcome that explains why each call
+  // produced (or didn't produce) variants, so we no longer have to guess.
   const beforeCount = await getReconstructionResidualCount(subjectId);
 
   let attempted = 0;
   let alreadyExisting = 0;
   let failed = 0;
+  const reasons = new Map<string, number>();
+  const bumpReason = (key: string, delta = 1): void => {
+    reasons.set(key, (reasons.get(key) ?? 0) + delta);
+  };
 
   for (const { question_id } of questionIds) {
     try {
@@ -113,8 +117,13 @@ async function main() {
         continue;
       }
 
-      await computeReconstructionResidual(subjectId, question_id);
+      const outcome = await computeReconstructionResidual(subjectId, question_id);
       attempted++;
+      if (outcome.skippedReason) {
+        bumpReason(`session_skipped:${outcome.skippedReason}`);
+      }
+      if (outcome.variantsBailed > 0) bumpReason('variant:avatar_null', outcome.variantsBailed);
+      if (outcome.variantsErrored > 0) bumpReason('variant:errored', outcome.variantsErrored);
       process.stdout.write(`\r  ${attempted + alreadyExisting}/${questionIds.length} processed (${attempted} attempted, ${alreadyExisting} existing)`);
     } catch (err) {
       failed++;
@@ -126,8 +135,12 @@ async function main() {
   const newRows = afterCount - beforeCount;
 
   console.log(`\n\nExisting: ${alreadyExisting}, Attempted: ${attempted}, New rows: ${newRows}, Failed: ${failed}`);
-  if (attempted > 0 && newRows === 0) {
-    console.log(`  Note: every attempt produced zero rows. Common silent-bail causes: session is a calibration (excluded by design), <3 prior journal responses for the Markov chain, or thin profile/corpus data.`);
+  if (reasons.size > 0) {
+    console.log('  Skip/bail breakdown:');
+    const sorted = [...reasons.entries()].sort((a, b) => b[1] - a[1]);
+    for (const [reason, count] of sorted) {
+      console.log(`    ${reason}: ${count}`);
+    }
   }
 
   // Report final state
