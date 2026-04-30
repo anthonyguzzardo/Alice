@@ -161,11 +161,9 @@ export function computeDynamicalSignals(stream: KeystrokeEvent[]): DynamicalSign
   if (!native) return null;
 
   try {
-    const t0 = performance.now();
     // Typed FFI: pass the stream array directly. napi-rs decodes from JS to
     // Vec<KeystrokeEventInput> on the Rust side. No JSON round-trip.
     const result = native.computeDynamicalSignals(stream);
-    console.log(`[signals] rust dynamical: ${(performance.now() - t0).toFixed(1)}ms (${stream.length} keystrokes)`);
     return {
       ikiCount: result.ikiCount ?? 0,
       holdFlightCount: result.holdFlightCount ?? 0,
@@ -231,9 +229,7 @@ export function computeMotorSignals(
   if (!native) return null;
 
   try {
-    const t0 = performance.now();
     const result = native.computeMotorSignals(stream, totalDurationMs);
-    console.log(`[signals] rust motor: ${(performance.now() - t0).toFixed(1)}ms`);
     return {
       sampleEntropy: n(result.sampleEntropy),
       mseSeries: na(result.mseSeries),
@@ -266,9 +262,7 @@ export function computeProcessSignals(eventLogJson: string): ProcessSignals | nu
   if (!native) return null;
 
   try {
-    const t0 = performance.now();
     const result = native.computeProcessSignals(eventLogJson);
-    console.log(`[signals] rust process: ${(performance.now() - t0).toFixed(1)}ms`);
     return {
       pauseWithinWord: n(result.pauseWithinWord),
       pauseBetweenWord: n(result.pauseBetweenWord),
@@ -293,9 +287,7 @@ export function computePerplexity(corpus: string[], text: string): PerplexityRes
   if (!native) return null;
 
   try {
-    const t0 = performance.now();
     const result = native.computePerplexity(corpus, text);
-    console.log(`[signals] rust perplexity: ${(performance.now() - t0).toFixed(1)}ms`);
     if (result.perplexity < 0) return null; // Rust signals error with -1.0
     return {
       perplexity: result.perplexity,
@@ -364,9 +356,7 @@ export function generateAvatar(
   if (!native) return null;
 
   try {
-    const t0 = performance.now();
     const result = native.generateAvatar(corpus, topic, profile, maxWords, variant);
-    console.log(`[signals] rust avatar v${variant}: ${(performance.now() - t0).toFixed(1)}ms (${result.wordCount} words)`);
     if (!result.text) return null;
     const stream: KeystrokeEvent[] = result.keystrokeStreamJson
       ? JSON.parse(result.keystrokeStreamJson) as KeystrokeEvent[]
@@ -401,9 +391,7 @@ export function regenerateAvatar(
   if (!native) return null;
 
   try {
-    const t0 = performance.now();
     const result = native.regenerateAvatar(corpus, topic, profile, maxWords, variant, seed);
-    console.log(`[signals] rust regenerate avatar v${variant}: ${(performance.now() - t0).toFixed(1)}ms (${result.wordCount} words)`);
     if (!result.text) return null;
     const stream: KeystrokeEvent[] = result.keystrokeStreamJson
       ? JSON.parse(result.keystrokeStreamJson) as KeystrokeEvent[]

@@ -62,8 +62,7 @@ interface HealthResponse {
 }
 
 export const GET: APIRoute = async () => {
-  // Owner-only endpoint (Caddy basic-auth gated). subjectId pinned to OWNER_SUBJECT_ID.
-  // TODO(step5): review — if a per-subject health view ever lands, accept ?subjectId.
+  // Owner-only operator dashboard. Subjects don't have a health view.
   const subjectId = OWNER_SUBJECT_ID;
   const today = localDateStr();
   const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);

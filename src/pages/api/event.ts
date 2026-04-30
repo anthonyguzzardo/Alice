@@ -4,8 +4,7 @@ import { parseBody } from '../../lib/utlParseBody.ts';
 import { logError } from '../../lib/utlErrorLog.ts';
 
 export const POST: APIRoute = async ({ request }) => {
-  // Owner journal interaction event (Caddy basic-auth gated).
-  // TODO(step5): review.
+  // Owner-only. Subjects don't hit this endpoint.
   const subjectId = OWNER_SUBJECT_ID;
   const body = await parseBody<{ questionId: number; eventType: string; metadata?: string | Record<string, unknown> }>(request);
   if (!body) {

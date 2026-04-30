@@ -21,8 +21,7 @@ import { consumeSubmissionLimit, rateLimited } from '../../lib/utlRateLimit.ts';
 void ensureWorkerStarted();
 
 export const GET: APIRoute = async () => {
-  // Owner-only endpoint (Caddy basic-auth gated). Subject calibration not yet wired.
-  // TODO(step5): review — when subject calibration lands, derive subjectId from auth.
+  // Owner-only. Subjects calibrate via /api/subject/calibrate.
   const subjectId = OWNER_SUBJECT_ID;
 
   const used = new Set(await getUsedCalibrationPrompts(subjectId));

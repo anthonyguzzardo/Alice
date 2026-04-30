@@ -28,8 +28,7 @@ try {
 }
 
 export const POST: APIRoute = async ({ request }) => {
-  // Owner-only avatar generation (Caddy basic-auth gated).
-  // TODO(step5): review.
+  // Owner-only. Avatar generation is research infrastructure, not subject-facing.
   const subjectId = OWNER_SUBJECT_ID;
 
   if (!nativeModule?.generateAvatar) {
