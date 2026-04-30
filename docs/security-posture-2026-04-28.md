@@ -75,9 +75,31 @@ Severity = "what does it cost if exploited," not "how easy is it to fix."
 | 18 | Spectre / Rowhammer / cold-boot | Encryption key sits in process RAM whenever Node runs. Out of reach on a managed VPS. |
 | 19 | Browser-side adversaries on owner's device | Extensions with `<all_urls>` read the textarea. Tab-restore-on-crash brings entries back. DevTools always shows POST body. Mitigate with a dedicated browser profile, no extensions. |
 
-## Class II punch list (next-week-sized)
+## Active workstream — FDE rebuild via LUKS (Path A)
 
-Stop after these. Past that the marginal return on platform hardening is below the marginal return on continuing to harden the journal flow itself. Ranked by data-exposure impact.
+Verified 2026-04-29 night via SSH + `lsblk`: Hetzner volume is plain ext4 on `/dev/sda1`, no LUKS layer. `ALICE_ENCRYPTION_KEY` and `ALICE_PG_URL` both sit on the same plaintext volume, so the at-rest encryption of subject content in Supabase is theatrical against any attacker with disk read on Hetzner (read secrets.env → connect to Supabase → decrypt). This violates the consent doc's privacy claim end-to-end.
+
+**Decision (2026-04-29):** rebuild the host with a LUKS-encrypted root partition. Owner types passphrase via Hetzner web VNC console on (rare) reboots. Tang/Clevis network-bound auto-unlock deferred — single-host research instrument with infrequent reboots doesn't need it yet. Path B (downgrade consent claim) explicitly rejected — "we are legit, can't violate subjects' privacy."
+
+**Five-phase rebuild plan, ~4-6 hours total:**
+1. **Pre-flight** — pull `/etc/alice/secrets.env`, `/etc/caddy/Caddyfile`, systemd units, linux-x64 `.node` to laptop. Hetzner Cloud snapshot labelled `pre-luks-rebuild-2026-04-30`. Don't skip the snapshot — it's the rollback path.
+2. **Rescue boot** — Hetzner Cloud Console → Rescue tab → Linux 64-bit → power cycle.
+3. **LUKS install** — wipe sda; partition (ESP + boot + LUKS); cryptsetup luksFormat; debootstrap noble inside LUKS; chroot install of kernel + cryptsetup-initramfs + grub-efi-amd64 with `GRUB_ENABLE_CRYPTODISK=y`; configure /etc/crypttab; set root password + SSH authorized_keys.
+4. **Boot test** — disable rescue, watch VNC console for LUKS passphrase prompt within 30s; type passphrase; SSH in; verify `lsblk` shows TYPE=crypt.
+5. **Restore + smoke test** — install Node 22 + Caddy + postgresql-client; create alice user (uid 996); push back captured state; clone repo; pull `.node` from CI artifact; enable services; end-to-end test (owner login → journal → observatory → export → ash login → calibration).
+
+**Status (2026-04-29 night):** plan locked, paused before Phase 0 execution. Resume tomorrow. The conversation transcript with the full per-block scripts (paste-ready with verification stops) is the working source — re-derive from that, not from this summary.
+
+**On resume, before doing anything:**
+- confirm `~/alice-prebuild-snapshot/` exists on laptop with all pulled state
+- confirm the Hetzner snapshot is "Available" (rollback safety net)
+- re-verify `lsblk` on prod still shows the plain ext4 layout (i.e. nothing changed overnight)
+
+After this lands: gap #5 (key co-located with credentials) downgrades from a real privacy violation to a host-compromise-only risk, the consent doc's at-rest encryption claim becomes verifiable, and the FDE row in "Open verifications" closes.
+
+## Class II punch list (after FDE)
+
+Once FDE is in place, the remaining Class II items. Ranked by data-exposure impact.
 
 | # | Item | Where | Effort | Risk |
 |---|---|---|---|---|
