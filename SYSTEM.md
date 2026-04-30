@@ -110,7 +110,7 @@ During this phase the questions do not adapt. The signal pipeline runs from day 
 
 #### Phase 2: Generated (Day 31+)
 
-After the seeds run out, the system generates tomorrow's question from a bounded context window. Every response is embedded as a vector (Voyage AI) and stored for semantic retrieval. When generating a question, the system assembles:
+After the seeds run out, the system generates tomorrow's question from a bounded context window. Every response is embedded as a vector (local Qwen3-Embedding-0.6B via TEI) and stored for semantic retrieval. When generating a question, the system assembles:
 
 - **Recent entries** (last 14, verbatim) — raw, uncompressed source of truth.
 - **Resonant older entries** retrieved by semantic similarity — past entries that echo current themes, regardless of age.
@@ -333,7 +333,7 @@ Synchronous (before the done message returns):
 3. **Session summary saved.** Full ~50-field row of client-computed behavioral metrics + server-computed densities into `tb_session_summaries`.
 4. **Burst sequence and per-keystroke event log persisted** to `tb_burst_sequences` and `tb_session_events`. Deletion-event timing log attached to the session row.
 5. **Per-session metadata computed** — hour typicality, deletion-density curve, burst trajectory shape, inter-burst rhythm, burst-deletion proximity. Persisted to `tb_session_metadata`.
-6. **Embedding fires-and-forgets** -- entry vectorized via Voyage AI, stored in pgvector with HNSW index. Failures degrade future retrieval to recency-only.
+6. **Embedding fires-and-forgets** -- entry vectorized via local TEI server (Qwen3-Embedding-0.6B), stored in pgvector with HNSW index. Failures degrade future retrieval to recency-only and are drained later via `npm run drain-subjects`.
 
 Async background (the user already has their done message):
 - **Signal pipeline** — dynamical, motor, process signals computed via Rust engine. Session integrity scored against prior profile. Profile updated. Reconstruction residual generated (ghost session synthesized, run through pipeline, L2 norms computed).
@@ -357,7 +357,7 @@ There are no cron jobs, no scheduled tasks, no server dependencies. The system i
 - **PostgreSQL 17** + **pgvector** (HNSW-indexed vector search, JSONB, microsecond-precision timing via `DOUBLE PRECISION`)
 - **Rust signal engine** via napi-rs (`src-rs/`) for dynamical, motor, process, and reconstruction signal computation. Single source of truth for all signal math. If native module unavailable, signals are null for that session.
 - **Claude API** (`@anthropic-ai/sdk`) for question generation, calibration content extraction, and witness-trait rendering
-- **Voyage AI** (`voyageai`) for voyage-3-lite embeddings and semantic retrieval
+- **Qwen3-Embedding-0.6B** via local TEI (Text Embedding Inference) server for vector embeddings and semantic retrieval
 - **Three.js** for 3D rendering of the Alice Negative witness-form
 - **TypeScript** (strict)
 
@@ -398,7 +398,7 @@ There are no cron jobs, no scheduled tasks, no server dependencies. The system i
 - Public research page (`/research`) -- the scientific case for the instrument, with live instrument metadata (session count, signal families, reconstruction residuals) fetched from the API
 - Papers page (`/papers`) -- versioned published papers rendered from markdown with gray-matter frontmatter
 - Instrument architecture page (`/instrument`), methodology page (`/methodology`), vision page (`/vision`)
-- Graceful degradation -- if Voyage AI is unavailable, falls back to recency-only retrieval; if Rust engine unavailable, signal computation returns null and the pipeline skips affected families for that session (health endpoint exposes `rustEngine: true/false`)
+- Graceful degradation -- if the local TEI server is unavailable, embedding falls back to recency-only retrieval (drained later via `npm run drain-subjects`); if Rust engine unavailable, signal computation returns null and the pipeline skips affected families for that session (health endpoint exposes `rustEngine: true/false`)
 - All analysis triggered on submit -- no cron, no scheduler
 
 ### Key Modules

@@ -660,9 +660,10 @@ export async function verifyResidual(
     }
   }
 
-  // Semantic signals are NOT recomputed here. They depend on external APIs
-  // (Claude, Voyage) that may have changed. Per design: semantic residuals
-  // are externally-dependent and excluded from the bit-reproducibility guarantee.
+  // Semantic signals are NOT recomputed here. They depend on the Claude API
+  // (idea density, integrative complexity, etc.) which may drift. Per design:
+  // semantic residuals are externally-dependent and excluded from the
+  // bit-reproducibility guarantee.
 
   const dynamicalMatch = signals.filter(s => s.family === 'dynamical').every(s => s.match);
   const motorMatch = signals.filter(s => s.family === 'motor').every(s => s.match);

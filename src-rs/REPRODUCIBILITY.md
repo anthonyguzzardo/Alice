@@ -100,7 +100,7 @@ The guarantee composes two independently verified properties:
 1. **Ghost generation is seed-deterministic and build-stable.** `regenerate_avatar` takes an explicit seed and produces bit-identical output across clean rebuilds. Verified by CI (`tests/avatar_reproducibility.rs`): all 5 adversary variants produce identical snapshots across builds.
 2. **Signal computation is bit-identical across clean rebuilds.** The existing guarantee (Neumaier summation, deterministic iteration, pinned toolchain). Verified by CI (`tests/reproducibility.rs`).
 
-**Semantic residuals are not covered.** They depend on external NLP APIs (Claude for idea density, Voyage for embeddings) whose behavior can change independently of Alice's code. Semantic residuals are stored and verifiable against regenerated ghost text, but bit-identity across regeneration is not guaranteed.
+**Semantic residuals are not covered.** They depend on the Claude API for idea density, integrative complexity, and similar text-classifying signals, whose behavior can change independently of Alice's code. (Embeddings are local TEI/Qwen3 and deterministic; the Claude-derived semantic signals are the externally-dependent layer.) Semantic residuals are stored and verifiable against regenerated ghost text, but bit-identity across regeneration is not guaranteed.
 
 **Pre-reproducibility-era residuals** (`avatar_seed IS NULL`, all rows before 2026-04-22) are frozen artifacts. Their stored values are the permanent record; they cannot be independently regenerated.
 
@@ -116,4 +116,4 @@ Exercises the full chain on a real stored residual: loads stored seed + profile,
 
 Dynamical and motor signals are verified bit-identical across clean rebuilds via the cross-build snapshot test (see `signal-reproducibility.yml`). Process signals are computed by the same Rust engine with the same numerical discipline (Neumaier summation, BTreeMap iteration where applicable) but are not currently in the cross-build snapshot test. Adding process signals to the check requires a realistic keystroke event fixture with cursor positions, deletions, insertions, and UTF-16 offsets; the current fixture is a linear forward-typing sequence that does not exercise the text reconstruction path. This is tracked as a followup in METHODS_PROVENANCE.md.
 
-Semantic signals depend on external APIs (Claude for idea density, Voyage for embeddings) and are not subject to build-time reproducibility guarantees. This is documented as an inherent scope limitation, not a gap to close.
+Semantic signals depend on the Claude API (idea density, integrative complexity, etc.) and are not subject to build-time reproducibility guarantees. Embeddings are local TEI/Qwen3 and deterministic. This is documented as an inherent scope limitation, not a gap to close.

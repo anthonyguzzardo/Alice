@@ -270,7 +270,6 @@ A bit-identity claim that doesn't extend to production rows is marketing, not a 
 
 ## Known Gotchas
 
-- **VoyageAI types in `libEmbeddings.ts`**: `voyageai` imported via `createRequire` (CJS shim in ESM). If type errors resurface on `VoyageAIClient` or `result: unknown`: extract module ref separately, use `InstanceType<typeof VoyageAIClient>`, cast embed responses to `{ data?: Array<{ embedding?: number[] }> }`.
 - **PostgreSQL camelCase aliases**: PG lowercases unquoted identifiers. Double-quote: `SELECT col AS "camelCase"`.
 - **JSONB auto-parsing**: postgres driver auto-parses JSONB to JS objects. Functions returning JSONB to callers expecting strings must re-stringify.
 - **Rust native module**: loaded via `createRequire` in `libSignalsNative.ts`. Binary path resolves per `process.platform`/`process.arch` via `resolveBinaryFilename()`, exported as `BINARY_PATH` so `libEngineProvenance` hashes the exact loaded file. Targets: `darwin-arm64`, `darwin-x64`, `linux-x64-gnu`, `linux-arm64-gnu`, `win32-x64-msvc`. Missing binary = signals null + `rustEngine: false`. Rebuild: `npm run build:rust`.

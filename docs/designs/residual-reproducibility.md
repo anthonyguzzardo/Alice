@@ -362,7 +362,7 @@ If a future profile model improvement warrants reanalysis, the correct approach 
 >
 > **Scope of the guarantee.** Dynamical and motor residuals are bit-reproducible end to end. The ghost generation (seed-deterministic, build-stable) and the signal computation (Neumaier summation, deterministic iteration, pinned toolchain) are both verified by CI across clean rebuilds. The full chain from stored inputs to stored dynamical/motor residual values is reproducible.
 >
-> Semantic residuals (idea density, lexical sophistication, epistemic stance, integrative complexity, deep cohesion, text compression ratio) depend on external NLP APIs (Claude, Voyage) whose behavior can change independently of Alice's code. Semantic residuals are stored and verifiable against regenerated ghost text, but are not covered by the bit-reproducibility guarantee. They are classified as externally-dependent.
+> Semantic residuals (idea density, lexical sophistication, epistemic stance, integrative complexity, deep cohesion, text compression ratio) depend on the Claude API whose behavior can change independently of Alice's code. Semantic residuals are stored and verifiable against regenerated ghost text, but are not covered by the bit-reproducibility guarantee. They are classified as externally-dependent.
 >
 > Residuals computed before [migration date] are historical artifacts. They carry `NULL` seed and profile snapshot columns. Their stored values are the permanent record; they cannot be independently regenerated.
 
@@ -475,12 +475,12 @@ Script: `src/scripts/verify-residual-integration.ts`
 // 3. Assert match === true
 // 4. Assert recomputed signals are within tolerance (exact match for
 //    dynamical/motor signals on same build; semantic signals may have
-//    external API drift if they call Claude/Voyage)
+//    external API drift if they call Claude)
 ```
 
 ### Semantic signal caveat
 
-Semantic signals (`libSemanticSignals.ts`) may call external APIs (Claude for idea density, Voyage for embeddings). These are not deterministic across API versions. The integration test should:
+Semantic signals (`libSemanticSignals.ts`) may call the Claude API. These are not deterministic across API versions. The integration test should:
 - Verify dynamical and motor residuals match exactly (same Rust engine, same build).
 - Verify semantic residuals match within a tolerance, or skip them with a documented reason if external API responses have drifted.
 
@@ -496,4 +496,4 @@ This caveat does not weaken the reproducibility claim for the signal engine (Rus
 
 3. **`max_words` source:** Already stored as `real_word_count` on the residual row. No additional persistence needed. Derived from `tb_session_summaries.word_count`, which is immutable per session.
 
-4. **Semantic signals and external API dependence.** Semantic signal computation (idea density, lexical sophistication, epistemic stance, integrative complexity, deep cohesion) depends on external APIs (Claude, Voyage) that can change behavior independently of Alice's code. Model updates, prompt caching behavior, and embedding space revisions are outside Alice's control. For Stage 1, semantic residuals are classified as **externally-dependent** and excluded from the strong reproducibility guarantee. **Dynamical and motor residuals are bit-reproducible end-to-end. Semantic residuals are not.** Future work may address semantic reproducibility via API response snapshotting (storing the raw API output alongside the computed signal); not in scope here.
+4. **Semantic signals and external API dependence.** Semantic signal computation (idea density, lexical sophistication, epistemic stance, integrative complexity, deep cohesion) depends on the Claude API which can change behavior independently of Alice's code. Model updates and prompt caching behavior are outside Alice's control. For Stage 1, semantic residuals are classified as **externally-dependent** and excluded from the strong reproducibility guarantee. **Dynamical and motor residuals are bit-reproducible end-to-end. Semantic residuals are not.** Future work may address semantic reproducibility via API response snapshotting (storing the raw API output alongside the computed signal); not in scope here.

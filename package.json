@@ -37,8 +37,7 @@
     "marked": "^18.0.1",
     "postgres": "^3.4.9",
     "three": "^0.183.2",
-    "tsx": "^4.21.0",
-    "voyageai": "^0.2.1"
+    "tsx": "^4.21.0"
   },
   "devDependencies": {
     "@astrojs/node": "^10.0.4",
