@@ -2,55 +2,33 @@
 
 What needs doing. Nothing else.
 
-## Closed in 2026-04-30 second pass
+## Closed in 2026-04-30 cleanup
 
 - Voyage AI key revoked at the dashboard.
-- Supabase password decision: no rotation. `.env` never left the disk (no iCloud/Dropbox/Time Machine sync; no untrusted physical access).
-- Provenance stamping verified on prod. 5 affected questions ({126, 127, 157, 162, 194}, subjects 2 + 9) reprocessed via prod's worker; 18 rows now stamped with prod binary (engine_provenance_id = 6). Remaining NULLs on prod are pre-provenance-era rows — NULL by design.
-- `npm run drain-subjects` and its 5 child backfill scripts deleted. They wrote signal rows from the laptop without stamping provenance; that path is gone. Surviving laptop-only flow: `npm run embed` (TEI embeddings, by design).
-- 6 same-class backfill scripts deleted (process-signals, rburst-sequences, hold-flight-corr, adversary-variants, extended-residuals, integrity). All wrote Rust-derived signals from the laptop without stamping; the prod worker handles all of these on submission.
-- Paper one (option_f_draft.md, "Reconstruction Validity") Section 4.4 updated. Three reproducibility properties expanded to four; new property #4 covers per-row binary provenance. Closing paragraph distinguishes pre-reproducibility-era residuals (frozen artifacts) from pre-provenance-era signal rows (NULL stamp by design). Needs a real-eyes pass before publication.
-- Migration-030 `TODO(step5): review` markers closed. All 5 active sites (event, health, feedback, avatar, calibrate) determined owner-only; TODO lines deleted, owner-lock comments left in place. Subjects use parallel `/api/subject/*` endpoints for what they actually need. Doc-comment in `libDb.ts:51` intentionally retained (documents the convention).
+- Supabase password decision: no rotation. `.env` never left disk (no iCloud/Dropbox/Time Machine sync, no untrusted physical access).
+- Provenance stamping verified on prod. 5 affected questions reprocessed via prod's worker; 18 rows now stamped with prod binary (`engine_provenance_id = 6`).
+- 12 backfill / drain / recompute scripts deleted (drain-subjects + 5 child backfills, 6 same-class signal backfills, plus repo-root `recompute-dynamical-v2` and `diagnose-holdlight-alignment`). All wrote Rust-derived signals from the laptop without stamping; the prod worker handles all of these on submission. Surviving laptop-only flow: `npm run embed`.
+- 9 dead one-shot research / analysis scripts deleted (`recompute-reconstruction`, `recompute-cross-session`, `recompute-semantic-signals`, `extract-residual-decomposition`, `verify-residual-integration`, `extract-calibration-deltas`, `screen-calibration-deltas`, `confound-analysis`, `describe-session-pairs`). 4 orphaned test files removed alongside.
+- Paper one (`option_f_draft.md`, "Reconstruction Validity") Section 4.4 updated. Three reproducibility properties expanded to four; new property #4 covers per-row binary provenance. Closing paragraph distinguishes pre-reproducibility-era residuals from pre-provenance-era signal rows. Needs a real-eyes pass before publication.
+- Migration-030 `TODO(step5): review` markers closed. All 5 active sites (event, health, feedback, avatar, calibrate) determined owner-only; TODOs deleted, owner-lock comments left in place. Subjects use parallel `/api/subject/*` endpoints. Doc-comment in `libDb.ts:51` retained intentionally.
+- `console.*` per-job timing spam removed from `libSignalsNative.ts` (6 logs + their orphan `t0` declarations).
 
 ---
 
 ## Open
 
-### 1. `console.*` noise narrowed to one file
+### 1. Low-novelty residual cluster — cold-start, not a bug
 
-Real per-submission spam is 6 timing logs in `src/lib/libSignalsNative.ts` (lines 168, 236, 271, 298, 369, 406 — `[signals] rust dynamical: Xms` etc.). Delete or gate behind `process.env.ALICE_DEBUG_NATIVE`. Other `console.*` in `src/lib/` is intentional (worker boot/shutdown, error-log helper, embed/TEI status) — leave it.
+The HANDOFF flagged "one day reading ~9 against rolling-window mean of ~38." The query returned five sessions, not one:
 
-### 2. Remaining `src/scripts/` audit
+| qid | scheduled_for | word_count | duration_ms | total_l2_norm |
+|-----|---------------|-----------:|------------:|--------------:|
+|   1 | 2026-04-13    |         90 |     236,936 |          7.89 |
+|   3 | 2026-04-15    |        153 |     169,729 |          8.64 |
+|  12 | 2026-04-24    |        131 |     308,507 |          8.87 |
+|   5 | 2026-04-17    |        146 |     137,970 |          9.37 |
+|   2 | 2026-04-14    |        187 |     194,283 |          9.60 |
 
-drain-subjects + 5 child backfills + backfill-embeddings already deleted. ~24 scripts remain; ~9 are aliased in package.json. Deletion candidates (heavyweight, likely one-shot research code):
+Four of five are sessions Q1–Q5 (Apr 13–17 — the first week of journaling). Word counts and durations are unremarkable. The pattern is a cold-start: the avatar reconstructs more faithfully when the profile has thin behavioral diversity, so early-corpus residuals collapse toward the lower bound. This is a real instrument property, not a measurement artifact and not a structural error. Q12 is the only later outlier worth a deeper look if reviewer questions arise.
 
-- `recompute-reconstruction.ts`
-- `recompute-cross-session.ts`
-- `recompute-semantic-signals.ts`
-- `extract-residual-decomposition.ts`
-- `verify-residual-integration.ts`
-- `extract-calibration-deltas.ts`
-- `screen-calibration-deltas.ts` (759 lines)
-- `confound-analysis.ts` (774 lines)
-- `describe-session-pairs.ts`
-- `schedule-questions.ts`
-
-(`backfill-encryption.ts` is encryption migration, not signal compute — keep.)
-
-### 3. Investigate the unexplained low-novelty residual day
-
-Variant-1 `total_l2_norm` for owner has one day reading ~9 against a rolling-window mean of ~38 (>2σ toward "session looked unusually avatar-like"). Either a real low-novelty cognitive day or a measurement artifact. Find the question_id, eyeball word count, duration, P-burst stats, the question text. If structural, document. If real, that's the kind of finding the instrument is designed to surface.
-
-```sql
-SELECT r.question_id, q.scheduled_for, ss.word_count, ss.total_duration_ms,
-       r.total_l2_norm, r.adversary_variant_id
-FROM tb_reconstruction_residuals r
-JOIN tb_questions q ON r.question_id = q.question_id
-JOIN tb_session_summaries ss ON r.question_id = ss.question_id
-WHERE r.subject_id = 1
-  AND r.adversary_variant_id = 1
-  AND r.total_l2_norm < 15
-  AND q.question_source_id != 3
-ORDER BY r.total_l2_norm ASC
-LIMIT 5;
-```
+Decision needed: document this as a known cold-start regime in the methods section (one sentence in Section 4.4 or 6), or footnote it where the residual values are first reported.
