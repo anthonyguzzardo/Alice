@@ -50,7 +50,6 @@ import ObsToolbar from '../../components/cmpObsToolbar.astro';
           <a href="/observatory">overview</a>
           <a href="/observatory/trajectory">trajectory</a>
           <a href="/observatory/scales">scales</a>
-          <a href="/observatory/coupling">coupling</a>
           <a href="/observatory/ghost">ghost</a>
           <a href="/">→ alice</a>
           <a href="#" data-logout>logout</a>
@@ -138,16 +137,12 @@ import ObsToolbar from '../../components/cmpObsToolbar.astro';
           } else {
             const head = '<thead><tr><th>when</th><th>subject</th><th>scheduled</th><th>response</th></tr></thead>';
             const body = rows.map(r => {
-              // Build the entry-detail link with this row's subjectId so the
-              // operator lands inside that subject's scope, regardless of
-              // which subject they're currently viewing.
-              const entryHref = '/observatory/entry/' + r.responseId + '?subjectId=' + r.subjectId;
               const subj = (r.displayName || r.username) + ' #' + r.subjectId;
               return `<tr>
                 <td>${fmtTime(r.createdAt)}</td>
                 <td>${subj}</td>
                 <td class="meta">${r.scheduledFor ?? '—'}</td>
-                <td><a href="${entryHref}">#${r.responseId}</a></td>
+                <td>#${r.responseId}</td>
               </tr>`;
             }).join('');
             table.innerHTML = `<table>${head}<tbody>${body}</tbody></table>`;

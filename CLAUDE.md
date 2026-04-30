@@ -97,7 +97,7 @@ Without `tx`, each function uses the module-level pool independently.
 - Enum tables: explicit INSERT with fixed IDs
 - No ALTER TABLE in `db/sql/dbAlice_Tables.sql`. Rewrite the CREATE TABLE so schema reads as a complete script. Increments go in `db/sql/migrations/`.
 - No proper nouns in column names
-- JSONB columns: `traits_json`, `signals_json`, `deletion_events_json`, `iki_autocorrelation_json`, `digraph_latency_json`, `pe_spectrum`, prompt trace ID arrays. (`event_log_json` and `keystroke_stream_json` are encrypted ciphertext+nonce TEXT pairs. App `JSON.stringify`s before encrypt, `JSON.parse`s after decrypt.)
+- Despite the `_json` suffix, `event_log_json` and `keystroke_stream_json` are encrypted ciphertext+nonce TEXT pairs, not JSONB. App `JSON.stringify`s before encrypt, `JSON.parse`s after decrypt.
 - Embeddings: `vector(512)` on `tb_embeddings` via pgvector with HNSW index
 
 ---
@@ -110,15 +110,14 @@ Prefixes make files self-identifying outside their directory (stack traces, sear
 |--------|------|---------|
 | `lib` | Library/domain logic | `libDynamicalSignals.ts` |
 | `utl` | Utility | `utlDate.ts` |
-| `cmp` | Astro component | `cmpAppNav.astro` |
+| `cmp` | Astro component | `cmpObsToolbar.astro` |
 | `lay` | Astro layout | `layBase.astro` |
 | `sty` | CSS file | `styObservatory.css` |
 
 Rules:
 1. Prefix + PascalCase, no hyphens
-2. Subdirectories also prefixed (`libAliceNegative/libStateEngine.ts`)
-3. NOT prefixed: `src/pages/*.astro` (file-based routing → URLs, kebab-case), `src/pages/api/*.ts` (kebab-case), `src/scripts/*.ts` (kebab-case), `src-rs/src/*.rs` (snake_case)
-4. SQL: `db/sql/dbAlice_*.sql`, migrations `db/sql/migrations/NNN_description.sql`
+2. NOT prefixed: `src/pages/*.astro` (file-based routing → URLs, kebab-case), `src/pages/api/*.ts` (kebab-case), `src/scripts/*.ts` (kebab-case), `src-rs/src/*.rs` (snake_case)
+3. SQL: `db/sql/dbAlice_*.sql`, migrations `db/sql/migrations/NNN_description.sql`
 
 ```
 src/

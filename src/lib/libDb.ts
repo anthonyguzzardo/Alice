@@ -1564,21 +1564,6 @@ export async function savePromptTrace(trace: PromptTraceInput): Promise<void> {
 // were archived 2026-04-16. Data preserved under zz_archive_* tables.
 // Stub functions removed 2026-04-20 — no active callers remain.
 
-// Calibration-context extraction was archived 2026-04-27 (INC-015). The
-// producer (libCalibrationExtract.ts) was deleted alongside the pipeline
-// invocation in libSignalWorker.ts; tb_calibration_context is renamed to
-// zz_archive_tb_calibration_context by migration 034. saveCalibrationContext,
-// getCalibrationContextForQuestion, getRecentCalibrationContext,
-// getCalibrationContextNearDate, and CalibrationContextTag are removed.
-
-// Entry states + reflections were archived 2026-04-27 (INC-017). The producer
-// for entry_states (libRenderWitness, deleted in INC-014) and the reflection
-// generator both had zero live callers when archived. tb_entry_states and
-// tb_reflections renamed to zz_archive_* by migration 036. EntryStateRow,
-// saveEntryState, getAllEntryStates, getEntryStateCount, getEntryStatesWithDates,
-// getEntryStateByResponseId, saveReflection, getLatestReflection,
-// getAllReflections, getLatestReflectionWithCoverage are removed.
-
 // ----------------------------------------------------------------------------
 // @region calibration-deltas -- saveSessionDelta, getRecentSessionDeltas, getSameDayCalibrationSummary
 // SESSION DELTA (same-day calibration -> journal behavioral shift)

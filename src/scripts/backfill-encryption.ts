@@ -207,16 +207,6 @@ async function main(): Promise<void> {
     'tb_questions', 'question_id', 'text', 'text_ciphertext', 'text_nonce',
   ));
   allStats.push(await backfillSingleColumn(
-    'tb_reflections', 'reflection_id', 'text', 'text_ciphertext', 'text_nonce',
-  ));
-  allStats.push(await backfillSingleColumn(
-    'tb_calibration_context', 'calibration_context_id', 'value', 'value_ciphertext', 'value_nonce',
-  ));
-  allStats.push(await backfillSingleColumn(
-    'tb_calibration_context', 'calibration_context_id', 'detail', 'detail_ciphertext', 'detail_nonce',
-    { skipNullPlaintext: true },
-  ));
-  allStats.push(await backfillSingleColumn(
     'tb_embeddings', 'embedding_id', 'embedded_text', 'embedded_text_ciphertext', 'embedded_text_nonce',
   ));
 

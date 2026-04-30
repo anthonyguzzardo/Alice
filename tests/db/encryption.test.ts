@@ -19,9 +19,7 @@
  *
  * The test exercises the complete column inventory (tb_responses,
  * tb_questions, tb_embeddings, tb_session_events) so any wiring drift is
- * caught — not just one column. tb_calibration_context was archived
- * 2026-04-27 (INC-015) and dropped from this test; tb_reflections was
- * archived 2026-04-27 (INC-017) and dropped likewise.
+ * caught — not just one column.
  */
 
 import { describe, it, expect, beforeEach, afterAll } from 'vitest';

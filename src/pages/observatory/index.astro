@@ -47,7 +47,6 @@ import ObsToolbar from '../../components/cmpObsToolbar.astro';
           <a href="/observatory" class="active">overview</a>
           <a href="/observatory/trajectory">trajectory</a>
           <a href="/observatory/scales">scales</a>
-          <a href="/observatory/coupling">coupling</a>
           <a href="/observatory/ghost">ghost</a>
           <a href="/">→ alice</a>
           <a href="#" data-logout>logout</a>
@@ -117,7 +116,7 @@ import ObsToolbar from '../../components/cmpObsToolbar.astro';
             ? `<a class="action-btn" href="${window.__obsUrl('/observatory/replay/' + s.question_id)}">▶ replay</a>`
             : '<span class="action-btn-muted">—</span>';
           return `<tr>
-            <td><a href="${window.__obsUrl('/observatory/entry/' + s.response_id)}">${s.date}</a></td>
+            <td>${s.date}</td>
             <td class="meta">${meta}</td>
             <td>${replay}</td>
           </tr>`;

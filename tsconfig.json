@@ -6,12 +6,9 @@
   "include": [".astro/types.d.ts", "**/*"],
   "exclude": [
     "dist",
-    "src/lib/libDynamics.ts",
     "src/lib/libSemanticSignals.ts",
     "src/lib/libCrossSessionSignals.ts",
     "src/lib/libSessionMetadata.ts",
-    "src/lib/libEmotionProfile.ts",
-    "src/lib/libSignalFamilies.ts",
     "src/lib/libProfile.ts",
     "scripts/diagnose-holdlight-alignment.ts"
   ]

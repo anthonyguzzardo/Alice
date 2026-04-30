@@ -4,11 +4,6 @@
  * Returns a per-entry envelope keyed on tb_responses, joined to question
  * text + date and to live signal tables (motor, phase2, process,
  * cross-session, discourse). Designer-facing only.
- *
- * Pre-2026-04-27 this endpoint anchored on tb_entry_states and surfaced
- * 7D behavioral z-scores. tb_entry_states was archived (migration 036,
- * INC-017) along with the radar UI that consumed it; the endpoint was
- * re-anchored on tb_responses to keep the rest of the trajectory page alive.
  */
 import type { APIRoute } from 'astro';
 import sql from '../../../lib/libDb.ts';
