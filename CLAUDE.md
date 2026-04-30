@@ -261,7 +261,7 @@ A bit-identity claim that doesn't extend to production rows is marketing, not a 
 
 - One row per (binary, CPU model) pair. Same binary on different microarchitectures (AMD EPYC Milan vs Genoa) gets distinct rows. Vectorized FP paths can diverge across uarchs.
 - Captured once per process via `getEngineProvenanceId()` in `libEngineProvenance.ts`. Lazily computes SHA-256 of loaded `.node`, reads CPU model (`sysctl` macOS / `/proc/cpuinfo` Linux), `napi-rs` and `rustc` versions, upserts. Cached for process lifetime.
-- Stamped after pipeline, before completion. `libSignalWorker.runJob` calls `stampEngineProvenance(questionId, provenanceId)`. Updates all 6 Rust-derived signal tables atomically, only where `IS NULL`. Idempotent on retry.
+- Stamped after pipeline, before completion. `libSignalWorker.runJob` calls `stampEngineProvenance(subjectId, questionId, provenanceId)`. Updates all 6 Rust-derived signal tables atomically, only where `IS NULL`. Idempotent on retry.
 - NULL = pre-provenance era. Column is nullable by design. Missing stamp must never block a measurement.
 - **Production build flag**: linux/x86_64 builds with `RUSTFLAGS="-C target-cpu=x86-64-v3"`. Pins instruction baseline (AVX2 + FMA + BMI2) so AMD EPYC Milan and Genoa produce bit-identical output. Without it, runtime CPU dispatch can diverge across the Hetzner fleet. CI's `build-linux-x64` job sets this.
 - Compiled `.node` is never in git. Built per-target locally (`npm run build:rust`) or in CI. `src-rs/*.node` is in `.gitignore`. Dev `.node` ≠ prod `.node`; provenance row tells you which.
