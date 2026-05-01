@@ -40,10 +40,10 @@ fweeo.com {
 
   # Long cache for hashed assets; no-store for everything else (defeats
   # BFCache restore of textarea contents on back-navigation).
-  @assets path /_astro/* /favicon.ico /robots.txt
+  @assets path /_astro/* /fonts/* /favicon.ico /robots.txt
   @dynamic {
     not {
-      path /_astro/* /favicon.ico /robots.txt
+      path /_astro/* /fonts/* /favicon.ico /robots.txt
     }
   }
   header @assets {
