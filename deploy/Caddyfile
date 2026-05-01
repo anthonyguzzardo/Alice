@@ -1,27 +1,59 @@
 # Caddy config for Alice on Hetzner.
 # Place at /etc/caddy/Caddyfile, then `sudo systemctl reload caddy`.
 #
-# Caddy auto-issues + renews TLS certs via Let's Encrypt. This handles
-# real end-to-end TLS — Cloudflare flexible-mode (no real TLS to origin)
-# was rejected as a downgrade.
+# Caddy handles real end-to-end TLS via Let's Encrypt (Cloudflare
+# flexible-mode rejected as a downgrade).
 #
 # DNS: Cloudflare A record fweeo.com → Hetzner IP, proxy ON.
 #      Cloudflare A record www.fweeo.com → Hetzner IP, proxy ON.
+#      (Phase 3 of Class II punch-list flips this to DNS-only.)
 #
-# Auth: every protected route is gated by the application's session-cookie
-# middleware (`src/middleware.ts`). Caddy is purely TLS termination + a
-# reverse proxy to the Astro server on localhost:4321. Pre-2026-04-28
-# this file held an HTTP Basic Auth gate over owner-only paths
-# (`@owner_paths` + `OWNER_BASICAUTH_HASH`); both have been removed now
-# that owner and subjects share the universal `/login` flow.
+# Auth: every protected route is gated by the app's session-cookie
+# middleware (`src/middleware.ts`). Caddy is TLS + reverse proxy only.
 
-# Redirect www → apex (canonical hostname is fweeo.com).
+# Redirect www → apex.
 www.fweeo.com {
   redir https://fweeo.com{uri} permanent
 }
 
 fweeo.com {
   encode gzip zstd
+
+  # Security headers (applied after upstream so we always win).
+  # CSP keeps 'unsafe-inline' for script/style because Astro emits
+  # `is:inline` scripts and inline `style=` attributes. Strict
+  # nonce-based CSP is a follow-up workstream — without it, this
+  # CSP blocks remote exfil + framing but does NOT prevent reflected
+  # XSS execution.
+  header {
+    Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+    Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'self'; object-src 'none'; upgrade-insecure-requests"
+    X-Frame-Options "DENY"
+    X-Content-Type-Options "nosniff"
+    Referrer-Policy "no-referrer"
+    Permissions-Policy "accelerometer=(), ambient-light-sensor=(), autoplay=(), battery=(), camera=(), display-capture=(), document-domain=(), encrypted-media=(), fullscreen=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), picture-in-picture=(), publickey-credentials-get=(), screen-wake-lock=(), sync-xhr=(), usb=(), web-share=(), xr-spatial-tracking=(), interest-cohort=()"
+    Cross-Origin-Opener-Policy "same-origin"
+    Cross-Origin-Resource-Policy "same-origin"
+    -Server
+    defer
+  }
+
+  # Long cache for hashed assets; no-store for everything else (defeats
+  # BFCache restore of textarea contents on back-navigation).
+  @assets path /_astro/* /favicon.ico /robots.txt
+  @dynamic {
+    not {
+      path /_astro/* /favicon.ico /robots.txt
+    }
+  }
+  header @assets {
+    Cache-Control "public, max-age=31536000, immutable"
+    defer
+  }
+  header @dynamic {
+    Cache-Control "no-store"
+    defer
+  }
 
   reverse_proxy localhost:4321 {
     header_up Host {host}
@@ -37,4 +69,9 @@ fweeo.com {
     }
     format console
   }
+
+  # Skip access logs on subject-bearing POST paths — no IP/path
+  # metadata trail for journal/calibration submissions.
+  @journal_posts path /api/respond /api/subject/respond /api/calibrate /api/subject/calibrate /api/event
+  log_skip @journal_posts
 }
