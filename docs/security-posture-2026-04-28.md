@@ -108,6 +108,19 @@ Severity = "what does it cost if exploited," not "how easy is it to fix."
 
 **Next:** Class II punch list — item 1 (Cloudflare proxy off) is now the largest remaining data-exposure surface.
 
+## Completed: Cloudflare Web Analytics RUM removed — 2026-04-30
+
+Cloudflare Web Analytics RUM beacon was active at audit (auto-injected via dashboard, mode: Enable excluding EU). Captured per-element interaction data including `#password-input` INP for non-EU visitors. Removed 2026-04-30 via dashboard Delete.
+
+Discovered during Class II item 2 deploy: the new CSP (`script-src 'self' 'unsafe-inline'`) refused the auto-injected `https://static.cloudflareinsights.com/beacon.min.js` script and surfaced the violation in DevTools, exposing the third-party RUM stream that had been running silently. Beacon is sourced from Cloudflare's edge HTML rewrite (orange-cloud), never from our code: `grep -rE "cloudflareinsights|beacon\.min" /opt/alice` returns clean across `src/`, `dist/`, and `node_modules/` (0 hits).
+
+Order of effects:
+- CSP (deployed 2026-04-30) blocks new beacon execution in browsers from that point onward.
+- Dashboard "Delete" (2026-04-30) stops Cloudflare from injecting the script tag at all and stops server-side counter aggregation.
+- Class II #1 (DNS-only) will eliminate any residual ability for Cloudflare to inject anything into responses.
+
+Historical RUM data (pre-2026-04-30) sits in Cloudflare's retention. Data-subject deletion request to Cloudflare privacy (`privacyquestions@cloudflare.com`, GDPR Art. 17 / CCPA right-to-delete) is open as a follow-up.
+
 ## Class II punch list (after FDE)
 
 Once FDE is in place, the remaining Class II items. Ranked by data-exposure impact.
