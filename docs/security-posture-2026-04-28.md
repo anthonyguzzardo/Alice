@@ -27,7 +27,9 @@ These do not need rework — listed so future audits do not re-discover them.
   - Embeddings: local TEI on `localhost:8090` with SHA-pinned Qwen3-Embedding-0.6B. Voyage is dead.
   - LLM: `ANTHROPIC_API_KEY` is not on prod. Only call site is `src/scripts/expand-corpus.ts` (operator-run `npm run corpus:refresh`); user-agnostic by construction — no subject text, signals, traits, or per-subject context cross the API boundary.
   - Supabase: only ever sees ciphertext (encryption happens at the app layer before INSERT).
-  - **Cloudflare is the only third party that sees journal plaintext today** (proxy ON in front of fweeo.com). Single largest remaining data-exposure surface.
+  - **Fonts** (closed 2026-04-30): Cormorant Garamond + EB Garamond self-hosted at `/fonts/` (latin + latin-ext woff2 subsets, OFL). Replaces `fonts.googleapis.com` + `fonts.gstatic.com` which previously saw every pageview's referrer + IP + UA on every Alice page. See Completed section.
+  - **Cloudflare is the only remaining third party in the data path** (proxy ON in front of fweeo.com). They terminate user TLS at the edge; every login, journal entry, session cookie crosses their plaintext. Subpoenable (US company). Single largest remaining data-exposure surface. Closing this is Class II item 1.
+- **Caddy security headers + Cache-Control + log_skip** (deployed 2026-04-30, see Completed section): HSTS preload-eligible (max-age=63072000), CSP (with `'unsafe-inline'` caveat — strict nonce-based CSP on Class I roadmap), X-Frame-Options DENY, X-Content-Type-Options nosniff, Referrer-Policy no-referrer, Permissions-Policy full lockdown, COOP/CORP same-origin, `-Server`. `Cache-Control: no-store` on every dynamic path; `public, max-age=31536000, immutable` on hashed assets (`/_astro/*`, `/fonts/*`, `/favicon.ico`, `/robots.txt`). `log_skip` on `/api/respond`, `/api/subject/respond`, `/api/calibrate`, `/api/subject/calibrate`, `/api/event` — no IP/path metadata trail for subject-bearing POSTs.
 - **Cross-subject leak guard**: `tests/db/exportLeakGuard.test.ts` plants two subjects, exports A, asserts no row references B.
 - **CI npm audit gate**: `npm audit --audit-level=high --omit=dev` runs on every PR.
 - **Browser hygiene**: textareas have `autocomplete/autocorrect/autocapitalize/spellcheck` off on both render paths. No localStorage drafts. No service worker, no manifest, no source maps in dist. Theme is the only thing in localStorage.
@@ -42,14 +44,14 @@ Severity = "what does it cost if exploited," not "how easy is it to fix."
 | # | Gap | Where | Reason |
 |---|---|---|---|
 | 1 | Cloudflare proxy ON in front of fweeo.com | `deploy/Caddyfile:8` (DNS comment) | Cloudflare terminates user TLS at their edge and re-encrypts to Caddy. They see every login, journal entry, session cookie in plaintext at the edge. Subpoenable (US company). For monastic Alice this is the single largest remaining leak. |
-| 2 | No HSTS header | grep returns zero hits across repo | First HTTP visit is downgrade-attackable (sslstrip, evil-twin WiFi). |
-| 3 | No CSP, X-Frame-Options, Referrer-Policy, Permissions-Policy, X-Content-Type-Options | grep returns zero hits | Single XSS bug becomes total compromise. The `escapeHtml` helper in `src/pages/index.astro:1686` is the only line of defense for innerHTML render paths. |
+| 2 | ~~No HSTS header~~ | `deploy/Caddyfile` | **Closed 2026-04-30 (Class II #2)** — `Strict-Transport-Security: max-age=63072000; includeSubDomains; preload` deployed. |
+| 3 | ~~No CSP, X-Frame-Options, Referrer-Policy, Permissions-Policy, X-Content-Type-Options~~ — partially closed | `deploy/Caddyfile` | **Partially closed 2026-04-30 (Class II #2)** — XFO DENY, X-Content-Type-Options nosniff, Referrer-Policy no-referrer, Permissions-Policy full lockdown, COOP/CORP same-origin all deployed. CSP also deployed but with `script-src 'self' 'unsafe-inline'` and `style-src 'self' 'unsafe-inline'` because Astro emits `<script is:inline>` (theme bootstrap, session check) and inline `style=` attributes. Current CSP blocks remote script loading, exfiltration via `connect-src`, framing, base-URL pivots, plugin embeds — but does NOT prevent reflected XSS executing as inline `<script>...</script>`. The `escapeHtml` helper in `src/pages/index.astro:1686` remains the load-bearing inline-XSS defense. Strict nonce-based CSP on Class I roadmap. |
 
 ### High
 
 | # | Gap | Where | Reason |
 |---|---|---|---|
-| 4 | No `Cache-Control: no-store` on journal pages (`/`, `/subject`) | grep returns one hit and it's `/api/subject/export` only | BFCache restores textarea contents from RAM after back-navigation. |
+| 4 | ~~No `Cache-Control: no-store` on journal pages (`/`, `/subject`)~~ | `deploy/Caddyfile` | **Closed 2026-04-30 (Class II #2)** — `Cache-Control: no-store` on every dynamic path (HTML + API); `public, max-age=31536000, immutable` only on hashed assets. BFCache no longer restores journal textareas on back-navigation. |
 | 5 | `ALICE_ENCRYPTION_KEY` is plaintext in `/etc/alice/secrets.env`; permanent (no rotation) | `libCrypto.ts:15-16` | **Mitigated by FDE 2026-04-30 against offline disk reads.** Live host compromise (root via SSH or Caddy 0day) = key + ciphertext + DB in same blast radius. Class I bar requires HSM/TPM-bound master with KDF-derived per-row keys and rotation. |
 | 6 | No 2FA / WebAuthn | not implemented | Single password gates the owner. |
 | 7 | Argon2id at OWASP minimum (64MB / 3 iter) | `libSubjectAuth.ts:35` | Hetzner CCX13 can comfortably run 256MB / 4 iter. ~16x GPU/ASIC cost increase for free. **Gated on a benchmark confirming login latency stays under 500ms before the bump lands.** |
@@ -58,7 +60,7 @@ Severity = "what does it cost if exploited," not "how easy is it to fix."
 
 | # | Gap | Where | Reason |
 |---|---|---|---|
-| 8 | Caddy access log retains IPs and URL paths to disk | `deploy/Caddyfile:33-39` (50MB × 5) | Forensic metadata trail. POST bodies not logged. Add `log_skip /api/respond /api/subject/respond /api/calibrate /api/subject/calibrate /api/event` or filter format. |
+| 8 | ~~Caddy access log retains IPs and URL paths to disk on subject POST paths~~ | `deploy/Caddyfile` | **Closed 2026-04-30 (Class II #2)** — `log_skip` on `/api/respond`, `/api/subject/respond`, `/api/calibrate`, `/api/subject/calibrate`, `/api/event`. GET paths (`/login`, `/observatory`, etc.) still get IP+path logged for ops debugging — acceptable trade since GETs don't carry subject content. |
 | 9 | `x-forwarded-for` trusted from any upstream | `src/lib/libSubject.ts:80`, `src/pages/api/subject/login.ts:34` | If Cloudflare is bypassed, attacker spoofs XFF to bypass per-IP rate limit. Pin Caddy `trusted_proxies` to Cloudflare's published ranges (or LAN if going DNS-only). |
 | 10 | No CAA DNS records | DNS-side only | Without `fweeo.com. CAA 0 issue "letsencrypt.org"` any of ~150 trusted CAs can issue a fweeo.com cert. CAA cuts that to one. |
 | 11 | DNSSEC status not verified | DNS-side | Confirm DNSSEC enabled at Cloudflare for fweeo.com. |
@@ -121,6 +123,36 @@ Order of effects:
 
 Historical RUM data (pre-2026-04-30) sits in Cloudflare's retention. Data-subject deletion request to Cloudflare privacy (`privacyquestions@cloudflare.com`, GDPR Art. 17 / CCPA right-to-delete) is open as a follow-up.
 
+## Completed: Class II item 2 — security headers, Cache-Control, log_skip, self-hosted fonts — 2026-04-30
+
+Five gaps closed in one Caddyfile + app-code window. Discovery during this deploy also surfaced the Cloudflare Web Analytics RUM beacon (separate Completed section above).
+
+**Caddy header bundle** (`deploy/Caddyfile` `header { ... defer }` block on `fweeo.com`, applied after upstream so we always win):
+- `Strict-Transport-Security: max-age=63072000; includeSubDomains; preload`. Closes Crit #2.
+- `Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'self'; object-src 'none'; upgrade-insecure-requests`. Partially closes Crit #3 (see CSP caveat below).
+- `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Permissions-Policy` full lockdown, `Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Resource-Policy: same-origin`, `-Server` (Caddy banner removed; CF re-injects `server: cloudflare` at edge until Class II #1).
+
+**Cache-Control discipline** (matchers in same Caddyfile, both with `defer`):
+- `@assets path /_astro/* /fonts/* /favicon.ico /robots.txt` → `public, max-age=31536000, immutable`.
+- `@dynamic` (everything else) → `no-store`. Closes High #4 — BFCache no longer restores journal textareas on back-navigation.
+
+**`log_skip`** on `/api/respond`, `/api/subject/respond`, `/api/calibrate`, `/api/subject/calibrate`, `/api/event` — no IP/path metadata trail for subject-bearing POSTs. Closes Med #8.
+
+**Self-hosted fonts** (closes a third-party leak that was not in the original gap list — discovered via CSP violation in DevTools):
+- 20 woff2 files (Cormorant Garamond + EB Garamond, latin + latin-ext subsets, OFL) committed to `public/fonts/` (~995 KB), served at `/fonts/`.
+- `public/fonts/styFonts.css` aggregates all `@font-face` blocks; imported by `layBase.astro` + 10 page-level `.astro` files (each had its own Google `@import`, all replaced with `@import url('/fonts/styFonts.css')`).
+- Eliminates `fonts.googleapis.com` + `fonts.gstatic.com` as third parties. Verified: `curl -sL https://fweeo.com/login | grep -E "googleapis|gstatic"` returns no matches.
+
+**CSP caveat — partial close on Crit #3:** `'unsafe-inline'` for `script-src` and `style-src` is required because Astro emits `<script is:inline>` blocks (theme bootstrap, session check) and inline `style=` attributes across many pages. What this CSP blocks: remote script loading, exfiltration via `connect-src` to non-self, framing/clickjacking via `frame-ancestors 'none'`, base-URL pivots, plugin embeds. What it does NOT block: reflected XSS as inline `<script>...</script>`. Strict nonce-based CSP added to Class I roadmap as the full closure path.
+
+**Closed by this work:**
+- Critical #2 (HSTS) — closed.
+- Critical #3 (CSP + headers) — partially closed; full closure pending nonce migration.
+- High #4 (Cache-Control no-store) — closed.
+- Medium #8 (log_skip on journal POSTs) — closed.
+
+**Next:** Class II #1 (Cloudflare proxy off / DNS-only flip) is now the highest-impact remaining item — the only remaining third party in the data path.
+
 ## Class II punch list (after FDE)
 
 Once FDE is in place, the remaining Class II items. Ranked by data-exposure impact.
@@ -128,16 +160,17 @@ Once FDE is in place, the remaining Class II items. Ranked by data-exposure impa
 | # | Item | Where | Effort | Risk |
 |---|---|---|---|---|
 | 1 | **Cloudflare proxy off (or Tunnel with origin auth tokens you control).** **HIGHEST PRIORITY.** Now that data-bearing AI calls are eliminated, Cloudflare is the single remaining third party that sees journal plaintext. Closes Critical #1. | Cloudflare dashboard + `Caddyfile` if Tunnel | 1-2h | medium (test login + journal submit + observatory + export end-to-end) |
-| 2 | **Caddy security-header bundle** + `Cache-Control: no-store` on `/`, `/subject`, `/api/respond`, `/api/subject/respond`, `/api/calibrate`, `/api/subject/calibrate`, `/api/event`. HSTS preload, CSP with nonces, Referrer-Policy `no-referrer`, Permissions-Policy lockdown, X-Frame-Options DENY, X-Content-Type-Options nosniff. Closes Critical #2 + #3 + High #4 in one Caddyfile edit. | `deploy/Caddyfile` | 30m | low |
+| 2 | ~~**Caddy security-header bundle** + `Cache-Control: no-store` ... Closes Critical #2 + #3 + High #4 in one Caddyfile edit.~~ **CLOSED 2026-04-30** — see Completed section below. CSP shipped with `'unsafe-inline'` (Crit #3 partial); strict nonce-based CSP moved to Class I roadmap. Self-hosted fonts shipped in same window (closed a third-party leak not in original gap list). | `deploy/Caddyfile` | 30m | low |
 | 3 | CAA DNS record pinning Let's Encrypt; verify DNSSEC enabled at Cloudflare. Closes Medium #10 + #11. | DNS only | 10m | none |
 | 4 | Argon2id 256MB / 4 iter — only after a Hetzner CCX13 benchmark confirms login latency stays under 500ms. Rotate by running `npm run set-owner-password` and instructing each subject to use the password reset flow (auto re-hashes at new params). Closes High #7. | `src/lib/libSubjectAuth.ts:35` | 30m | low |
-| 5 | Caddy `log_skip` on journal POST paths + pin `trusted_proxies` to Cloudflare ranges (or LAN if going DNS-only post item 1). Closes Medium #8 + #9. | `deploy/Caddyfile` | 15m | low |
+| 5 | ~~Caddy `log_skip` on journal POST paths~~ + pin `trusted_proxies` to Cloudflare ranges (or LAN if going DNS-only post item 1). **`log_skip` closed 2026-04-30 (Class II #2 deploy)** — Med #8 closed. `trusted_proxies` will be addressed during Class II #1 (DNS-only flip means no proxy in front, so `trusted_proxies` stays empty by construction). Closes Medium #9. | `deploy/Caddyfile` | 15m | low |
 
 ## Class I roadmap (separate project, not this week)
 
 Listed for completeness so they do not get reinvented.
 
 - HSM-bound master key (TPM 2.0 sealing, YubiKey-backed envelope key, or AWS/GCP KMS). HKDF-derived per-row keys. Master rotation annually with re-encryption pass.
+- **Strict nonce-based CSP**: Astro middleware injects per-request nonce into every `<script>` and inline `<style>` tag, exposes the nonce via response header, Caddy reads it back and sets `Content-Security-Policy: ...; script-src 'self' 'nonce-{NONCE}'; style-src 'self' 'nonce-{NONCE}'`. Eliminates `'unsafe-inline'`, fully closes Critical #3. Currently CSP blocks remote-loaded scripts but reflected XSS executing as inline `<script>` is not blocked — `escapeHtml` is the only line of defense.
 - Third-party penetration test.
 - SOC 2 Type II or equivalent.
 - Formal change management (signed releases, audit log of admin operations).
