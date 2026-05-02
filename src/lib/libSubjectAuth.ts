@@ -105,6 +105,14 @@ export interface SubjectAuthRow {
   iana_timezone: string;
   is_owner: boolean;
   is_active: boolean;
+  display_name: string | null;
+  invite_code: string | null;
+  /**
+   * TIMESTAMPTZ rendered as text in SQL (`::text`) so postgres.js does not
+   * auto-parse to a `Date`. Callers (`/account` page) call `.slice(0, 10)` on
+   * the value; a Date would have no `.slice` method.
+   */
+  dttm_created_utc: string;
 }
 
 // ─── Login / verify / logout ───────────────────────────────────────────────
@@ -121,7 +129,9 @@ export async function loginSubject(
 ): Promise<{ token: string; subjectId: number; mustResetPassword: boolean; isOwner: boolean } | null> {
   const rows = await sql`
     SELECT subject_id, username, password_hash, must_reset_password,
-           iana_timezone, is_owner, is_active
+           iana_timezone, is_owner, is_active,
+           display_name, invite_code,
+           dttm_created_utc::text AS dttm_created_utc
     FROM tb_subjects
     WHERE username = ${username} AND is_active = TRUE
   `;
@@ -169,7 +179,9 @@ export async function verifySubjectSession(
   const tokenHash = hashToken(token);
   const rows = await sql`
     SELECT s.subject_id, s.username, s.password_hash, s.must_reset_password,
-           s.iana_timezone, s.is_owner, s.is_active
+           s.iana_timezone, s.is_owner, s.is_active,
+           s.display_name, s.invite_code,
+           s.dttm_created_utc::text AS dttm_created_utc
     FROM tb_subject_sessions sess
     JOIN tb_subjects s ON sess.subject_id = s.subject_id
     WHERE sess.token_hash = ${tokenHash}

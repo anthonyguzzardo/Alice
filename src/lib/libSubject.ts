@@ -73,20 +73,22 @@ export async function getRequestSubject(request: Request): Promise<Subject | nul
 }
 
 function authRowToSubject(row: SubjectAuthRow): Subject {
-  // verifySubjectSession returns the auth-shaped row; flesh it out by reading
-  // the rest of the columns once we know the subject_id is valid.
-  // (We could JOIN them all in verifySubjectSession, but keeping the boundaries
-  // tight makes the auth path easy to audit.)
+  // verifySubjectSession's SELECT returns every column the Subject shape
+  // needs, including the display_name / invite_code / dttm_created_utc tail
+  // that account-page UI depends on. Pre-fix this function returned hardcoded
+  // null/'' for those three fields, which made `/account` show "(none)" for
+  // display_name and "—" for member-since on every subject regardless of
+  // provisioning. The auth query carries the full row in one round-trip.
   return {
     subject_id: row.subject_id,
     username: row.username,
-    display_name: null,
+    display_name: row.display_name,
     is_owner: row.is_owner,
     is_active: row.is_active,
     must_reset_password: row.must_reset_password,
     iana_timezone: row.iana_timezone,
-    invite_code: null,
-    dttm_created_utc: '',
+    invite_code: row.invite_code,
+    dttm_created_utc: row.dttm_created_utc,
   };
 }
 
