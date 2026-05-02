@@ -188,7 +188,7 @@ Rust code is held to Rust's standards, not JavaScript's.
 
 ### Deterministic Iteration
 
-- **Never iterate `HashMap` on a path feeding sampling/output.** Iteration order is nondeterministic across runs (randomized hash seeds). Same seed → different results = correctness bug.
+- **Never iterate `Ha'shMap` on a path feeding sampling/output.** Iteration order is nondeterministic across runs (randomized hash seeds). Same seed → different results = correctness bug.
 - **Pattern: build with `HashMap`, freeze into sorted `Vec`.** Then `.into_iter().collect()` into `Vec<(K, V)>` and `.sort_by()` on key. All reads through the sorted vec. See `MarkovChain` and `PpmTrie` in `avatar.rs`.
 - `sorted_vec_get()` for O(log n) lookup via binary search.
 - `BTreeMap` when insertion after construction is needed. For build-once-sample-many, sorted vecs preferred (cache locality).
