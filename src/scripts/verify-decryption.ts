@@ -36,13 +36,13 @@ async function main() {
     LIMIT 1
   `;
 
-  if (rows.length === 0) {
+  const row = rows[0];
+  if (!row) {
     console.error('No owner calibration responses found (subject_id=1, question_source_id=3).');
     console.error('Cannot verify decryption without a sample row. ABORT rebuild.');
     process.exit(2);
   }
 
-  const row = rows[0];
   console.log(`Question ID:    ${row.questionId}`);
   console.log(`Question UTC:   ${row.questionCreatedUtc}`);
   console.log(`Response ID:    ${row.responseId}`);

@@ -36,7 +36,7 @@ async function main() {
     JOIN tb_questions q ON r.question_id = q.question_id
     WHERE r.subject_id = 1 AND q.question_source_id = 3
   `;
-  console.log(`Total owner-calibration responses on prod: ${totalRow[0].n}`);
+  console.log(`Total owner-calibration responses on prod: ${totalRow[0]?.n ?? 0}`);
   console.log();
 
   const rows = await sql`
