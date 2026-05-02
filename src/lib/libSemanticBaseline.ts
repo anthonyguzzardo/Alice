@@ -49,7 +49,7 @@
  *   Pakhomov et al. (2013) - within-person propositional density stability
  */
 
-import sql, { getSemanticSignals } from './libDb.ts';
+import sql, { getSemanticSignals, logSignalSkip } from './libDb.ts';
 import { logError } from './utlErrorLog.ts';
 
 // ─── Constants ─────────────────────────────────────────────────────
@@ -243,17 +243,36 @@ export async function updateSemanticBaselines(subjectId: number, questionId: num
     SELECT question_source_id FROM tb_questions
     WHERE question_id = ${questionId} AND subject_id = ${subjectId}
   `;
-  if (sourceRows.length === 0) return;
-  if ((sourceRows[0] as { question_source_id: number }).question_source_id === 3) return;
+  if (sourceRows.length === 0) {
+    await logSignalSkip(subjectId, questionId, 'semantic_baseline', 'question_not_found');
+    return;
+  }
+  if ((sourceRows[0] as { question_source_id: number }).question_source_id === 3) {
+    await logSignalSkip(subjectId, questionId, 'semantic_baseline', 'calibration_excluded');
+    return;
+  }
 
   const sem = await getSemanticSignals(subjectId, questionId);
-  if (!sem) return;
+  if (!sem) {
+    // Semantic baseline depends on the prior `tb_semantic_signals` write. The
+    // common case is "semantic signals declined to compute because text<20 chars",
+    // which already logged its own skip earlier in the pipeline. We log here too
+    // so a "why is the baseline trajectory empty for this session" query lands a
+    // direct answer instead of needing the operator to chain back to semantic.
+    await logSignalSkip(subjectId, questionId, 'semantic_baseline', 'compute_error', {
+      detail: 'tb_semantic_signals row not present (upstream semantic skip)',
+    });
+    return;
+  }
 
   // Sessions with external input contamination (paste or drag-and-drop) should
   // not shift the within-person baseline. The text may not be the person's own
   // unmediated output, and including it would compromise the baseline's validity
   // as a self-referencing cognitive measurement.
-  if (sem.paste_contaminated) return;
+  if (sem.paste_contaminated) {
+    await logSignalSkip(subjectId, questionId, 'semantic_baseline', 'paste_contaminated');
+    return;
+  }
 
   const signalValues: Record<BaselineSignal, number | null> = {
     idea_density: sem.idea_density ?? null,

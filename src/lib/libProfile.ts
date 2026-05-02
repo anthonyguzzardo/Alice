@@ -12,7 +12,7 @@
  */
 
 import sql from './libDbPool.ts';
-import { listResponseTexts } from './libDb.ts';
+import { listResponseTexts, logSignalSkip } from './libDb.ts';
 import { logError } from './utlErrorLog.ts';
 
 // ─── Helpers ──────────────────────────────────────────────────────
@@ -49,15 +49,24 @@ export async function updateProfile(subjectId: number, questionId: number): Prom
       SELECT question_source_id FROM tb_questions
       WHERE question_id = ${questionId} AND subject_id = ${subjectId}
     `;
-    if (sourceRows.length === 0) return;
-    if ((sourceRows[0] as { question_source_id: number }).question_source_id === 3) return;
+    if (sourceRows.length === 0) {
+      await logSignalSkip(subjectId, questionId, 'profile', 'question_not_found');
+      return;
+    }
+    if ((sourceRows[0] as { question_source_id: number }).question_source_id === 3) {
+      await logSignalSkip(subjectId, questionId, 'profile', 'calibration_excluded');
+      return;
+    }
 
     // Skip if the triggering session has external input contamination (paste/drop).
     // alice-lint-disable-next-query subject-scope -- PK lookup; question_id is globally unique and the gate above already verified (questionId, subjectId) match
     const contaminationRows = await sql`
       SELECT paste_contaminated FROM tb_semantic_signals WHERE question_id = ${questionId}
     `;
-    if (contaminationRows.length > 0 && (contaminationRows[0] as { paste_contaminated: boolean }).paste_contaminated) return;
+    if (contaminationRows.length > 0 && (contaminationRows[0] as { paste_contaminated: boolean }).paste_contaminated) {
+      await logSignalSkip(subjectId, questionId, 'profile', 'paste_contaminated');
+      return;
+    }
 
     // ── Gather all uncontaminated journal session data ──
     const summaries = await sql`
@@ -81,7 +90,10 @@ export async function updateProfile(subjectId: number, questionId: number): Prom
       ORDER BY ss.session_summary_id ASC
     ` as any[];
 
-    if (summaries.length === 0) return;
+    if (summaries.length === 0) {
+      await logSignalSkip(subjectId, questionId, 'profile', 'no_journal_sessions');
+      return;
+    }
 
     // ── Motor signals (ex-Gaussian, digraph) ──
     const motorRows = await sql`

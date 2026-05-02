@@ -1,4 +1,4 @@
-# Alice — Subject Consent (v1)
+# Alice - Subject Consent (v1)
 
 **No external AI ever reads what you wrote.** Not for training, analysis,
 or any product improvement. OpenAI, Anthropic, Google, and every other AI

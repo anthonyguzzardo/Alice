@@ -55,7 +55,7 @@ SET search_path TO alice, public;
 -- pgvector extension installs in public (shared across schemas)
 CREATE EXTENSION IF NOT EXISTS vector;
 
--- @region enums -- te_question_source, te_reflection_type, te_interaction_event_type, te_prompt_trace_type, te_embedding_source, te_context_dimension, te_adversary_variants, te_signal_job_status, te_signal_job_kind, te_data_access_actor, te_data_access_action
+-- @region enums -- te_question_source, te_reflection_type, te_interaction_event_type, te_prompt_trace_type, te_embedding_source, te_context_dimension, te_adversary_variants, te_signal_job_status, te_signal_job_kind, te_signal_skip_reason, te_data_access_actor, te_data_access_action
 -- ============================================================================
 -- ENUM TABLES (static, no footer)
 -- ============================================================================
@@ -176,6 +176,39 @@ INSERT INTO te_signal_job_kind (signal_job_kind_id, enum_code, name, description
    (1, 'response_pipeline',    'Response pipeline',    'Owner journal response: prior-day delta + question generation + witness render + embed + derived signals')
   ,(2, 'calibration_pipeline', 'Calibration pipeline', 'Calibration session: tag extraction + derived signals + drift snapshot')
 ON CONFLICT (signal_job_kind_id) DO NOTHING;
+
+-- --------------------------------------------------------------------------
+
+-- PURPOSE: why a signal family / pipeline stage decided not to compute or
+--          persist anything for a given session. The rules themselves are
+--          correct; their invisibility from the DB was the bug. Every
+--          early-return in libSignalPipeline / libIntegrity / libProfile
+--          gets logged through this enum so "why is this row missing"
+--          becomes a single SELECT instead of a five-file grep.
+-- MUTABILITY: static after deploy
+-- REFERENCED BY: tb_signal_skip_log.signal_skip_reason_id
+CREATE TABLE IF NOT EXISTS te_signal_skip_reason (
+   signal_skip_reason_id  SMALLINT PRIMARY KEY
+  ,enum_code              TEXT UNIQUE NOT NULL
+  ,name                   TEXT NOT NULL
+  ,description            TEXT
+);
+
+INSERT INTO te_signal_skip_reason (signal_skip_reason_id, enum_code, name, description) VALUES
+   (1,  'text_too_short',           'Text too short',           'Response text length below the family threshold (semantic ≥20 chars, cross-session ≥20 chars).')
+  ,(2,  'text_missing',             'Text missing',             'getResponseText returned null. Indicates a saved row whose text could not be decrypted, or a defensive guard tripping on a row that should not exist.')
+  ,(3,  'stream_too_short',         'Stream too short',         'Keystroke stream event count below the family threshold (dynamical ≥10, motor ≥10).')
+  ,(4,  'stream_missing',           'Stream missing',           'getKeystrokeStream returned null. Indicates a session_event row absent or unparseable.')
+  ,(5,  'event_log_missing',        'Event log missing',        'getEventLogJson returned null. Process signals require the event log; the keystroke stream alone is insufficient.')
+  ,(6,  'calibration_excluded',     'Calibration excluded',     'Calibration sessions (question_source_id = 3) are intentionally excluded from integrity, profile, and reconstruction. Prompted neutral writing produces systematically large distances against journal-derived baselines.')
+  ,(7,  'profile_too_immature',     'Profile too immature',     'Integrity requires profile.session_count ≥ 5. New subjects produce no integrity rows for their first 4 journal sessions by design.')
+  ,(8,  'session_summary_missing',  'Session summary missing',  'tb_session_summaries row not found. Integrity, profile, and reconstruction depend on it.')
+  ,(9,  'dimension_count_too_low',  'Dimension count too low',  'Fewer than 3 valid dimensions had both profile_mean and profile_std > 0. Z-score distance is unreliable below this floor.')
+  ,(10, 'paste_contaminated',       'Paste contaminated',       'Session has external-input contamination (paste or drop). Profile, reconstruction, and several derived analyses exclude these rows.')
+  ,(11, 'question_not_found',       'Question not found',       'Defensive guard: the (subject_id, question_id) tuple did not resolve to a tb_questions row. Indicates a bug at the call site or a deleted question.')
+  ,(12, 'compute_error',            'Compute error',            'The family compute function threw, returned null unexpectedly, or returned a result that failed downstream validation. Context_json carries the error string when available.')
+  ,(13, 'no_journal_sessions',      'No journal sessions',      'Profile builder found zero non-calibration, paste-uncontaminated journal sessions for the subject. Profile is not yet computable.')
+ON CONFLICT (signal_skip_reason_id) DO NOTHING;
 
 -- --------------------------------------------------------------------------
 
@@ -1438,7 +1471,7 @@ CREATE TABLE IF NOT EXISTS tb_semantic_trajectory (
 
 -- --------------------------------------------------------------------------
 
--- @region jobs -- tb_engine_provenance, tb_signal_jobs
+-- @region jobs -- tb_engine_provenance, tb_signal_jobs, tb_signal_skip_log
 
 -- PURPOSE: identify which Rust signal-engine binary produced a given signal
 -- USE CASE: at process boot, the engine module computes SHA-256 of the loaded
@@ -1521,3 +1554,38 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_signal_jobs_question_kind
   WHERE signal_job_status_id <> 5;
 
 CREATE INDEX IF NOT EXISTS ix_signal_jobs_subject_id ON tb_signal_jobs (subject_id);
+
+-- --------------------------------------------------------------------------
+
+-- PURPOSE: append-only log of every "did not compute" decision in the signal
+--          pipeline. One row per (session, family, decision). Read by humans
+--          for diagnosis; never read by application code in a hot path.
+-- USE CASE: when a row is missing from any tb_*_signals / tb_session_integrity
+--          table for a given session, this log says why. Replaces the
+--          "grep five files and reason about it" workflow.
+--          Common query: SELECT signal_family, r.enum_code, context_json
+--                        FROM tb_signal_skip_log s
+--                        JOIN te_signal_skip_reason r USING (signal_skip_reason_id)
+--                        WHERE s.subject_id = ? AND s.question_id = ?;
+-- MUTABILITY: insert by libDb.logSignalSkip. Never updated, never deleted by
+--          application code. Cleanup is a future operator concern (TTL or
+--          per-subject delete on account close — see libDelete.ts).
+-- REFERENCED BY: nothing in the application path. Diagnostic surface only.
+-- FOOTER: created only (the row records a decision at a moment in time;
+--          there is no "modified" semantic).
+CREATE TABLE IF NOT EXISTS tb_signal_skip_log (
+   signal_skip_log_id     INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  ,subject_id             INT NOT NULL                                  -- logical FK to tb_subjects
+  ,question_id            INT NOT NULL                                  -- logical FK to tb_questions
+  ,signal_family          TEXT NOT NULL                                 -- string tag: 'dynamical' | 'motor' | 'semantic' | 'process' | 'cross_session' | 'integrity' | 'profile' | 'reconstruction' | 'semantic_baseline'
+  ,signal_skip_reason_id  SMALLINT NOT NULL                             -- logical FK to te_signal_skip_reason
+  ,context_json           JSONB                                         -- numeric details: {needed: 256, got: 312} etc. Nullable.
+  ,dttm_created_utc       TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ,created_by             TEXT NOT NULL DEFAULT 'system'
+);
+
+CREATE INDEX IF NOT EXISTS ix_signal_skip_log_subject_question
+  ON tb_signal_skip_log (subject_id, question_id);
+
+CREATE INDEX IF NOT EXISTS ix_signal_skip_log_subject_family
+  ON tb_signal_skip_log (subject_id, signal_family);

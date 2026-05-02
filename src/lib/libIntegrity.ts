@@ -19,6 +19,7 @@
 import sql from './libDbPool.ts';
 import { computeProfileDistance as rustProfileDistance } from './libSignalsNative.ts';
 import { logError } from './utlErrorLog.ts';
+import { logSignalSkip } from './libDb.ts';
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -136,14 +137,29 @@ export async function computeSessionIntegrity(subjectId: number, questionId: num
     SELECT question_source_id FROM tb_questions
     WHERE question_id = ${questionId} AND subject_id = ${subjectId}
   `;
-  if (sourceRows.length === 0) return null;
-  if ((sourceRows[0] as { question_source_id: number }).question_source_id === 3) return null;
+  if (sourceRows.length === 0) {
+    await logSignalSkip(subjectId, questionId, 'integrity', 'question_not_found');
+    return null;
+  }
+  if ((sourceRows[0] as { question_source_id: number }).question_source_id === 3) {
+    await logSignalSkip(subjectId, questionId, 'integrity', 'calibration_excluded');
+    return null;
+  }
 
   const profile = await loadProfile(subjectId);
-  if (!profile || !profile.session_count || (profile.session_count as number) < 5) return null;
+  if (!profile || !profile.session_count || (profile.session_count as number) < 5) {
+    await logSignalSkip(subjectId, questionId, 'integrity', 'profile_too_immature', {
+      needed: 5,
+      got: (profile?.session_count as number | null | undefined) ?? 0,
+    });
+    return null;
+  }
 
   const summary = await loadSessionSummary(subjectId, questionId);
-  if (!summary) return null;
+  if (!summary) {
+    await logSignalSkip(subjectId, questionId, 'integrity', 'session_summary_missing');
+    return null;
+  }
 
   const motor = await loadMotorSignals(subjectId, questionId);
 
@@ -171,11 +187,24 @@ export async function computeSessionIntegrity(subjectId: number, questionId: num
     stds.push(profileStd as number);
   }
 
-  if (dimNames.length < 3) return null;
+  if (dimNames.length < 3) {
+    await logSignalSkip(subjectId, questionId, 'integrity', 'dimension_count_too_low', {
+      needed: 3,
+      got: dimNames.length,
+    });
+    return null;
+  }
 
   // Rust computes z-scores and L2 distance. Single source of truth.
   const rustResult = rustProfileDistance(values, means, stds);
-  if (!rustResult || rustResult.zScores.length !== dimNames.length) return null;
+  if (!rustResult || rustResult.zScores.length !== dimNames.length) {
+    await logSignalSkip(subjectId, questionId, 'integrity', 'compute_error', {
+      detail: !rustResult ? 'rustProfileDistance returned null' : 'zScores length mismatch',
+      dimensionCount: dimNames.length,
+      rustResultZScores: rustResult?.zScores.length ?? null,
+    });
+    return null;
+  }
 
   const zScores: Record<string, number> = {};
   for (let i = 0; i < dimNames.length; i++) {

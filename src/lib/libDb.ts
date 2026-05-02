@@ -2,6 +2,7 @@ import sql from './libDbPool.ts';
 import type { TxSql } from './libDbPool.ts';
 import { localDateStr } from './utlDate.ts';
 import { encrypt, decrypt } from './libCrypto.ts';
+import { logError } from './utlErrorLog.ts';
 
 // Re-export sql for callers that import it directly
 export { default as sql } from './libDbPool.ts';
@@ -2704,6 +2705,114 @@ export async function countOpenSignalJobs(): Promise<number> {
     WHERE signal_job_status_id IN (1, 2, 4)
   `;
   return (rows[0] as { n: number }).n;
+}
+
+// ============================================================================
+// @region skip-log -- SignalFamily, SignalSkipReason, SIGNAL_SKIP_REASON_ID, logSignalSkip
+// SIGNAL SKIP LOG (diagnostic; never read in application path)
+// ----------------------------------------------------------------------------
+//
+// Every "did not compute" decision in the signal pipeline funnels through
+// `logSignalSkip`. The table is read by humans answering "why is this row
+// missing"; never by the pipeline itself. Failures here MUST NOT propagate —
+// the diagnostic log is strictly best-effort, and a missing row in
+// tb_signal_skip_log is preferable to a broken pipeline.
+//
+// Adding a new family or reason: extend the union types below AND the
+// SIGNAL_SKIP_REASON_ID map AND the corresponding INSERT in
+// dbAlice_Tables.sql / migrations. Out-of-sync types vs DB will fail at
+// runtime when the helper looks up an ID that doesn't exist in the map (TS
+// catches this) or is missing from the DB (the FK-by-id INSERT lands a row
+// with no matching te_signal_skip_reason; the catch swallows it).
+// ============================================================================
+
+export type SignalFamily =
+  | 'dynamical'
+  | 'motor'
+  | 'semantic'
+  | 'process'
+  | 'cross_session'
+  | 'integrity'
+  | 'profile'
+  | 'reconstruction'
+  | 'semantic_baseline';
+
+export type SignalSkipReason =
+  | 'text_too_short'
+  | 'text_missing'
+  | 'stream_too_short'
+  | 'stream_missing'
+  | 'event_log_missing'
+  | 'calibration_excluded'
+  | 'profile_too_immature'
+  | 'session_summary_missing'
+  | 'dimension_count_too_low'
+  | 'paste_contaminated'
+  | 'question_not_found'
+  | 'compute_error'
+  | 'no_journal_sessions';
+
+// Mirror of the te_signal_skip_reason seed in dbAlice_Tables.sql / migration
+// 040. TS-side mapping keeps the call sites clean (`logSignalSkip(..., 'text_too_short', ...)`)
+// while still inserting an integer FK. Adding a reason: append to the union
+// above, append here, append to the INSERT in the schema + migration.
+const SIGNAL_SKIP_REASON_ID: Record<SignalSkipReason, number> = {
+  text_too_short:           1,
+  text_missing:             2,
+  stream_too_short:         3,
+  stream_missing:           4,
+  event_log_missing:        5,
+  calibration_excluded:     6,
+  profile_too_immature:     7,
+  session_summary_missing:  8,
+  dimension_count_too_low:  9,
+  paste_contaminated:       10,
+  question_not_found:       11,
+  compute_error:            12,
+  no_journal_sessions:      13,
+};
+
+/**
+ * Append one row to `tb_signal_skip_log` recording why a signal family or
+ * pipeline stage declined to compute / persist for a given session.
+ *
+ * Strictly best-effort: failures are swallowed via `logError` and never
+ * propagate to the caller. The diagnostic log must not be load-bearing for
+ * the signal pipeline — a transient DB blip on a skip-log INSERT cannot be
+ * allowed to abort an in-flight signal computation. Callers do not need to
+ * try/catch this; just await it and continue.
+ *
+ * Pass a `tx` only when the skip is part of a larger transaction that you
+ * want to roll back atomically with the log row. The default (module-level
+ * pool) is correct for the typical fire-and-log-then-keep-going call site.
+ */
+export async function logSignalSkip(
+  subjectId: number,
+  questionId: number,
+  family: SignalFamily,
+  reason: SignalSkipReason,
+  context: Record<string, unknown> | null = null,
+  tx?: TxSql,
+): Promise<void> {
+  const conn = tx ?? sql;
+  const reasonId = SIGNAL_SKIP_REASON_ID[reason];
+  // Use sql.json() to mark the parameter as JSON — same pattern as
+  // recordDataAccess in libConsent.ts. Passing an object without the marker
+  // fails the TS overload; JSON.stringify before passing double-encodes.
+  // null bypasses sql.json so the SQL parameter stays NULL.
+  const ctxParam = context != null ? sql.json(context as Parameters<typeof sql.json>[0]) : null;
+  try {
+    await conn`
+      INSERT INTO tb_signal_skip_log
+        (subject_id, question_id, signal_family, signal_skip_reason_id, context_json)
+      VALUES
+        (${subjectId}, ${questionId}, ${family}, ${reasonId}, ${ctxParam})
+    `;
+  } catch (err) {
+    // Diagnostic log failure must not break the signal pipeline. Surface
+    // the error to the file log so it isn't silent, then return cleanly.
+    logError('signal-skip-log.insert', err, { subjectId, questionId, family, reason });
+  }
 }
 
 export default sql;

@@ -26,6 +26,7 @@ import sql, {
   getResponseText as dbGetResponseText,
   getEventLogJson as dbGetEventLogJson,
   getKeystrokeStreamJson as dbGetKeystrokeStreamJson,
+  logSignalSkip,
 } from './libDb.ts';
 import {
   computeDynamicalSignals,
@@ -76,7 +77,13 @@ export async function computeAndPersistDerivedSignals(subjectId: number, questio
   const stream = await getKeystrokeStream(subjectId, questionId);
 
   // ── Dynamical signals (previously on-demand) ──
-  if (stream && stream.length >= 10 && !(await getDynamicalSignals(subjectId, questionId))) {
+  if (await getDynamicalSignals(subjectId, questionId)) {
+    // Already computed — idempotent retry path, no skip log entry.
+  } else if (!stream) {
+    await logSignalSkip(subjectId, questionId, 'dynamical', 'stream_missing');
+  } else if (stream.length < 10) {
+    await logSignalSkip(subjectId, questionId, 'dynamical', 'stream_too_short', { needed: 10, got: stream.length });
+  } else {
     try {
       const ds = computeDynamicalSignals(stream);
       if (ds) {
@@ -130,14 +137,23 @@ export async function computeAndPersistDerivedSignals(subjectId: number, questio
           te_flight_to_hold: ds.teFlightToHold ?? null,
           te_dominance: ds.teDominance ?? null,
         });
+      } else {
+        await logSignalSkip(subjectId, questionId, 'dynamical', 'compute_error', { detail: 'native compute returned null' });
       }
     } catch (err) {
       logError('signal-pipeline.dynamical', err, { questionId });
+      await logSignalSkip(subjectId, questionId, 'dynamical', 'compute_error', { error: String(err) });
     }
   }
 
   // ── Motor signals ──
-  if (stream && stream.length >= 10 && !(await getMotorSignals(subjectId, questionId))) {
+  if (await getMotorSignals(subjectId, questionId)) {
+    // Already computed — idempotent retry path, no skip log entry.
+  } else if (!stream) {
+    await logSignalSkip(subjectId, questionId, 'motor', 'stream_missing');
+  } else if (stream.length < 10) {
+    await logSignalSkip(subjectId, questionId, 'motor', 'stream_too_short', { needed: 10, got: stream.length });
+  } else {
     try {
       const { totalDurationMs } = await getSessionInfo(subjectId, questionId);
       const ms = computeMotorSignals(stream, totalDurationMs);
@@ -167,17 +183,26 @@ export async function computeAndPersistDerivedSignals(subjectId: number, questio
           adjacent_hold_time_cov: ms.adjacentHoldTimeCov ?? null,
           hold_flight_rank_corr: ms.holdFlightRankCorr ?? null,
         });
+      } else {
+        await logSignalSkip(subjectId, questionId, 'motor', 'compute_error', { detail: 'native compute returned null' });
       }
     } catch (err) {
       logError('signal-pipeline.motor', err, { questionId });
+      await logSignalSkip(subjectId, questionId, 'motor', 'compute_error', { error: String(err) });
     }
   }
 
   // ── Semantic signals ──
-  if (!(await getSemanticSignals(subjectId, questionId))) {
-    try {
-      const text = await getResponseText(subjectId, questionId);
-      if (text && text.length >= 20) {
+  if (await getSemanticSignals(subjectId, questionId)) {
+    // Already computed — idempotent retry path, no skip log entry.
+  } else {
+    const text = await getResponseText(subjectId, questionId);
+    if (!text) {
+      await logSignalSkip(subjectId, questionId, 'semantic', 'text_missing');
+    } else if (text.length < 20) {
+      await logSignalSkip(subjectId, questionId, 'semantic', 'text_too_short', { needed: 20, got: text.length });
+    } else {
+      try {
         const { pasteCount, dropCount } = await getSessionInfo(subjectId, questionId);
         const ss = computeSemanticSignals(text, pasteCount, dropCount);
         const dc = await computeDiscourseCoherence(text);
@@ -197,9 +222,10 @@ export async function computeAndPersistDerivedSignals(subjectId: number, questio
           lexicon_version: ss.lexiconVersion,
           paste_contaminated: ss.pasteContaminated,
         });
+      } catch (err) {
+        logError('signal-pipeline.semantic', err, { questionId });
+        await logSignalSkip(subjectId, questionId, 'semantic', 'compute_error', { error: String(err) });
       }
-    } catch (err) {
-      logError('signal-pipeline.semantic', err, { questionId });
     }
   }
 
@@ -211,10 +237,14 @@ export async function computeAndPersistDerivedSignals(subjectId: number, questio
   }
 
   // ── Process signals ──
-  if (!(await getProcessSignals(subjectId, questionId))) {
-    try {
-      const eventLogJson = await getEventLogJson(subjectId, questionId);
-      if (eventLogJson) {
+  if (await getProcessSignals(subjectId, questionId)) {
+    // Already computed — idempotent retry path, no skip log entry.
+  } else {
+    const eventLogJson = await getEventLogJson(subjectId, questionId);
+    if (!eventLogJson) {
+      await logSignalSkip(subjectId, questionId, 'process', 'event_log_missing');
+    } else {
+      try {
         const ps = computeProcessSignals(eventLogJson);
         if (ps) {
           await saveProcessSignals(subjectId, questionId, {
@@ -234,18 +264,27 @@ export async function computeAndPersistDerivedSignals(subjectId: number, questio
             await saveRburstSequence(subjectId, questionId, ps.rBurstSequences);
             await updateRburstTrajectoryShape(subjectId, questionId);
           }
+        } else {
+          await logSignalSkip(subjectId, questionId, 'process', 'compute_error', { detail: 'native compute returned null' });
         }
+      } catch (err) {
+        logError('signal-pipeline.process', err, { questionId });
+        await logSignalSkip(subjectId, questionId, 'process', 'compute_error', { error: String(err) });
       }
-    } catch (err) {
-      logError('signal-pipeline.process', err, { questionId });
     }
   }
 
   // ── Cross-session signals (depends on motor signals being persisted first) ──
-  if (!(await getCrossSessionSignals(subjectId, questionId))) {
-    try {
-      const text = await getResponseText(subjectId, questionId);
-      if (text && text.length >= 20) {
+  if (await getCrossSessionSignals(subjectId, questionId)) {
+    // Already computed — idempotent retry path, no skip log entry.
+  } else {
+    const text = await getResponseText(subjectId, questionId);
+    if (!text) {
+      await logSignalSkip(subjectId, questionId, 'cross_session', 'text_missing');
+    } else if (text.length < 20) {
+      await logSignalSkip(subjectId, questionId, 'cross_session', 'text_too_short', { needed: 20, got: text.length });
+    } else {
+      try {
         const cs = await computeCrossSessionSignals(subjectId, questionId, text);
         if (cs) {
           await saveCrossSessionSignals(subjectId, questionId, {
@@ -261,14 +300,21 @@ export async function computeAndPersistDerivedSignals(subjectId: number, questio
             text_network_communities: cs.textNetworkCommunities ?? null,
             bridging_ratio: cs.bridgingRatio ?? null,
           });
+        } else {
+          await logSignalSkip(subjectId, questionId, 'cross_session', 'compute_error', { detail: 'compute returned null' });
         }
+      } catch (err) {
+        logError('signal-pipeline.crossSession', err, { questionId });
+        await logSignalSkip(subjectId, questionId, 'cross_session', 'compute_error', { error: String(err) });
       }
-    } catch (err) {
-      logError('signal-pipeline.crossSession', err, { questionId });
     }
   }
 
   // ── Session integrity (BEFORE profile update — compares against prior profile) ──
+  // Skip-log discipline lives inside computeSessionIntegrity itself: it knows
+  // *which* gate it hit (calibration / immature profile / dimension floor / etc.)
+  // and writes the appropriate row before returning null. The orchestrator only
+  // needs to handle the post-gate compute_error case here.
   if (!(await getSessionIntegrity(subjectId, questionId))) {
     try {
       const integrity = await computeSessionIntegrity(subjectId, questionId);
@@ -286,6 +332,7 @@ export async function computeAndPersistDerivedSignals(subjectId: number, questio
       }
     } catch (err) {
       logError('signal-pipeline.integrity', err, { subjectId, questionId });
+      await logSignalSkip(subjectId, questionId, 'integrity', 'compute_error', { error: String(err) });
     }
   }
 
