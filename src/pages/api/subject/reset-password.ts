@@ -21,8 +21,25 @@ import {
   isValidPostResetNextPath,
 } from '../../../lib/libSubjectAuth.ts';
 import { parseBody } from '../../../lib/utlParseBody.ts';
+import { consume, reset as resetRateLimit } from '../../../lib/utlRateLimit.ts';
 
 const MIN_PASSWORD_LENGTH = 12;
+
+// Rate limit: 10 reset attempts per 15 minutes per subject. Mirrors the
+// login handler's shape exactly because the threat profile is identical —
+// per-attempt Argon2id verify cost (~100ms) dominates either way, and
+// capping attempt count is the primary CPU-DoS defense for both endpoints.
+//
+// Key shape is `reset:<subject_id>` rather than `reset:<subject_id>:<ip>`.
+// An attacker with a stolen session cookie can burn the legit user's
+// bucket and lock them out of the reset endpoint for one window. We
+// accept that — anyone who has the session has bigger problems than a
+// 15-minute reset DoS, and the simpler key shape makes the primary
+// defense (CPU-DoS protection) more obviously correct. Revisit with a
+// composite (subject + IP) key only if session-cookie compromise becomes
+// a realistic threat.
+const RESET_LIMIT = 10;
+const RESET_WINDOW_MS = 15 * 60 * 1000;
 
 export const POST: APIRoute = async ({ request, cookies, locals }) => {
   const subject = locals.subject;
@@ -30,6 +47,18 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
     return new Response(JSON.stringify({ error: 'unauthorized' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const rateKey = `reset:${subject.subject_id}`;
+  const limited = consume(rateKey, RESET_LIMIT, RESET_WINDOW_MS);
+  if (!limited.allowed) {
+    return new Response(JSON.stringify({ error: 'rate_limited' }), {
+      status: 429,
+      headers: {
+        'Content-Type': 'application/json',
+        'Retry-After': String(limited.retryAfterSeconds),
+      },
     });
   }
 
@@ -70,6 +99,11 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       headers: { 'Content-Type': 'application/json' },
     });
   }
+
+  // Successful reset: clear the rate-limit bucket so a subject who
+  // fat-fingered their current password a few times before getting it
+  // right starts fresh. Mirrors the login handler's resetRateLimit pattern.
+  resetRateLimit(rateKey);
 
   // resetPassword wipes all sessions; clear the cookie too.
   cookies.delete(SESSION_COOKIE, { path: '/' });
