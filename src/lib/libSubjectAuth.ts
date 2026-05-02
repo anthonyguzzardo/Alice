@@ -322,37 +322,72 @@ export async function createSubject(
 }
 
 /**
+ * Outcome of `setOwnerPassword`. The caller surfaces these distinctly in CLI
+ * output: `rotated` reports the session-invalidation count so the operator
+ * can sanity-check (one tab open → one session invalidated); `created` is
+ * the fresh-deploy bootstrap path where there are no prior sessions.
+ */
+export type SetOwnerPasswordResult =
+  | { kind: 'rotated'; sessionsInvalidated: number }
+  | { kind: 'created' };
+
+/**
  * Set the owner's password. Used by `npm run set-owner-password` during
  * initial deploy and any time the owner needs to rotate their password.
  *
  * On a fresh database with no owner row, INSERTs a row with
  * username='owner', is_owner=TRUE, and the supplied password.
- * On a database that already has an owner row, UPDATEs the password.
- * Idempotent in both directions.
+ * On a database that already has an owner row, UPDATEs the password AND
+ * deletes every existing owner session so any pre-existing cookie can no
+ * longer authenticate. Mirrors `resetPassword`'s session-wipe discipline:
+ * a credential change implies the prior credential is no longer trusted,
+ * and any session predating the change must not survive into the new
+ * credential's lifetime. Atomic — UPDATE + DELETE + (INSERT) all run
+ * inside a single `sql.begin` transaction.
+ *
+ * `tb_subject_sessions` is a leaf table (no other table holds an FK to
+ * its surrogate key), so the DELETE has no further cascade work.
+ *
+ * Returns a discriminated union describing which path ran.
  */
-export async function setOwnerPassword(plaintextPassword: string): Promise<void> {
+export async function setOwnerPassword(
+  plaintextPassword: string,
+): Promise<SetOwnerPasswordResult> {
   const passwordHash = await hashPassword(plaintextPassword);
-  const updated = await sql`
-    UPDATE tb_subjects
-    SET password_hash       = ${passwordHash}
-      , must_reset_password = FALSE
-      , dttm_modified_utc   = CURRENT_TIMESTAMP
-    WHERE is_owner = TRUE
-  `;
-  if (updated.count === 1) return;
-  if (updated.count > 1) {
-    throw new Error(`multiple owner rows found (${updated.count}); expected 0 or 1`);
-  }
-  const inserted = await sql`
-    INSERT INTO tb_subjects (
-      username, password_hash, must_reset_password,
-      iana_timezone, display_name, is_owner
-    ) VALUES (
-      'owner', ${passwordHash}, FALSE,
-      'UTC', 'Owner', TRUE
-    )
-  `;
-  if (inserted.count !== 1) {
-    throw new Error(`failed to insert owner row, got ${inserted.count}`);
-  }
+  return await sql.begin(async (tx) => {
+    const updated = await tx`
+      UPDATE tb_subjects
+      SET password_hash       = ${passwordHash}
+        , must_reset_password = FALSE
+        , dttm_modified_utc   = CURRENT_TIMESTAMP
+      WHERE is_owner = TRUE
+    `;
+    if (updated.count > 1) {
+      throw new Error(`multiple owner rows found (${updated.count}); expected 0 or 1`);
+    }
+    if (updated.count === 1) {
+      // Owner row matched on the partial unique index `uq_subjects_single_owner`
+      // (one row WHERE is_owner = TRUE), so the subquery resolves to that
+      // single subject_id. Hardcoding `subject_id = 1` would assume the seed
+      // ID convention; joining on `is_owner = TRUE` is the truthful join.
+      const wiped = await tx`
+        DELETE FROM tb_subject_sessions
+        WHERE subject_id IN (SELECT subject_id FROM tb_subjects WHERE is_owner = TRUE)
+      `;
+      return { kind: 'rotated', sessionsInvalidated: wiped.count };
+    }
+    const inserted = await tx`
+      INSERT INTO tb_subjects (
+        username, password_hash, must_reset_password,
+        iana_timezone, display_name, is_owner
+      ) VALUES (
+        'owner', ${passwordHash}, FALSE,
+        'UTC', 'Owner', TRUE
+      )
+    `;
+    if (inserted.count !== 1) {
+      throw new Error(`failed to insert owner row, got ${inserted.count}`);
+    }
+    return { kind: 'created' };
+  });
 }

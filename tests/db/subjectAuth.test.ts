@@ -207,28 +207,30 @@ describe('logoutSubject + sweepExpiredSessions', () => {
 });
 
 describe('setOwnerPassword', () => {
-  it('updates the owner row and clears must_reset_password', async () => {
-    await setOwnerPassword('owner-real-password');
+  it('updates the owner row, clears must_reset_password, and reports rotated', async () => {
+    const result = await setOwnerPassword('owner-real-password');
+    expect(result.kind).toBe('rotated');
 
-    const result = await loginSubject('owner', 'owner-real-password');
-    expect(result).not.toBeNull();
-    expect(result!.isOwner).toBe(true);
-    expect(result!.mustResetPassword).toBe(false);
+    const login = await loginSubject('owner', 'owner-real-password');
+    expect(login).not.toBeNull();
+    expect(login!.isOwner).toBe(true);
+    expect(login!.mustResetPassword).toBe(false);
   });
 
-  it('inserts the owner row when none exists (fresh-deploy bootstrap)', async () => {
+  it('inserts the owner row when none exists (fresh-deploy bootstrap) and reports created', async () => {
     // Temporarily delete the owner row to simulate a fresh database.
     const placeholder = await hashPassword('temp-owner-restore-after-test');
     await sql`DELETE FROM tb_subjects WHERE is_owner = TRUE`;
     try {
-      await setOwnerPassword('bootstrap-password');
+      const result = await setOwnerPassword('bootstrap-password');
+      expect(result.kind).toBe('created');
 
-      const result = await loginSubject('owner', 'bootstrap-password');
-      expect(result).not.toBeNull();
-      expect(result!.isOwner).toBe(true);
+      const login = await loginSubject('owner', 'bootstrap-password');
+      expect(login).not.toBeNull();
+      expect(login!.isOwner).toBe(true);
       // Inserts always set must_reset_password=FALSE — bootstrap caller
       // already supplies the real password.
-      expect(result!.mustResetPassword).toBe(false);
+      expect(login!.mustResetPassword).toBe(false);
     } finally {
       // Restore the seeded state for the rest of the test file.
       await sql`DELETE FROM tb_subjects WHERE is_owner = TRUE`;
@@ -237,5 +239,29 @@ describe('setOwnerPassword', () => {
         VALUES ('owner', ${placeholder}, TRUE, TRUE, 'UTC')
       `;
     }
+  });
+
+  it('invalidates all existing owner sessions when rotating', async () => {
+    // Establish two owner sessions, then rotate. Both prior session tokens
+    // must fail to verify after the rotation; sessionsInvalidated count
+    // must reflect both rows.
+    await setOwnerPassword('rotation-pre-password');
+    const a = await loginSubject('owner', 'rotation-pre-password');
+    const b = await loginSubject('owner', 'rotation-pre-password');
+    expect(a).not.toBeNull();
+    expect(b).not.toBeNull();
+    expect(await verifySubjectSession(a!.token)).not.toBeNull();
+    expect(await verifySubjectSession(b!.token)).not.toBeNull();
+
+    const result = await setOwnerPassword('rotation-post-password');
+    expect(result.kind).toBe('rotated');
+    expect(result.kind === 'rotated' && result.sessionsInvalidated).toBe(2);
+
+    // Both prior tokens are now dead.
+    expect(await verifySubjectSession(a!.token)).toBeNull();
+    expect(await verifySubjectSession(b!.token)).toBeNull();
+    // The new password works.
+    const fresh = await loginSubject('owner', 'rotation-post-password');
+    expect(fresh).not.toBeNull();
   });
 });

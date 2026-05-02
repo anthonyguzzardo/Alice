@@ -30,8 +30,14 @@ async function main() {
     process.exit(2);
   }
 
-  await setOwnerPassword(password);
-  console.log('Owner password updated. must_reset_password cleared. All existing sessions kept.');
+  const result = await setOwnerPassword(password);
+  if (result.kind === 'rotated') {
+    console.log(
+      `Owner password rotated. ${result.sessionsInvalidated} active owner session(s) invalidated — every browser/device with an existing owner cookie must log in again.`,
+    );
+  } else {
+    console.log('Owner row created with the supplied password. No prior sessions to invalidate.');
+  }
 
   await sql.end({ timeout: 5 });
 }
