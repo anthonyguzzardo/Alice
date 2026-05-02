@@ -14,7 +14,12 @@
  */
 
 import type { APIRoute } from 'astro';
-import { resetPassword, SESSION_COOKIE } from '../../../lib/libSubjectAuth.ts';
+import {
+  resetPassword,
+  SESSION_COOKIE,
+  POST_RESET_NEXT_COOKIE,
+  isValidPostResetNextPath,
+} from '../../../lib/libSubjectAuth.ts';
 import { parseBody } from '../../../lib/utlParseBody.ts';
 
 const MIN_PASSWORD_LENGTH = 12;
@@ -69,7 +74,17 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
   // resetPassword wipes all sessions; clear the cookie too.
   cookies.delete(SESSION_COOKIE, { path: '/' });
 
-  return new Response(JSON.stringify({ ok: true }), {
+  // Read + consume the post-reset `next` cookie if present. Re-validate on
+  // read: the cookie was server-set (not user-controlled at runtime), but a
+  // belt-and-suspenders check guards against any future code path that
+  // might set this cookie without validating, plus a manually-edited cookie
+  // jar. Failure is silent: response carries no `next`, client falls back
+  // to /subject after re-login.
+  const rawNext = cookies.get(POST_RESET_NEXT_COOKIE)?.value;
+  const next = isValidPostResetNextPath(rawNext) ? rawNext : null;
+  cookies.delete(POST_RESET_NEXT_COOKIE, { path: '/' });
+
+  return new Response(JSON.stringify({ ok: true, next }), {
     headers: { 'Content-Type': 'application/json' },
   });
 };

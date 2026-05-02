@@ -25,10 +25,12 @@
  *      can do anything else; only `/reset-password`, `/api/subject/reset-password`,
  *      and `/api/subject/logout` are reachable.
  *   2. consent gate — subjects whose most-recent acknowledgment differs
- *      from `CONSENT_VERSION` must re-acknowledge; only `/consent`,
- *      `/api/subject/consent`, `/api/subject/logout`,
- *      `/api/subject/export`, `/api/subject/account/delete`, and the
- *      consent doc page are reachable.
+ *      from `CONSENT_VERSION` must re-acknowledge. Right-to-leave is
+ *      unconditional, so the gate exempts both the consent flow itself AND
+ *      the leave paths: `CONSENT_GATE_ALLOW_PAGES` for HTML surfaces
+ *      (`/consent`, `/account/delete`) and `CONSENT_GATE_ALLOW_APIS` for
+ *      backing endpoints (`/api/subject/consent`, `/api/subject/export`,
+ *      `/api/subject/account/delete`). Logout is universal via PUBLIC_PATHS.
  *   3. (Anything past consent runs through to the handler.)
  *
  * The owner skips both gates: owner has no consent doc to acknowledge and
@@ -60,15 +62,24 @@ const ALLOW_DURING_MUST_RESET = new Set<string>([
   '/api/subject/logout',
 ]);
 
-// Whitelist for the consent gate. The right to leave (logout, export,
-// delete) and the right to acknowledge a new consent version are
-// unconditional — a subject who refuses a new version still keeps these.
-const ALLOW_DURING_CONSENT_GATE = new Set<string>([
+// Consent-gate whitelists. The right to leave (export + close account) and
+// the right to acknowledge a new consent version are unconditional — a
+// subject who refuses a new version still keeps these.
+//
+// Two parallel sets because the API gate and page gate consult them
+// independently (each gate only ever fires for its own path class). Adding
+// a path requires picking the correct set; mis-classification is caught at
+// review time, not by the type system. Logout is intentionally NOT here:
+// it lives in `PUBLIC_PATHS` and short-circuits before either gate runs.
+const CONSENT_GATE_ALLOW_APIS = new Set<string>([
   '/api/subject/consent',
-  '/api/subject/logout',
   '/api/subject/export',
   '/api/subject/account/delete',
+]);
+
+const CONSENT_GATE_ALLOW_PAGES = new Set<string>([
   '/consent',
+  '/account/delete',
 ]);
 
 // Owner-only API surface (full match or prefix). Subject sessions hitting
@@ -171,12 +182,21 @@ export const onRequest = defineMiddleware(async ({ request, locals }, next) => {
   const path = url.pathname;
 
   // Already-authenticated visitors to /login bounce to their home surface.
-  // Saves a redundant re-login + makes "/login" idempotent.
+  // Saves a redundant re-login + makes "/login" idempotent. For subjects in
+  // a gated state we redirect directly to the gating page rather than to
+  // their nominal home, since the page-gate would just bounce them again
+  // (`/login → /subject → /reset-password` collapses to `/login → /reset-password`).
   if (path === '/login' && subject) {
-    return new Response(null, {
-      status: 302,
-      headers: { Location: subject.is_owner ? '/' : '/subject' },
-    });
+    let location: string;
+    if (subject.is_owner) {
+      location = '/';
+    } else if (subject.must_reset_password) {
+      location = '/reset-password';
+    } else {
+      const consentStatus = await getSubjectConsentStatus(subject.subject_id);
+      location = consentStatus.isCurrent ? '/subject' : '/consent';
+    }
+    return new Response(null, { status: 302, headers: { Location: location } });
   }
 
   if (PUBLIC_PATHS.has(path) || isStaticAsset(path)) {
@@ -205,7 +225,7 @@ export const onRequest = defineMiddleware(async ({ request, locals }, next) => {
       return next();
     }
 
-    if (!ALLOW_DURING_CONSENT_GATE.has(path)) {
+    if (!CONSENT_GATE_ALLOW_APIS.has(path)) {
       const consentStatus = await getSubjectConsentStatus(subject.subject_id);
       if (!consentStatus.isCurrent) {
         return jsonError(403, 'consent_required');
@@ -238,7 +258,7 @@ export const onRequest = defineMiddleware(async ({ request, locals }, next) => {
       }
       return next();
     }
-    if (path !== '/consent') {
+    if (!CONSENT_GATE_ALLOW_PAGES.has(path)) {
       const consentStatus = await getSubjectConsentStatus(subject.subject_id);
       if (!consentStatus.isCurrent) {
         return new Response(null, { status: 302, headers: { Location: '/consent' } });

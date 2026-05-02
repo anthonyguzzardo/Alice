@@ -159,6 +159,15 @@
         });
       });
 
+      function readNextParam(): string | null {
+        const next = new URLSearchParams(window.location.search).get('next');
+        // Same-origin absolute path only. The server re-validates this — the
+        // client-side check is UX (don't bother sending a value the server is
+        // guaranteed to drop). Path policy must match libSubjectAuth.isValidPostResetNextPath.
+        if (!next || !next.startsWith('/') || next.startsWith('//')) return null;
+        return next;
+      }
+
       btn.addEventListener('click', async () => {
         const username = usernameInput.value.trim();
         const password = passwordInput.value;
@@ -167,10 +176,16 @@
         btn.disabled = true;
         errorMsg.textContent = '';
 
+        const next = readNextParam();
         const res = await fetch('/api/subject/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, password }),
+          // `next` rides along so the server can stash it in a one-shot
+          // HttpOnly cookie when the subject is being forced into a password
+          // reset. After the reset the `next` cookie is read + cleared on
+          // /api/subject/reset-password and returned in its JSON response,
+          // so the second login lands at the original destination.
+          body: JSON.stringify({ username, password, next }),
         });
 
         if (res.status === 401) {
@@ -180,7 +195,38 @@
           return;
         }
 
+        if (res.status === 429) {
+          // Rate limited at the IP level (10 per 15 min). Surface the wait
+          // time from the Retry-After header so the user knows it'll clear
+          // on its own. Keep the button disabled — re-enabling would
+          // encourage retries that are guaranteed to fail.
+          const retryAfter = Number.parseInt(res.headers.get('retry-after') ?? '', 10);
+          const waitMsg = Number.isFinite(retryAfter) && retryAfter > 0
+            ? `too many attempts, wait ${retryAfter} seconds`
+            : 'too many attempts, try again later';
+          errorMsg.textContent = waitMsg;
+          return;
+        }
+
+        if (res.status === 400) {
+          // Malformed request (missing fields / invalid JSON). Client-side
+          // validation already prevents the empty-fields case, so this
+          // mostly fires on a JSON-parse failure or a manual fetch in
+          // DevTools. Show the server's error code if present, generic
+          // fallback otherwise.
+          const body = await res.json().catch(() => ({})) as { error?: string };
+          errorMsg.textContent = body.error === 'missing_credentials'
+            ? 'username and password are required'
+            : body.error === 'invalid_json'
+              ? 'malformed request'
+              : 'request rejected';
+          btn.disabled = false;
+          return;
+        }
+
         if (!res.ok) {
+          // 5xx and anything else — generic. Re-enable so a transient
+          // server blip doesn't strand the user with no way to retry.
           errorMsg.textContent = 'server error, try again';
           btn.disabled = false;
           return;
@@ -192,9 +238,7 @@
           return;
         }
         // Honor `?next=` if same-origin, else dispatch by role.
-        const params = new URLSearchParams(window.location.search);
-        const next = params.get('next');
-        if (next && next.startsWith('/') && !next.startsWith('//')) {
+        if (next) {
           window.location.href = next;
           return;
         }

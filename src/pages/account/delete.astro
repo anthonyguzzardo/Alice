@@ -12,9 +12,14 @@
  * cookie on success or 410.
  *
  * Consent gate: this page is reachable even when the consent gate engages.
- * Right to leave is unconditional. The middleware whitelist
- * (`/api/subject/account/delete`) is what closes the loop server-side;
- * here we just don't redirect to /consent.
+ * Right to leave is unconditional. Two middleware whitelists implement that
+ * promise: `CONSENT_GATE_ALLOW_PAGES` exempts `/account/delete` from the
+ * page-side redirect, and `CONSENT_GATE_ALLOW_APIS` exempts both the
+ * `/api/subject/account/delete` POST and the `/api/subject/export` GET that
+ * the "Download my data first" affordance triggers. The cancel-link target
+ * is computed from `consentNotCurrent` so a gated subject who cancels lands
+ * back at `/consent` (the only logical "back" while gated) instead of
+ * bouncing through `/account` → 302 to `/consent`.
  *
  * Policy note (becomes load-bearing on the first v2 consent bump):
  * delete BEHAVIOR is governed by current code, not by the consent version
@@ -277,7 +282,7 @@ const consentNotCurrent = !status.isCurrent;
           <button id="delete-btn" class="delete-btn" disabled>
             Delete my account permanently
           </button>
-          <a class="cancel-link" href="/account">cancel</a>
+          <a class="cancel-link" href={consentNotCurrent ? '/consent' : '/account'}>cancel</a>
         </div>
         <div class="error-msg" id="error-msg"></div>
       </div>

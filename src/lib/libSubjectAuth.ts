@@ -44,6 +44,39 @@ const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 /** Cookie name carrying the raw session token. */
 export const SESSION_COOKIE = 'alice_session';
 
+/**
+ * One-shot cookie that carries a validated `next` path through the forced-reset
+ * detour. Set on `/api/subject/login` success when `mustResetPassword === true`
+ * AND the request body included a same-origin `next` path; read by
+ * `/api/subject/reset-password` on success and returned in the JSON response,
+ * then deleted server-side. Distinct from `SESSION_COOKIE` so a cookie-aware
+ * reader cannot confuse the two.
+ *
+ * Lifetime deviates intentionally from the session cookie's no-Max-Age pattern:
+ * this is a one-shot, not a session. 10 minutes is enough for a slow user to
+ * read the reset criteria + type a new password twice + submit, without leaving
+ * an abandoned reset's destination lingering on the next login attempt.
+ */
+export const POST_RESET_NEXT_COOKIE = 'alice_post_reset_next';
+export const POST_RESET_NEXT_MAX_AGE_SECONDS = 600;
+
+/**
+ * Shared validation for the post-reset `next` path. Allows only same-origin
+ * absolute paths (`/foo`), rejects protocol-relative URLs (`//evil.com/...`)
+ * and absolute URLs with a scheme. The threat model is open-redirect: a
+ * malicious caller sending `next=//evil.com` on the login POST should not be
+ * able to write that into the cookie, no matter what the client claimed.
+ *
+ * The client-side check in `login.astro` exists for UX (don't send a bad path
+ * that's just going to be dropped); this function is the security gate that
+ * runs server-side regardless of what the client did.
+ */
+export function isValidPostResetNextPath(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  if (value.length === 0 || value.length > 512) return false;
+  return value.startsWith('/') && !value.startsWith('//');
+}
+
 // ─── Pure helpers ──────────────────────────────────────────────────────────
 
 export async function hashPassword(plaintext: string): Promise<string> {

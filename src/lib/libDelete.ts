@@ -8,11 +8,13 @@
  * audit row but otherwise the cascade is identical.
  *
  * Atomicity: every delete + the soft-delete + the audit-row insert run
- * inside one `sql.begin` transaction. A failed delete rolls back
- * everything including the audit row — the subject can retry. A
- * successful cascade with a failed audit-write also rolls back, which is
- * the correct asymmetry: a failed delete is recoverable, a successful
- * delete with no audit row is not.
+ * inside one `sql.begin` transaction. The transaction is all-or-nothing:
+ * any failure (a row delete throwing, the soft-delete UPDATE failing, the
+ * audit INSERT failing) rolls back every prior step. The subject can
+ * retry; the DB never observes a partial cascade. The audit row landing
+ * is what makes the cascade "real," and it lands in the same commit as
+ * the last data delete, so the post-condition is "cascade complete and
+ * audited" or "no change at all."
  *
  * Order of operations inside the transaction (leaves-inward; matters for
  * documented intent more than for FK reasons since postgres deferred

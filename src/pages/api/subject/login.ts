@@ -20,7 +20,13 @@
  */
 
 import type { APIRoute } from 'astro';
-import { loginSubject, SESSION_COOKIE } from '../../../lib/libSubjectAuth.ts';
+import {
+  loginSubject,
+  SESSION_COOKIE,
+  POST_RESET_NEXT_COOKIE,
+  POST_RESET_NEXT_MAX_AGE_SECONDS,
+  isValidPostResetNextPath,
+} from '../../../lib/libSubjectAuth.ts';
 import { parseBody } from '../../../lib/utlParseBody.ts';
 import { consume, reset as resetRateLimit } from '../../../lib/utlRateLimit.ts';
 
@@ -55,7 +61,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     });
   }
 
-  const body = await parseBody<{ username?: string; password?: string }>(request);
+  const body = await parseBody<{ username?: string; password?: string; next?: string }>(request);
   if (!body) {
     return new Response(JSON.stringify({ error: 'invalid_json' }), {
       status: 400,
@@ -94,6 +100,26 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     sameSite: 'lax',
     path: '/',
   });
+
+  // When the subject is being forced into a password reset, stash the
+  // user-chosen `next` path in a one-shot HttpOnly cookie so we can route
+  // them to it after the reset completes. Carrying it through the URL
+  // (`/login?next=… → /reset-password?next=… → /login?next=…`) leaks the
+  // path into the address bar, browser history, the Referer header on the
+  // reset POST, and any analytics/RUM. Server-side cookie keeps it out of
+  // all of those surfaces. Server-side validation of the path is the
+  // security gate; the client-side check in login.astro is just UX (don't
+  // bother sending a path the server is going to drop). Validation failure
+  // is silent: cookie not set, login still succeeds.
+  if (result.mustResetPassword && isValidPostResetNextPath(body.next)) {
+    cookies.set(POST_RESET_NEXT_COOKIE, body.next, {
+      httpOnly: true,
+      secure: import.meta.env.PROD,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: POST_RESET_NEXT_MAX_AGE_SECONDS,
+    });
+  }
 
   return new Response(JSON.stringify({
     ok: true,
