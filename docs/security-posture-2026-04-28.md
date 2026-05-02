@@ -64,7 +64,7 @@ Severity = "what does it cost if exploited," not "how easy is it to fix."
 | 8 | ~~Caddy access log retains IPs and URL paths to disk on subject POST paths~~ | `deploy/Caddyfile` | **Closed 2026-04-30 (Class II #2)** — `log_skip` on `/api/respond`, `/api/subject/respond`, `/api/calibrate`, `/api/subject/calibrate`, `/api/event`. GET paths (`/login`, `/observatory`, etc.) still get IP+path logged for ops debugging — acceptable trade since GETs don't carry subject content. |
 | 9 | ~~`x-forwarded-for` trusted from any upstream~~ | `src/lib/utlRequestContext.ts:23`, `src/pages/api/subject/login.ts:34` | **Closed 2026-05-01 by review + CF flip** — `deploy/Caddyfile` `header_up X-Forwarded-For {remote_host}` already replaces client-supplied XFF (no `+` prefix = replace, not append). After DNS-only flip, `{remote_host}` is the real client IP, so per-IP rate limiting works as intended. No code change needed. |
 | 10 | ~~No CAA DNS records~~ | DNS-side | **Closed 2026-05-01 (Class II #3)** — `0 issue "letsencrypt.org"` + `0 iodef "mailto:agguzzy91@gmail.com"`. Cloudflare Universal SSL disabled to stop their auto-injection of CAAs for `comodoca.com`/`digicert.com`/`pki.goog`/`ssl.com`. Verified via `dig CAA fweeo.com +short`. CT Monitoring also enabled as belt-and-suspenders. |
-| 11 | DNSSEC enabled, parent DS propagating | DNS-side | **Enabled 2026-05-01 (Class II #3)** — CF DNS → Settings → Enable DNSSEC. Domain at CF Registrar so DS auto-pushed to .com parent. Zone-side DNSKEY + RRSIG verified. Closes fully once `dig @a.gtld-servers.net fweeo.com DS +short` returns non-empty. |
+| 11 | ~~DNSSEC status not verified~~ | DNS-side | **Closed 2026-05-01 (Class II #3)** — DNSSEC enabled at CF, DS auto-pushed to .com parent (CF Registrar). Verified end-to-end: `dig @a.gtld-servers.net fweeo.com DS +short` returns `2371 13 2 E637EFFBCBCA4CACDF6A46620570E233C2C50C69F2038F95A39CCF6FE9A5666E`. `dig @1.1.1.1 fweeo.com` returns `ad` flag (Authenticated Data) confirming validating resolvers verify the chain. Algorithm 13 (ECDSAP256SHA256). |
 | 12 | No Sigstore signature on linux-x64 `.node` artifact | `.github/workflows/` | Compromised CI account = persistent execution on Hetzner. (npm audit gate already in place.) |
 | 13 | systemd journal captures Node stdout | `src/lib/utlErrorLog.ts:40` calls `console.error` after writing to `data/errors.log` | **Mitigated by FDE 2026-04-30 — journald and `data/errors.log` now encrypted at rest.** Live host compromise still exposes content. |
 | 14 | Logs and encrypted DB share storage | host filesystem | Disk seizure recovers logs (timing/IP traces) plus encrypted DB. Ship logs to a remote sink and zero local logs nightly. |
@@ -154,9 +154,9 @@ Five gaps closed in one Caddyfile + app-code window. Discovery during this deplo
 
 **Next:** Class II #1 (Cloudflare proxy off / DNS-only flip) is now the highest-impact remaining item — the only remaining third party in the data path.
 
-## Completed: Class II items 1, 3, 5 — Cloudflare proxy off, CAA pin, ufw lockdown — 2026-05-01
+## Completed: Class II items 1, 3, 5 — Cloudflare proxy off, CAA pin, DNSSEC, ufw lockdown — 2026-05-01
 
-Closes Critical #1, Medium #9, Medium #10. Medium #11 (DNSSEC) enabled and propagating; closes once the DS lands at the .com parent. Crit #1 was the single largest remaining data-exposure surface and the entire reason the punch list existed.
+Closes Critical #1, Medium #9, Medium #10, Medium #11. Crit #1 was the single largest remaining data-exposure surface and the entire reason the Class II punch list existed.
 
 ### ufw enabled (prerequisite for the CF flip)
 
@@ -206,16 +206,17 @@ Closure: SSL/TLS → Edge Certificates → bottom of page → **Disable Universa
 
 While on the same Edge Certificates page: enable **Certificate Transparency Monitoring** (Beta toggle just above Disable Universal SSL). Free passive defense; emails when ANY CA issues a cert for `fweeo.com`. Combined with the `iodef` CAA record, that is dual coverage: CAA tells unauthorized CAs not to issue (and to email if they try), CT Monitoring catches misissuance even by authorized CAs.
 
-### DNSSEC enabled (closes Med #11 once parent DS lands)
+### DNSSEC enabled (closes Med #11)
 
 Cloudflare DNS → Settings → DNSSEC → **Enable DNSSEC**. Domain is registered at Cloudflare Registrar (Path A), so the DS record is auto-pushed to the .com parent zone via Verisign without manual registrar work.
 
-Current state at write time:
+Verified end-to-end same session:
 
-- Zone-side DNSKEY published: KSK 257 + ZSK 256, algorithm 13 (ECDSAP256SHA256). RRSIG present on responses.
-- Parent-side DS still propagating: `dig @a.gtld-servers.net fweeo.com DS +short` returns empty as of the last probe.
+- Zone-side: DNSKEY published (KSK 257 + ZSK 256, algorithm 13 ECDSAP256SHA256). RRSIG present on every response.
+- Parent-side: `dig @a.gtld-servers.net fweeo.com DS +short` → `2371 13 2 E637EFFBCBCA4CACDF6A46620570E233C2C50C69F2038F95A39CCF6FE9A5666E`.
+- Validation: `dig @1.1.1.1 fweeo.com` returns `ad` flag in `;; flags:` line. Validating resolvers verify the .com → fweeo.com chain successfully.
 
-Closes when the .com root publishes the DS, usually within minutes to a few hours. No further action needed.
+Cache poisoning + DNS spoofing on the path between user resolvers and Cloudflare's authoritative servers no longer succeeds against validating clients.
 
 ### Med #9 (XFF trust) closed by code review, no Caddyfile change
 
@@ -228,11 +229,10 @@ No new directive needed; the existing line was already load-bearing. Closing wit
 - Critical #1 (Cloudflare proxy ON) — closed.
 - Medium #9 (XFF trust) — closed by existing config + CF flip.
 - Medium #10 (no CAA) — closed (LE-only, Universal SSL disabled).
-- Medium #11 (DNSSEC) — enabled; closes when parent DS lands.
+- Medium #11 (DNSSEC) — closed (parent DS published, validating resolvers return `ad` flag).
 
 ### Open follow-ups from this session:
 
-- DNSSEC propagation verification: re-probe `dig @a.gtld-servers.net fweeo.com DS +short` until non-empty, then close Med #11 explicitly.
 - Cloudflare data-subject deletion request (GDPR Art. 17 / CCPA right-to-delete) for pre-2026-04-30 Web Analytics RUM data: still open, tracked under Completed: Cloudflare Web Analytics RUM section above.
 
 **Next:** Class II #4 (Argon2id 256MB / 4 iter benchmark + bump). All Class II items 1-3 + 5 are now closed.
@@ -266,7 +266,7 @@ Listed for completeness so they do not get reinvented.
 
 Items the audit cannot close from inside the repo. Each needs a one-time check that lives outside source control.
 
-- ~~**DNSSEC enabled at Cloudflare**~~ — enabled 2026-05-01; parent DS propagating. Verify Active by re-probing `dig @a.gtld-servers.net fweeo.com DS +short`.
+- ~~**DNSSEC enabled at Cloudflare**~~ **Closed 2026-05-01** — enabled, DS published at .com parent, validating resolvers return `ad` flag. See Class II item 3 in Completed section.
 - ~~**Full-disk encryption on the Hetzner volume** for the `/opt/alice` mount.~~ **Closed 2026-04-30** — see Completed: FDE rebuild section above.
 - **Backup posture for `ALICE_ENCRYPTION_KEY`**: verify both backups (operator's password manager AND `/etc/alice/secrets.env`) exist, are readable, and are stored in geographically distinct locations.
 - ~~**CAA records pinning Let's Encrypt** at the registrar.~~ **Closed 2026-05-01** — see Class II item 3 in Completed section.
