@@ -1,11 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import matter from 'gray-matter';
 import { marked } from 'marked';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PAPERS_DIR = path.resolve(__dirname, '../../papers');
+// Anchor on cwd. See libDocs.ts for the same fix and rationale: post-build
+// the bundled module is in dist/server/chunks/, where the papers/ tree
+// is not copied. systemd sets WorkingDirectory=/opt/alice, dev runs from
+// the project root.
+const PAPERS_DIR = path.resolve(process.cwd(), 'papers');
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

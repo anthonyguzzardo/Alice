@@ -16,7 +16,6 @@
  * basic-auth and don't need to consent (this is the operator's instrument).
  */
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { marked } from 'marked';
 import {
@@ -41,12 +40,12 @@ if (!currentVersion) {
   throw new Error(`CONSENT_VERSION "${CONSENT_VERSION}" missing from CONSENT_VERSIONS registry`);
 }
 
-// Anchor the docs path to this file's location, then climb to project root.
-// Mirrors the pattern in libDocs.ts / libPapers.ts so behavior is consistent
-// across dev, build, and the systemd-launched node server on Hetzner.
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const projectRoot = path.resolve(__dirname, '../../');
-const docPath = path.resolve(projectRoot, currentVersion.docPath);
+// Anchor the docs path to the cwd, which is the project root in dev
+// (`npm run dev` from repo root) and `/opt/alice` in prod (systemd
+// `WorkingDirectory=/opt/alice`). Using `import.meta.url` here would
+// resolve to `dist/server/chunks/...` post-build, where the docs tree
+// is not bundled, so `readFileSync` would throw ENOENT.
+const docPath = path.resolve(process.cwd(), currentVersion.docPath);
 const md = readFileSync(docPath, 'utf-8');
 const html = await marked.parse(md);
 

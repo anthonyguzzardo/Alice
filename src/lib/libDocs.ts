@@ -1,10 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { marked } from 'marked';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DOCS_DIR = path.resolve(__dirname, '../../docs');
+// Anchor on cwd, not import.meta.url. Post-Astro-build the bundled module
+// lives in dist/server/chunks/, so `../..` would resolve to `dist/server`,
+// where the docs/ tree is not copied. systemd sets WorkingDirectory=/opt/alice,
+// dev runs from the project root, so cwd is correct in both modes.
+const DOCS_DIR = path.resolve(process.cwd(), 'docs');
 
 export interface Doc {
   slug: string;
