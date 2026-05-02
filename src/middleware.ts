@@ -135,16 +135,25 @@ function isStaticAsset(path: string): boolean {
  * check. SameSite=Lax cookies already block cross-origin POSTs, but a
  * second layer here costs nothing.
  *
- * Allowed origins:
+ * Default allowed origins:
  *   - https://fweeo.com (production canonical)
- *   - http://localhost:4321 (local dev)
+ *   - http://localhost:4321 (`astro dev` default port)
  *   - missing Origin (browsers omit Origin on top-level navigation; Lax
  *     cookies handle the rest, and same-origin GETs from the page are fine)
+ *
+ * Override with `ALICE_ALLOWED_ORIGINS` (comma-separated). When set, it
+ * REPLACES the defaults — list every origin you want to allow, including
+ * the production one if it's still in scope. Use case: dev on a non-default
+ * port (e.g. `ALICE_ALLOWED_ORIGINS=http://localhost:4567`).
  */
-const ALLOWED_ORIGINS = new Set<string>([
-  'https://fweeo.com',
-  'http://localhost:4321',
-]);
+const ALLOWED_ORIGINS: ReadonlySet<string> = (() => {
+  const raw = process.env.ALICE_ALLOWED_ORIGINS;
+  if (raw && raw.trim().length > 0) {
+    const list = raw.split(',').map((s) => s.trim()).filter((s) => s.length > 0);
+    if (list.length > 0) return new Set(list);
+  }
+  return new Set(['https://fweeo.com', 'http://localhost:4321']);
+})();
 
 function failsOriginCheck(request: Request): boolean {
   const method = request.method.toUpperCase();
