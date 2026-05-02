@@ -19,7 +19,6 @@
  * unconditional).
  */
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { marked } from 'marked';
 import {
@@ -40,13 +39,16 @@ if (!status.isCurrent) return Astro.redirect('/consent');
 const history: ConsentHistoryEntry[] = await getSubjectConsentHistory(subject.subject_id);
 
 // Pre-render all known consent doc versions to HTML so the history view
-// can show the doc text for each acknowledged version inline.
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const projectRoot = path.resolve(__dirname, '../../../');
+// can show the doc text for each acknowledged version inline. Anchor on
+// process.cwd() (project root in dev, /opt/alice in prod via systemd
+// WorkingDirectory). import.meta.url would resolve to dist/server/chunks
+// post-build, where the docs/ tree is not bundled — readFileSync would
+// ENOENT and every history entry would render the "doc unavailable"
+// fallback. Same fix that landed for consent.astro in 2d729d8.
 const versionDocs = new Map<string, string>();
 for (const v of CONSENT_VERSIONS) {
   try {
-    const md = readFileSync(path.resolve(projectRoot, v.docPath), 'utf-8');
+    const md = readFileSync(path.resolve(process.cwd(), v.docPath), 'utf-8');
     versionDocs.set(v.version, await marked.parse(md));
   } catch {
     // Doc file missing — render the date only for this version.
