@@ -74,7 +74,7 @@ operator does not see what you wrote, ever, through any operator-facing
 surface. Other subjects can never see your data.
 
 ## Questions
-Contact the operator directly at agguzzy91@gmail.com.
+Contact the operator directly at anthony@mrfoxco.com.
 
 ## Consent versions
 This is consent version v1. If we update the terms, you'll be asked to
