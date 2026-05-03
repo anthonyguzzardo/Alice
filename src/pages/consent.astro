@@ -262,9 +262,44 @@ const isStaleReload = Astro.url.searchParams.get('stale') === '1';
       .consent-stale-action:hover {
         background: rgba(0, 0, 0, 0.04);
       }
+
+      /* Fixed top-left "back to journal" link, only rendered when consent
+         is current (subject is browsing the page, not gated). During gate
+         state the link is hidden — clicking it would just bounce them
+         right back to /consent via middleware. Shared shape with /welcome
+         and /account. */
+      .back-to-journal {
+        position: fixed;
+        top: 1.5rem;
+        left: 1.5rem;
+        z-index: 10;
+        font-family: 'EB Garamond', Georgia, serif;
+        font-size: 0.95rem;
+        color: var(--text-muted);
+        text-decoration: none;
+        padding: 0.4rem 0.85rem;
+        background: rgba(245, 242, 237, 0.95);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        transition: color 0.2s ease, border-color 0.2s ease;
+      }
+      .back-to-journal:hover {
+        color: var(--text);
+        border-color: var(--border-focus);
+      }
+      @media (max-width: 600px) {
+        .back-to-journal {
+          top: 1rem;
+          left: 1rem;
+          font-size: 0.9rem;
+        }
+      }
     </style>
   </head>
   <body>
+    {alreadyAcknowledged && (
+      <a class="back-to-journal" href="/subject">← back to journal</a>
+    )}
     <div class="consent-wrap">
       {isStaleReload && (
         <div class="consent-stale" id="consent-stale-banner">
@@ -293,9 +328,6 @@ const isStaleReload = Astro.url.searchParams.get('stale') === '1';
         <div class="consent-status">
           You acknowledged version <code>{status.currentVersion}</code> on
           <span class="when">{previousAcknowledgedAt}</span>.
-          <div style="margin-top: 1rem;">
-            <a href="/subject">→ back to journal</a>
-          </div>
         </div>
       ) : (
         <div class="consent-actions">

@@ -225,18 +225,44 @@ const joinedDate = subject.dttm_created_utc ? subject.dttm_created_utc.slice(0, 
         border-top: 1px solid var(--border);
       }
 
-      .footer-back {
-        margin-top: 3rem;
-        font-size: 1rem;
-      }
-      .footer-back a {
+      /* Fixed top-left "back to journal" link. Subtle bg (matches --bg
+         with alpha) + border so it remains legible when content scrolls
+         behind it without being a heavy chrome element. Mobile drops the
+         offset so it does not crowd the narrow viewport. Shared shape
+         with /welcome and /consent. */
+      .back-to-journal {
+        position: fixed;
+        top: 1.5rem;
+        left: 1.5rem;
+        z-index: 10;
+        font-family: 'EB Garamond', Georgia, serif;
+        font-size: 0.95rem;
         color: var(--text-muted);
         text-decoration: none;
+        padding: 0.4rem 0.85rem;
+        background: rgba(245, 242, 237, 0.95);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        transition: color 0.2s ease, border-color 0.2s ease;
       }
-      .footer-back a:hover { color: var(--text); }
+      [data-theme="dark"] .back-to-journal {
+        background: rgba(20, 18, 16, 0.95);
+      }
+      .back-to-journal:hover {
+        color: var(--text);
+        border-color: var(--border-focus);
+      }
+      @media (max-width: 600px) {
+        .back-to-journal {
+          top: 1rem;
+          left: 1rem;
+          font-size: 0.9rem;
+        }
+      }
     </style>
   </head>
   <body>
+    <a class="back-to-journal" href="/subject">← back to journal</a>
     <div class="account-wrap">
       <h1 class="account-title">Your account</h1>
 
@@ -294,7 +320,6 @@ const joinedDate = subject.dttm_created_utc ? subject.dttm_created_utc.slice(0, 
         )}
       </section>
 
-      <p class="footer-back"><a href="/subject">← back to journal</a></p>
     </div>
   </body>
 </html>

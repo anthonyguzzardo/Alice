@@ -92,19 +92,40 @@ if (subject.must_reset_password) return Astro.redirect('/reset-password');
       .welcome-doc em { font-style: italic; color: var(--text-muted); }
       .welcome-doc a { color: var(--accent); text-decoration: underline; }
 
-      .welcome-back {
-        margin-top: 3rem;
-        text-align: center;
-        font-size: 1rem;
-      }
-      .welcome-back a {
+      /* Fixed top-left "back to journal" link. Subtle bg (matches --bg
+         with alpha) + border so it remains legible when content scrolls
+         behind it without being a heavy chrome element. Mobile drops the
+         offset so it does not crowd the narrow viewport. */
+      .back-to-journal {
+        position: fixed;
+        top: 1.5rem;
+        left: 1.5rem;
+        z-index: 10;
+        font-family: 'EB Garamond', Georgia, serif;
+        font-size: 0.95rem;
         color: var(--text-muted);
         text-decoration: none;
+        padding: 0.4rem 0.85rem;
+        background: rgba(245, 242, 237, 0.95);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        transition: color 0.2s ease, border-color 0.2s ease;
       }
-      .welcome-back a:hover { color: var(--text); }
+      .back-to-journal:hover {
+        color: var(--text);
+        border-color: #8a8580;
+      }
+      @media (max-width: 600px) {
+        .back-to-journal {
+          top: 1rem;
+          left: 1rem;
+          font-size: 0.9rem;
+        }
+      }
     </style>
   </head>
   <body>
+    <a class="back-to-journal" href="/subject">← back to journal</a>
     <div class="welcome-wrap">
       <article class="welcome-doc">
         <h1>How to use Alice</h1>
@@ -161,7 +182,6 @@ if (subject.must_reset_password) return Astro.redirect('/reset-password');
         </p>
       </article>
 
-      <p class="welcome-back"><a href="/subject">← back to journal</a></p>
     </div>
   </body>
 </html>
