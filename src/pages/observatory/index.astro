@@ -90,7 +90,7 @@ import ObsToolbar from '../../components/cmpObsToolbar.astro';
           const y = h - ((v - min) / range) * (h - 2) - 1;
           return x.toFixed(1) + ',' + y.toFixed(1);
         }).join(' ');
-        return `<svg class="spark" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg"><polyline fill="none" stroke="${color}" stroke-width="1.5" points="${pts}"/></svg>`;
+        return `<svg class="spark" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg"><polyline fill="none" stroke="${color}" stroke-width="2" points="${pts}"/></svg>`;
       }
 
       function renderEntries(states, container) {

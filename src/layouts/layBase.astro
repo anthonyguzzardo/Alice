@@ -53,40 +53,7 @@ const {
 
 <style is:global>
   @import url('/fonts/styFonts.css');
-
-  :root {
-    --bg: #f5f2ed;
-    --bg-dim: #e9e5de;
-    --bg-panel: #ebe7e1;
-    --text: #1a1a1a;
-    --text-muted: #6b6560;
-    --text-faint: #9a9590;
-    --border: #ccc5bc;
-    --border-focus: #8a8580;
-    --accent: #7a5a44;
-    --positive: #6b8e6b;
-    --negative: #b5603f;
-    --semantic: #7a5a7a;
-    --serif-display: 'Cormorant Garamond', Georgia, serif;
-    --serif-body: 'EB Garamond', Georgia, serif;
-    --mono: 'SF Mono', 'Menlo', 'Consolas', monospace;
-    --sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Helvetica, sans-serif;
-  }
-
-  [data-theme="dark"] {
-    --bg: #141210;
-    --bg-dim: #1a1816;
-    --bg-panel: #1a1816;
-    --text: #e8e4df;
-    --text-muted: #7a7570;
-    --text-faint: #4a4540;
-    --border: #333;
-    --border-focus: #666;
-    --accent: #a08a6e;
-    --positive: #8aa08a;
-    --negative: #c77a5a;
-    --semantic: #9a7a9a;
-  }
+  @import '../styles/styTokens.css';
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 

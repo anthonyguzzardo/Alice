@@ -5,41 +5,12 @@
  * table headers, data), sans-serif for prose (insights, arcs, discovery
  * descriptions). Warm cream / charcoal palette so it still reads as part
  * of Alice rather than a generic dev dashboard.
+ *
+ * Tokens live in styTokens.css (shared with layBase). Observatory-specific
+ * styles below.
  * ───────────────────────────────────────────────────────────────────── */
 
-:root {
-  --bg: #f5f2ed;
-  --bg-panel: #ebe7e1;
-  --bg-panel-hover: #e3dfd8;
-  --text: #1a1a1a;
-  --text-muted: #6b6560;
-  --text-faint: #9a9590;
-  --border: #ccc5bc;
-  --border-focus: #8a8580;
-  --accent: #7a5a44;       /* warm brown, used for links & actions */
-  --semantic: #7a5a7a;     /* muted purple, semantic space */
-  --positive: #6b8e6b;     /* soft green */
-  --negative: #b5603f;     /* terracotta */
-  --warn: #c9a55e;
-  --mono: 'SF Mono', 'Menlo', 'Consolas', 'Liberation Mono', monospace;
-  --sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Helvetica, sans-serif;
-}
-
-[data-theme="dark"] {
-  --bg: #0f0e0c;
-  --bg-panel: #1a1816;
-  --bg-panel-hover: #201d1a;
-  --text: #d4d0c8;
-  --text-muted: #b0aba5;
-  --text-faint: #888178;
-  --border: #333;
-  --border-focus: #666;
-  --accent: #a08a6e;
-  --semantic: #9a7a9a;
-  --positive: #8aa08a;
-  --negative: #c77a5a;
-  --warn: #c9a55e;
-}
+@import './styTokens.css';
 
 * { box-sizing: border-box; }
 

@@ -1,0 +1,50 @@
+/* ─────────────────────────────────────────────────────────────────────
+ * Design tokens — single source of truth.
+ *
+ * Imported by layBase.astro (global) and styObservatory.css (observatory).
+ * Dark-mode values are tuned for halation: borders thicker-toned, faint
+ * text lifted off near-black, display weight bumped one notch.
+ * ───────────────────────────────────────────────────────────────────── */
+
+:root {
+  --bg: #f5f2ed;
+  --bg-dim: #e9e5de;
+  --bg-panel: #ebe7e1;
+  --bg-panel-hover: #e3dfd8;
+  --text: #1a1a1a;
+  --text-muted: #6b6560;
+  --text-faint: #9a9590;
+  --border: #ccc5bc;
+  --border-focus: #8a8580;
+  --accent: #7a5a44;
+  --positive: #6b8e6b;
+  --negative: #b5603f;
+  --semantic: #7a5a7a;
+  --warn: #c9a55e;
+
+  --weight-display: 300;
+
+  --serif-display: 'Cormorant Garamond', Georgia, serif;
+  --serif-body: 'EB Garamond', Georgia, serif;
+  --mono: 'SF Mono', 'Menlo', 'Consolas', 'Liberation Mono', monospace;
+  --sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Helvetica, sans-serif;
+}
+
+[data-theme="dark"] {
+  --bg: #141210;
+  --bg-dim: #1a1816;
+  --bg-panel: #1a1816;
+  --bg-panel-hover: #201d1a;
+  --text: #e8e4df;
+  --text-muted: #b0aba5;
+  --text-faint: #888178;
+  --border: #4a4540;
+  --border-focus: #8a8580;
+  --accent: #a08a6e;
+  --positive: #8aa08a;
+  --negative: #c77a5a;
+  --semantic: #9a7a9a;
+  --warn: #c9a55e;
+
+  --weight-display: 400;
+}
