@@ -33,7 +33,7 @@ export const SEED_QUESTIONS: string[] = [
   "Who do you become when you're scared? Is that who you want to be?",
   "What conversation would change everything if you actually had it?",
   "What are you building that will still matter in ten years?",
-  "Where are you performing competence instead of actually learning?",
+  "Where are you performing competence instead of becoming competent?",
 
   // Week 4: Settle — direction and identity
   "What would you work on if you had no audience?",
