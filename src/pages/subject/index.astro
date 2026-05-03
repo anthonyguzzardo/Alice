@@ -14,6 +14,17 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Alice</title>
+    <script is:inline>
+      // Catch iPad pretending to be Mac Safari (iPadOS 13+ default). See
+      // login.astro for the full rationale.
+      (function () {
+        var pts = navigator.maxTouchPoints || 0;
+        var p = navigator.platform || '';
+        if (pts > 1 && /Mac|iPad/i.test(p)) {
+          window.location.replace('/desktop-only');
+        }
+      })();
+    </script>
     <!-- Theme is locked to light on subject-facing pages until the dark
          variant is finalized. No localStorage read; CSS :root supplies the
          light palette by default. The [data-theme="dark"] rules below stay

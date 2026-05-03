@@ -1,0 +1,92 @@
+---
+/**
+ * /desktop-only — the one page mobile / tablet user agents can reach.
+ *
+ * Alice's measurement instrument (keystroke timing, hold/flight intervals,
+ * pause architecture) depends on a physical keyboard and timing precision
+ * that mobile and tablet browsers cannot reliably provide. Rather than
+ * silently degrade signal quality on a phone, we block.
+ *
+ * Two layers detect mobile:
+ *   1. `src/middleware.ts` — server-side User-Agent regex catches phones,
+ *      most Android tablets, and traditional iPad UAs. Redirects every
+ *      non-static path here.
+ *   2. Inline JS on every page (here intentionally absent — the loop guard
+ *      lives in the snippet itself, but skipping it on the destination is
+ *      cheaper) — catches iPad pretending to be Mac Safari (iPadOS 13+
+ *      default), which the server-side regex cannot distinguish from a
+ *      real Mac.
+ *
+ * Public surface — listed in `PUBLIC_PATHS` so middleware does not gate it.
+ * Theme is locked light (no localStorage read).
+ */
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Alice — laptop only</title>
+    <style is:global>
+      @import url('/fonts/styFonts.css');
+
+      :root {
+        --bg: #f5f2ed;
+        --text: #1a1a1a;
+        --text-muted: #6b6560;
+        --border: #ccc5bc;
+        --accent: #7a5a44;
+      }
+
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      body {
+        font-family: 'EB Garamond', Georgia, serif;
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem 1.5rem;
+      }
+
+      .desktop-only-wrap {
+        max-width: 520px;
+        text-align: center;
+      }
+
+      h1 {
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-weight: 400;
+        font-size: 2rem;
+        margin-bottom: 1.5rem;
+      }
+
+      p {
+        font-size: 1.05rem;
+        line-height: 1.7;
+        color: var(--text-muted);
+        margin: 0.7rem 0;
+      }
+
+      p strong { color: var(--text); font-weight: 500; }
+    </style>
+  </head>
+  <body>
+    <div class="desktop-only-wrap">
+      <h1>Alice is laptop only</h1>
+      <p>
+        The instrument measures keystroke timing, pauses, and revision
+        patterns in ways that mobile and tablet browsers cannot reliably
+        support. Open this page on a <strong>laptop or desktop browser</strong>
+        to continue.
+      </p>
+      <p>
+        If you reached this page on what you believe is a laptop, your
+        browser may be advertising itself as mobile. Try a different
+        browser, or contact the operator.
+      </p>
+    </div>
+  </body>
+</html>

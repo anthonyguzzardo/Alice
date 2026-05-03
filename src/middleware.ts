@@ -47,13 +47,36 @@ import { getSubjectConsentStatus } from './lib/libConsent.ts';
 // `/api/subject/logout` lives under `/api/subject/*` for path consistency
 // with login but is universal — owner must be able to call it without
 // hitting the subject-only gate downstream.
+//
+// `/desktop-only` is here because the mobile-UA gate redirects every
+// other route here; if it were not in PUBLIC_PATHS the gate's destination
+// would itself be blocked, and the redirect would loop.
 const PUBLIC_PATHS = new Set<string>([
   '/login',
   '/api/subject/login',
   '/api/subject/logout',
+  '/desktop-only',
   '/favicon.ico',
   '/robots.txt',
 ]);
+
+/**
+ * User-Agent matcher for mobile / tablet devices. Catches phones, most
+ * Android tablets, and the traditional iPad UA token. Does NOT catch
+ * iPad on iPadOS 13+ (which advertises itself as Mac Safari by default
+ * with no `iPad` token); that case is caught client-side via
+ * `navigator.maxTouchPoints` checks on each subject-facing page.
+ *
+ * Alice's keystroke-timing instrument cannot run reliably on touch
+ * keyboards, so the policy is "laptop only, full stop." Operator can
+ * unblock specific routes later by listing them in MOBILE_ALLOW_PATHS.
+ */
+const MOBILE_UA_REGEX = /Mobi|Android|iPhone|iPod|BlackBerry|IEMobile|Opera Mini|Windows Phone|Kindle|Silk/i;
+
+function isMobileUserAgent(ua: string | null): boolean {
+  if (!ua) return false;
+  return MOBILE_UA_REGEX.test(ua);
+}
 
 // Subject-only APIs that the must-reset gate exempts (so the subject can
 // finish the reset and log out without hitting the gate forever).
@@ -179,11 +202,30 @@ function failsOriginCheck(request: Request): boolean {
 }
 
 export const onRequest = defineMiddleware(async ({ request, locals }, next) => {
-  const subject = await getRequestSubject(request);
-  locals.subject = subject;
-
   const url = new URL(request.url);
   const path = url.pathname;
+
+  // ───── Mobile / tablet block ──────────────────────────────────────────
+  // Alice is laptop-only by design. Block early — before session resolve,
+  // before any auth check — so a phone visiting any path other than
+  // `/desktop-only` itself or a static asset always sees the block page.
+  // Static assets pass through so `/desktop-only` can render its CSS and
+  // fonts. Server-side UA matching does NOT catch iPad-as-Mac (iPadOS 13+);
+  // each subject-facing page handles that case via inline maxTouchPoints
+  // detection.
+  if (
+    path !== '/desktop-only'
+    && !isStaticAsset(path)
+    && isMobileUserAgent(request.headers.get('user-agent'))
+  ) {
+    return new Response(null, {
+      status: 302,
+      headers: { Location: '/desktop-only' },
+    });
+  }
+
+  const subject = await getRequestSubject(request);
+  locals.subject = subject;
 
   // Already-authenticated visitors to /login bounce to their home surface.
   // Saves a redundant re-login + makes "/login" idempotent. For subjects in

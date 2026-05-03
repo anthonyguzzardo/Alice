@@ -19,6 +19,21 @@ const {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content={description} />
   <title>{title}</title>
+  <script is:inline>
+    // Catch iPad pretending to be Mac Safari (iPadOS 13+ default). The
+    // server-side User-Agent gate in middleware can't distinguish a real
+    // Mac from an iPad in Mac-Safari mode; this client-side check uses
+    // maxTouchPoints (real Macs report 0–1; iPads report 5+) to catch
+    // the loophole and redirect to /desktop-only. Lives in layBase so
+    // every marketing/public page that uses PublicLayout inherits it.
+    (function () {
+      var pts = navigator.maxTouchPoints || 0;
+      var p = navigator.platform || '';
+      if (pts > 1 && /Mac|iPad/i.test(p)) {
+        window.location.replace('/desktop-only');
+      }
+    })();
+  </script>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="stylesheet" href="/fonts/styFonts.css" />
 </head>
