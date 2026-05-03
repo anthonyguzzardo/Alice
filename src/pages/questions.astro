@@ -169,7 +169,7 @@ import PublicLayout from '../layouts/layPublic.astro';
 
   .q-section {
     padding: 3rem 0;
-    border-top: 1px solid var(--border);
+    border-top: var(--border-width) solid var(--border);
   }
 
   .q-section h2 {
@@ -199,7 +199,7 @@ import PublicLayout from '../layouts/layPublic.astro';
   }
 
   .q-example {
-    border: 1px solid var(--border);
+    border: var(--border-width) solid var(--border);
     border-radius: 6px;
     padding: 1.5rem;
   }
@@ -222,7 +222,7 @@ import PublicLayout from '../layouts/layPublic.astro';
     color: var(--text-muted);
     margin-bottom: 0.75rem;
     padding-bottom: 0.75rem;
-    border-bottom: 1px solid var(--border);
+    border-bottom: var(--border-width) solid var(--border);
   }
 
   .q-example-text {
@@ -246,14 +246,14 @@ import PublicLayout from '../layouts/layPublic.astro';
     flex-direction: column;
     gap: 0;
     margin: 2rem 0;
-    border: 1px solid var(--border);
+    border: var(--border-width) solid var(--border);
     border-radius: 6px;
     overflow: hidden;
   }
 
   .q-layer {
     padding: 1.25rem 1.5rem;
-    border-bottom: 1px solid var(--border);
+    border-bottom: var(--border-width) solid var(--border);
   }
 
   .q-layer:last-child {
@@ -286,7 +286,7 @@ import PublicLayout from '../layouts/layPublic.astro';
   }
 
   .q-principle {
-    border: 1px solid var(--border);
+    border: var(--border-width) solid var(--border);
     border-radius: 6px;
     padding: 1.5rem;
   }
@@ -329,7 +329,7 @@ import PublicLayout from '../layouts/layPublic.astro';
     font-size: 1.05rem;
     color: var(--accent);
     text-decoration: none;
-    border-bottom: 1px solid var(--border);
+    border-bottom: var(--border-width) solid var(--border);
     padding-bottom: 0.15rem;
     transition: border-color 0.2s ease;
   }

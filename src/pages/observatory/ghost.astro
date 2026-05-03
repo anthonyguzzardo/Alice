@@ -59,7 +59,7 @@ import ObsToolbar from '../../components/cmpObsToolbar.astro';
       }
       .chart-panel {
         background: var(--bg-panel);
-        border: 1px solid var(--border);
+        border: var(--border-width) solid var(--border);
         border-radius: 2px;
         padding: 1rem 1.25rem 0.75rem;
         margin-bottom: 0.5rem;
@@ -93,7 +93,7 @@ import ObsToolbar from '../../components/cmpObsToolbar.astro';
         color: var(--text-faint);
         margin: 2rem 0 0.75rem;
         padding-bottom: 0.5rem;
-        border-bottom: 1px solid var(--border);
+        border-bottom: var(--border-width) solid var(--border);
       }
       .variant-tab {
         font-family: var(--mono);
@@ -115,7 +115,7 @@ import ObsToolbar from '../../components/cmpObsToolbar.astro';
       .variant-tab.active {
         color: var(--text);
         background: var(--bg-panel);
-        border: 1px solid var(--border);
+        border: var(--border-width) solid var(--border);
       }
       .insufficient {
         font-family: var(--sans);
@@ -184,7 +184,7 @@ import ObsToolbar from '../../components/cmpObsToolbar.astro';
         <span id="counts">loading…</span>
       </div>
 
-      <nav id="variant-tabs" style="display:none; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
+      <nav id="variant-tabs" style="display:none; margin-bottom: 1.5rem; border-bottom: var(--border-width) solid var(--border); padding-bottom: 0.5rem;">
         <a href="#baseline" class="variant-tab active" data-variant="1">BASELINE</a>
         <a href="#conditional" class="variant-tab" data-variant="2">CONDITIONAL</a>
         <a href="#copula" class="variant-tab" data-variant="3">COPULA</a>

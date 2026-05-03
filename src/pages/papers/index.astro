@@ -32,6 +32,8 @@ function truncateAbstract(text: string, maxLen = 160): string {
       @import url('/fonts/styFonts.css');
 
       :root {
+        --weight-display: 300;
+        --border-width: 1px;
         --bg: #f5f2ed;
         --bg-input: #ebe7e1;
         --text: #1a1a1a;
@@ -42,13 +44,15 @@ function truncateAbstract(text: string, maxLen = 160): string {
       }
 
       [data-theme="dark"] {
+        --weight-display: 500;
+        --border-width: 2px;
         --bg: #0a0a0a;
         --bg-input: #161514;
         --text: #ffffff;
-        --text-muted: #7a7570;
-        --text-faint: #4a4540;
-        --border: #333;
-        --border-focus: #666;
+        --text-muted: #b0aba5;
+        --text-faint: #8a8580;
+        --border: #5a5550;
+        --border-focus: #a0998f;
       }
 
       * {
@@ -88,7 +92,7 @@ function truncateAbstract(text: string, maxLen = 160): string {
 
       .top-btn {
         background: none;
-        border: 1px solid var(--border);
+        border: var(--border-width) solid var(--border);
         border-radius: 50%;
         width: 36px;
         height: 36px;
@@ -113,7 +117,7 @@ function truncateAbstract(text: string, maxLen = 160): string {
 
       .nav-menu-btn {
         background: none;
-        border: 1px solid var(--border);
+        border: var(--border-width) solid var(--border);
         border-radius: 50%;
         width: 36px;
         height: 36px;
@@ -137,7 +141,7 @@ function truncateAbstract(text: string, maxLen = 160): string {
         top: calc(100% + 0.6rem);
         right: 0;
         background: var(--bg);
-        border: 1px solid var(--border);
+        border: var(--border-width) solid var(--border);
         border-radius: 8px;
         padding: 0.5rem 0;
         min-width: 180px;

@@ -66,11 +66,11 @@ const entries = listLogEntries('published');
   .lg-list {
     list-style: none;
     padding: 0;
-    border-top: 1px solid var(--border);
+    border-top: var(--border-width) solid var(--border);
   }
 
   .lg-item {
-    border-bottom: 1px solid var(--border);
+    border-bottom: var(--border-width) solid var(--border);
   }
 
   .lg-item a {
@@ -131,7 +131,7 @@ const entries = listLogEntries('published');
     font-style: italic;
     color: var(--text-faint);
     padding: 3rem 0;
-    border-top: 1px solid var(--border);
+    border-top: var(--border-width) solid var(--border);
   }
 
   @media (max-width: 768px) {

@@ -589,7 +589,7 @@ import PublicLayout from '../layouts/layPublic.astro';
   /* ===== SECTIONS ===== */
   .hw-section {
     padding: 3rem 0;
-    border-top: 1px solid var(--border);
+    border-top: var(--border-width) solid var(--border);
   }
 
   .hw-section > h2 {
@@ -634,7 +634,7 @@ import PublicLayout from '../layouts/layPublic.astro';
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    border: 1px solid var(--border);
+    border: var(--border-width) solid var(--border);
     font-family: var(--mono);
     font-size: 0.75rem;
     color: var(--text-muted);
@@ -714,7 +714,7 @@ import PublicLayout from '../layouts/layPublic.astro';
   }
 
   .hw-channel {
-    border: 1px solid var(--border);
+    border: var(--border-width) solid var(--border);
     border-radius: 4px;
     padding: 1.25rem;
   }
@@ -737,7 +737,7 @@ import PublicLayout from '../layouts/layPublic.astro';
 
   .hw-tag-content {
     color: var(--text-muted);
-    border: 1px solid var(--border);
+    border: var(--border-width) solid var(--border);
   }
 
   .hw-channel p {
@@ -750,7 +750,7 @@ import PublicLayout from '../layouts/layPublic.astro';
   .hw-channel-detail {
     margin-top: 0.75rem;
     padding-top: 0.75rem;
-    border-top: 1px solid var(--border);
+    border-top: var(--border-width) solid var(--border);
     font-family: var(--mono);
     font-size: 0.7rem;
     color: var(--text-faint);
@@ -764,7 +764,7 @@ import PublicLayout from '../layouts/layPublic.astro';
 
   /* --- Table list (Stage 2) --- */
   .hw-table-list {
-    border: 1px solid var(--border);
+    border: var(--border-width) solid var(--border);
     border-radius: 4px;
     overflow: hidden;
   }
@@ -774,7 +774,7 @@ import PublicLayout from '../layouts/layPublic.astro';
     grid-template-columns: 200px 1fr;
     gap: 1rem;
     padding: 0.6rem 1.25rem;
-    border-bottom: 1px solid var(--border);
+    border-bottom: var(--border-width) solid var(--border);
     align-items: baseline;
   }
 
@@ -802,7 +802,7 @@ import PublicLayout from '../layouts/layPublic.astro';
   }
 
   .hw-family {
-    border: 1px solid var(--border);
+    border: var(--border-width) solid var(--border);
     border-radius: 4px;
   }
 
@@ -859,7 +859,7 @@ import PublicLayout from '../layouts/layPublic.astro';
 
   .hw-tag-cross {
     color: var(--text-muted);
-    border: 1px solid var(--border);
+    border: var(--border-width) solid var(--border);
   }
 
   .hw-family-engine {
@@ -903,7 +903,7 @@ import PublicLayout from '../layouts/layPublic.astro';
     background: var(--bg-dim);
     padding: 0.25rem 0.55rem;
     border-radius: 2px;
-    border: 1px solid var(--border);
+    border: var(--border-width) solid var(--border);
   }
 
   .hw-family-dest {
@@ -925,7 +925,7 @@ import PublicLayout from '../layouts/layPublic.astro';
   }
 
   .hw-downstream-item {
-    border: 1px solid var(--border);
+    border: var(--border-width) solid var(--border);
     border-radius: 4px;
     padding: 1.25rem;
   }
@@ -964,7 +964,7 @@ import PublicLayout from '../layouts/layPublic.astro';
   }
 
   .hw-ghost-side {
-    border: 1px solid var(--border);
+    border: var(--border-width) solid var(--border);
     border-radius: 4px;
     padding: 1.5rem;
   }
@@ -1068,7 +1068,7 @@ import PublicLayout from '../layouts/layPublic.astro';
   }
 
   .hw-variant {
-    border: 1px solid var(--border);
+    border: var(--border-width) solid var(--border);
     border-radius: 4px;
     padding: 1rem 1.25rem;
   }
@@ -1087,7 +1087,7 @@ import PublicLayout from '../layouts/layPublic.astro';
     width: 24px;
     height: 24px;
     border-radius: 50%;
-    border: 1px solid var(--border);
+    border: var(--border-width) solid var(--border);
     font-family: var(--mono);
     font-size: 0.65rem;
     color: var(--text-faint);
@@ -1137,7 +1137,7 @@ import PublicLayout from '../layouts/layPublic.astro';
 
   /* --- Ghost note --- */
   .hw-ghost-note {
-    border: 1px solid var(--border);
+    border: var(--border-width) solid var(--border);
     border-radius: 4px;
     padding: 1.25rem;
   }
@@ -1169,7 +1169,7 @@ import PublicLayout from '../layouts/layPublic.astro';
     grid-template-columns: 120px 1fr;
     gap: 1.5rem;
     padding: 1.25rem 0;
-    border-bottom: 1px solid var(--border);
+    border-bottom: var(--border-width) solid var(--border);
   }
 
   .hw-timeline-entry:last-child {
@@ -1226,7 +1226,7 @@ import PublicLayout from '../layouts/layPublic.astro';
 
   .hw-type-architecture {
     color: var(--text-muted);
-    border: 1px solid var(--border);
+    border: var(--border-width) solid var(--border);
   }
 
   .hw-type-infra {
@@ -1323,7 +1323,7 @@ import PublicLayout from '../layouts/layPublic.astro';
     font-size: 1rem;
     color: var(--accent);
     text-decoration: none;
-    border-bottom: 1px solid var(--border);
+    border-bottom: var(--border-width) solid var(--border);
     padding-bottom: 0.15rem;
     transition: border-color 0.2s ease;
   }

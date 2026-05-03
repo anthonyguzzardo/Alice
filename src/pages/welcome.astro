@@ -50,6 +50,8 @@ if (subject.must_reset_password) return Astro.redirect('/reset-password');
       @import url('/fonts/styFonts.css');
 
       :root {
+        --weight-display: 300;
+        --border-width: 1px;
         --bg: #f5f2ed;
         --text: #1a1a1a;
         --text-muted: #6b6560;
@@ -118,7 +120,7 @@ if (subject.must_reset_password) return Astro.redirect('/reset-password');
         text-decoration: none;
         padding: 0.4rem 0.85rem;
         background: rgba(245, 242, 237, 0.95);
-        border: 1px solid var(--border);
+        border: var(--border-width) solid var(--border);
         border-radius: 4px;
         transition: color 0.2s ease, border-color 0.2s ease;
       }

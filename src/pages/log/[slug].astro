@@ -88,7 +88,7 @@ if (!entry) {
   /* --- Body (rendered markdown) --- */
   .le-body {
     padding-top: 2rem;
-    border-top: 1px solid var(--border);
+    border-top: var(--border-width) solid var(--border);
   }
 
   .le-body h2 {
@@ -140,7 +140,7 @@ if (!entry) {
 
   .le-body pre {
     background: var(--bg-dim);
-    border: 1px solid var(--border);
+    border: var(--border-width) solid var(--border);
     border-radius: 6px;
     padding: 1.25rem;
     overflow-x: auto;
@@ -166,7 +166,7 @@ if (!entry) {
   .le-body a {
     color: var(--accent);
     text-decoration: none;
-    border-bottom: 1px solid var(--border);
+    border-bottom: var(--border-width) solid var(--border);
     transition: border-color 0.15s ease;
   }
 
@@ -178,7 +178,7 @@ if (!entry) {
   .le-footer {
     padding-top: 3rem;
     margin-top: 3rem;
-    border-top: 1px solid var(--border);
+    border-top: var(--border-width) solid var(--border);
   }
 
   .le-footer a {
@@ -186,7 +186,7 @@ if (!entry) {
     font-size: 1rem;
     color: var(--accent);
     text-decoration: none;
-    border-bottom: 1px solid var(--border);
+    border-bottom: var(--border-width) solid var(--border);
     padding-bottom: 0.15rem;
     transition: border-color 0.2s ease;
   }

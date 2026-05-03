@@ -47,7 +47,7 @@ import ObsToolbar from '../../components/cmpObsToolbar.astro';
       @media (max-width: 820px) { .chart-row { grid-template-columns: 1fr; } }
       .chart-panel {
         background: var(--bg-panel);
-        border: 1px solid var(--border);
+        border: var(--border-width) solid var(--border);
         border-radius: 2px;
         padding: 1rem 1.25rem 0.75rem;
         margin-bottom: 0.5rem;
@@ -78,7 +78,7 @@ import ObsToolbar from '../../components/cmpObsToolbar.astro';
         color: var(--text-faint);
         margin: 2rem 0 0.75rem;
         padding-bottom: 0.5rem;
-        border-bottom: 1px solid var(--border);
+        border-bottom: var(--border-width) solid var(--border);
       }
       .section-desc {
         font-family: var(--sans);
@@ -97,7 +97,7 @@ import ObsToolbar from '../../components/cmpObsToolbar.astro';
         color: var(--text-faint);
         padding: 0.5rem;
         text-align: left;
-        border-bottom: 1px solid var(--border);
+        border-bottom: var(--border-width) solid var(--border);
       }
       .ergo-table td {
         font-family: var(--mono);

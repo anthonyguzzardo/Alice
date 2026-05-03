@@ -17,6 +17,8 @@
       @import url('/fonts/styFonts.css');
 
       :root {
+        --weight-display: 300;
+        --border-width: 1px;
         --bg: #f5f2ed;
         --bg-input: #ebe7e1;
         --text: #1a1a1a;
@@ -36,13 +38,15 @@
       }
 
       [data-theme="dark"] {
+        --weight-display: 500;
+        --border-width: 2px;
         --bg: #0a0a0a;
         --bg-input: #161514;
         --text: #ffffff;
-        --text-muted: #7a7570;
-        --text-faint: #4a4540;
-        --border: #333;
-        --border-focus: #666;
+        --text-muted: #b0aba5;
+        --text-faint: #8a8580;
+        --border: #5a5550;
+        --border-focus: #a0998f;
         --panel-bg: #141312;
         --metric-label: #7a7570;
         --metric-value: #ffffff;
@@ -114,7 +118,7 @@
 
       .mode-btn {
         background: none;
-        border: 1px solid var(--border);
+        border: var(--border-width) solid var(--border);
         border-radius: 4px;
         color: var(--text-muted);
         font-family: inherit;
@@ -135,7 +139,7 @@
 
       .reset-btn {
         background: none;
-        border: 1px solid var(--border);
+        border: var(--border-width) solid var(--border);
         border-radius: 4px;
         color: var(--text-faint);
         font-family: inherit;
@@ -172,7 +176,7 @@
         flex: 1;
         min-height: 300px;
         background: var(--bg-input);
-        border: 1px solid var(--border);
+        border: var(--border-width) solid var(--border);
         border-radius: 4px;
         color: var(--text);
         font-family: inherit;
@@ -203,7 +207,7 @@
 
       .submit-btn {
         background: var(--panel-bg);
-        border: 1px solid var(--border);
+        border: var(--border-width) solid var(--border);
         border-radius: 4px;
         color: var(--text);
         font-family: inherit;
@@ -308,7 +312,7 @@
 
       .info-toggle {
         background: none;
-        border: 1px solid var(--border);
+        border: var(--border-width) solid var(--border);
         border-radius: 4px;
         color: var(--text-faint);
         font-family: inherit;

@@ -27,6 +27,8 @@ const comments = await getCommentsForPaper(slug!);
       @import url('/fonts/styFonts.css');
 
       :root {
+        --weight-display: 300;
+        --border-width: 1px;
         --bg: #f5f2ed;
         --bg-input: #ebe7e1;
         --text: #1a1a1a;
@@ -37,13 +39,15 @@ const comments = await getCommentsForPaper(slug!);
       }
 
       [data-theme="dark"] {
+        --weight-display: 500;
+        --border-width: 2px;
         --bg: #0a0a0a;
         --bg-input: #161514;
         --text: #ffffff;
-        --text-muted: #7a7570;
-        --text-faint: #4a4540;
-        --border: #333;
-        --border-focus: #666;
+        --text-muted: #b0aba5;
+        --text-faint: #8a8580;
+        --border: #5a5550;
+        --border-focus: #a0998f;
       }
 
       * {
@@ -84,7 +88,7 @@ const comments = await getCommentsForPaper(slug!);
 
       .top-btn {
         background: none;
-        border: 1px solid var(--border);
+        border: var(--border-width) solid var(--border);
         border-radius: 50%;
         width: 36px;
         height: 36px;
@@ -106,7 +110,7 @@ const comments = await getCommentsForPaper(slug!);
 
       .nav-menu-btn {
         background: none;
-        border: 1px solid var(--border);
+        border: var(--border-width) solid var(--border);
         border-radius: 50%;
         width: 36px;
         height: 36px;
@@ -130,7 +134,7 @@ const comments = await getCommentsForPaper(slug!);
         top: calc(100% + 0.6rem);
         right: 0;
         background: var(--bg);
-        border: 1px solid var(--border);
+        border: var(--border-width) solid var(--border);
         border-radius: 8px;
         padding: 0.5rem 0;
         min-width: 180px;
@@ -284,7 +288,7 @@ const comments = await getCommentsForPaper(slug!);
       }
 
       .paper-body th, .paper-body td {
-        border: 1px solid var(--border);
+        border: var(--border-width) solid var(--border);
         padding: 0.6rem 0.8rem;
         text-align: left;
         color: var(--text-muted);
@@ -345,7 +349,7 @@ const comments = await getCommentsForPaper(slug!);
       .comments-section {
         margin-top: 5rem;
         padding-top: 3rem;
-        border-top: 1px solid var(--border);
+        border-top: var(--border-width) solid var(--border);
       }
 
       .comments-heading {
@@ -359,7 +363,7 @@ const comments = await getCommentsForPaper(slug!);
       .comment {
         margin-bottom: 2rem;
         padding-bottom: 2rem;
-        border-bottom: 1px solid var(--border);
+        border-bottom: var(--border-width) solid var(--border);
       }
 
       .comment:last-of-type {
@@ -408,7 +412,7 @@ const comments = await getCommentsForPaper(slug!);
         width: 100%;
         padding: 0.8rem;
         background: var(--bg-input);
-        border: 1px solid var(--border);
+        border: var(--border-width) solid var(--border);
         border-radius: 4px;
         color: var(--text);
         font-family: 'EB Garamond', Georgia, serif;
@@ -430,7 +434,7 @@ const comments = await getCommentsForPaper(slug!);
 
       .submit-btn {
         background: none;
-        border: 1px solid var(--border);
+        border: var(--border-width) solid var(--border);
         border-radius: 4px;
         padding: 0.6rem 1.8rem;
         color: var(--text-muted);

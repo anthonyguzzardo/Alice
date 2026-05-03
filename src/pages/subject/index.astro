@@ -34,6 +34,8 @@
       @import url('/fonts/styFonts.css');
 
       :root {
+        --weight-display: 300;
+        --border-width: 1px;
         --bg: #f5f2ed;
         --bg-pre: #e9e5de;
         --bg-input: #ebe7e1;
@@ -51,6 +53,8 @@
       }
 
       [data-theme="dark"] {
+        --weight-display: 500;
+        --border-width: 2px;
         --bg: #0f0e0c;
         --bg-pre: #050505;
         --bg-input: #161514;
@@ -58,8 +62,8 @@
         --text-pre: #6a6560;
         --text-muted: #b0aba5;
         --text-faint: #888178;
-        --border: #333;
-        --border-focus: #666;
+        --border: #5a5550;
+        --border-focus: #a0998f;
         --btn-bg: #222;
         --btn-hover: #444;
         --btn-text: #d4d0c8;
@@ -119,16 +123,25 @@
         transition: color 2.5s ease, opacity 3s ease;
       }
 
-      /* Dark theme: hairline italic at 300 doesn't survive on dark — bump to 400 for body, dim color for prompt feel. */
+      /* Dark mode: light-on-dark looks thinner (halation). Bump weights and
+         glyph weights so everything reads heavier. */
       [data-theme="dark"] .question {
-        color: #A8A39A;
-        font-weight: 400;
+        color: #c2bdb4;
+        font-weight: 500;
       }
       [data-theme="dark"] .date {
-        color: #736D65;
+        color: #a09890;
       }
       [data-theme="dark"] .submit-btn {
-        border-color: #7A746B;
+        border-color: var(--border-focus);
+        font-weight: 500;
+      }
+      [data-theme="dark"] .top-btn,
+      [data-theme="dark"] .free-write-link {
+        font-weight: 500;
+      }
+      [data-theme="dark"] .response-area {
+        font-weight: 500;
       }
 
       body.pre-arrival .question { color: var(--text-pre); }
@@ -181,7 +194,7 @@
 
       .submit-btn {
         background: none;
-        border: 1px solid var(--border);
+        border: var(--border-width) solid var(--border);
         border-radius: 3px;
         color: color-mix(in oklab, var(--text-faint), var(--done-text) calc(var(--submit-presence, 0) * 100%));
         font-family: 'Cormorant Garamond', Georgia, serif;
@@ -230,7 +243,7 @@
         letter-spacing: 0.1em;
         text-transform: lowercase;
         cursor: pointer;
-        border: 1px solid var(--border);
+        border: var(--border-width) solid var(--border);
         background: none;
         font-family: 'Cormorant Garamond', Georgia, serif;
         font-style: italic;
@@ -262,7 +275,7 @@
 
       .top-btn {
         background: none;
-        border: 1px solid var(--border);
+        border: var(--border-width) solid var(--border);
         border-radius: 50%;
         width: 36px;
         height: 36px;

@@ -67,6 +67,8 @@ const consentNotCurrent = !status.isCurrent;
       @import url('/fonts/styFonts.css');
 
       :root {
+        --weight-display: 300;
+        --border-width: 1px;
         --bg: #f5f2ed;
         --text: #1a1a1a;
         --text-muted: #6b6560;
@@ -83,12 +85,14 @@ const consentNotCurrent = !status.isCurrent;
       }
 
       [data-theme="dark"] {
+        --weight-display: 500;
+        --border-width: 2px;
         --bg: #141210;
         --text: #ffffff;
-        --text-muted: #7a7570;
-        --text-faint: #555;
-        --border: #333;
-        --border-focus: #666;
+        --text-muted: #b0aba5;
+        --text-faint: #8a8580;
+        --border: #5a5550;
+        --border-focus: #a0998f;
         --bg-input: #1a1816;
         --btn-bg: #222;
         --btn-hover: #333;
@@ -129,7 +133,7 @@ const consentNotCurrent = !status.isCurrent;
 
       .warning {
         background: var(--bg-input);
-        border: 1px solid var(--border);
+        border: var(--border-width) solid var(--border);
         border-left: none;
         padding: 1.25rem 1.5rem;
         margin-bottom: 2rem;
@@ -170,7 +174,7 @@ const consentNotCurrent = !status.isCurrent;
         width: 100%;
         padding: 0.7rem 0.9rem;
         background: var(--bg-input);
-        border: 1px solid var(--border);
+        border: var(--border-width) solid var(--border);
         border-radius: 4px;
         color: var(--text);
         outline: none;
@@ -215,7 +219,7 @@ const consentNotCurrent = !status.isCurrent;
         margin-top: 1rem;
         padding: 0.65rem 1rem;
         background: var(--bg-input);
-        border: 1px solid var(--border);
+        border: var(--border-width) solid var(--border);
         border-radius: 4px;
         font-size: 0.95rem;
         color: var(--text-muted);
