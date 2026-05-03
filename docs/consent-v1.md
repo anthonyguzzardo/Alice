@@ -32,8 +32,11 @@ All data stays in the United States.
 Every text and keystroke field is encrypted at rest using AES-256-GCM
 (industry-standard authenticated encryption). The encryption key is held
 by the operator alone. It is never transmitted to a third-party service.
-At-rest encryption protects against database theft and backup leaks; it
-does not protect against compromise of the operator's machine itself.
+The production server's underlying disk is also encrypted at rest, with
+a passphrase known only to the operator. What encryption cannot protect
+against is compromise of a machine while it is running with data
+decrypted in memory — the live application server, or the operator's
+laptop while they are working with the system locally.
 
 ## External AI for question authoring
 The operator may use external AI services to draft candidate prompts for
@@ -57,11 +60,18 @@ rotation overwrites them. After that, no copy remains. A minimal record
 (subject ID, consent acknowledgments, deletion timestamp) is retained
 indefinitely as a research integrity audit trail.
 
+Export and delete are unconditional. You can use either at any time —
+including when you have declined to re-acknowledge an updated consent
+version. The right to take your data with you, or to leave entirely,
+does not depend on agreeing to anything new.
+
 ## Who can see what
 The operator can see the numerical signals derived from your writing,
-the prompts you saw, and timing-based replays of your sessions (with
-every letter redacted to a dot). The operator does not see what you
-wrote. Other subjects can never see your data.
+the prompts you saw, and timing-based replays of your sessions — with
+every letter and digit redacted server-side, before the data reaches
+the operator's view, so only the timing pattern is visible. The
+operator does not see what you wrote, ever, through any operator-facing
+surface. Other subjects can never see your data.
 
 ## Questions
 Contact the operator directly at agguzzy91@gmail.com.
