@@ -14,12 +14,11 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Alice</title>
-    <script is:inline>
-      (function() {
-        var t = localStorage.getItem('alice-theme') || 'light';
-        document.documentElement.setAttribute('data-theme', t);
-      })();
-    </script>
+    <!-- Theme is locked to light on subject-facing pages until the dark
+         variant is finalized. No localStorage read; CSS :root supplies the
+         light palette by default. The [data-theme="dark"] rules below stay
+         in place as dead code so re-enabling is a one-liner (add the
+         localStorage-reading inline script back) rather than a CSS rewrite. -->
     <style is:global>
       @import url('/fonts/styFonts.css');
 
@@ -81,7 +80,7 @@
       }
 
       .container {
-        max-width: 820px;
+        max-width: 960px;
         width: 100%;
       }
 
@@ -132,7 +131,7 @@
          response continues from the question on the same column. */
       .response-area {
         width: 100%;
-        min-height: 200px;
+        min-height: 280px;
         background: transparent;
         border: none;
         border-radius: 0;
@@ -313,7 +312,6 @@
   </head>
   <body>
     <div class="top-controls">
-      <button class="top-btn" id="theme-toggle" aria-label="Toggle theme"></button>
       <button class="top-btn" id="logout-btn" aria-label="Log out" title="Log out">⏻</button>
     </div>
     <div class="container">
@@ -327,19 +325,6 @@
     </div>
 
     <script>
-      // ── Theme toggle ────────────────────────────────────────────────────
-      const themeBtn = document.getElementById('theme-toggle')!;
-      const savedTheme = localStorage.getItem('alice-theme') || 'light';
-      document.documentElement.setAttribute('data-theme', savedTheme);
-      themeBtn.textContent = savedTheme === 'dark' ? '☀' : '☾';
-      themeBtn.addEventListener('click', () => {
-        const current = document.documentElement.getAttribute('data-theme');
-        const next = current === 'dark' ? 'light' : 'dark';
-        document.documentElement.setAttribute('data-theme', next);
-        localStorage.setItem('alice-theme', next);
-        themeBtn.textContent = next === 'dark' ? '☀' : '☾';
-      });
-
       // ── Logout ──────────────────────────────────────────────────────────
       const logoutBtn = document.getElementById('logout-btn')!;
       logoutBtn.addEventListener('click', async () => {
@@ -507,9 +492,9 @@
         // ghost at 5 chars, full presence around 500 chars, always clickable
         // once visible. (Hallnäs & Redström 2001 reframed: no moment of
         // permission, just a peripheral signal that grows with the work.)
-        const SUBMIT_START_CHARS = 5;
-        const SUBMIT_FULL_CHARS = 500;
-        const SUBMIT_MIN_PRESENCE = 0.10;
+        const SUBMIT_START_CHARS = 3;
+        const SUBMIT_FULL_CHARS = 250;
+        const SUBMIT_MIN_PRESENCE = 0.20;
         function updateSubmitPresence() {
           if (mode === 'calibration') return; // presence pinned at 1 below
           const chars = textarea.value.trim().length;

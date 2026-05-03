@@ -49,12 +49,9 @@ const consentNotCurrent = !status.isCurrent;
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Alice — close account</title>
-    <script is:inline>
-      (function () {
-        var t = localStorage.getItem('alice-theme') || 'light';
-        document.documentElement.setAttribute('data-theme', t);
-      })();
-    </script>
+    <!-- Theme is locked to light on subject-facing pages until the dark
+         variant is finalized. No localStorage read; CSS :root supplies the
+         light palette by default. -->
     <style is:global>
       @import url('/fonts/styFonts.css');
 
