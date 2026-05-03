@@ -42,7 +42,7 @@ header {
   align-items: center;
   padding-bottom: 1rem;
   margin-bottom: 2rem;
-  border-bottom: 1px solid var(--border);
+  border-bottom: var(--border-width) solid var(--border);
 }
 h1 {
   font-family: var(--mono);
@@ -64,7 +64,7 @@ nav {
 }
 .obs-theme-toggle {
   background: none;
-  border: 1px solid var(--border);
+  border: var(--border-width) solid var(--border);
   border-radius: 50%;
   width: 28px;
   height: 28px;
@@ -109,7 +109,7 @@ nav a.active {
 /* ── panels ─────────────────────────────────────────────── */
 .panel {
   background: var(--bg-panel);
-  border: 1px solid var(--border);
+  border: var(--border-width) solid var(--border);
   border-radius: 2px;
   padding: 1.5rem 1.75rem;
   margin-bottom: 1rem;
@@ -160,7 +160,7 @@ nav a.active {
 
 .arc, .discovery {
   padding: 0.65rem 0;
-  border-bottom: 1px solid var(--border);
+  border-bottom: var(--border-width) solid var(--border);
   font-size: 13px;
   line-height: 1.55;
   color: var(--text);
@@ -190,11 +190,11 @@ thead th {
   color: var(--text-faint);
   text-align: left;
   padding: 0.5rem 0.7rem;
-  border-bottom: 1px solid var(--border);
+  border-bottom: var(--border-width) solid var(--border);
 }
 tbody td {
   padding: 0.55rem 0.7rem;
-  border-bottom: 1px solid var(--border);
+  border-bottom: var(--border-width) solid var(--border);
   font-size: 12px;
   color: var(--text);
   overflow-wrap: anywhere; /* let long tokens like syntactic_complexity break */
@@ -232,7 +232,7 @@ td a:hover { border-bottom-color: var(--accent); }
   letter-spacing: 0.18em;
   text-transform: uppercase;
   text-decoration: none !important;
-  border: 1px solid var(--border);
+  border: var(--border-width) solid var(--border);
   border-radius: 2px;
   transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
 }
@@ -253,7 +253,7 @@ td a:hover { border-bottom-color: var(--accent); }
 .pill, .badge {
   display: inline-block;
   padding: 0.1rem 0.5rem;
-  border: 1px solid var(--border);
+  border: var(--border-width) solid var(--border);
   font-family: var(--mono);
   font-size: 8px;
   letter-spacing: 0.18em;
@@ -318,7 +318,7 @@ td a:hover { border-bottom-color: var(--accent); }
   padding: 1.5rem 1.75rem;
   margin-bottom: 1rem;
   background: var(--bg-panel);
-  border: 1px solid var(--border);
+  border: var(--border-width) solid var(--border);
   border-radius: 2px;
 }
 .question-meta {
@@ -388,7 +388,7 @@ canvas { display: block; margin: 0 auto; }
   letter-spacing: 0.18em;
   text-transform: uppercase;
   text-decoration: none !important;
-  border: 1px solid var(--border);
+  border: var(--border-width) solid var(--border);
   border-bottom: none;
   border-radius: 2px 2px 0 0;
   transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
@@ -396,7 +396,7 @@ canvas { display: block; margin: 0 auto; }
 }
 .replay-cta:hover {
   border-color: var(--accent);
-  border-bottom: 1px solid var(--accent);
+  border-bottom: var(--border-width) solid var(--accent);
   color: var(--text) !important;
   background: var(--bg-panel-hover);
 }
@@ -430,7 +430,7 @@ canvas { display: block; margin: 0 auto; }
   min-height: 320px;
   padding: 1.5rem 1.75rem;
   background: var(--bg-panel);
-  border: 1px solid var(--border);
+  border: var(--border-width) solid var(--border);
   border-radius: 2px;
   font-family: var(--sans);
   font-size: 15px;
@@ -447,7 +447,7 @@ canvas { display: block; margin: 0 auto; }
 }
 .btn {
   padding: 0.3rem 0.9rem;
-  border: 1px solid var(--border);
+  border: var(--border-width) solid var(--border);
   background: transparent;
   color: var(--text-muted);
   font-family: var(--mono);
@@ -495,7 +495,7 @@ canvas { display: block; margin: 0 auto; }
 .speed-pick { display: flex; gap: 0.3rem; }
 .speed-pick button {
   padding: 0.25rem 0.55rem;
-  border: 1px solid var(--border);
+  border: var(--border-width) solid var(--border);
   background: transparent;
   color: var(--text-faint);
   cursor: pointer;

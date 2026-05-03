@@ -354,7 +354,7 @@
     gap: 0.6rem;
     background: var(--bg-panel);
     color: var(--text);
-    border: 1px solid var(--border);
+    border: var(--border-width) solid var(--border);
     border-radius: 2px;
     padding: 0.32rem 0.65rem;
     font-family: var(--mono);
@@ -390,8 +390,8 @@
   .obs-pick-chevron {
     width: 6px;
     height: 6px;
-    border-right: 1px solid var(--text-faint);
-    border-bottom: 1px solid var(--text-faint);
+    border-right: var(--border-width) solid var(--text-faint);
+    border-bottom: var(--border-width) solid var(--text-faint);
     transform: translateY(-2px) rotate(45deg);
     transition: transform 0.15s ease, border-color 0.15s ease;
   }
@@ -413,7 +413,7 @@
     padding: 0.25rem 0;
     list-style: none;
     background: var(--bg-panel);
-    border: 1px solid var(--border-focus);
+    border: var(--border-width) solid var(--border-focus);
     border-radius: 2px;
     min-width: 100%;
     max-height: 320px;
@@ -460,7 +460,7 @@
     align-items: center;
     gap: 0.5rem;
     text-decoration: none;
-    border: 1px solid var(--accent);
+    border: var(--border-width) solid var(--accent);
     color: var(--accent);
     padding: 0.32rem 0.7rem;
     border-radius: 2px;
