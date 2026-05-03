@@ -186,7 +186,7 @@
         });
 
         if (res.status === 401) {
-          errorMsg.textContent = 'invalid credentials';
+          errorMsg.textContent = 'username or password incorrect';
           passwordInput.value = '';
           refreshDisabled();
           return;
@@ -194,29 +194,26 @@
 
         if (res.status === 429) {
           // Rate limited at the IP level (10 per 15 min). Surface the wait
-          // time from the Retry-After header so the user knows it'll clear
-          // on its own. Keep the button disabled — re-enabling would
+          // time from the Retry-After header so the user knows it will
+          // clear on its own. Keep the button disabled — re-enabling would
           // encourage retries that are guaranteed to fail.
           const retryAfter = Number.parseInt(res.headers.get('retry-after') ?? '', 10);
-          const waitMsg = Number.isFinite(retryAfter) && retryAfter > 0
-            ? `too many attempts, wait ${retryAfter} seconds`
-            : 'too many attempts, try again later';
-          errorMsg.textContent = waitMsg;
+          errorMsg.textContent = Number.isFinite(retryAfter) && retryAfter > 0
+            ? `too many tries — please wait ${retryAfter} seconds and try again`
+            : 'too many tries — please wait a minute and try again';
           return;
         }
 
         if (res.status === 400) {
-          // Malformed request (missing fields / invalid JSON). Client-side
-          // validation already prevents the empty-fields case, so this
-          // mostly fires on a JSON-parse failure or a manual fetch in
-          // DevTools. Show the server's error code if present, generic
-          // fallback otherwise.
+          // Server distinguishes missing-credentials vs malformed-JSON. Only
+          // missing-credentials is worth surfacing distinctly to the user,
+          // since it has actionable advice. Anything else collapses to a
+          // generic "didn't go through" — the user has no way to act on
+          // "the JSON was malformed."
           const body = await res.json().catch(() => ({})) as { error?: string };
           errorMsg.textContent = body.error === 'missing_credentials'
-            ? 'username and password are required'
-            : body.error === 'invalid_json'
-              ? 'malformed request'
-              : 'request rejected';
+            ? 'please enter both your username and password'
+            : 'something didn\'t go through, please try again';
           btn.disabled = false;
           return;
         }
@@ -224,7 +221,7 @@
         if (!res.ok) {
           // 5xx and anything else — generic. Re-enable so a transient
           // server blip doesn't strand the user with no way to retry.
-          errorMsg.textContent = 'server error, try again';
+          errorMsg.textContent = 'something went wrong on our end, try again in a moment';
           btn.disabled = false;
           return;
         }

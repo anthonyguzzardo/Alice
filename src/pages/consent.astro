@@ -355,7 +355,7 @@ const isStaleReload = Astro.url.searchParams.get('stale') === '1';
           if (!res.ok) {
             const body = await res.json().catch(() => ({})) as { error?: string; current?: string };
             if (body.error === 'stale_version' && body.current) {
-              if (errorMsg) errorMsg.textContent = `terms updated to ${body.current}; reloading…`;
+              if (errorMsg) errorMsg.textContent = 'the terms have been updated, reloading...';
               // Reload with `?stale=1` so the page renders the new version
               // with a banner + disabled-acknowledge state. Otherwise a
               // silent reload would let the subject re-click without
@@ -363,7 +363,10 @@ const isStaleReload = Astro.url.searchParams.get('stale') === '1';
               setTimeout(() => { window.location.href = '/consent?stale=1'; }, 1200);
               return;
             }
-            if (errorMsg) errorMsg.textContent = body.error ?? 'consent failed; try again';
+            // Never surface the raw server enum code (`consent_failed` etc).
+            // Generic actionable message regardless of which non-stale
+            // failure shape came back.
+            if (errorMsg) errorMsg.textContent = 'couldn\'t save your acknowledgment, please try again';
             btn.disabled = false;
             return;
           }
