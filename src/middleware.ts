@@ -100,12 +100,16 @@ function isOwnerPage(path: string): boolean {
   return false;
 }
 
-// Subject-only pages: the journal at `/subject`, account, consent, reset.
+// Subject-only pages: the journal at `/subject`, account, consent, reset,
+// and the welcome / how-to-use orientation page. Distinct from the public
+// `/how-it-works` page, which is a marketing/architecture walkthrough for
+// visitors and not a subject-facing surface.
 function isSubjectPage(path: string): boolean {
   if (path === '/subject' || path.startsWith('/subject/')) return true;
   if (path === '/account' || path.startsWith('/account/')) return true;
   if (path === '/consent') return true;
   if (path === '/reset-password') return true;
+  if (path === '/welcome') return true;
   return false;
 }
 

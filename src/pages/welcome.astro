@@ -1,0 +1,167 @@
+---
+/**
+ * /welcome — plain-language explanation of how Alice works for subjects.
+ *
+ * Subject-only page (gated by middleware via `isSubjectPage`). Reachable
+ * from the /subject footer as "how to use." Always re-readable; never
+ * forced. The consent doc covers the legal / data-handling surface; this
+ * page covers the *use* surface — what to expect day-to-day, what gets
+ * measured, the cadence, where things live.
+ *
+ * Distinct from /how-it-works, which is a public-facing architecture
+ * walkthrough aimed at researchers and visitors. This page is for
+ * authenticated subjects who already have credentials and need to know
+ * how to actually use the instrument.
+ *
+ * Inline HTML (no markdown indirection) because the content is short and
+ * the page does not need a registry / version system. Scoped styles
+ * mirror the consent doc's palette so the two read as a pair.
+ *
+ * Theme is locked to light per the subject-facing convention finalized
+ * 2026-05-02; no localStorage read.
+ */
+
+const subject = Astro.locals.subject;
+if (!subject) return Astro.redirect('/login');
+if (subject.is_owner) return Astro.redirect('/');
+if (subject.must_reset_password) return Astro.redirect('/reset-password');
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Alice — how to use</title>
+    <!-- Theme is locked to light on subject-facing pages until the dark
+         variant is finalized. No localStorage read; CSS :root supplies the
+         light palette by default. -->
+    <style is:global>
+      @import url('/fonts/styFonts.css');
+
+      :root {
+        --bg: #f5f2ed;
+        --text: #1a1a1a;
+        --text-muted: #6b6560;
+        --text-faint: #9a9590;
+        --border: #ccc5bc;
+        --bg-input: #ebe7e1;
+        --accent: #7a5a44;
+      }
+
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      body {
+        font-family: 'EB Garamond', Georgia, serif;
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+        padding: 3rem 1.5rem 5rem;
+      }
+
+      .welcome-wrap {
+        max-width: 680px;
+        width: 100%;
+        margin: 0 auto;
+      }
+
+      .welcome-doc {
+        font-size: 1.05rem;
+        line-height: 1.7;
+        color: var(--text);
+      }
+
+      .welcome-doc h1 {
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-size: 2rem;
+        font-weight: 400;
+        margin: 0 0 1.5rem;
+        text-align: center;
+      }
+
+      .welcome-doc h2 {
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-size: 1.4rem;
+        font-weight: 400;
+        margin: 2rem 0 0.6rem;
+      }
+
+      .welcome-doc p { margin: 0.7rem 0; }
+      .welcome-doc ul { margin: 0.7rem 0 0.7rem 1.4rem; }
+      .welcome-doc li { margin: 0.35rem 0; }
+      .welcome-doc strong { font-weight: 500; color: var(--text); }
+      .welcome-doc em { font-style: italic; color: var(--text-muted); }
+      .welcome-doc a { color: var(--accent); text-decoration: underline; }
+
+      .welcome-back {
+        margin-top: 3rem;
+        text-align: center;
+        font-size: 1rem;
+      }
+      .welcome-back a {
+        color: var(--text-muted);
+        text-decoration: none;
+      }
+      .welcome-back a:hover { color: var(--text); }
+    </style>
+  </head>
+  <body>
+    <div class="welcome-wrap">
+      <article class="welcome-doc">
+        <h1>How to use Alice</h1>
+
+        <p>
+          <strong>One question per day.</strong> You see today's prompt,
+          write what comes to you, click done. Submission is final. No
+          edits, and the page does not show your entry back to you
+          afterward. That is the design.
+        </p>
+
+        <h2>What to expect</h2>
+        <ul>
+          <li>A single prompt per day. There is no queue, no preview, no week-ahead view.</li>
+          <li>Take as long or as little as you want. A sentence is fine. Five hundred words is fine. The instrument does not reward word count.</li>
+          <li>After you submit, the page shows a brief acknowledgment. Coming back later will not show you what you wrote.</li>
+          <li>A <em>free write</em> button below today's question lets you do extra sessions any time. Use it as often as you want.</li>
+        </ul>
+
+        <h2>What we measure</h2>
+        <p>
+          We measure <em>how</em> you wrote (keystroke timing, pauses, how
+          you revise), not <em>what</em> you wrote. Your text is encrypted
+          at rest and is never shown back to anyone, including the
+          operator. Numerical signals derived from your writing build a
+          personal baseline; deviations from your own baseline over time
+          are the signal of interest.
+        </p>
+        <p>
+          No external AI ever reads your writing. See
+          <a href="/consent">consent</a> for the full data-handling details.
+        </p>
+
+        <h2>Cadence</h2>
+        <p>
+          Show up daily-ish. There are no streaks, no scoring, no nudges.
+          Missing a day is fine. Missing weeks at a time loses signal but
+          is not a failure. The instrument is patient.
+        </p>
+
+        <h2>Where things live</h2>
+        <ul>
+          <li><strong><a href="/account">settings</a></strong>: account info, data export, close account.</li>
+          <li><strong><a href="/consent">consent</a></strong>: current terms, version history, re-readable any time.</li>
+        </ul>
+
+        <h2>A note on showing up</h2>
+        <p>
+          This works if you write without rehearsal: what comes to you, in
+          this moment, given the prompt. There is no audience. The
+          operator does not read your text, and the instrument does not
+          score it. Trust the design and write the way you would think
+          out loud.
+        </p>
+      </article>
+
+      <p class="welcome-back"><a href="/subject">← back to journal</a></p>
+    </div>
+  </body>
+</html>
