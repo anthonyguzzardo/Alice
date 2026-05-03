@@ -182,47 +182,17 @@ Each submission is analyzed server-side for word-category densities using valida
 
 Stored per session and z-scored against personal history. Feeds the question-generator's compact-signals block (after personal-percentile contextualization) and the parallel semantic state space.
 
-#### Layer 2.5: Parallel Behavioral and Semantic State Spaces
+#### Layer 2.5: Parallel Behavioral and Semantic State Spaces — ARCHIVED 2026-04-27
 
-Each session produces two orthogonal state vectors. Behavioral and semantic spaces are kept separate at construction time so coupling discovery and joint-embedding work downstream remain meaningful — a principle borrowed from how multimodal representation learning keeps modalities orthogonal until a learned joint space combines them.
+The behavioral 7D + semantic 11D state spaces, the PersDyn dynamics engine, the emotion→behavior coupling, and the Alice Negative witness-form they fed were fully scrubbed on 2026-04-27. The associated tables (`tb_entry_states`, `tb_semantic_states`, `tb_trait_dynamics`, `tb_coupling_matrix`, `tb_semantic_dynamics`, `tb_semantic_coupling`, `tb_emotion_behavior_coupling`) and modules (`src/lib/alice-negative/*`, `src/pages/alice-negative.astro`) no longer exist.
 
-**Behavioral 7D — `tb_entry_states`.** Z-scored against personal *journaling* history (calibration sessions are excluded by design — they form the reference frame, not data points within it):
-- `fluency` — P-burst length (Chenoweth & Hayes 2001, Deane 2015)
-- `deliberation` — hesitation + pause rate + revision weight (Deane 2015)
-- `revision` — inverted commitment + substantive deletion rate (Baaijen et al. 2012)
-- `commitment` — final/typed ratio z-scored
-- `volatility` — session-to-session behavioral distance
-- `thermal` — correction rate + revision timing (Faigley & Witte 1981)
-- `presence` — inverse distraction (tab-away + pause rate)
+Reasoning (per the architectural pivot postmortem): the interpretive surface that translated validated dynamics into rendered visual traits proved to be a layer the system did not need — narrative interpretation that future frontier models would commoditize, while the behavioral substrate (keystroke pipeline, reconstruction residual) is what survives. The system measures, retrieves, and juxtaposes; it does not narrate or render. Z-scored deviations on individual signal columns survive in the per-session metadata and the Observatory's per-entry view; what was removed is the ABOVE-signals layer that bundled them into rendered traits.
 
-`expression` was a 7-dimensional sibling until 2026-04-16, when it was relocated into the parallel semantic space. The 8D vectors are preserved under `zz_archive_entry_states_8d_20260416`.
-
-**Semantic 11D — `tb_semantic_states`.** Z-scored against personal history:
-- `syntactic_complexity` — z(avg sentence length) (Biber 1988)
-- `interrogation` — z(question density)
-- `self_focus` — z(first-person pronoun density) (Pennebaker 1997)
-- `uncertainty` — z(hedging density)
-- `cognitive_processing` — z(cognitive mechanism density) (Pennebaker LIWC)
-- `nrc_anger` / `nrc_fear` / `nrc_joy` / `nrc_sadness` / `nrc_trust` / `nrc_anticipation` — z(NRC emotion densities) (Mohammad & Turney 2013)
-
-Four LLM-extracted dimensions (sentiment, abstraction, agency_framing, temporal_orientation) are schema-ready in `tb_semantic_states` but populated null until the extraction step is built.
-
-**PersDyn dynamics on each space.** The dynamics engine (`src/lib/alice-negative/dynamics.ts`) is generic over a dimension list and runs separately on the behavioral and semantic spaces. For each dimension it computes:
-- **Baseline** — rolling mean (30-entry window).
-- **Variability** — rolling std.
-- **Attractor force** — Ornstein-Uhlenbeck mean-reversion parameter from lag-1 autocorrelation. Reveals whether a dimension is rigid (deviations snap back fast) or malleable (shifts persist).
-- **Coupling matrix** — signed lagged Pearson cross-correlations across all dimension pairs (Critcher, Berkeley xLab; Mesbah et al. 2024).
-- **System entropy** — Shannon entropy of the variability distribution.
-- **Phase** — stable / shifting / disrupted, from convergence trajectory.
-- **Velocity** — rate of movement through the dim-space.
-
-Behavioral and semantic each persist into their own dynamics and coupling tables (`tb_trait_dynamics` / `tb_coupling_matrix` for behavioral; `tb_semantic_dynamics` / `tb_semantic_coupling` for semantic). The joint-embedding distance function — composed `concat(behavioral 7D, semantic ND)` — is downstream work to be validated against a pre-registered list of hand-labeled session pairs before learned-metric work begins.
-
-**Emotion → behavior coupling — `tb_emotion_behavior_coupling`.** Cross-domain coupling between NRC + Pennebaker densities and behavioral 7D dimensions, also via lagged signed cross-correlation. Discovers chains like "anticipation density spikes → fluency follows two entries later" without forcing the densities into the behavioral state vector.
+Do not reintroduce. If a future need surfaces for a state-vector aggregate, build it as a derivation from the existing signal columns, not as a parallel persisted table.
 
 #### Layer 2.6: Per-session metadata signals (slice-3 follow-ups)
 
-A third layer of derived signals lives in `tb_session_metadata`. These do not perturb the behavioral 7D z-score discipline or the semantic 11D vector — they are session-level descriptors that joint embedding will pick up as additional coordinates once the distance function lands.
+A third layer of derived signals lives in `tb_session_metadata`. Session-level descriptors that complement the per-family signal tables without duplicating any individual signal column.
 
 - **Hour typicality** — circular-density z-score on personal hour distribution. Sessions at typical hours score near 0; unusual hours score negative. After ~5 sessions of history, the writer's circadian writing distribution becomes legible.
 - **Deletion-density curve** — classification of *when* in the session deletion mass occurred: `early` (false starts), `late` (wrote-then-restructured), `terminal` (sharp burst at the end), `bimodal` (peaks at both ends), `uniform`, or `none`. Computed from a 10-bin histogram of weighted deletion chars across session time.
@@ -287,10 +257,6 @@ Profile-based anomaly detection (`src/lib/libIntegrity.ts`) scores each session 
 
 Integrity runs BEFORE `updateProfile()` so the comparison is against the prior profile state. Z-score vectors are persisted as JSONB (raw inputs alongside the label). The z-scores are the durable asset; the flag and threshold may be recomputed with different criteria.
 
-### Coupling Stability
-
-Before comparing emotion-behavior coupling to the ghost (which is decoupled by construction), the coupling must be shown to be stable within-person. `src/lib/libCouplingStability.ts` uses a rolling-window approach: for windows of growing size, compute all emotion x behavior cross-correlations. For each pair, track how the correlation estimate changes. CV < 0.5 = stable. Uses Rust batch correlations for all ~1400 computations in a single FFI call.
-
 ### Structured Receipt (Deterministic Digest)
 
 `src/lib/reflect.ts` produces a deterministic structured digest — compact behavioral signals across the last 7 sessions, dynamics summary (behavioral + semantic), calibration baseline confidence, recent session-delta trend. No LLM call. Same data the designer sees in the database, formatted for legibility. When written, the row is embedded so RAG at generation time can resurface receipts whose themes are relevant to the current moment.
@@ -299,23 +265,16 @@ Currently the function is not auto-invoked; it runs on demand until a designer-f
 
 ### Designer-Facing Observatory
 
-`/observatory/*` is the designer's instrument view. Never shown to the user. Reads from the live PostgreSQL database.
+`/observatory/*` is the operator's instrument view. Never subject-facing. Reads from the live PostgreSQL database. **Subject content opacity discipline applies**: operator never sees subject plaintext through any operator-facing surface, including replay — every letter and digit is redacted server-side before reaching the operator's view.
 
-**`/observatory` — overview.** Plain-English insights computed from deterministic signals only:
-- *Right now* — notable deviations on the latest entry across both behavioral and semantic spaces (any dimension with |z| > 1).
-- *Sustained trends* — monotonic runs of ≥3 entries on any dimension.
-- *Discoveries* — top empirical couplings (behavioral, semantic, and emotion→behavior cross-domain), in plain language with the underlying r value as evidence.
-- *Calibration drift* — latest drift magnitude, mean drift, sparkline of the drift trajectory.
-- *Session integrity* — distance trajectory sparkline, most deviant dimensions, flagged sessions table.
-- *Entries table* — every entry with its 7D z-scores color-coded by deviation magnitude, semantic convergence, slice-3 metadata pills (deletion curve type, burst trajectory shape, hour typicality), and a per-entry replay link when an event log is available.
+Pages currently live (post 2026-04-27 architectural pivot, which removed the alice-negative coupling/dynamics surfaces):
 
-**`/observatory/coupling`.** Side-by-side dynamics tables for behavioral 7D and semantic 11D — baseline, variability, attractor force (with rigid/moderate/malleable badge), current state, deviation. Three coupling tables (behavioral 7D pairs, semantic 11D pairs, emotion → behavior cross-domain) sorted by correlation strength. Coupling stability section: rolling-window convergence chart, stable/unstable pair tables with CV and trend slope.
+- **`/observatory` — overview.** Per-subject deviations on the latest entry, sustained trends, calibration drift, session-integrity flags, entries table with slice-3 metadata pills (deletion curve type, burst trajectory shape, hour typicality) and per-entry replay link.
+- **`/observatory/ghost`.** Reconstruction residual analysis: per-family L2 norms, per-signal residual breakdown, perplexity convergence. The reconstruction validity surface.
+- **`/observatory/scales` / `/observatory/trajectory` / `/observatory/inbox`.** Cross-subject views for the operator: comparative scales, longitudinal trajectory, pending-work inbox.
+- **`/observatory/replay/[questionId]` — read-only playback.** Re-renders the keystroke timeline of the original session at original tempo from `tb_session_events`. Controls: play / pause / scrub / speed. Textarea is read-only and **content is redacted server-side** (every letter and digit replaced before reaching the operator's view) — the operator watches *behavior*, not what was written.
 
-**`/observatory/ghost`.** Ghost in the Shell. Reconstruction residual analysis: per-family L2 norms across all reconstruction sessions, per-signal residual breakdown, perplexity convergence tracking. Adaptive difficulty section with grouped dot plots and MATTR scatter (data accumulating as new questions are generated with difficulty logging).
-
-**`/observatory/entry/[id]`.** Per-entry drill-down. Two radar charts (7D behavioral, 11D semantic), each with its z-scored values laid out on the personal-baseline axes. Below them, the slice-3 metadata pills and a full session-summary stat grid (every captured behavioral signal, every calibration delta, device + hour + day context). If the session has an event log, a "replay this session" button.
-
-**`/observatory/replay/[questionId]` — read-only playback.** Re-renders the keystroke timeline of the original session at original tempo from the per-input text snapshots stored in `tb_session_events`. Controls: play / pause / scrub / speed (0.5×, 1×, 2×, 4×, 8×). The textarea is read-only; the writer watches their own writing happen, including pauses and deletions. This surfaces *behavior*, not interpretation.
+The cross-subject toolbar (`cmpObsToolbar.astro`) provides per-subject scoping via a dropdown + `?subjectId=N` URL param.
 
 ### "Did It Land?"
 
@@ -335,12 +294,17 @@ Synchronous (before the done message returns):
 5. **Per-session metadata computed** — hour typicality, deletion-density curve, burst trajectory shape, inter-burst rhythm, burst-deletion proximity. Persisted to `tb_session_metadata`.
 6. **Embedding fires-and-forgets** -- entry vectorized via local TEI server (Qwen3-Embedding-0.6B), stored in pgvector with HNSW index. Failures degrade future retrieval to recency-only and are drained later via `npm run drain-subjects`.
 
-Async background (the user already has their done message):
-- **Signal pipeline** — dynamical, motor, process signals computed via Rust engine. Session integrity scored against prior profile. Profile updated. Reconstruction residual generated (ghost session synthesized, run through pipeline, L2 norms computed).
+Async background (durable via `tb_signal_jobs` queue, drained by `libSignalWorker.ts`):
+- **Signal pipeline** — dynamical, motor, semantic, process, cross-session signals computed via Rust engine + TS sub-signals. Session integrity scored against prior profile (when ≥5 prior journal sessions exist). Profile updated. Reconstruction residual generated (ghost session synthesized, run through pipeline, L2 norms computed). Each family records intentional skips in `tb_signal_skip_log` (see "Skip-rule transparency" below).
 - **Question generation** — during seeds (days 1-30), no-op. After day 30, assembles a bounded context window via semantic retrieval and generates tomorrow's question. Logs difficulty level and raw inputs to prompt traces.
-- **Witness state rendering** — runs the deterministic pipeline (behavioral 7D states, semantic ND states, dynamics on each, emotion-behavior coupling) and renders 26 visual traits for the Alice Negative witness-form via one LLM call.
 
-Each background stage runs independently; one failure cannot silently skip the others, and every error lands in `data/errors.log` tagged with its stage.
+Each background stage runs independently; one failure cannot silently skip the others, and every error lands in `data/errors.log` tagged with its stage AND in the failed job's `last_error` column on `tb_signal_jobs`.
+
+#### Skip-rule transparency
+
+Signal families decline to compute when input data falls below per-family thresholds (text length, keystroke count, profile maturity, calibration filter, paste contamination). Pre-2026-05-02 those thresholds lived in five different files with no DB visibility, making "why is this row missing for this session" a five-file grep.
+
+`te_signal_skip_reason` (13 codes) + `tb_signal_skip_log` (append-only) record every family-level skip with `{needed, got}` context. `libDb.logSignalSkip` is called from `libSignalPipeline`, `libIntegrity`, `libProfile`, and `libSemanticBaseline` at every gate. Diagnostic surface only — never read in the application path. Common query: `SELECT signal_family, r.enum_code, context_json FROM tb_signal_skip_log s JOIN te_signal_skip_reason r USING (signal_skip_reason_id) WHERE s.subject_id = ? AND s.question_id = ?`. Catalog of every threshold lives in `GOTCHAS.md`.
 
 #### On Submission (Free Write)
 
@@ -354,16 +318,18 @@ There are no cron jobs, no scheduled tasks, no server dependencies. The system i
 ## Stack
 
 - **Astro** (SSR, Node adapter)
-- **PostgreSQL 17** + **pgvector** (HNSW-indexed vector search, JSONB, microsecond-precision timing via `DOUBLE PRECISION`)
+- **PostgreSQL 17** + **pgvector** (HNSW-indexed vector search, JSONB, microsecond-precision timing via `DOUBLE PRECISION`). Hosted on Supabase us-west-2.
 - **Rust signal engine** via napi-rs (`src-rs/`) for dynamical, motor, process, and reconstruction signal computation. Single source of truth for all signal math. If native module unavailable, signals are null for that session.
-- **Claude API** (`@anthropic-ai/sdk`) for question generation, calibration content extraction, and witness-trait rendering
+- **Claude API** (`@anthropic-ai/sdk`) for question generation and calibration content extraction (operator-side, never on subject submission paths)
 - **Qwen3-Embedding-0.6B** via local TEI (Text Embedding Inference) server for vector embeddings and semantic retrieval
-- **Three.js** for 3D rendering of the Alice Negative witness-form
+- **Argon2id** for password hashing (subject auth via `argon2`); **AES-256-GCM** for at-rest encryption of subject-authored content
 - **TypeScript** (strict)
 
 ## Architecture
 
-- Single user, no auth
+- **Multi-subject with Path 2-lite auth.** Owner provisions subjects via CLI (`npm run create-subject`), each subject gets a temp password and `must_reset_password=TRUE`; first-login forces reset, then consent acknowledgment, then journal access. Argon2id password hashing, opaque 32-byte session tokens (raw in cookie, SHA-256 in `tb_subject_sessions`), 7-day session cap, password reset deletes all sessions for that subject, owner password rotation deletes all owner sessions. Login + reset endpoints rate-limited (10 attempts / 15 min). Subject content (responses, questions, keystroke streams, event logs) encrypted at rest via AES-256-GCM with a key held by the operator alone. See `docs/consent-v1.md` for the subject-facing summary, `src/lib/libSubjectAuth.ts` + `src/middleware.ts` for the auth surface, `feedback_subject_content_opacity` memory for the opacity discipline.
+- **Subject-facing surface is laptop only.** Mobile / tablet user agents are blocked by middleware to `/desktop-only`. iPad-as-Mac (iPadOS 13+ default UA) is caught client-side via `navigator.maxTouchPoints` on every subject-facing page.
+- **Onboarding via `/welcome`.** Subject-facing orientation page — what to expect, what we measure, cadence, where things live. Reachable from the `/subject` footer; never forced.
 - PostgreSQL 17 database (`alice`, connection via `ALICE_PG_URL` env var) with pgvector HNSW-indexed embeddings
 - Schema managed by `db/sql/dbAlice_Tables.sql` (schema `alice`) with proper PostgreSQL types: `DOUBLE PRECISION` for all timing and signal values, `BOOLEAN` for flags, `DATE` for calendar dates, `TIMESTAMPTZ` for event timestamps, `SMALLINT` for bounded integers with `CHECK` constraints, `JSONB` for structured data
 - Rust native signal engine (`src-rs/`) for compute-heavy algorithms (RQA O(n^2), sample entropy O(n^2*m), DFA, permutation entropy, transfer entropy, ex-Gaussian fitting, process signal replay, profile distance, batch correlations). Single source of truth; no TypeScript fallback. Built via `npm run build:rust`, auto-built on `npm run dev`.
@@ -376,9 +342,6 @@ There are no cron jobs, no scheduled tasks, no server dependencies. The system i
 - Context-matched baselines with confidence scoring (none / low / moderate / strong)
 - Linguistic density pipeline (NRC + LIWC), per-burst sequence capture, calibration content extraction (incidental supervision)
 - Same-day session delta with personal-range contextualization
-- Behavioral 7D and parallel semantic 11D state spaces, kept orthogonal at construction time; calibrations excluded by design (they are the reference frame, not points within it)
-- PersDyn dynamics (baseline, variability, attractor force, system entropy, phase, velocity, coupling) computed separately on each space
-- Emotion to behavior coupling discovery across the content/process boundary
 - Per-session metadata signals (hour typicality, deletion-density curve, burst trajectory shape, inter-burst rhythm, burst-deletion proximity)
 - Motor signals (`tb_motor_signals`, Rust engine) -- sample entropy, IKI autocorrelation, motor jerk, lapse rate, tempo drift, IKI compression ratio, digraph latency profile, ex-Gaussian tau/mu/sigma, tau proportion, adjacent hold-time covariance
 - Dynamical signals (`tb_dynamical_signals`, Rust engine) -- permutation entropy, DFA alpha, RQA (determinism, laminarity, trapping time, recurrence rate), transfer entropy (hold-to-flight, flight-to-hold, dominance)
@@ -393,8 +356,7 @@ There are no cron jobs, no scheduled tasks, no server dependencies. The system i
 - Per-keystroke event log for read-only playback
 - Structured receipt code path (deterministic, no LLM, no narrative) present but not auto-invoked
 - "Did it land?" feedback every 5th submission
-- Designer-facing Observatory (`/observatory/*`) -- never user-facing
-- Alice Negative witness-form (`/alice-negative`) -- 26-trait 3D rendering driven by validated behavioral dynamics, re-rendered each submission via one LLM call whose input is deterministic math
+- Designer-facing Observatory (`/observatory/*`) -- never subject-facing. Subject content opacity discipline: operator never sees subject plaintext through any operator-facing surface, including replay (every letter and digit redacted server-side before reaching the operator's view).
 - Public research page (`/research`) -- the scientific case for the instrument, with live instrument metadata (session count, signal families, reconstruction residuals) fetched from the API
 - Papers page (`/papers`) -- versioned published papers rendered from markdown with gray-matter frontmatter
 - Instrument architecture page (`/instrument`), methodology page (`/methodology`), vision page (`/vision`)
@@ -403,10 +365,10 @@ There are no cron jobs, no scheduled tasks, no server dependencies. The system i
 
 ### Key Modules
 
-- **State engines** — `src/lib/alice-negative/state-engine.ts` (behavioral 7D), `src/lib/alice-negative/semantic-space.ts` (semantic 11D, schema-ready for 4 LLM-extracted dimensions). Both load from `tb_session_summaries` filtered to journal sessions only; both produce z-scored vectors with a convergence scalar.
-- **Generic dynamics engine** — `src/lib/alice-negative/dynamics.ts`. Takes a dimension list as parameter; defaults to `STATE_DIMENSIONS` (7D behavioral). Reused over `SEMANTIC_DIMENSIONS` for the parallel space.
-- **Emotion profile** — `src/lib/alice-negative/emotion-profile.ts`. Cross-domain coupling between linguistic densities and behavioral state, persisted to `tb_emotion_behavior_coupling`.
-- **Witness rendering** — `src/lib/alice-negative/render-witness.ts`. The single entry point that runs both state engines, both dynamics passes, and the emotion coupling. It then calls `interpreter.ts`, which makes one LLM call to translate the validated dynamics into 26 visual traits for the Alice Negative witness-form (`/alice-negative`). The LLM does not interpret raw signal — the interpretation is done deterministically; the LLM only renders art from validated math.
+- **Subject auth** — `src/lib/libSubjectAuth.ts` (Argon2id hashing, opaque session tokens, `loginSubject` / `verifySubjectSession` / `resetPassword` / `setOwnerPassword`, post-reset-next cookie carrier), `src/lib/libSubject.ts` (request → subject resolver), `src/middleware.ts` (universal gate: public paths, owner-only APIs/pages, subject-only APIs/pages, must-reset gate, consent gate, mobile UA block). CLI tooling: `npm run create-subject`, `npm run set-owner-password`, `npm run delete-subject`, `npm run factory-reset`.
+- **At-rest encryption** — `src/lib/libCrypto.ts` (AES-256-GCM via `ALICE_ENCRYPTION_KEY`). Subject-authored content (`tb_responses.text`, `tb_questions.text`, `tb_session_events.event_log_json` + `keystroke_stream_json`, `tb_embeddings.embedded_text`) stored as `<col>_ciphertext` + `<col>_nonce` pairs. Read boundary lives in `libDb`'s `@region encrypted-reads`; direct SELECTs of encrypted columns outside that region are forbidden.
+- **Consent + audit** — `src/lib/libConsent.ts` (consent acks, data-access log writes via `recordConsent` / `recordDataAccess`). `tb_subject_consent` is append-only forever (research-integrity record); `tb_data_access_log` records every export / delete / consent / factory-reset event with actor disambiguation.
+- **Session integrity gates** — `src/lib/libIntegrity.ts`. Calibration-excluded by design; `profile.session_count >= 5` floor; `dimension_count >= 3` floor. All gate decisions logged to `tb_signal_skip_log`.
 - **Session metadata** — `src/lib/session-metadata.ts`. Computes the slice-3 follow-up signals (hour typicality, deletion curve, burst shape, inter-burst rhythm, burst-deletion proximity). Called synchronously from `respond.ts`.
 - **Calibration drift** — `src/lib/calibration-drift.ts`. Snapshots baselines on every calibration submit; computes drift magnitude as z-norm L2 distance against per-dimension journal-session dispersion.
 - **Signal formatting** — `src/lib/signals.ts`. Research-backed verbalization of behavioral data + dynamics for question-generation prompts. Informed by Netflix "From Logs to Language" (2026), anchoring bias research, "Lost in the Middle" (TACL 2024).
@@ -421,8 +383,7 @@ There are no cron jobs, no scheduled tasks, no server dependencies. The system i
 - **Signal pipeline** -- `src/lib/libSignalPipeline.ts`. Orchestrates all 5 signal families (dynamical, motor, semantic, process, cross-session) plus session integrity as independent fire-and-forget computations after session submission. Integrity runs before profile update.
 - **Reconstruction pipeline** -- `src/lib/libReconstruction.ts`. Ghost generation (Rust Markov + motor synthesis), signal comparison, L2 norm computation. Runs as part of the signal pipeline for reconstruction-eligible sessions.
 - **Session integrity** -- `src/lib/libIntegrity.ts`. Profile-based mediation detection. 12-dimension z-score vector, L2 distance, dynamic threshold. Uses Rust for z-scores and distance computation.
-- **Coupling stability** -- `src/lib/libCouplingStability.ts`. Rolling-window stability analysis for emotion-behavior coupling. Uses Rust batch correlations.
-- **Personal profile** -- `src/lib/libProfile.ts`. Rolling behavioral profile (means and stds across motor/process dimensions). Updated after each session.
+- **Personal profile** -- `src/lib/libProfile.ts`. Rolling behavioral profile (means and stds across motor/process dimensions). Updated after each session. Calibration sessions and paste-contaminated journals are excluded by design.
 - **Observatory APIs** -- `src/pages/api/observatory/*`. `states`, `synthesis`, `coupling`, `coupling-stability`, `ghost`, `difficulty`, `integrity`, `entry/[id]`, `calibration-drift`, `playback/[questionId]`, `instrument-status`. All read from live PostgreSQL.
 
 ### Historical Data

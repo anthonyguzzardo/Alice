@@ -63,7 +63,7 @@ Severity = "what does it cost if exploited," not "how easy is it to fix."
 |---|---|---|---|
 | 8 | ~~Caddy access log retains IPs and URL paths to disk on subject POST paths~~ | `deploy/Caddyfile` | **Closed 2026-04-30 (Class II #2)** — `log_skip` on `/api/respond`, `/api/subject/respond`, `/api/calibrate`, `/api/subject/calibrate`, `/api/event`. GET paths (`/login`, `/observatory`, etc.) still get IP+path logged for ops debugging — acceptable trade since GETs don't carry subject content. |
 | 9 | ~~`x-forwarded-for` trusted from any upstream~~ | `src/lib/utlRequestContext.ts:23`, `src/pages/api/subject/login.ts:34` | **Closed 2026-05-01 by review + CF flip** — `deploy/Caddyfile` `header_up X-Forwarded-For {remote_host}` already replaces client-supplied XFF (no `+` prefix = replace, not append). After DNS-only flip, `{remote_host}` is the real client IP, so per-IP rate limiting works as intended. No code change needed. |
-| 10 | ~~No CAA DNS records~~ | DNS-side | **Closed 2026-05-01 (Class II #3)** — `0 issue "letsencrypt.org"` + `0 iodef "mailto:agguzzy91@gmail.com"`. Cloudflare Universal SSL disabled to stop their auto-injection of CAAs for `comodoca.com`/`digicert.com`/`pki.goog`/`ssl.com`. Verified via `dig CAA fweeo.com +short`. CT Monitoring also enabled as belt-and-suspenders. |
+| 10 | ~~No CAA DNS records~~ | DNS-side | **Closed 2026-05-01 (Class II #3)** — `0 issue "letsencrypt.org"` + `0 iodef "mailto:anthony@mrfoxco.com"`. Cloudflare Universal SSL disabled to stop their auto-injection of CAAs for `comodoca.com`/`digicert.com`/`pki.goog`/`ssl.com`. Verified via `dig CAA fweeo.com +short`. CT Monitoring also enabled as belt-and-suspenders. |
 | 11 | ~~DNSSEC status not verified~~ | DNS-side | **Closed 2026-05-01 (Class II #3)** — DNSSEC enabled at CF, DS auto-pushed to .com parent (CF Registrar). Verified end-to-end: `dig @a.gtld-servers.net fweeo.com DS +short` returns `2371 13 2 E637EFFBCBCA4CACDF6A46620570E233C2C50C69F2038F95A39CCF6FE9A5666E`. `dig @1.1.1.1 fweeo.com` returns `ad` flag (Authenticated Data) confirming validating resolvers verify the chain. Algorithm 13 (ECDSAP256SHA256). |
 | 12 | No Sigstore signature on linux-x64 `.node` artifact | `.github/workflows/` | Compromised CI account = persistent execution on Hetzner. (npm audit gate already in place.) |
 | 13 | systemd journal captures Node stdout | `src/lib/utlErrorLog.ts:40` calls `console.error` after writing to `data/errors.log` | **Mitigated by FDE 2026-04-30 — journald and `data/errors.log` now encrypted at rest.** Live host compromise still exposes content. |
@@ -198,7 +198,7 @@ Verification:
 Added two records:
 
 - `fweeo.com. CAA 0 issue "letsencrypt.org"`
-- `fweeo.com. CAA 0 iodef "mailto:agguzzy91@gmail.com"`
+- `fweeo.com. CAA 0 iodef "mailto:anthony@mrfoxco.com"`
 
 **Sneaky behavior worth recording:** Cloudflare auto-injects CAA records for the CAs their Universal SSL uses (`comodoca.com`, `digicert.com`, `pki.goog`, `ssl.com`, both `issue` and `issuewild` tags) whenever Universal SSL is enabled AND any CAA records exist in the zone. These auto-injected records do NOT appear in the dashboard. They are visible only via `dig CAA`. The doc CF links to (their own CAA page) confirms this is documented but opt-out, and the dashboard surface is misleading. Effective policy with our manual record alone was 5 authorized CAs, not the 1 we intended.
 

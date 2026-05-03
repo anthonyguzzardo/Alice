@@ -8,6 +8,60 @@ Newest first.
 
 ---
 
+## INC-025: Signal-skip transparency (te_signal_skip_reason + tb_signal_skip_log)
+
+**Date:** 2026-05-02
+**Type:** Methods-transparency improvement, not a correctness fix. Existing thresholds and skip logic were correct; the issue was that they were invisible from the database, making "why is this signal row missing for this session" a five-file grep against application code. This entry documents the change because methods reviewers need to know the audit surface exists and how to query it.
+
+### What was wrong
+
+Signal-family skip rules lived in five layers across the codebase, none of which left a trace in the database when a row was declined:
+
+1. `libSignalPipeline.ts` family-level gates (e.g., `stream.length >= 10` for dynamical/motor; `text.length >= 20` for semantic/cross-session; event-log presence for process).
+2. TypeScript family-internal sub-signal thresholds in `libSemanticSignals.ts` and `libCrossSessionSignals.ts` (e.g., `priorTexts >= 5` for self-perplexity).
+3. Rust family-internal thresholds in `dynamical.rs`, `motor.rs`, `process.rs` (returned as `SignalError::InsufficientData { needed, got }` and discarded at the FFI boundary).
+4. `libIntegrity.ts` three-gate filter: calibration-excluded, `profile.session_count >= 5`, `dimension_count >= 3`.
+5. `libProfile.ts` calibration-excluded + paste-contamination filters.
+
+A reviewer (or operator) staring at a missing row in `tb_dynamical_signals` for a given session had no DB-side way to determine whether the family skipped intentionally (e.g., short stream) or errored. The schema comment at `db/sql/dbAlice_Tables.sql:884-886` mentioned only that signal columns are nullable "because short sessions may not produce enough data for computation (e.g., RQA needs >= 30 IKIs)" — illustrative, not exhaustive.
+
+### Discovery method
+
+Surfaced when reviewing a fresh test subject (subject 12, 1 journal + 2 calibrations). `tb_session_integrity` had zero rows; the operator could not distinguish "by design (gate 2: profile_too_immature)" from "broken." Resolving that question required reading `libIntegrity.ts:130-200` end-to-end, then `libSignalPipeline.ts`, then `libProfile.ts`, then `dbAlice_Seed.sql`. Five files for one missing row.
+
+### Resolution
+
+New dictionary table `te_signal_skip_reason` (13 codes: `text_too_short`, `text_missing`, `stream_too_short`, `stream_missing`, `event_log_missing`, `calibration_excluded`, `profile_too_immature`, `session_summary_missing`, `dimension_count_too_low`, `paste_contaminated`, `question_not_found`, `compute_error`, `no_journal_sessions`) and append-only log table `tb_signal_skip_log` (subject_id, question_id, signal_family, signal_skip_reason_id, context_json) — migration 040, mirrored in `dbAlice_Tables.sql`.
+
+`libDb.logSignalSkip(subjectId, questionId, family, reason, context)` is the single canonical writer. Errors are swallowed via `logError`; the diagnostic log is strictly best-effort and cannot block the signal pipeline. Instrumented at every Layer-1 (family-level) skip site:
+
+- `libSignalPipeline.ts`: dynamical / motor / semantic / process / cross-session family gates.
+- `libIntegrity.ts`: each of the four internal `return null` sites (calibration filter, profile-maturity floor, dimension-count floor, compute-error) records the specific reason and `{needed, got}` context.
+- `libProfile.ts`: question-not-found, calibration-excluded, paste-contaminated, no-journal-sessions paths.
+- `libSemanticBaseline.ts`: same three gates plus the chained-skip case where upstream `tb_semantic_signals` row is absent.
+
+Layer-2 (sub-signal nullability inside a written row) is **not** instrumented — knowing why `self_perplexity` is null inside an existing cross-session row still requires reading the `< N` checks in `libCrossSessionSignals.ts`. Deferred until that becomes a recurring pain point.
+
+Companion `GOTCHAS.md` entry catalogues every threshold across all five layers (file:line citations) so a methods reviewer who wants to audit the actual numerical thresholds can do so without grepping.
+
+### What changed observable behavior
+
+- A diagnostic SELECT now answers "why is this row missing": `SELECT signal_family, r.enum_code, context_json FROM tb_signal_skip_log s JOIN te_signal_skip_reason r USING (signal_skip_reason_id) WHERE s.subject_id = ? AND s.question_id = ?`.
+- Pipeline behavior is identical. Same thresholds, same skip decisions, same compute. The only delta is that the decisions are now persisted as audit rows.
+- Failure of `logSignalSkip` itself (transient DB blip, table missing pre-migration) does not propagate — caught by internal try/catch in the helper, logged to `data/errors.log` only. Pre-migration deployments saw error-log noise but unbroken pipeline behavior.
+
+### What didn't change
+
+- No threshold value changed. No skip rule was added or removed. No signal computation was modified.
+- `tb_engine_provenance` provenance stamping is unaffected — skip events are not signal rows and have no engine-binary dependency.
+- Bit-reproducibility of signal outputs is unchanged (the diagnostic log writes after compute, never before).
+
+### Scope of impact
+
+Methods reviewers can now answer "is this missing row a working-as-designed skip or a bug?" without reading application code. This was the recurring frustration that prompted the change. The instrumentation is purely additive — it does not affect any signal-engine claim that was previously valid.
+
+---
+
 ## INC-024: Daily-delta self-heal (drop LIMIT 1, loop oldest-first)
 
 **Date:** 2026-04-29
