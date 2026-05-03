@@ -26,29 +26,7 @@ const comments = await getCommentsForPaper(slug!);
     <style is:global>
       @import url('/fonts/styFonts.css');
 
-      :root {
-        --weight-display: 300;
-        --border-width: 1px;
-        --bg: #f5f2ed;
-        --bg-input: #ebe7e1;
-        --text: #1a1a1a;
-        --text-muted: #6b6560;
-        --text-faint: #9a9590;
-        --border: #ccc5bc;
-        --border-focus: #8a8580;
-      }
-
-      [data-theme="dark"] {
-        --weight-display: 500;
-        --border-width: 2px;
-        --bg: #0a0a0a;
-        --bg-input: #161514;
-        --text: #ffffff;
-        --text-muted: #b0aba5;
-        --text-faint: #8a8580;
-        --border: #5a5550;
-        --border-focus: #a0998f;
-      }
+      @import "../../styles/styTokens.css";
 
       * {
         margin: 0;

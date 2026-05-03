@@ -16,46 +16,27 @@
     <style is:global>
       @import url('/fonts/styFonts.css');
 
+      @import "../../styles/styTokens.css";
+
+      /* Page-specific tokens — only used by the signal sandbox visualizations. */
       :root {
-        --weight-display: 300;
-        --border-width: 1px;
-        --bg: #f5f2ed;
-        --bg-input: #ebe7e1;
-        --text: #1a1a1a;
-        --text-muted: #6b6560;
-        --text-faint: #9a9590;
-        --border: #ccc5bc;
-        --border-focus: #8a8580;
         --panel-bg: #ebe7e1;
         --metric-label: #6b6560;
         --metric-value: #1a1a1a;
         --section-border: #ddd8d2;
         --zero: #c5c0ba;
-        --positive: #4a7c59;
-        --negative: #8c4a4a;
         --bar-bg: #ddd8d2;
         --bar-fill: #8a8580;
       }
 
       [data-theme="dark"] {
-        --weight-display: 500;
-        --border-width: 2px;
-        --bg: #0a0a0a;
-        --bg-input: #161514;
-        --text: #ffffff;
-        --text-muted: #b0aba5;
-        --text-faint: #8a8580;
-        --border: #5a5550;
-        --border-focus: #a0998f;
-        --panel-bg: #141312;
-        --metric-label: #7a7570;
-        --metric-value: #ffffff;
-        --section-border: #2a2825;
-        --zero: #4a4540;
-        --positive: #6aaa79;
-        --negative: #bb6a6a;
-        --bar-bg: #2a2825;
-        --bar-fill: #7a7570;
+        --panel-bg: #2a2825;
+        --metric-label: #948e85;
+        --metric-value: #f0ece4;
+        --section-border: #322f2c;
+        --zero: #5a554f;
+        --bar-bg: #322f2c;
+        --bar-fill: #9a948b;
       }
 
       * { margin: 0; padding: 0; box-sizing: border-box; }

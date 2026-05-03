@@ -1,29 +1,60 @@
 /* ─────────────────────────────────────────────────────────────────────
- * Design tokens — single source of truth.
+ * Design tokens — single source of truth for color, weight, line widths,
+ * and font stacks. Imported by every page that needs themed styling.
  *
- * Imported by layBase.astro (global) and styObservatory.css (observatory).
- * Dark-mode values are tuned for halation: borders thicker-toned, faint
- * text lifted off near-black, display weight bumped one notch.
+ * Light is the default (cream Alice palette). Dark is tuned to kill
+ * halation: bg lifted off pure black to a neutral charcoal, text bright
+ * enough to clear cream-on-warm-black wash, borders 2px to survive
+ * light-on-dark perceptual thinning, display weight bumped one notch.
+ *
+ * To add a new themed token: define it here (light + dark). Never
+ * inline a hex value at the call site — reach for an existing token or
+ * add a new one.
  * ───────────────────────────────────────────────────────────────────── */
 
 :root {
+  /* ── widths & weights ───────────────────────────────────────────── */
+  --weight-display: 300;
+  --border-width: 1px;
+
+  /* ── surfaces ───────────────────────────────────────────────────── */
   --bg: #f5f2ed;
   --bg-dim: #e9e5de;
+  --bg-pre: #e9e5de;
+  --bg-input: #ebe7e1;
   --bg-panel: #ebe7e1;
   --bg-panel-hover: #e3dfd8;
+
+  /* ── text ───────────────────────────────────────────────────────── */
   --text: #1a1a1a;
+  --text-pre: #a8a39d;
   --text-muted: #6b6560;
   --text-faint: #9a9590;
+
+  /* ── lines ──────────────────────────────────────────────────────── */
   --border: #ccc5bc;
   --border-focus: #8a8580;
+
+  /* ── accents & states ───────────────────────────────────────────── */
   --accent: #7a5a44;
   --positive: #6b8e6b;
   --negative: #b5603f;
   --semantic: #7a5a7a;
   --warn: #c9a55e;
+  --danger: #b5603f;
 
-  --weight-display: 300;
+  /* ── buttons ────────────────────────────────────────────────────── */
+  --btn-bg: #e0dbd5;
+  --btn-hover: #ccc5bc;
+  --btn-text: #1a1a1a;
 
+  /* ── journal/calibration specific ───────────────────────────────── */
+  --done-text: #8a8580;
+  --loading: #c5c0ba;
+  --free-border: #c5c0ba;
+  --free-hover-bg: rgba(0, 0, 0, 0.03);
+
+  /* ── fonts ──────────────────────────────────────────────────────── */
   --serif-display: 'Cormorant Garamond', Georgia, serif;
   --serif-body: 'EB Garamond', Georgia, serif;
   --mono: 'SF Mono', 'Menlo', 'Consolas', 'Liberation Mono', monospace;
@@ -31,20 +62,37 @@
 }
 
 [data-theme="dark"] {
-  --bg: #141210;
-  --bg-dim: #1a1816;
-  --bg-panel: #1a1816;
-  --bg-panel-hover: #201d1a;
-  --text: #e8e4df;
-  --text-muted: #b0aba5;
-  --text-faint: #888178;
-  --border: #4a4540;
-  --border-focus: #8a8580;
-  --accent: #a08a6e;
+  --weight-display: 500;
+  --border-width: 2px;
+
+  --bg: #22201d;
+  --bg-dim: #2a2825;
+  --bg-pre: #1a1816;
+  --bg-input: #2a2825;
+  --bg-panel: #2a2825;
+  --bg-panel-hover: #322f2c;
+
+  --text: #f0ece4;
+  --text-pre: #8a8580;
+  --text-muted: #c4beb5;
+  --text-faint: #948e85;
+
+  --border: #5a554f;
+  --border-focus: #9a948b;
+
+  --accent: #b89a7a;
   --positive: #8aa08a;
   --negative: #c77a5a;
   --semantic: #9a7a9a;
   --warn: #c9a55e;
+  --danger: #c77a5a;
 
-  --weight-display: 400;
+  --btn-bg: #322f2c;
+  --btn-hover: #4a4540;
+  --btn-text: #f0ece4;
+
+  --done-text: #948e85;
+  --loading: #948e85;
+  --free-border: #6a655f;
+  --free-hover-bg: rgba(255, 255, 255, 0.04);
 }

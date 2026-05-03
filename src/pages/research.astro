@@ -1128,8 +1128,8 @@ full_adversary:  motor=0.3947`;
 
   .r-hero-text h1 {
     font-family: var(--serif-display);
-    font-size: 2.2rem;
-    font-weight: 400;
+    font-size: 2.4rem;
+    font-weight: 500;
     line-height: 1.35;
     color: var(--text);
     margin-bottom: 1.5rem;
@@ -1137,10 +1137,14 @@ full_adversary:  motor=0.3947`;
 
   .r-subtitle {
     font-family: var(--serif-body);
-    font-size: 1.1rem;
-    line-height: 1.7;
+    font-size: 1.25rem;
+    line-height: 1.75;
     color: var(--text);
   }
+
+  /* Dark mode: bump weight + size for legibility on dark bg. */
+  [data-theme="dark"] .r-hero-text h1 { font-weight: 500; }
+  [data-theme="dark"] .r-subtitle { font-weight: 500; }
 
   /* --- Hero visualization --- */
   .r-hero-viz {
@@ -1244,20 +1248,24 @@ full_adversary:  motor=0.3947`;
 
   .r-section h2 {
     font-family: var(--serif-display);
-    font-size: 1.5rem;
-    font-weight: 400;
+    font-size: 1.65rem;
+    font-weight: 500;
     color: var(--text);
     margin-bottom: 1.5rem;
   }
 
   .r-section p {
     font-family: var(--serif-body);
-    font-size: 1.05rem;
+    font-size: 1.2rem;
     line-height: 1.75;
     color: var(--text);
     margin-bottom: 1.25rem;
     max-width: 720px;
   }
+
+  /* Dark mode: heavier strokes survive halation. */
+  [data-theme="dark"] .r-section p,
+  [data-theme="dark"] .r-section h2 { font-weight: 500; }
 
   .r-subsection-heading {
     font-family: var(--mono);

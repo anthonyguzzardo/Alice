@@ -80,37 +80,7 @@ const joinedDate = subject.dttm_created_utc ? subject.dttm_created_utc.slice(0, 
     <style is:global>
       @import url('/fonts/styFonts.css');
 
-      :root {
-        --weight-display: 300;
-        --border-width: 1px;
-        --bg: #f5f2ed;
-        --text: #1a1a1a;
-        --text-muted: #6b6560;
-        --text-faint: #9a9590;
-        --border: #ccc5bc;
-        --border-focus: #8a8580;
-        --bg-input: #ebe7e1;
-        --btn-bg: #e0dbd5;
-        --btn-hover: #ccc5bc;
-        --accent: #7a5a44;
-        --danger: #b5603f;
-      }
-
-      [data-theme="dark"] {
-        --weight-display: 500;
-        --border-width: 2px;
-        --bg: #141210;
-        --text: #ffffff;
-        --text-muted: #b0aba5;
-        --text-faint: #8a8580;
-        --border: #5a5550;
-        --border-focus: #a0998f;
-        --bg-input: #1a1816;
-        --btn-bg: #222;
-        --btn-hover: #333;
-        --accent: #a08a6e;
-        --danger: #c2635f;
-      }
+      @import "../../styles/styTokens.css";
 
       * { margin: 0; padding: 0; box-sizing: border-box; }
       body {
