@@ -1,303 +1,367 @@
 /**
  * Neutral prompts for calibration sessions.
- * These should elicit real writing (not one-word answers) without
- * emotional charge. The system picks one at random each time.
  *
- * Categories are organized by COGNITIVE TASK TYPE, not topic, so that
- * each prompt demands a materially different kind of thinking even when
- * two prompts share a subject domain.
+ * MEASUREMENT GOAL
+ * Establish a within-subject baseline of keystroke dynamics during
+ * knowledge-telling cognition (Bereiter & Scardamalia, 1987): direct memory
+ * probe and recitation, no synthesis, no emotional load. Calibration sessions
+ * become the floor against which journal sessions are compared for KT
+ * detection, drift, and daily delta.
  *
- * All prompts produce knowledge-telling (reciting known facts or procedures),
- * not knowledge-transforming (generating new understanding). This makes
- * calibration sessions the floor for KT detection.
+ * DESIGN RULES
+ *  1. Knowledge-telling only. Each prompt must be answerable by direct probe
+ *     of memory (episodic, perceptual, or procedural). No prompt should
+ *     require synthesizing across domains, evaluating tradeoffs, taking a
+ *     position, or constructing new understanding. Knowledge-transforming
+ *     prompts contaminate the baseline.
+ *  2. Active recall over free description. A prompt that demands a real
+ *     mental search ("what did you eat last night") produces richer and more
+ *     informative keystroke variation than one that affords pattern-completion
+ *     ("describe a paperclip"). Templated, decoration-style prompts induce
+ *     auto-pilot typing, which is task-avoidance dynamics, not recitation
+ *     dynamics. That degrades the measurement.
+ *  3. Surface-form variety inside each cognitive family. Within a family
+ *     (e.g. recent autobiographical recall) every prompt opens differently
+ *     and asks for a different slice of memory. No template is allowed to
+ *     repeat more than a few times across the whole pool.
+ *  4. Adult register. Prompts address a competent adult with a busy life. No
+ *     "explain to someone who has never seen one." No object-identification
+ *     of trivial household items. No taboo-word puzzles. No sensory imagery
+ *     directed at hypothetical naive observers.
+ *
+ * COGNITIVE FAMILIES
+ *   - Present observation       (perceptual scan of immediate environment)
+ *   - Recent autobiographical   (episodic recall of the last hours/days)
+ *   - Personal procedural       (recitation of habitual routines)
+ *   - Place memory              (spatial recall of known environments)
+ *   - Enumeration               (concrete counting / listing in scene)
+ *   - Perspective and framing   (re-describing the scene from a fixed angle)
+ *   - Verbal fluency (canonical)(Wikipedia: animals, supermarket, letter S,
+ *                                etc.; bounded set, not extended templates)
+ *   - Recent inputs             (last book, video, news, recommendation)
+ *   - Bodily attention          (interoception / proprioception, no synthesis)
+ *   - Hidden inventory          (location-cued recall: what is behind / inside
+ *                                a closed thing, retrieved without looking)
+ *   - Intangible inventory      (digital and abstract enumeration: tabs,
+ *                                charges, contacts, files)
+ *   - Object provenance         (history of a specific physical object owned)
+ *   - Semantic recall           (long-term factual memory: numbers, lyrics,
+ *                                languages, names from earlier life)
+ *   - Daily grain               (procedural at rare granularity: which knob,
+ *                                which loop, which direction)
+ *   - Known people              (neutral factual recall about specific known
+ *                                others: preferences, habits, environments)
+ *   - Temporal                  (concrete schedule and time recall)
+ *   - Oblique inventory         (listing by unusual property: things with
+ *                                moving parts, things with words on them)
+ *
+ * WHAT WAS REMOVED (and why)
+ *   - "Describe a [paperclip|zipper|safety pin|hinge|...] to someone who has
+ *     never seen one." 30+ prompts on the same template, all directed at
+ *     trivial household objects. Reads as a teacher prompt addressed to a
+ *     child. Suppresses engaged recall.
+ *   - "Describe X without using the words Y, Z, W." Lexical-constraint puzzle.
+ *     Pulls cognition toward problem-solving, not knowledge-telling, so the
+ *     resulting keystroke trace is not a clean baseline.
+ *   - "Describe the [taste|smell|feel|sound] of X to someone who has never
+ *     [had|smelled|felt|heard] it." 48 prompts on near-identical templates,
+ *     and the framing pulls toward analogy / metaphor generation, which is
+ *     closer to knowledge-transforming than knowledge-telling.
+ *   - Most "explain how to [tie a shoe|crack an egg|...]" generic life-skills
+ *     prompts. Replaced with personal-procedural prompts about routines the
+ *     subject actually performs, which afford real recall instead of
+ *     condescending recitation.
  */
 export const CALIBRATION_PROMPTS: string[] = [
   // ---------------------------------------------------------------------------
-  // OBSERVATION — describe what's around you now
+  // PRESENT OBSERVATION
   // ---------------------------------------------------------------------------
+  "Look around. What's the first thing your eyes land on?",
   "Describe the room you're sitting in right now.",
-  "What's on your desk or table right now? List everything you can see.",
-  "Describe the view from the nearest window.",
-  "Look around and describe three objects within arm's reach.",
-  "Describe the lighting in the room you're in right now.",
-  "Describe the temperature right now and how it feels.",
-  "What does the street outside look like right now?",
-  "What's the most cluttered area in your space right now? Describe it.",
+  "What's on the surface closest to your hand?",
+  "What can you see from where you're sitting that wasn't here a week ago?",
+  "Describe the lighting right now. Sources, colors, where shadows fall.",
+  "What's the temperature in the room, and how do you know?",
+  "Three sounds you can hear, ordered nearest to farthest.",
+  "What's the most recently moved object in your field of view?",
+  "Pick up the closest object that isn't a phone or laptop. Describe it.",
+  "How worn is the floor under you? Material, color, scuff marks.",
   "Describe the ceiling above you.",
-  "What does your kitchen counter look like right now?",
-  "Describe what you're wearing right now, piece by piece.",
-  "What's in your pockets or bag right now?",
-  "Describe what the sky looks like right now.",
-  "Pick up the nearest object. Describe its weight and texture.",
-  "What's the most colorful thing in your field of vision right now?",
-  "If you walked out your front door and turned left, what would you see?",
-  "Describe the floor beneath your feet right now. Material, texture, condition.",
-  "Describe the nearest door in detail. Handle, frame, finish, state.",
+  "What's out the nearest window right now?",
+  "What are you wearing? Top to bottom, including anything in pockets.",
+  "Closest book or printed thing. Title, condition, where it sits.",
+  "What's plugged in within arm's reach?",
+  "Describe the door of the room you're in.",
+  "What time is it, and how does the light differ from an hour ago?",
+  "Smells in the room right now, if any.",
+  "What's the most colorful thing in the room?",
+  "Describe whatever container is closest to you. Cup, bottle, box, bag.",
+  "Look at your hands. Anything on them right now?",
+  "What's currently making noise within ten feet of you?",
+  "What's directly behind you that you can't see right now?",
+  "Describe the seat you're in, including how comfortable it actually is.",
+  "What's the dirtiest surface in the room? Be specific about why.",
 
   // ---------------------------------------------------------------------------
-  // RECENT MEMORY — what did you do/see/eat recently
+  // RECENT AUTOBIOGRAPHICAL RECALL
   // ---------------------------------------------------------------------------
-  "Describe what you did this morning in as much detail as you can remember.",
-  "What did you eat yesterday? Walk through it meal by meal.",
-  "What's the last show or movie you watched? What happened in it?",
-  "Describe the last conversation you had with someone today.",
-  "What did you do exactly one week ago today? Try to remember.",
+  "Walk through your morning so far, in order.",
+  "What did you eat last? Where, and what did it come on?",
+  "Last person you spoke to out loud. Who, and roughly what about?",
+  "Last text you sent. Who to, and what was it responding to?",
+  "What's the most recent thing you searched online?",
   "What did you wear yesterday?",
-  "What was the first thing you saw when you opened your eyes this morning?",
-  "What's the last thing you searched for online?",
-  "What's the last photo you took? Describe what's in it.",
-  "Describe the last thing you bought and why you bought it.",
-  "What three things did you do right before sitting down here?",
-  "Describe the last time you opened a cabinet or drawer. What was inside?",
-  "What was the last door you walked through before sitting down here?",
-  "Describe the last time you looked at the time. What were you doing?",
-  "What's the last thing you threw away? Describe it.",
+  "Three things you did between waking up and sitting down here.",
+  "Last photo on your phone. What's in it?",
+  "What did you have for dinner the night before last?",
+  "Who was the last person who came into your home?",
+  "Last time you left your home. Where to, and how did you get there?",
+  "Last package or piece of mail that arrived. What was it?",
+  "Last money you spent in person, not online. On what.",
+  "What time did you get out of bed today?",
+  "Last screen you closed before opening this one.",
+  "Describe what you did Saturday afternoon.",
+  "Last conversation that lasted more than five minutes. Who, what about.",
+  "What have you had to drink so far today?",
+  "Last thing you carried from one room to another.",
+  "What was the first thing you noticed on waking today?",
+  "Last thing you wrote by hand.",
+  "Last appointment, errand, or scheduled thing you went to.",
+  "What did you do in the hour before sitting down here?",
+  "Last cash transaction you remember. Where, how much.",
+  "Last time you had to wait somewhere. Where, and how long.",
 
   // ---------------------------------------------------------------------------
-  // ROUTINE AND PROCESS — walk through how you do X
+  // PERSONAL PROCEDURAL
   // ---------------------------------------------------------------------------
-  "Walk through how you make your favorite meal, step by step.",
-  "Describe your evening wind-down routine.",
-  "Walk through your morning hygiene routine step by step.",
-  "Describe how you typically end your workday.",
-  "Walk through the last errand you ran.",
-  "Describe how you do your laundry from start to finish.",
-  "Walk through how you take a shower from start to finish.",
-  "Walk through the steps you take to lock up when you leave home.",
-  "Walk through how you pay for something at a store.",
-  "Describe how you sort your mail or packages when they arrive.",
-  "Describe your routine when you first get to your desk or workspace.",
-  "Walk through how you organize your week.",
-  "Walk through the steps of making a sandwich.",
-  "Describe how you pack a bag when you're going somewhere for the day.",
-  "Walk through how you get ready when you're running late.",
+  "What you do between sitting down at your desk and starting actual work.",
+  "Your routine for closing the laptop at the end of the day.",
+  "What you do before getting in bed, in the order you do it.",
+  "How you make coffee, tea, or whatever your morning drink is.",
+  "How you decide what to wear in the morning.",
+  "Your routine for handling laundry from hamper to drawer.",
+  "What you do when you walk in the door coming home.",
+  "How you pack a bag for a day out of the house.",
+  "Your routine for charging your devices overnight.",
+  "How you handle the dishes after a meal.",
+  "What you do when groceries arrive or come home with you.",
+  "How you decide what to cook on a regular weeknight.",
+  "Your routine for taking out the trash.",
+  "How you check what's on your calendar for the week.",
+  "Steps you take when leaving the house for more than an hour.",
+  "Your routine for cleaning a particular room in your home.",
+  "How you handle email at the start of a workday.",
+  "What you do when you sit down to read.",
+  "Your routine for getting out of the house in a hurry.",
+  "How you actually fold (or don't fold) the clothes you own.",
 
   // ---------------------------------------------------------------------------
-  // OBJECT EXPLANATION — describe X to someone who has never seen one
+  // PLACE MEMORY
   // ---------------------------------------------------------------------------
-  "Describe a paperclip to someone who has never seen one.",
-  "Describe a zipper to someone who has never seen one.",
-  "Describe a safety pin to someone who has never seen one.",
-  "Describe a doorknob to someone who has never seen one.",
-  "Describe a light switch to someone who has never seen one.",
-  "Describe a hinge to someone who has never seen one.",
-  "Describe a candle to someone who has never seen one.",
-  "Describe a flashlight to someone who has never seen one.",
-  "Describe a padlock to someone who has never seen one.",
-  "Describe a rubber band to someone who has never seen one.",
-  "Describe a stapler to someone who has never seen one.",
-  "Describe chopsticks to someone who has never seen them.",
-  "Describe a corkscrew to someone who has never seen one.",
-  "Describe a compass to someone who has never seen one.",
-  "Describe a pair of scissors to someone who has never seen them.",
-  "Describe a magnifying glass to someone who has never seen one.",
-  "Describe a calculator to someone who has never seen one.",
-  "Describe a refrigerator to someone who has never seen one.",
-  "Describe a washing machine to someone who has never seen one.",
-  "Describe a vacuum cleaner to someone who has never seen one.",
-  "Describe a toaster to someone who has never seen one.",
-  "Describe a whisk to someone who has never seen one.",
-  "Describe an abacus to someone who has never seen one.",
-  "Describe a slide rule to someone who has never seen one.",
-  "Describe a binder clip to someone who has never seen one.",
-  "Describe a tape dispenser to someone who has never seen one.",
-  "Describe a colander to someone who has never seen one.",
-  "Describe a coffee maker to someone who has never seen one.",
-  "Describe a microwave to someone who has never seen one.",
-  "Describe a blender to someone who has never seen one.",
+  "Walk through your home, room by room, as if showing someone in for the first time.",
+  "Describe the grocery store you go to most often, aisle by aisle as best you can.",
+  "Layout of the place you used to live before this one.",
+  "Describe a coffee shop or cafe you've been to more than five times.",
+  "Walk through the route from your bed to the front door.",
+  "Describe your kitchen as if drawing it from above.",
+  "A street near your home you walk often. What's on it, in order?",
+  "The closest pharmacy, store, or gas station. Describe its inside.",
+  "A restaurant you've eaten at more than once. The physical layout.",
+  "The room where you sleep. Walls, floor, what's in the corners.",
+  "Walk through the route you take when you leave the house and turn right.",
+  "A library, bookstore, or shop you know well. Layout.",
+  "Describe the inside of the vehicle you ride in most often.",
+  "A bathroom in your home, fixture by fixture.",
+  "Walk through the closet or storage area you use most.",
+  "A staircase you climb often. Describe it.",
+  "The front of the building you live in, as someone walking up to it would see.",
+  "Describe a park, trail, or outdoor space you visit regularly.",
+  "Layout of the place you spent most weekday afternoons as a kid.",
+  "The room a friend or family member lives in that you know best.",
 
   // ---------------------------------------------------------------------------
-  // PROCEDURAL INSTRUCTION — explain how to X
+  // ENUMERATION
   // ---------------------------------------------------------------------------
-  "Explain how to tie a shoe.",
-  "Explain how to crack an egg.",
-  "Explain how to boil an egg.",
-  "Explain how to chop an onion.",
-  "Explain how to mince garlic.",
-  "Explain how to cook rice on a stovetop.",
-  "Explain how to cook pasta and drain it without losing any.",
-  "Explain how to fold a fitted sheet.",
-  "Explain how to sew a button back onto a shirt.",
-  "Explain how to thread a needle.",
-  "Explain how to iron a dress shirt.",
-  "Explain how to sharpen a kitchen knife.",
-  "Explain how to clean a cast iron pan.",
-  "Explain how to hang a picture level on a wall.",
-  "Explain how to patch a small hole in drywall.",
-  "Explain how to plant a seed in a pot.",
-  "Explain how to knead bread dough.",
-  "Explain how to replace a light bulb in a ceiling fixture.",
-  "Explain how to use a tape measure accurately.",
-  "Explain how to paint a wall without leaving roller marks.",
-  "Explain how to drive a nail without bending it.",
-  "Explain how to parallel park a car.",
-  "Explain how to fold a T-shirt for packing.",
-  "Explain how to make a bed with hospital corners.",
-  "Explain how to unclog a kitchen sink.",
-  "Explain how to polish a pair of leather shoes.",
-  "Explain how to whip cream by hand.",
-  "Explain how to peel a hard-boiled egg cleanly.",
+  "Count the windows in your home. Where each one is.",
+  "List the electronics in the room you're in.",
+  "How many pairs of shoes do you own? Where they live.",
+  "List everything in your fridge, top shelf to bottom.",
+  "Count the doors between you and the street.",
+  "List the apps you've used today, in order.",
+  "Things you can see right now that are made of metal.",
+  "How many cups, mugs, or glasses are in the room you're in?",
+  "Books visible from where you're sitting. Titles or rough descriptions.",
+  "List the chairs in your home.",
+  "How many lamps and overhead lights does your home have?",
+  "List everything in the bag, backpack, or pocket you reach for most.",
+  "Count the plants in your home, if any. Where each one is.",
+  "List what's currently on the kitchen counter.",
+  "Subscriptions you currently pay for. As many as you can name.",
 
   // ---------------------------------------------------------------------------
-  // CONSTRAINED DESCRIPTION — describe X without using specific words
+  // PERSPECTIVE AND FRAMING
   // ---------------------------------------------------------------------------
-  "Describe a fork without using the words \"eat,\" \"food,\" or \"metal.\"",
-  "Describe a spoon without using the words \"eat,\" \"soup,\" or \"round.\"",
-  "Describe a knife without using the words \"cut,\" \"sharp,\" or \"blade.\"",
-  "Describe a cup without using the words \"drink,\" \"hold,\" or \"liquid.\"",
-  "Describe a chair without using the words \"sit,\" \"legs,\" or \"back.\"",
-  "Describe a bed without using the words \"sleep,\" \"mattress,\" or \"soft.\"",
-  "Describe a window without using the words \"glass,\" \"see,\" or \"open.\"",
-  "Describe a door without using the words \"open,\" \"close,\" or \"wood.\"",
-  "Describe a book without using the words \"read,\" \"pages,\" or \"words.\"",
-  "Describe a clock without using the words \"time,\" \"hands,\" or \"tick.\"",
-  "Describe a shoe without using the words \"foot,\" \"walk,\" or \"lace.\"",
-  "Describe a car without using the words \"drive,\" \"wheels,\" or \"road.\"",
-  "Describe a guitar without using the words \"music,\" \"strings,\" or \"play.\"",
-  "Describe a piano without using the words \"keys,\" \"music,\" or \"play.\"",
-  "Describe a bicycle without using the words \"ride,\" \"wheels,\" or \"pedal.\"",
-  "Describe an apple without using the words \"red,\" \"fruit,\" or \"tree.\"",
-  "Describe a banana without using the words \"yellow,\" \"fruit,\" or \"peel.\"",
-  "Describe a watermelon without using the words \"red,\" \"green,\" or \"seed.\"",
-  "Describe a pencil without using the words \"write,\" \"wood,\" or \"lead.\"",
-  "Describe a blanket without using the words \"warm,\" \"soft,\" or \"bed.\"",
-  "Describe a lamp without using the words \"light,\" \"bulb,\" or \"on.\"",
-  "Describe a pillow without using the words \"soft,\" \"head,\" or \"sleep.\"",
-  "Describe a coat without using the words \"wear,\" \"warm,\" or \"winter.\"",
-  "Describe a television without using the words \"watch,\" \"screen,\" or \"show.\"",
-  "Describe a boat without using the words \"water,\" \"float,\" or \"sail.\"",
+  "Describe the room you're in as if writing stage directions.",
+  "Describe what's on your desk from a bird's-eye view.",
+  "Describe the room from the perspective of someone standing in the doorway.",
+  "Describe your current view as a still photograph.",
+  "Describe what's around you using only what you could touch without standing up.",
+  "Describe the room as if walking someone through it on a phone call.",
+  "Describe what's in front of you in shapes and colors only, no object names.",
+  "Describe the room you're in if the lights were off and you had to navigate it from memory.",
 
   // ---------------------------------------------------------------------------
-  // FLUENT GENERATION — name as many X as you can
+  // VERBAL FLUENCY (canonical neuropsych categories, bounded set)
   // ---------------------------------------------------------------------------
-  "Name as many animals as you can in 60 seconds.",
-  "Name as many animals that fly as you can.",
-  "Name as many animals that swim as you can.",
-  "Name as many fruits as you can.",
-  "Name as many vegetables as you can.",
-  "Name as many kinds of cheese as you can.",
-  "Name as many kinds of bread as you can.",
-  "Name as many spices as you can.",
-  "Name as many herbs as you can.",
-  "Name as many kinds of pasta as you can.",
-  "Name as many breeds of dog as you can.",
-  "Name as many kinds of bird as you can.",
-  "Name as many musical instruments as you can.",
-  "Name as many sports as you can.",
+  "Name as many animals as you can. Keep going until you stall.",
+  "Name as many things you'd find in a supermarket as you can.",
+  "Name as many words starting with the letter S as you can.",
+  "Name as many things you'd find in a kitchen as you can.",
   "Name as many countries as you can.",
-  "Name as many rivers as you can.",
-  "Name as many languages as you can.",
-  "Name as many teas as you can.",
-  "Name as many desserts as you can.",
-  "Name as many ice cream flavors as you can.",
+  "Name as many tools as you can.",
+  "Name as many words starting with the letter F as you can.",
 
   // ---------------------------------------------------------------------------
-  // SENSORY: TASTE — describe the taste of X to someone who's never had it
+  // RECENT INPUTS (media, reading, recommendations)
   // ---------------------------------------------------------------------------
-  "Describe the taste of water to someone who has never had it.",
-  "Describe the taste of plain white rice to someone who has never had it.",
-  "Describe the taste of a ripe banana to someone who has never had it.",
-  "Describe the taste of celery to someone who has never had it.",
-  "Describe the taste of dark chocolate to someone who has never had it.",
-  "Describe the taste of honey to someone who has never had it.",
-  "Describe the taste of a lemon to someone who has never had it.",
-  "Describe the taste of olive oil to someone who has never had it.",
-  "Describe the taste of black pepper to someone who has never had it.",
-  "Describe the taste of a fresh strawberry to someone who has never had it.",
-  "Describe the taste of butter to someone who has never had it.",
-  "Describe the taste of a mango to someone who has never had it.",
+  "Last show or movie you watched. What happened in it?",
+  "Last book or article you read more than a paragraph of. What was it about?",
+  "Last podcast, song, or audio you remember. What was on it?",
+  "Most recent piece of news you read. What was the story?",
+  "Last thing someone recommended to you. What and who.",
+  "What's the last screenshot you took, and why?",
+  "A video, post, or short you watched recently. What was it.",
+  "Last tab you closed without finishing. What was on it.",
+  "Last image you saved or downloaded. What of.",
+  "Last thing you sent to someone via link or share. What, and to whom.",
 
   // ---------------------------------------------------------------------------
-  // SENSORY: SMELL — describe the smell of X to someone who's never smelled it
+  // BODILY ATTENTION
   // ---------------------------------------------------------------------------
-  "Describe the smell of coffee brewing to someone who has never smelled it.",
-  "Describe the smell of bread baking to someone who has never smelled it.",
-  "Describe the smell of cut grass to someone who has never smelled it.",
-  "Describe the smell of a campfire to someone who has never smelled it.",
-  "Describe the smell of petrichor after rain to someone who has never smelled it.",
-  "Describe the smell of ocean air to someone who has never smelled it.",
-  "Describe the smell of a struck match to someone who has never smelled it.",
-  "Describe the smell of pine trees to someone who has never smelled it.",
-  "Describe the smell of lavender to someone who has never smelled it.",
-  "Describe the smell of an old book to someone who has never smelled it.",
-  "Describe the smell of fresh laundry to someone who has never smelled it.",
-  "Describe the smell of cinnamon to someone who has never smelled it.",
+  "Close your eyes for ten seconds. Open them. What do you notice that you weren't noticing before?",
+  "What does the inside of your mouth feel like right now?",
+  "Where in your body do you feel any tension right now?",
+  "Sounds you can hear with your eyes closed that you weren't tracking with them open.",
+  "The temperature on the back of your neck versus the front of your hands.",
+  "Any taste in your mouth right now from anything you ate or drank earlier.",
+  "Posture check. How are you actually sitting or standing right now?",
+  "What you can smell right now if you breathe in slowly through your nose.",
+  "How tired do your eyes feel, and where exactly is the tiredness.",
+  "The weight of your phone in your hand or pocket.",
+  "Where your weight is resting right now. Hips, feet, elbows.",
+  "How your clothing is touching your skin in three different places.",
 
   // ---------------------------------------------------------------------------
-  // SENSORY: TEXTURE — describe the feel of X to someone who's never felt it
+  // HIDDEN INVENTORY (location-cued recall, no peeking)
   // ---------------------------------------------------------------------------
-  "Describe the feel of silk to someone who has never felt it.",
-  "Describe the feel of raw denim to someone who has never felt it.",
-  "Describe the feel of velvet to someone who has never felt it.",
-  "Describe the feel of wet wool to someone who has never felt it.",
-  "Describe the feel of leather to someone who has never felt it.",
-  "Describe the feel of coarse sand to someone who has never felt it.",
-  "Describe the feel of tree bark to someone who has never felt it.",
-  "Describe the feel of smooth river stones to someone who has never felt it.",
-  "Describe the feel of raw bread dough to someone who has never felt it.",
-  "Describe the feel of grass underfoot to someone who has never felt it.",
-  "Describe the feel of a pinecone to someone who has never felt it.",
-  "Describe the feel of corduroy to someone who has never felt it.",
+  "What's in the third drawer down in your kitchen?",
+  "What's behind the door you most rarely open?",
+  "What's on top of the highest shelf you can see?",
+  "What's at the bottom of the bag you carry most?",
+  "What's in the glove compartment of the vehicle you use most often?",
+  "What's in the medicine cabinet?",
+  "Top of your fridge. What lives up there?",
+  "What's under your bed right now?",
+  "What's in the freezer, top to bottom?",
+  "Junk drawer. Inventory it from memory.",
+  "What's behind the couch or under the cushions?",
+  "What's on top of your dresser or nightstand?",
+  "What's in the trunk of the car you ride in most?",
+  "Inside the closet you opened most recently. Top shelf, hanging rod, floor.",
+  "Inside the pantry or food cupboard. Shelf by shelf.",
 
   // ---------------------------------------------------------------------------
-  // SENSORY: SOUND — describe the sound of X to someone who's never heard it
+  // INTANGIBLE INVENTORY
   // ---------------------------------------------------------------------------
-  "Describe the sound of rain on a window to someone who has never heard it.",
-  "Describe the sound of a door slamming to someone who has never heard it.",
-  "Describe the sound of a key turning in a lock to someone who has never heard it.",
-  "Describe the sound of footsteps on gravel to someone who has never heard it.",
-  "Describe the sound of typing on a keyboard to someone who has never heard it.",
-  "Describe the sound of a clock ticking to someone who has never heard it.",
-  "Describe the sound of velcro being pulled apart to someone who has never heard it.",
-  "Describe the sound of paper being crumpled to someone who has never heard it.",
-  "Describe the sound of water boiling to someone who has never heard it.",
-  "Describe the sound of scissors cutting paper to someone who has never heard it.",
-  "Describe the sound of a pencil being sharpened to someone who has never heard it.",
-  "Describe the sound of a creaking floorboard to someone who has never heard it.",
+  "Recurring charges hitting your card every month. Name as many as you can.",
+  "Browser tabs you currently have open. Approximate count, and any you'd hate to lose.",
+  "Folders or labels in your email inbox.",
+  "Files visible on your desktop right now.",
+  "Apps that open automatically when your computer boots.",
+  "Notification badges currently on your phone.",
+  "Bookmarks you actually use.",
+  "Saved cards or payment methods in any wallet app.",
+  "Subscriptions you've canceled in the last year.",
+  "Names in your phone contacts starting with M.",
+  "Shortcuts and keybindings you use without thinking.",
+  "Apps on the home screen of your phone, in order.",
 
   // ---------------------------------------------------------------------------
-  // SPATIAL MEMORY — describe a place from memory
+  // OBJECT PROVENANCE
   // ---------------------------------------------------------------------------
-  "Walk through the layout of your home, room by room.",
-  "Describe a grocery store you know well, aisle by aisle.",
-  "Describe a coffee shop you know well.",
-  "Describe a park you know well in physical detail.",
-  "Describe a school hallway from your memory.",
-  "Describe a classroom from your memory.",
-  "Describe a library you've spent time in.",
-  "Describe a hotel room you've stayed in.",
-  "Describe an airport terminal you've passed through.",
-  "Walk through the path from your bed to your kitchen.",
-  "Describe the inside of your car or the vehicle you use most.",
-  "Describe a street corner you pass often.",
-  "Walk through the route from your front door to the nearest store.",
-  "Describe the area around where you live.",
-  "Describe a staircase you climb often.",
-  "Describe a restaurant you've eaten at more than once. The physical space.",
-  "Describe a gas station you've been to recently.",
-  "Describe a waiting room you've sat in.",
+  "An object near you. Where did it come from? When did you get it?",
+  "The cup or mug you use most often. Where it came from.",
+  "A piece of clothing you're wearing. Where you got it, when, what it cost if you remember.",
+  "An object you've kept for more than ten years. Its history.",
+  "Last gift you received. From whom, when, on what occasion.",
+  "Last thing you got for free. What and how.",
+  "Something within sight that was once owned by someone else before you.",
+  "An object in your home that came from a different country.",
+  "The oldest piece of furniture in your home. Where it came from.",
 
   // ---------------------------------------------------------------------------
-  // PERSPECTIVE SHIFT — describe X from an unusual vantage point or frame
+  // SEMANTIC RECALL (what you know from your life, retrieved cold)
   // ---------------------------------------------------------------------------
-  "Describe the room you're in as if writing stage directions for a play.",
-  "Describe the room you're in from the perspective of a ceiling camera.",
-  "Describe the room you're in from knee height.",
-  "Describe the room you're in as if narrating for an audiobook.",
-  "Describe the sounds you can hear right now, ordered from nearest to farthest.",
-  "Describe everything on the nearest shelf, left to right.",
-  "Describe everything you can see that is made of metal.",
-  "Describe everything within arm's reach by texture rather than name.",
+  "Phone numbers you can still recite from memory.",
+  "Email addresses you can type from muscle memory.",
+  "Songs you know all the lyrics to. List them.",
+  "Movies you've watched more than three times.",
+  "Books you've read more than once.",
+  "Foreign-language phrases you remember from a class or trip.",
+  "Names of teachers you had before age 12.",
+  "Streets that border your neighborhood.",
+  "Recipes you can cook without looking anything up.",
+  "License plates you've memorized at any point in your life.",
+  "Childhood phone numbers, addresses, or postal codes you still remember.",
 
   // ---------------------------------------------------------------------------
-  // ENUMERATION — count or list specific things
+  // DAILY GRAIN (procedural at rare granularity)
   // ---------------------------------------------------------------------------
-  "How many windows are in the room you're in? Describe each one.",
-  "Count the light sources in your room. Describe them.",
-  "List everything you can see that's blue.",
-  "How many apps did you open on your phone today? Name them.",
-  "Count the electronics in the room. Describe what each one does.",
-  "List every surface in the room you're in.",
-  "List everything you ate and drank today in order.",
-  "How many doors can you see from where you're sitting? Describe each one.",
+  "How you specifically tie your shoes. Knot type, which loop goes over which.",
+  "How you turn on the shower in your home. Which knob, which direction, how long until it's hot.",
+  "What sequence of buttons you press to take a screenshot on your phone.",
+  "How you open and close a window in the room you're in right now.",
+  "How you specifically lock your front door. Direction of turn, how it sounds.",
+  "The sequence of taps to open the camera on your phone from the lock screen.",
+  "How you actually use the toothpaste tube. Squeeze where, cap on or off, where it sits.",
+  "Which side of the bed you get in on, and the exact motion of getting in.",
+  "How you hold a pen. Which fingers, where it sits against the hand.",
+  "How you open a fresh jar. Hand position, technique if it's stuck.",
+
+  // ---------------------------------------------------------------------------
+  // KNOWN PEOPLE (factual recall, neutral)
+  // ---------------------------------------------------------------------------
+  "Someone you live with or share space with. Ten things you know about their preferences. Food, sleep, weather, anything.",
+  "A coworker or collaborator you've known longest. What they take in their coffee, where they live, how they get to work.",
+  "A parent, sibling, or close friend. What's currently in their kitchen, as best you remember.",
+  "Someone you saw last week. What they were wearing.",
+  "A neighbor. What you actually know about them.",
+  "A friend's home you've been to more than five times. Details about it.",
+  "A person who works at a place you visit often. Anything specific you know about them.",
+  "A relative you don't see often. What you remember of their home or habits.",
+
+  // ---------------------------------------------------------------------------
+  // TEMPORAL
+  // ---------------------------------------------------------------------------
+  "What's on your calendar for the next 48 hours?",
+  "Last thing you set an alarm for, at what time.",
+  "Days of this past week. Account for what you did each one.",
+  "Three things on your to-do list right now.",
+  "Last thing you added to a calendar invite or reminder.",
+  "What times of day you actually eat, on a normal day.",
+  "Months in the next year that already have something planned in them.",
+
+  // ---------------------------------------------------------------------------
+  // OBLIQUE INVENTORY (listing by unusual property)
+  // ---------------------------------------------------------------------------
+  "List the things in your home that exist primarily to hide other things.",
+  "Objects in your home that have moving parts.",
+  "Words written somewhere in the room right now. What they are and where.",
+  "Things in your home that came in a box and are still in the box.",
+  "Surfaces in the room you've never cleaned.",
+  "Objects within sight that run on batteries.",
+  "Things in your home that have your name written on them somewhere.",
+  "Items in your home that change appearance over time. Plants, photos, furniture.",
+  "Things in your home older than you are.",
+  "Objects in the room that are designed to be replaced and aren't yet.",
 ];
