@@ -4,7 +4,7 @@ A personal, monastic daily thinking journal. One question per day. No gamificati
 
 ## Stack
 - Astro (SSR, Node adapter)
-- PostgreSQL 17 + pgvector. Env `ALICE_PG_URL` (`postgres://localhost/alice`), schema `alice`, `search_path = alice,public`
+- PostgreSQL 17 + pgvector on Supabase (us-west-2). Env `ALICE_PG_URL` is the **only** DB. Canonical value lives in `.env` (Supabase pooler URL). The local Postgres is dead — do not query `postgres://localhost/alice`, do not seed it, do not migrate against it. When running `psql` from the CLI, source `.env` first (`set -a; source .env; set +a`) so `ALICE_PG_URL` resolves to Supabase, not the shell default. Schema `alice`, `search_path = alice,public`.
 - Rust signal engine via napi-rs (`src-rs/`: dynamical + motor + process)
 - Claude API (`@anthropic-ai/sdk`) for question generation
 - TypeScript (strict)
