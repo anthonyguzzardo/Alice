@@ -184,14 +184,9 @@ The variant enum table `te_adversary_variants` stores the five variant definitio
 
 ### Backfill
 
-Backfill scripts exist for both forward and retroactive computation:
+The dedicated reconstruction backfill scripts (`backfill-rburst-sequences.ts`, `backfill-hold-flight-corr.ts`, `backfill-adversary-variants.ts`, `backfill-profile.ts`) were removed during paper cleanups. The forward pipeline is now the only path: every new session computes all five variants on submission, and idempotent guards (`if (!residualExists)`) make replay safe. If retroactive variant computation becomes necessary again, reintroduce the scripts under a single backfill entry point rather than the four-step ordering that previously existed.
 
-- `src/scripts/backfill-rburst-sequences.ts`: Extracts per-R-burst detail (size, duration, leading-edge flag) from existing event logs into `tb_rburst_sequences`. Computes `rburst_trajectory_shape` on session metadata. Refreshes profile at the end. Idempotent.
-- `src/scripts/backfill-hold-flight-corr.ts`: One-off. Computes `hold_flight_rank_corr` from existing keystroke streams for motor signal rows that predate migration 010. Required before profile regeneration.
-- `src/scripts/backfill-adversary-variants.ts`: Finds sessions with baseline (variant 1) but missing variants 2-5. Calls `computeReconstructionResidual()` which internally loops over all variants and skips existing ones. Idempotent.
-- `src/scripts/backfill-profile.ts`: Regenerates the personal profile from all sessions. Must be run after R-burst and hold-flight-corr backfills to populate all profile fields.
-
-**Backfill order:** rburst-sequences, then hold-flight-corr, then profile, then adversary-variants.
+A stale reference to `backfill-adversary-variants` remains in `src-rs/src/avatar.rs` (comment near line 1082); that comment is the only remaining trace of the removed workflow and should be cleaned up the next time that file is touched.
 
 ### Profile fields feeding the ghost
 
@@ -210,27 +205,29 @@ One new field in `tb_motor_signals`:
 |-------|------------|---------|
 | `hold_flight_rank_corr` | Spearman rank correlation between paired hold and flight times per session. Fractional ranks with tie handling. Minimum 30 pairs. | Spearman (1904) |
 
-## Empirical results (26 sessions, 63 corpus entries, post-INC-001 recomputation)
+## Empirical results (46 sessions, owner only, 2026-04-23 to 2026-05-05)
 
 | Variant | Avg Total L2 | Avg Motor L2 | Avg Dynamical L2 | Avg Semantic L2 |
 |---------|-------------|-------------|-----------------|----------------|
-| 1. Baseline | 52.3 | 90.8 | 1.35 | 0.159 |
-| 2. Conditional Timing | 92.1 | **88.8** | 73.75 | 0.158 |
-| 3. Copula Motor | 57.7 | 99.9 | 0.67 | 0.169 |
-| 4. PPM Text | 55.0 | 98.0 | **0.31** | **0.134** |
-| 5. Full Adversary | 59.1 | 91.1 | 0.33 | 0.169 |
+| 1. Baseline | 42.51 | 100.48 | 2.28 | 0.179 |
+| 2. Conditional Timing | **38.88** | **85.00** | 2.60 | 0.173 |
+| 3. Copula Motor | 40.62 | 98.36 | **1.78** | 0.193 |
+| 4. PPM Text | 41.14 | 96.82 | 2.02 | 0.210 |
+| 5. Full Adversary | 40.39 | 91.83 | 2.22 | **0.170** |
 
 ### What the numbers say
 
-**Conditional Timing (variant 2) has the lowest motor L2 (88.8) but the highest total L2 (92.1).** The AR(1) process preserves keystroke rhythm and modestly closes the motor gap. But it creates artificial complexity patterns that the dynamical signals detect as anomalous, blowing up dynamical L2 from 1.35 to 73.75. The AR(1) process is too regular; real cognitive events produce temporal complexity that a simple autoregressive model cannot replicate. This is informative: the motor residual is not just about serial dependence.
+**Conditional Timing (variant 2) has the lowest motor L2 (85.00) and the lowest total L2 (38.88).** AR(1) timing closes the motor gap by ~15 points relative to baseline. The earlier reading at 26 sessions saw AR(1) blow up dynamical L2 (73.75 vs 1.35 baseline) as an artifact of the synthesized rhythm; that artifact is no longer present at 46 sessions, with variant 2 dynamical L2 sitting at 2.60. Either the synthesis was tightened, or the older measurement reflected an earlier algorithmic state. Worth tracing in git history before treating the new picture as final.
 
-**Copula Motor (variant 3) makes motor worse (99.9 vs 90.8).** Coupling hold and flight times jointly introduces motor patterns that diverge further from real execution. The empirical rank correlation (rho = -0.189) is mild, and imposing it on the synthesis creates a coupling artifact the motor signals detect. The hold-flight relationship in real typing is more complex than a single correlation coefficient.
+**Copula Motor (variant 3) wins on dynamical L2 (1.78).** Imposing the empirical hold-flight rank correlation produces the cleanest dynamical structure of the five variants. Motor stays within the floor (98.36).
 
-**PPM Text (variant 4) wins on semantics (0.134 vs 0.159) and dynamical (0.31 vs 1.35).** Better text generation closes the gaps that better text should close, without affecting motor. This is the expected result and a sanity check: the text generation and timing synthesis axes are independent in the measurement.
+**PPM Text (variant 4) is the worst on semantic (0.210), reversing the older reading.** At 26 sessions PPM was the semantic winner (0.134); at 46 sessions it is the worst, and Full Adversary (variant 5) wins semantic at 0.170. PPM still keeps motor and dynamical near the floor. The semantic flip is the most surprising change between the two empirical snapshots and is worth investigating: either richer text from PPM is now diverging from journal-style writing in some measurable way, or the semantic signal computation itself has shifted.
 
-**Full Adversary (variant 5) lands at motor 91.1.** The combination of all improvements produces a negligible motor change over baseline (91.1 vs 90.8). The motor floor remains firmly in the 89-100 range across all variants.
+**Full Adversary (variant 5) lands at motor 91.83.** Combining all three improvements produces a motor residual between baseline (100.48) and the AR(1)-only variant 2 (85.00). The combined adversary does not beat AR(1) alone on motor, suggesting the copula and PPM additions slightly degrade the motor reconstruction that AR(1) achieves on its own.
 
-**The motor residual is real.** Five different statistical strategies, three of them specifically targeting motor execution, and the floor has not meaningfully moved. The cognitive signal lives in motor timing sequences, not in the distributions or correlations the variants can replicate.
+**The motor residual still holds across variants.** All five sit in the 85-100 range. The headline finding from the original write-up survives the larger-N recomputation: no statistical strategy collapses the motor floor.
+
+**Caveats on the new picture.** The variants are barely separated on total L2 (38-42, ~10% spread). At 46 sessions the variance per variant is still wide enough that the rank ordering may not be stable. Treat the qualitative findings (motor floor holds, AR(1) closes motor most, PPM no longer dominates semantic) as more reliable than the specific point estimates.
 
 ## The ten connected potentials
 
