@@ -45,34 +45,75 @@ async function main(): Promise<void> {
 === EXISTING CORPUS (${corpus.length} questions) ===
 ${numberedCorpus}
 
-=== QUESTION DESIGN PRINCIPLES ===
+=== THE PRIMARY TEST ===
 
-Every question must satisfy ALL of these criteria:
+The shortest honest answer must be a paragraph. If a noun phrase or single sentence feels complete, the question failed — both as a provocation (the answerer doesn't think) and as a measurement substrate (the signal pipeline needs sustained keystroke data; short sessions produce no measurement).
 
-1. UNANSWERABLE IN ONE SENTENCE. The question creates friction. A one-line answer means the question failed.
-2. ABOUT THE PERSON, NOT A TOPIC. "What are you avoiding?" not "What is avoidance?"
-3. NO RIGHT ANSWER. The person is thinking, not performing.
-4. WORTH RETURNING TO. The answer today differs from three months from now.
-5. SHORT. Under 15 words. One clause, one demand. Syntactically simple, cognitively demanding.
-6. DISTINCT FROM EVERY EXISTING QUESTION. Not a rephrasing, not a synonym, not the same question from a different angle. If it would feel repetitive to encounter both in the same month, it's too close.
+Before writing each question, mentally answer it with the laziest plausible response. If that response is a noun phrase ("Self-image." "My job." "Telling X I'm leaving.") or a single short sentence and feels structurally complete, the question is broken. Rework it.
 
-FRAMING RULES:
-- Use CAUSAL and EVALUATIVE framing. "Why" and "how do you reconcile" over "describe" or "what do you think about."
-- Use generative verbs: reconcile, examine, explore, confront, sit with. Avoid descriptive verbs: describe, list, identify, summarize.
-- Create a DISCLOSURE CONTEXT. The person should feel they are revealing something, not recording something.
-- Frame difficulty as invitation, not confrontation. Productive discomfort requires psychological safety.
+=== HOW SHAPE REFUSES CLOSURE ===
 
-DIVERSITY RULES:
-- Vary the domain: identity, relationships, work, fear, desire, time, meaning, contradiction, growth, loss.
-- Vary the cognitive demand: some questions ask for self-observation, some for evaluation, some for reconciliation of opposing positions.
-- Do NOT cluster around introspection. Some questions should be about action, decision, or the external world as it relates to the person.
+Use one of these structures. Mix across the batch.
 
-=== WHAT MAKES A QUESTION BAD ===
-- Therapy-speak: "How does that make you feel?" "What would your inner child say?"
-- Fortune-cookie wisdom: "What would you do if you couldn't fail?"
-- Too abstract: "What is the nature of your becoming?"
-- Too narrow: "What happened at work today?"
-- Redundant with an existing question (even if worded differently).`;
+A. Narrative anchor. Force a concrete past episode the answerer must reconstruct.
+   "Describe the last week you felt busiest. What were you not doing during it that you'd otherwise have to face?"
+
+B. Comparison / contradiction. Force articulation of two sides.
+   "What's the difference between what you say you value and how you actually spend your time?"
+
+C. Two-part with second clause forcing argument.
+   "If your life had a thesis statement, what would it be? Do you like it?"
+   "Who do you become when you're scared? Is that who you want to be?"
+
+D. Forecast + evidence. Predict own future behavior, then justify the prediction.
+   "Pick one thing you'd commit to for a year. Would you stay committed, or lose interest? What makes you think so?"
+
+E. Open consequence clause. Ask for what would change / what would be lost.
+   "What decision are you quietly avoiding? Describe what making it would actually look like."
+
+=== THE SECOND-CLAUSE RULE (LOAD-BEARING) ===
+
+When you add a second clause to force elaboration, that clause must OPEN the space, never NARROW it.
+
+OPEN clauses (good): ask for consequence, imagined scene, specific obstacle, evidence, or contrast.
+- "...and what would change if you let yourself want it openly?"
+- "...describe what stops you from having it."
+- "...what makes you think so?"
+
+NARROWING clauses (forbidden): smuggle a presupposed psychology, telling the answerer what frame to use.
+- "...what does the avoidance let you keep believing about yourself?" (assumes self-deception)
+- "...the version of yourself you're trying to outgrow." (assumes outgrowing)
+- "...what does the performance protect?" (assumes defensiveness)
+- "...what makes circling more bearable than committing?" (assumes anxiety-escape)
+
+The first clause poses the probe. The second clause clears space for the answer; it does not interpret on the answerer's behalf. Words like "protect," "outgrow," "what does this let you avoid," "what version of yourself," "what does this defend against" are red flags — they do interpretive work the answerer should do.
+
+=== OTHER CRITERIA ===
+
+- ABOUT THE PERSON, NOT A TOPIC. "What are you avoiding?" not "What is avoidance?"
+- NO RIGHT ANSWER. The person is thinking, not performing.
+- WORTH RETURNING TO. The answer today differs from three months from now.
+- DISTINCT FROM EVERY EXISTING QUESTION. Not a rephrasing or synonym. If two would feel repetitive in the same month, they're too close.
+- TIME-BOUND CHECKPOINTS ARE A TIC. "By day five," "in month eight," "by Friday," "this week" — fine to use ONCE in a corpus, not per question. Default to no timestamp.
+- AVOID THERAPY-SPEAK ("how does that make you feel," "inner child"), FORTUNE-COOKIE FRAMING ("what would you do if you couldn't fail"), AND ABSTRACT TOPIC QUESTIONS ("what is the nature of becoming").
+
+=== DIVERSITY ===
+
+Vary domain across the batch: identity, relationships, work, fear, desire, time, meaning, contradiction, growth, loss, action, decision, and the external world as it relates to the person. Don't cluster around introspection — some questions should probe action and external commitments.
+
+=== WORKED EXAMPLES OF FAILURE → FIX ===
+
+BAD: "What are you protecting by staying busy?"
+WHY: noun-phrase answer ("self-image"); also "protecting" presupposes defensiveness.
+FIXED: "Describe the last week you felt busiest. What were you not doing during it that you'd otherwise have to face?"
+
+BAD: "What would you do if you knew nobody was watching?"
+WHY: noun-phrase answer ("write").
+FIXED: "Describe how your day would change if no one were watching. Where would the changes be largest? What would surprisingly stay the same?"
+
+BAD: "If you could only do one thing for the next year, what would it be?"
+WHY: noun-phrase answer ("build the company").
+FIXED: "Pick one thing you'd commit to for a year. Would you stay committed, or lose interest? What makes you think so?"`;
 
   const userPrompt = `Generate exactly ${count} candidate questions for the corpus.
 
@@ -82,7 +123,7 @@ Output format: one question per line, no numbering, no commentary, no blank line
 
   const message = await client.messages.create({
     model: 'claude-sonnet-4-20250514',
-    max_tokens: 1024,
+    max_tokens: 4096,
     system: systemPrompt,
     messages: [{ role: 'user', content: userPrompt }],
   });
