@@ -52,7 +52,7 @@ export const SEED_QUESTIONS: string[] = [
   "Describe the version of your life you're most afraid of ending up in. What's the smallest decision being made right now that bends toward it?",
   "What are you circling that you haven't landed on? Describe what landing would require, and what makes circling preferable to committing.",
   "Pick one thing you'd commit to for a year. Would you stay committed, or lose interest? What makes you think so?",
-  "What would it mean to stop optimizing and start choosing? Describe where the difference would actually show up.",
+  "Describe a recent decision you made on autopilot. If you had paused and actually chosen, what would have been different?",
 
   // Days 28-29: Return
   "Go back and read your first response. What do you notice?",

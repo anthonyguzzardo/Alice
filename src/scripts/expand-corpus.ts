@@ -96,6 +96,7 @@ The first clause poses the probe. The second clause clears space for the answer;
 - DISTINCT FROM EVERY EXISTING QUESTION. Not a rephrasing or synonym. If two would feel repetitive in the same month, they're too close.
 - TIME-BOUND CHECKPOINTS ARE A TIC. "By day five," "in month eight," "by Friday," "this week" — fine to use ONCE in a corpus, not per question. Default to no timestamp.
 - AVOID THERAPY-SPEAK ("how does that make you feel," "inner child"), FORTUNE-COOKIE FRAMING ("what would you do if you couldn't fail"), AND ABSTRACT TOPIC QUESTIONS ("what is the nature of becoming").
+- BEWARE THE TOPIC QUESTION IN A DISCLOSURE COSTUME. The question "What would it mean to stop optimizing and start choosing?" sounds personal because of the verbs, but it's a definitional question that requires the answerer to first accept a philosophical premise (optimizing vs choosing as opposed modes) and then perform within it. Detector: if the answerer must accept your framing before they can answer, it's a topic question — cut it. Personal questions probe what is, not what would-it-mean.
 
 === DIVERSITY ===
 
@@ -113,7 +114,25 @@ FIXED: "Describe how your day would change if no one were watching. Where would 
 
 BAD: "If you could only do one thing for the next year, what would it be?"
 WHY: noun-phrase answer ("build the company").
-FIXED: "Pick one thing you'd commit to for a year. Would you stay committed, or lose interest? What makes you think so?"`;
+FIXED: "Pick one thing you'd commit to for a year. Would you stay committed, or lose interest? What makes you think so?"
+
+BAD: "What would it mean to stop optimizing and start choosing? Describe where the difference would actually show up."
+WHY: definitional / abstract / presupposed worldview. "What would it mean to..." asks for a definition, not a disclosure. The answerer has to first accept that "optimizing" and "choosing" are opposed modes before they can answer — it's seminar bait wearing a disclosure costume. Adding a second clause ("describe where the difference would show up") doesn't fix it because the difference is the question's own premise; the structure is circular.
+FIXED: "Describe a recent decision you made on autopilot. If you had paused and actually chosen, what would have been different?"
+FIX PATTERN: replace abstract definitional with concrete past-episode + counterfactual. The episode forces narrative grounding; the counterfactual forces honesty about what was actually being skipped.
+
+=== CANONICAL GOOD EXAMPLES ===
+
+These are confirmed-passing questions from the seed list. Use them as positive grounding for the shape and tone you're aiming for. Notice that none of them require the answerer to accept a frame before answering.
+
+- "When was the last time you changed your mind about something that mattered?"
+- "What's the difference between what you say you value and how you actually spend your time?"
+- "When do you feel most like yourself? What's different about those moments?"
+- "What's the story you tell yourself about why things haven't worked out the way you wanted?"
+- "What would it look like to take yourself seriously?"
+- "If your life had a thesis statement, what would it be? Do you like it?"
+- "Who do you become when you're scared? Is that who you want to be?"
+- "Describe a recent decision you made on autopilot. If you had paused and actually chosen, what would have been different?"`;
 
   const userPrompt = `Generate exactly ${count} candidate questions for the corpus.
 
