@@ -733,13 +733,29 @@
               }
             }
             // Seed alerts — subjects whose personal queue is about to run dry.
+            // Runway = seeds_remaining + corpus_unseen_for_subject. Below the
+            // threshold means corpus needs a refresh; above means corpus will
+            // cover the transition without action.
             if (seedAlerts.length > 0) {
-              const sa = seedAlerts as Array<{ subject_id: number; username: string; remaining: number }>;
-              html += row(`Seeds running low`, String(sa.length), 'warn');
+              const sa = seedAlerts as Array<{ subject_id: number; username: string; remaining: number; corpusUnseen: number; totalRunway: number }>;
+              const RUNWAY_THRESHOLD = 7;
+              const critical = sa.filter(s => s.totalRunway < RUNWAY_THRESHOLD);
+              const headerCls = critical.length > 0 ? 'warn' : '';
+              html += row(`Seeds running low`, String(sa.length), headerCls);
               html += '<div class="stage-list">' +
-                sa.map(s => `<span class="stage warn">${s.username}: ${s.remaining} left</span>`).join('') +
+                sa.map(s => {
+                  const cls = s.totalRunway < RUNWAY_THRESHOLD ? 'warn' : '';
+                  const tail = s.totalRunway < RUNWAY_THRESHOLD
+                    ? ` (corpus low, ${s.totalRunway} days runway)`
+                    : ` (+ ${s.corpusUnseen} corpus, ~${s.totalRunway} days runway)`;
+                  return `<span class="stage ${cls}">${s.username}: ${s.remaining} left${tail}</span>`;
+                }).join('') +
                 '</div>';
-              html += '<div class="empty" style="margin-top:0.4rem;">Run <code>npm run corpus:refresh</code> (writes 30 candidates to <code>data/corpus-candidates-YYYY-MM-DD.md</code>), review, then <code>npm run corpus:approve data/&lt;file&gt;.md</code>. Additive — never overwrites a subject\'s personal queue.</div>';
+              if (critical.length > 0) {
+                html += '<div class="empty" style="margin-top:0.4rem;">Corpus is low for ' + critical.length + ' subject' + (critical.length > 1 ? 's' : '') + '. Run <code>npm run corpus:refresh</code>, review <code>data/corpus-candidates-YYYY-MM-DD.md</code>, then <code>npm run corpus:approve data/&lt;file&gt;.md</code>. Additive — never overwrites a subject\'s personal queue.</div>';
+              } else {
+                html += '<div class="empty" style="margin-top:0.4rem;">Corpus is queued to take over when seeds exhaust. No action needed.</div>';
+              }
             }
           }
         }

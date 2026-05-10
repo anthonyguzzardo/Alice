@@ -54,7 +54,7 @@ interface HealthResponse {
   pendingWork: {
     embeds: number;
     embedsBySubject: Array<{ subject_id: number; username: string; count: number }>;
-    seedAlerts: Array<{ subject_id: number; username: string; remaining: number }>;
+    seedAlerts: Array<{ subject_id: number; username: string; remaining: number; corpusUnseen: number; totalRunway: number }>;
     teiAvailable: boolean;
   };
   rustEngine: boolean;
@@ -205,27 +205,42 @@ export const GET: APIRoute = async () => {
   const pendingEmbeds = embedsBySubject.reduce((sum, r) => sum + r.count, 0);
   const teiAvailable = await isTeiAvailable();
 
-  // Seed alerts — any subject with 0 < unanswered_seeds ≤ 5. Triggers the
-  // owner to manually run an LLM corpus refresh (additive to tb_question_corpus,
+  // Seed alerts — any subject with 0 < unanswered_seeds ≤ 5. Once seeds run
+  // out the subject draws from tb_question_corpus, so true runway is
+  // seeds_remaining + (corpus questions this subject hasn't yet been served).
+  // The alert text downstream routes off totalRunway, not remaining alone.
+  // Owner runs `npm run corpus:refresh` (additive to tb_question_corpus,
   // never overwrites a subject's personal queue). See METHODS_PROVENANCE.md
   // INC-014 for the corpus-refresh pivot rationale.
   const seedAlertRows = await sql`
-    SELECT subject_id AS "subjectId", username, remaining
+    SELECT subject_id AS "subjectId", username, remaining, "corpusUnseen"
     FROM (
       SELECT s.subject_id, s.username,
         COUNT(q.question_id) FILTER (
           WHERE q.question_source_id = 1
             AND NOT EXISTS (SELECT 1 FROM tb_responses r WHERE r.question_id = q.question_id)
-        )::int AS remaining
+        )::int AS remaining,
+        (
+          SELECT COUNT(*)::int FROM tb_question_corpus c
+          WHERE NOT c.is_retired
+            AND c.corpus_question_id NOT IN (
+              SELECT corpus_question_id FROM tb_questions
+              WHERE subject_id = s.subject_id AND corpus_question_id IS NOT NULL
+            )
+        ) AS "corpusUnseen"
       FROM tb_subjects s
       LEFT JOIN tb_questions q ON q.subject_id = s.subject_id
       GROUP BY s.subject_id, s.username
     ) t
     WHERE remaining > 0 AND remaining <= 5
     ORDER BY remaining ASC
-  ` as Array<{ subjectId: number; username: string; remaining: number }>;
+  ` as Array<{ subjectId: number; username: string; remaining: number; corpusUnseen: number }>;
   const seedAlerts = seedAlertRows.map(r => ({
-    subject_id: r.subjectId, username: r.username, remaining: r.remaining,
+    subject_id: r.subjectId,
+    username: r.username,
+    remaining: r.remaining,
+    corpusUnseen: r.corpusUnseen,
+    totalRunway: r.remaining + r.corpusUnseen,
   }));
 
   // --- OVERALL -------------------------------------------------------------
