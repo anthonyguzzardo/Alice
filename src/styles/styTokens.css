@@ -49,7 +49,7 @@
   --btn-text: #1a1a1a;
 
   /* ── journal/calibration specific ───────────────────────────────── */
-  --done-text: #8a8580;
+  --done-text: #6b6560;
   --loading: #c5c0ba;
   --free-border: #c5c0ba;
   --free-hover-bg: rgba(0, 0, 0, 0.03);
@@ -91,7 +91,7 @@
   --btn-hover: #4a4540;
   --btn-text: #f0ece4;
 
-  --done-text: #948e85;
+  --done-text: #c4beb5;
   --loading: #948e85;
   --free-border: #6a655f;
   --free-hover-bg: rgba(255, 255, 255, 0.04);
