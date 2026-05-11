@@ -1,5 +1,5 @@
 /**
- * 29 seed questions for Alice.
+ * 28 seed questions for Alice.
  *
  * Test: the shortest honest answer is still a paragraph. Noun-phrase answers
  * mean the question failed — both as a provocation and as a measurement
@@ -17,6 +17,9 @@
  * 3. About you, not a topic — not a seminar question.
  * 4. No right answer — you're thinking, not performing.
  * 5. Worth returning to — your answer today differs from three months from now.
+ * 6. The subject's prior responses are a black box to them. Never write a
+ *    question that asks them to re-read, recall verbatim, or reference what
+ *    they "already said / showed." The journal does not surface history.
  */
 export const SEED_QUESTIONS: string[] = [
   // Week 1: Surface — what's already in motion
@@ -53,8 +56,4 @@ export const SEED_QUESTIONS: string[] = [
   "What are you circling that you haven't landed on? Describe what landing would require, and what makes circling preferable to committing.",
   "Pick one thing you'd commit to for a year. Would you stay committed, or lose interest? What makes you think so?",
   "Describe a recent decision you made on autopilot. If you had paused and actually chosen, what would have been different?",
-
-  // Days 28-29: Return
-  "Go back and read your first response. What do you notice?",
-  "What question should Alice have asked you that it didn't? Describe why that question matters, and what your answer would reveal that you haven't already shown.",
 ];
