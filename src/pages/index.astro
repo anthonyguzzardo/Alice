@@ -502,8 +502,6 @@
           <a href="/observatory">Observatory</a>
           <div class="nav-divider"></div>
           <a href="/dev/signals">Signal Sandbox</a>
-          <div class="nav-divider"></div>
-          <a href="#" id="nav-logout">Log out</a>
         </div>
       </div>
       <div class="health-wrap">
@@ -514,6 +512,7 @@
         <div class="health-panel" id="health-panel" role="dialog" aria-label="Pipeline status"></div>
       </div>
       <button class="top-btn" id="theme-toggle" aria-label="Toggle theme"></button>
+      <button class="top-btn" id="logout-btn" aria-label="Log out" title="Log out">⏻</button>
     </div>
     <div class="container">
       <div class="date" id="date"></div>
@@ -552,9 +551,9 @@
       });
 
       // Logout — wipes the server session row and clears the cookie, then
-      // bounces to /login. The button lives in the nav dropdown.
-      document.getElementById('nav-logout')!.addEventListener('click', async (e) => {
-        e.preventDefault();
+      // bounces to /login. Always-visible power button in the top-right,
+      // matching the subject surface.
+      document.getElementById('logout-btn')!.addEventListener('click', async () => {
         try { await fetch('/api/subject/logout', { method: 'POST' }); }
         catch { /* fall through to redirect anyway */ }
         window.location.href = '/login';
