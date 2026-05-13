@@ -119,20 +119,3 @@ export async function getOwner(): Promise<Subject> {
   if (!owner) throw new Error('No owner row in tb_subjects — seed data missing');
   return owner;
 }
-
-// ----------------------------------------------------------------------------
-// Mutations
-// ----------------------------------------------------------------------------
-
-/**
- * Deactivate a subject by id. Returns true if the row was updated.
- * Owner row cannot be deactivated.
- */
-export async function deactivateSubject(id: number): Promise<boolean> {
-  const result = await sql`
-    UPDATE tb_subjects
-    SET is_active = FALSE, dttm_modified_utc = CURRENT_TIMESTAMP
-    WHERE subject_id = ${id} AND is_active = TRUE AND is_owner = FALSE
-  `;
-  return result.count > 0;
-}
