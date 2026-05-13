@@ -16,7 +16,7 @@
  * → question_id` to match the unified schema.
  */
 import type { APIRoute } from 'astro';
-import { getScheduledQuestion } from '../../../lib/libScheduler.ts';
+import { getScheduledQuestion, scheduleQuestionForSubject } from '../../../lib/libScheduler.ts';
 import { getResponseText } from '../../../lib/libDb.ts';
 import { localDateStr } from '../../../lib/utlDate.ts';
 
@@ -25,6 +25,12 @@ export const GET: APIRoute = async ({ locals }) => {
   const subject = locals.subject!;
 
   const today = localDateStr(new Date(), subject.iana_timezone);
+
+  // Self-heal: if cron hasn't pre-planted today's corpus draw yet, schedule
+  // one inline. Idempotent on (subject_id, scheduled_for) — returns the
+  // existing row if today is already scheduled.
+  await scheduleQuestionForSubject(subject.subject_id, today);
+
   const scheduled = await getScheduledQuestion(subject.subject_id, today);
 
   if (!scheduled) {

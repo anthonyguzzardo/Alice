@@ -334,7 +334,7 @@ There are no cron jobs, no scheduled tasks, no server dependencies. The system i
 - Schema managed by `db/sql/dbAlice_Tables.sql` (schema `alice`) with proper PostgreSQL types: `DOUBLE PRECISION` for all timing and signal values, `BOOLEAN` for flags, `DATE` for calendar dates, `TIMESTAMPTZ` for event timestamps, `SMALLINT` for bounded integers with `CHECK` constraints, `JSONB` for structured data
 - Rust native signal engine (`src-rs/`) for compute-heavy algorithms (RQA O(n^2), sample entropy O(n^2*m), DFA, permutation entropy, transfer entropy, ex-Gaussian fitting, process signal replay, profile distance, batch correlations). Single source of truth; no TypeScript fallback. Built via `npm run build:rust`, auto-built on `npm run dev`.
 - Microsecond-precision keystroke capture via `performance.now()` (~5 microsecond resolution). IEEE 754 float64 at every boundary: browser capture, JSON transport, Rust `f64` computation, PostgreSQL `DOUBLE PRECISION` storage. No conversion loss.
-- Seed questions in `src/lib/libSeeds.ts`
+- Daily questions drawn from `tb_question_corpus` by `libScheduler.scheduleQuestionForSubject` (round-robin no-repeat, falls back to oldest-last-seen on exhaustion). Pre-planted nightly by `src/scripts/schedule-questions.ts` and self-healed on-demand inside `/api/today` and `/api/subject/today`.
 - RAG-based memory: every entry is embedded and retrievable by semantic similarity with recency weighting
 - Contrarian retrieval: deliberately surfaces entries that are most *dissimilar* to current themes
 - Bounded prompt assembly: recent entries (verbatim) + RAG-retrieved older entries + contrarian entries + structured receipts

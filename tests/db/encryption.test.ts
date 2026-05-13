@@ -25,7 +25,6 @@
 import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import sql, {
   saveResponse,
-  scheduleQuestion,
   saveSessionEvents,
   insertEmbeddingMeta,
   getResponseText,
@@ -34,8 +33,22 @@ import sql, {
   getKeystrokeStreamJson,
   getSessionEvents,
 } from '../../src/lib/libDb.ts';
+import { encrypt } from '../../src/lib/libCrypto.ts';
 
 const SUBJECT_ID = 9001;
+
+// Test-only fixture: insert an encrypted tb_questions row. The production
+// scheduler doesn't expose a plant-by-text path anymore (corpus draws only);
+// this helper mirrors what the retired `scheduleQuestion` used to do so the
+// encryption round-trip can be exercised without coupling to corpus state.
+async function insertTestQuestion(subjectId: number, text: string, date: string, sourceId = 1): Promise<void> {
+  const enc = encrypt(text);
+  await sql`
+    INSERT INTO tb_questions (subject_id, text_ciphertext, text_nonce, question_source_id, scheduled_for)
+    VALUES (${subjectId}, ${enc.ciphertext}, ${enc.nonce}, ${sourceId}, ${date})
+    ON CONFLICT (subject_id, scheduled_for) DO NOTHING
+  `;
+}
 
 afterAll(async () => {
   await sql.end({ timeout: 5 });
@@ -62,7 +75,7 @@ describe('migration 031 — encryption round-trip through libDb', () => {
     // First we need a question (FK from response → question). scheduleQuestion
     // is also encrypted, so this also exercises tb_questions.text.
     const plaintextQuestion = 'Today, what surprised you?';
-    await scheduleQuestion(SUBJECT_ID, plaintextQuestion, '2026-04-27', 'seed');
+    await insertTestQuestion(SUBJECT_ID, plaintextQuestion, '2026-04-27');
     const qRows0 = await sql`
       SELECT question_id FROM tb_questions WHERE subject_id = ${SUBJECT_ID} AND scheduled_for = '2026-04-27'
     ` as Array<{ question_id: number }>;
@@ -89,7 +102,7 @@ describe('migration 031 — encryption round-trip through libDb', () => {
   });
 
   it('tb_questions.text — round-trip via getQuestionTextById', async () => {
-    await scheduleQuestion(SUBJECT_ID, 'What does honesty cost you today?', '2026-04-28', 'seed');
+    await insertTestQuestion(SUBJECT_ID, 'What does honesty cost you today?', '2026-04-28');
     const qRowsX = await sql`
       SELECT question_id FROM tb_questions WHERE subject_id = ${SUBJECT_ID} AND scheduled_for = '2026-04-28'
     ` as Array<{ question_id: number }>;
@@ -106,7 +119,7 @@ describe('migration 031 — encryption round-trip through libDb', () => {
   });
 
   it('tb_embeddings.embedded_text — round-trip via insertEmbeddingMeta path', async () => {
-    await scheduleQuestion(SUBJECT_ID, 'placeholder', '2026-04-30', 'seed');
+    await insertTestQuestion(SUBJECT_ID, 'placeholder', '2026-04-30');
     const qRowsX = await sql`
       SELECT question_id FROM tb_questions WHERE subject_id = ${SUBJECT_ID} AND scheduled_for = '2026-04-30'
     ` as Array<{ question_id: number }>;
@@ -127,7 +140,7 @@ describe('migration 031 — encryption round-trip through libDb', () => {
   });
 
   it('tb_session_events — event_log + keystroke_stream JSONB round-trip', async () => {
-    await scheduleQuestion(SUBJECT_ID, 'placeholder', '2026-05-01', 'seed');
+    await insertTestQuestion(SUBJECT_ID, 'placeholder', '2026-05-01');
     const qRowsX = await sql`
       SELECT question_id FROM tb_questions WHERE subject_id = ${SUBJECT_ID} AND scheduled_for = '2026-05-01'
     ` as Array<{ question_id: number }>;
@@ -180,7 +193,7 @@ describe('migration 031 — encryption round-trip through libDb', () => {
   });
 
   it('tampered ciphertext throws on read', async () => {
-    await scheduleQuestion(SUBJECT_ID, 'placeholder', '2026-05-02', 'seed');
+    await insertTestQuestion(SUBJECT_ID, 'placeholder', '2026-05-02');
     const qRowsX = await sql`
       SELECT question_id FROM tb_questions WHERE subject_id = ${SUBJECT_ID} AND scheduled_for = '2026-05-02'
     ` as Array<{ question_id: number }>;
@@ -206,8 +219,8 @@ describe('migration 031 — encryption round-trip through libDb', () => {
 
   it('different writes of identical plaintext produce different ciphertext (nonce uniqueness)', async () => {
     // Schedule two journal questions with identical plaintext on different dates.
-    await scheduleQuestion(SUBJECT_ID, 'identical question', '2026-05-03', 'seed');
-    await scheduleQuestion(SUBJECT_ID, 'identical question', '2026-05-04', 'seed');
+    await insertTestQuestion(SUBJECT_ID, 'identical question', '2026-05-03');
+    await insertTestQuestion(SUBJECT_ID, 'identical question', '2026-05-04');
 
     const rawRows = await sql`
       SELECT text_ciphertext, text_nonce FROM tb_questions

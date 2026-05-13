@@ -50,11 +50,13 @@ interface HealthResponse {
     sessionsMissingSummary: number;
     recentErrorCount: number;
     recentErrorJobs: string[];
+    subjectsMissingToday: Array<{ subject_id: number; username: string }>;
+    subjectsMissingTomorrow: Array<{ subject_id: number; username: string }>;
+    activeCorpusEmpty: boolean;
   };
   pendingWork: {
     embeds: number;
     embedsBySubject: Array<{ subject_id: number; username: string; count: number }>;
-    seedAlerts: Array<{ subject_id: number; username: string; remaining: number; corpusUnseen: number; totalRunway: number }>;
     teiAvailable: boolean;
   };
   rustEngine: boolean;
@@ -205,51 +207,48 @@ export const GET: APIRoute = async () => {
   const pendingEmbeds = embedsBySubject.reduce((sum, r) => sum + r.count, 0);
   const teiAvailable = await isTeiAvailable();
 
-  // Seed alerts — any subject with 0 < unanswered_seeds ≤ 5. Once seeds run
-  // out the subject draws from tb_question_corpus, so true runway is
-  // seeds_remaining + (corpus questions this subject hasn't yet been served).
-  // The alert text downstream routes off totalRunway, not remaining alone.
-  // Owner runs `npm run corpus:refresh` (additive to tb_question_corpus,
-  // never overwrites a subject's personal queue). See METHODS_PROVENANCE.md
-  // INC-014 for the corpus-refresh pivot rationale.
-  const seedAlertRows = await sql`
-    SELECT subject_id AS "subjectId", username, remaining, "corpusUnseen"
-    FROM (
-      SELECT s.subject_id, s.username,
-        COUNT(q.question_id) FILTER (
-          WHERE q.question_source_id = 1
-            AND NOT EXISTS (SELECT 1 FROM tb_responses r WHERE r.question_id = q.question_id)
-        )::int AS remaining,
-        (
-          SELECT COUNT(*)::int FROM tb_question_corpus c
-          WHERE NOT c.is_retired
-            AND c.corpus_question_id NOT IN (
-              SELECT corpus_question_id FROM tb_questions
-              WHERE subject_id = s.subject_id AND corpus_question_id IS NOT NULL
-            )
-        ) AS "corpusUnseen"
-      FROM tb_subjects s
-      LEFT JOIN tb_questions q ON q.subject_id = s.subject_id
-      GROUP BY s.subject_id, s.username
-    ) t
-    WHERE remaining > 0 AND remaining <= 5
-    ORDER BY remaining ASC
-  ` as Array<{ subjectId: number; username: string; remaining: number; corpusUnseen: number }>;
-  const seedAlerts = seedAlertRows.map(r => ({
-    subject_id: r.subjectId,
-    username: r.username,
-    remaining: r.remaining,
-    corpusUnseen: r.corpusUnseen,
-    totalRunway: r.remaining + r.corpusUnseen,
-  }));
+  // --- SCHEDULING ANOMALIES ------------------------------------------------
+  // Defense-in-depth for "subject locked out of journaling" bugs. The primary
+  // defense is the on-demand scheduler in /api/[subject/]today; the cron is
+  // secondary; this anomaly is the tertiary, operator-visible early warning.
+  // Owner is NOT excluded — every active subject runs the same predicate.
+  const missingTodayRows = await sql`
+    SELECT s.subject_id, s.username
+    FROM tb_subjects s
+    WHERE s.is_active = TRUE
+      AND NOT EXISTS (
+        SELECT 1 FROM tb_questions q
+        WHERE q.subject_id = s.subject_id AND q.scheduled_for = ${today}
+      )
+    ORDER BY s.subject_id
+  ` as Array<{ subject_id: number; username: string }>;
+  const missingTomorrowRows = await sql`
+    SELECT s.subject_id, s.username
+    FROM tb_subjects s
+    WHERE s.is_active = TRUE
+      AND NOT EXISTS (
+        SELECT 1 FROM tb_questions q
+        WHERE q.subject_id = s.subject_id AND q.scheduled_for = ${tomorrow}
+      )
+    ORDER BY s.subject_id
+  ` as Array<{ subject_id: number; username: string }>;
+
+  // Critical: zero active corpus rows. Scheduler would throw, every subject
+  // would land on the "no question today" path. Requires operator action.
+  const [corpusCountRow] = await sql`
+    SELECT COUNT(*)::int AS c FROM tb_question_corpus WHERE is_retired = FALSE
+  ` as Array<{ c: number }>;
+  const activeCorpusEmpty = corpusCountRow!.c === 0;
 
   // --- OVERALL -------------------------------------------------------------
   let overall: 'green' | 'yellow' | 'red' = 'green';
   if (lastSessionStatus && !lastSessionStatus.fullyProcessed) overall = 'red';
   else if (recentErrors.length > 0) overall = 'red';
+  else if (activeCorpusEmpty) overall = 'red';
   else if (!todayQuestion || !tomorrowQuestion) overall = 'yellow';
+  else if (missingTodayRows.length > 0 || missingTomorrowRows.length > 0) overall = 'yellow';
   else if (duplicateScheduledQuestions > 0 || sessionsMissingSummary > 0) overall = 'yellow';
-  else if (pendingEmbeds > 0 || seedAlerts.length > 0) overall = 'yellow';
+  else if (pendingEmbeds > 0) overall = 'yellow';
 
   const body: HealthResponse = {
     today: {
@@ -269,11 +268,13 @@ export const GET: APIRoute = async () => {
       sessionsMissingSummary,
       recentErrorCount: recentErrors.length,
       recentErrorJobs: uniqueErrorJobs,
+      subjectsMissingToday: missingTodayRows,
+      subjectsMissingTomorrow: missingTomorrowRows,
+      activeCorpusEmpty,
     },
     pendingWork: {
       embeds: pendingEmbeds,
       embedsBySubject,
-      seedAlerts,
       teiAvailable,
     },
     rustEngine: hasNativeEngine,

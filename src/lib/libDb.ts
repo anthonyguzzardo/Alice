@@ -86,7 +86,7 @@ function nowStr(): string {
 // No DDL or migration blocks here.
 // ----------------------------------------------------------------------------
 
-// @region queries -- getTodaysQuestion, getTodaysResponse, saveResponse, scheduleQuestion, scheduleSubjectCorpusQuestion, getSubjectScheduledQuestion, getSubjectCorpusHistory, getSubjectUnseenCorpusCount, getAllResponses, logInteractionEvent, hasQuestionForDate, countScheduledSeedQuestions
+// @region queries -- getTodaysQuestion, getTodaysResponse, saveResponse, scheduleSubjectCorpusQuestion, getSubjectScheduledQuestion, getSubjectCorpusHistory, getSubjectUnseenCorpusCount, getAllResponses, logInteractionEvent
 // ----------------------------------------------------------------------------
 // QUERIES
 // ----------------------------------------------------------------------------
@@ -142,17 +142,6 @@ export async function saveResponse(
   `;
   if (!row) throw new Error('saveResponse: insert returned no row');
   return row.response_id;
-}
-
-export async function scheduleQuestion(subjectId: number, text: string, date: string, source: 'seed' | 'generated' | 'calibration' = 'seed'): Promise<void> {
-  const sourceId = source === 'generated' ? 2 : source === 'calibration' ? 3 : 1;
-  const enc = encryptString(text);
-  // CONFLICT TARGET CHANGED (migration 030): (scheduled_for) → (subject_id, scheduled_for)
-  await sql`
-    INSERT INTO tb_questions (subject_id, text_ciphertext, text_nonce, question_source_id, scheduled_for)
-    VALUES (${subjectId}, ${enc.ciphertext}, ${enc.nonce}, ${sourceId}, ${date})
-    ON CONFLICT (subject_id, scheduled_for) DO NOTHING
-  `;
 }
 
 /**
@@ -357,20 +346,7 @@ export async function logInteractionEvent(subjectId: number, questionId: number,
   `;
 }
 
-export async function hasQuestionForDate(subjectId: number, date: string): Promise<boolean> {
-  const rows = await sql`SELECT 1 FROM tb_questions WHERE subject_id = ${subjectId} AND scheduled_for = ${date}`;
-  return rows.length > 0;
-}
-
-export async function countScheduledSeedQuestions(subjectId: number): Promise<number> {
-  const [row] = await sql`
-    SELECT COUNT(*)::int AS c FROM tb_questions
-    WHERE subject_id = ${subjectId} AND question_source_id = 1 AND scheduled_for IS NOT NULL
-  `;
-  return (row as { c: number }).c;
-}
-
-// @region encrypted-reads -- getResponseText, getQuestionTextById, getEventLogJson, getKeystrokeStreamJson, listEventLogJson, listKeystrokeStreams, listResponseTextsExcludingCalibration
+// @region encrypted-reads -- getResponseText, getQuestionTextById, listQuestionsForSubject, getEventLogJson, getKeystrokeStreamJson, listEventLogJson, listKeystrokeStreams, listResponseTextsExcludingCalibration
 // ----------------------------------------------------------------------------
 // IN-SCOPE READ HELPERS (migration 031)
 // ----------------------------------------------------------------------------
@@ -399,6 +375,51 @@ export async function getQuestionTextById(subjectId: number, questionId: number)
   const row = rows[0] as { text_ciphertext: string; text_nonce: string; question_source_id: number } | undefined;
   if (!row) return null;
   return { text: decrypt(row.text_ciphertext, row.text_nonce), question_source_id: row.question_source_id };
+}
+
+/** Every tb_questions row for a subject (seed + corpus + calibration + generated),
+ *  with plaintext text and a has_response flag joined from tb_responses. Ordered
+ *  by scheduled_for ASC (NULLS LAST), then question_id ASC. Used by audits. */
+export async function listQuestionsForSubject(
+  subjectId: number,
+): Promise<Array<{
+  question_id: number;
+  scheduled_for: string | null;
+  question_source_id: number;
+  corpus_question_id: number | null;
+  text: string;
+  has_response: boolean;
+}>> {
+  const rows = await sql`
+    SELECT q.question_id,
+           q.scheduled_for::text AS scheduled_for,
+           q.question_source_id,
+           q.corpus_question_id,
+           q.text_ciphertext,
+           q.text_nonce,
+           (r.response_id IS NOT NULL) AS has_response
+    FROM tb_questions q
+    LEFT JOIN tb_responses r
+      ON r.question_id = q.question_id AND r.subject_id = q.subject_id
+    WHERE q.subject_id = ${subjectId}
+    ORDER BY q.scheduled_for ASC NULLS LAST, q.question_id ASC
+  ` as Array<{
+    question_id: number;
+    scheduled_for: string | null;
+    question_source_id: number;
+    corpus_question_id: number | null;
+    text_ciphertext: string;
+    text_nonce: string;
+    has_response: boolean;
+  }>;
+  return rows.map(r => ({
+    question_id: r.question_id,
+    scheduled_for: r.scheduled_for,
+    question_source_id: r.question_source_id,
+    corpus_question_id: r.corpus_question_id,
+    text: decrypt(r.text_ciphertext, r.text_nonce),
+    has_response: r.has_response,
+  }));
 }
 
 /** Decrypted event log JSON for a session. Returns the JSON string (caller JSON.parses if needed). */

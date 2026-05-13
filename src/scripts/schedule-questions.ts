@@ -1,11 +1,9 @@
 /**
- * Schedule tomorrow's question for all active subjects.
+ * Schedule tomorrow's question for every active subject (owner included).
  *
- * Iterates active non-owner subjects, assigns a corpus question for tomorrow
- * via round-robin, and prints per-subject exhaustion warnings when unseen
+ * Iterates active subjects, assigns a corpus question for tomorrow via
+ * round-robin, and prints per-subject exhaustion warnings when unseen
  * questions drop below threshold.
- *
- * The owner is excluded — they have their own generation pipeline.
  *
  * Exit code: 0 on success (even with warnings), nonzero on errors.
  *
@@ -31,13 +29,12 @@ async function main(): Promise<void> {
   const targetDate = tomorrowStr();
   console.log(`Scheduling for: ${targetDate}\n`);
 
-  // Active non-owner subjects only
   const subjects = await sql`
-    SELECT subject_id, display_name, invite_code
+    SELECT subject_id, display_name, username
     FROM tb_subjects
-    WHERE is_owner = FALSE AND is_active = TRUE
+    WHERE is_active = TRUE
     ORDER BY subject_id ASC
-  ` as Array<{ subject_id: number; display_name: string | null; invite_code: string }>;
+  ` as Array<{ subject_id: number; display_name: string | null; username: string }>;
 
   if (subjects.length === 0) {
     console.log('No active subjects to schedule.');
@@ -47,7 +44,7 @@ async function main(): Promise<void> {
   let warnings = 0;
 
   for (const subj of subjects) {
-    const label = subj.display_name ?? subj.invite_code;
+    const label = subj.display_name ?? subj.username;
 
     const result = await scheduleQuestionForSubject(subj.subject_id, targetDate);
     const scheduled = await getScheduledQuestion(subj.subject_id, targetDate);

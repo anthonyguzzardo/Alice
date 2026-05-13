@@ -626,28 +626,18 @@
       function renderHealth(h: any) {
         healthDot.setAttribute('data-status', h.overall);
 
-        // Pending-work badge: combined count of attention items —
-        // embeds awaiting TEI/backfill + subjects with ≤5 seeds remaining
-        // (corpus-refresh trigger). Badge stays yellow when TEI is offline
-        // (action needed); flips green when everything is auto-drainable.
+        // Pending-work badge: count of embeds awaiting TEI/backfill. Badge
+        // stays yellow when TEI is offline (action needed); flips green when
+        // everything is auto-drainable.
         const pw = h.pendingWork;
-        const seedAlerts = (pw && pw.seedAlerts) || [];
-        const totalPending = (pw ? pw.embeds : 0) + seedAlerts.length;
+        const totalPending = pw ? pw.embeds : 0;
         if (totalPending > 0) {
           pendingBadge.textContent = String(totalPending);
-          // Green only when everything is fully auto-drainable.
           const teiOk = !!(pw && pw.teiAvailable);
-          const autoDrainable = teiOk && seedAlerts.length === 0;
-          pendingBadge.classList.toggle('tei-on', autoDrainable);
+          pendingBadge.classList.toggle('tei-on', teiOk);
           pendingBadge.removeAttribute('hidden');
-          const labelParts: string[] = [];
-          if (pw && pw.embeds > 0) {
-            labelParts.push(`${pw.embeds} embed${pw.embeds === 1 ? '' : 's'} pending` + (teiOk ? '' : ', TEI offline'));
-          }
-          if (seedAlerts.length > 0) {
-            labelParts.push(`${seedAlerts.length} subject${seedAlerts.length === 1 ? '' : 's'} low on seeds`);
-          }
-          healthDot.setAttribute('aria-label', `Pipeline health — ${labelParts.join('; ')}`);
+          const label = `${pw.embeds} embed${pw.embeds === 1 ? '' : 's'} pending` + (teiOk ? '' : ', TEI offline');
+          healthDot.setAttribute('aria-label', `Pipeline health — ${label}`);
         } else {
           pendingBadge.setAttribute('hidden', '');
           pendingBadge.classList.remove('tei-on');
@@ -689,11 +679,18 @@
 
         // ANOMALIES
         const a = h.anomalies;
-        const anomalyCount = a.duplicateScheduledQuestions + a.sessionsMissingSummary + a.recentErrorCount;
+        const missingToday = (a.subjectsMissingToday || []) as Array<{ subject_id: number; username: string }>;
+        const missingTomorrow = (a.subjectsMissingTomorrow || []) as Array<{ subject_id: number; username: string }>;
+        const anomalyCount = a.duplicateScheduledQuestions + a.sessionsMissingSummary + a.recentErrorCount
+          + missingToday.length + missingTomorrow.length + (a.activeCorpusEmpty ? 1 : 0);
         html += '<div class="section">Anomalies</div>';
         if (anomalyCount === 0) {
           html += '<div class="empty">none</div>';
         } else {
+          if (a.activeCorpusEmpty) {
+            html += row('Active corpus empty', 'critical', 'bad');
+            html += '<div class="empty" style="margin-top:0.4rem;">No active rows in <code>tb_question_corpus</code>. Scheduler will throw on next draw. Add corpus questions.</div>';
+          }
           if (a.recentErrorCount > 0) {
             html += row('Recent errors', String(a.recentErrorCount), 'bad');
             if (a.recentErrorJobs.length > 0) {
@@ -701,6 +698,18 @@
                 a.recentErrorJobs.map((j: string) => `<span class="stage bad">${j}</span>`).join('') +
                 '</div>';
             }
+          }
+          if (missingToday.length > 0) {
+            html += row('Subjects missing today', String(missingToday.length), 'warn');
+            html += '<div class="stage-list">' +
+              missingToday.map(s => `<span class="stage warn">${s.username}</span>`).join('') +
+              '</div>';
+          }
+          if (missingTomorrow.length > 0) {
+            html += row('Subjects missing tomorrow', String(missingTomorrow.length), 'warn');
+            html += '<div class="stage-list">' +
+              missingTomorrow.map(s => `<span class="stage warn">${s.username}</span>`).join('') +
+              '</div>';
           }
           if (a.duplicateScheduledQuestions > 0) {
             html += row('Duplicate questions', String(a.duplicateScheduledQuestions), 'warn');
@@ -713,49 +722,21 @@
         // PENDING WORK
         if (pw) {
           html += '<div class="section">Pending work</div>';
-          if (pw.embeds === 0 && seedAlerts.length === 0) {
+          if (pw.embeds === 0) {
             html += '<div class="empty">none</div>';
           } else {
-            // Embed pending — total + per-subject breakdown.
-            if (pw.embeds > 0) {
-              const teiLabel = pw.teiAvailable ? 'TEI online' : 'TEI offline';
-              const teiCls   = pw.teiAvailable ? '' : 'warn';
-              html += row(`Embeds pending`, String(pw.embeds), 'warn');
-              html += row(`Embedder`, teiLabel, teiCls);
-              const bySubj = (pw.embedsBySubject || []) as Array<{ subject_id: number; username: string; count: number }>;
-              if (bySubj.length > 0) {
-                html += '<div class="stage-list">' +
-                  bySubj.map(s => `<span class="stage warn">${s.username}: ${s.count}</span>`).join('') +
-                  '</div>';
-              }
-              if (!pw.teiAvailable) {
-                html += '<div class="empty" style="margin-top:0.4rem;">Run <code>npm run dev:full</code>, then <code>npm run backfill</code> to drain.</div>';
-              }
-            }
-            // Seed alerts — subjects whose personal queue is about to run dry.
-            // Runway = seeds_remaining + corpus_unseen_for_subject. Below the
-            // threshold means corpus needs a refresh; above means corpus will
-            // cover the transition without action.
-            if (seedAlerts.length > 0) {
-              const sa = seedAlerts as Array<{ subject_id: number; username: string; remaining: number; corpusUnseen: number; totalRunway: number }>;
-              const RUNWAY_THRESHOLD = 7;
-              const critical = sa.filter(s => s.totalRunway < RUNWAY_THRESHOLD);
-              const headerCls = critical.length > 0 ? 'warn' : '';
-              html += row(`Seeds running low`, String(sa.length), headerCls);
+            const teiLabel = pw.teiAvailable ? 'TEI online' : 'TEI offline';
+            const teiCls   = pw.teiAvailable ? '' : 'warn';
+            html += row(`Embeds pending`, String(pw.embeds), 'warn');
+            html += row(`Embedder`, teiLabel, teiCls);
+            const bySubj = (pw.embedsBySubject || []) as Array<{ subject_id: number; username: string; count: number }>;
+            if (bySubj.length > 0) {
               html += '<div class="stage-list">' +
-                sa.map(s => {
-                  const cls = s.totalRunway < RUNWAY_THRESHOLD ? 'warn' : '';
-                  const tail = s.totalRunway < RUNWAY_THRESHOLD
-                    ? ` (corpus low, ${s.totalRunway} days runway)`
-                    : ` (+ ${s.corpusUnseen} corpus, ~${s.totalRunway} days runway)`;
-                  return `<span class="stage ${cls}">${s.username}: ${s.remaining} left${tail}</span>`;
-                }).join('') +
+                bySubj.map(s => `<span class="stage warn">${s.username}: ${s.count}</span>`).join('') +
                 '</div>';
-              if (critical.length > 0) {
-                html += '<div class="empty" style="margin-top:0.4rem;">Corpus is low for ' + critical.length + ' subject' + (critical.length > 1 ? 's' : '') + '. Run <code>npm run corpus:refresh</code>, review <code>data/corpus-candidates-YYYY-MM-DD.md</code>, then <code>npm run corpus:approve data/&lt;file&gt;.md</code>. Additive — never overwrites a subject\'s personal queue.</div>';
-              } else {
-                html += '<div class="empty" style="margin-top:0.4rem;">Corpus is queued to take over when seeds exhaust. No action needed.</div>';
-              }
+            }
+            if (!pw.teiAvailable) {
+              html += '<div class="empty" style="margin-top:0.4rem;">Run <code>npm run dev:full</code>, then <code>npm run backfill</code> to drain.</div>';
             }
           }
         }

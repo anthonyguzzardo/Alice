@@ -13,7 +13,6 @@
 import 'dotenv/config';
 import sql from '../lib/libDbPool.ts';
 import { createSubject } from '../lib/libSubjectAuth.ts';
-import { seedUpcomingQuestions } from '../lib/libSchedule.ts';
 
 async function main() {
   const [, , username, tempPassword, ianaTimezone, displayName] = process.argv;
@@ -51,16 +50,8 @@ async function main() {
     displayName: displayName ?? null,
   });
 
-  // Plant the 30 seed questions starting today (in the subject's local TZ —
-  // day-1 must align with the subject's local midnight, not the server's).
-  // Every subject gets the same first 30 days of journey — non-negotiable.
-  // Without this they would log in and see `no_question_scheduled` from
-  // /api/subject/today and have nothing to do. seedUpcomingQuestions is
-  // idempotent, so a re-run on an existing subject is a no-op.
-  await seedUpcomingQuestions(subjectId, tz, 30);
-
   console.log(`Created subject_id ${subjectId} (username "${username}", tz ${tz}).`);
-  console.log(`Seeded 30 starting-day questions for the next 30 days.`);
+  console.log('First journal question will be drawn from tb_question_corpus on first /api/subject/today hit, and the nightly cron pre-plants subsequent days.');
   console.log('Hand the username and temp password to the subject out-of-band.');
   console.log('They will be forced to reset the password on first login.');
 
