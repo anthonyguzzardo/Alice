@@ -1,53 +1,28 @@
 /**
  * GET /api/subject/today
  *
- * Returns today's scheduled question for the authenticated subject.
+ * Returns today's question for the authenticated subject. If today's row does
+ * not exist, draws the next unseen corpus row, creates the row, returns it.
+ * If the subject has already answered today (in their own timezone), returns
+ * the same row with `existing_response_text` set so the UI renders the
+ * locked-until-tomorrow state.
  *
  * Auth: middleware has verified the session, attached `locals.subject`,
- * rejected owner accounts, and gated `must_reset_password = TRUE`. By the
- * time this handler runs, `locals.subject` is non-null, non-owner, and has
- * a real password set.
- *
- * Storage: post migration 032 the subject's daily question is a row in the
- * unified `tb_questions` table (`question_source_id = 4`, `corpus_question_id`
- * pointing to `tb_question_corpus`). The legacy `tb_scheduled_questions`
- * table was dropped in Step 9 of the schema unification. The wire field
- * carrying the question's surrogate key was renamed `scheduled_question_id
- * → question_id` to match the unified schema.
+ * rejected owner accounts, and gated `must_reset_password = TRUE`.
  */
 import type { APIRoute } from 'astro';
-import { getScheduledQuestion, scheduleQuestionForSubject } from '../../../lib/libScheduler.ts';
-import { getResponseText } from '../../../lib/libDb.ts';
-import { localDateStr } from '../../../lib/utlDate.ts';
+import { getOrCreateTodayQuestion } from '../../../lib/libQuestionFlow.ts';
 
 export const GET: APIRoute = async ({ locals }) => {
-  // Middleware guarantees this is non-null + non-owner + reset complete.
   const subject = locals.subject!;
-
-  const today = localDateStr(new Date(), subject.iana_timezone);
-
-  // Self-heal: if cron hasn't pre-planted today's corpus draw yet, schedule
-  // one inline. Idempotent on (subject_id, scheduled_for) — returns the
-  // existing row if today is already scheduled.
-  await scheduleQuestionForSubject(subject.subject_id, today);
-
-  const scheduled = await getScheduledQuestion(subject.subject_id, today);
-
-  if (!scheduled) {
-    return new Response(JSON.stringify({ error: 'no_question_scheduled' }), {
-      status: 404,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
-  const existingText = await getResponseText(subject.subject_id, scheduled.question_id);
+  const today = await getOrCreateTodayQuestion(subject.subject_id);
 
   return new Response(JSON.stringify({
-    question_id: scheduled.question_id,
-    text: scheduled.text,
-    theme_tag: scheduled.theme_tag,
-    scheduled_for: scheduled.scheduled_for,
-    existing_response_text: existingText ?? null,
+    question_id: today.questionId,
+    text: today.text,
+    theme_tag: today.themeTag,
+    scheduled_for: today.scheduledFor,
+    existing_response_text: today.existingResponseText,
   }), {
     headers: { 'Content-Type': 'application/json' },
   });

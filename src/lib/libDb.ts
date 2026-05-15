@@ -91,7 +91,7 @@ function nowStr(): string {
 // QUERIES
 // ----------------------------------------------------------------------------
 
-async function getSubjectTimezone(subjectId: number): Promise<string> {
+export async function getSubjectTimezone(subjectId: number): Promise<string> {
   const rows = await sql`SELECT iana_timezone FROM tb_subjects WHERE subject_id = ${subjectId}`;
   const row = rows[0] as { iana_timezone: string } | undefined;
   if (!row) throw new Error(`getSubjectTimezone: no tb_subjects row for subject_id=${subjectId}`);

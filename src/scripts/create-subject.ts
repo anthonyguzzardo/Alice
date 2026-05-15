@@ -51,7 +51,7 @@ async function main() {
   });
 
   console.log(`Created subject_id ${subjectId} (username "${username}", tz ${tz}).`);
-  console.log('First journal question will be drawn from tb_question_corpus on first /api/subject/today hit, and the nightly cron pre-plants subsequent days.');
+  console.log('First journal question is drawn from tb_question_corpus on first /api/subject/today hit. Each subsequent day creates one row at first page load.');
   console.log('Hand the username and temp password to the subject out-of-band.');
   console.log('They will be forced to reset the password on first login.');
 

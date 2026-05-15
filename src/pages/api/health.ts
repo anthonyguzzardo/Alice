@@ -42,16 +42,11 @@ interface HealthResponse {
   sessions: {
     count: number;
   };
-  tomorrow: {
-    questionReady: boolean;
-  };
   anomalies: {
     duplicateScheduledQuestions: number;
     sessionsMissingSummary: number;
     recentErrorCount: number;
     recentErrorJobs: string[];
-    subjectsMissingToday: Array<{ subject_id: number; username: string }>;
-    subjectsMissingTomorrow: Array<{ subject_id: number; username: string }>;
     activeCorpusEmpty: boolean;
   };
   pendingWork: {
@@ -67,7 +62,6 @@ export const GET: APIRoute = async () => {
   // Owner-only operator dashboard. Subjects don't have a health view.
   const subjectId = OWNER_SUBJECT_ID;
   const today = localDateStr();
-  const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
   // --- TODAY ---------------------------------------------------------------
   const todayQuestionRows = await sql`
@@ -131,12 +125,6 @@ export const GET: APIRoute = async () => {
       AND q.question_source_id != 3
   `;
   const sessionCount = (sessionCountRow as { c: number }).c;
-
-  // --- TOMORROW -----------------------------------------------------------
-  const tomorrowQuestionRows = await sql`
-    SELECT 1 FROM tb_questions WHERE subject_id = ${subjectId} AND scheduled_for = ${tomorrow}
-  `;
-  const tomorrowQuestion = tomorrowQuestionRows[0];
 
   // --- ANOMALIES -----------------------------------------------------------
   // Migration 031: text is encrypted with a fresh nonce per row, so SQL
@@ -207,34 +195,8 @@ export const GET: APIRoute = async () => {
   const pendingEmbeds = embedsBySubject.reduce((sum, r) => sum + r.count, 0);
   const teiAvailable = await isTeiAvailable();
 
-  // --- SCHEDULING ANOMALIES ------------------------------------------------
-  // Defense-in-depth for "subject locked out of journaling" bugs. The primary
-  // defense is the on-demand scheduler in /api/[subject/]today; the cron is
-  // secondary; this anomaly is the tertiary, operator-visible early warning.
-  // Owner is NOT excluded — every active subject runs the same predicate.
-  const missingTodayRows = await sql`
-    SELECT s.subject_id, s.username
-    FROM tb_subjects s
-    WHERE s.is_active = TRUE
-      AND NOT EXISTS (
-        SELECT 1 FROM tb_questions q
-        WHERE q.subject_id = s.subject_id AND q.scheduled_for = ${today}
-      )
-    ORDER BY s.subject_id
-  ` as Array<{ subject_id: number; username: string }>;
-  const missingTomorrowRows = await sql`
-    SELECT s.subject_id, s.username
-    FROM tb_subjects s
-    WHERE s.is_active = TRUE
-      AND NOT EXISTS (
-        SELECT 1 FROM tb_questions q
-        WHERE q.subject_id = s.subject_id AND q.scheduled_for = ${tomorrow}
-      )
-    ORDER BY s.subject_id
-  ` as Array<{ subject_id: number; username: string }>;
-
-  // Critical: zero active corpus rows. Scheduler would throw, every subject
-  // would land on the "no question today" path. Requires operator action.
+  // Critical: zero active corpus rows. The just-in-time question flow would
+  // throw on every subject load. Requires operator action (corpus refresh).
   const [corpusCountRow] = await sql`
     SELECT COUNT(*)::int AS c FROM tb_question_corpus WHERE is_retired = FALSE
   ` as Array<{ c: number }>;
@@ -245,8 +207,6 @@ export const GET: APIRoute = async () => {
   if (lastSessionStatus && !lastSessionStatus.fullyProcessed) overall = 'red';
   else if (recentErrors.length > 0) overall = 'red';
   else if (activeCorpusEmpty) overall = 'red';
-  else if (!todayQuestion || !tomorrowQuestion) overall = 'yellow';
-  else if (missingTodayRows.length > 0 || missingTomorrowRows.length > 0) overall = 'yellow';
   else if (duplicateScheduledQuestions > 0 || sessionsMissingSummary > 0) overall = 'yellow';
   else if (pendingEmbeds > 0) overall = 'yellow';
 
@@ -260,16 +220,11 @@ export const GET: APIRoute = async () => {
     sessions: {
       count: sessionCount,
     },
-    tomorrow: {
-      questionReady: !!tomorrowQuestion,
-    },
     anomalies: {
       duplicateScheduledQuestions,
       sessionsMissingSummary,
       recentErrorCount: recentErrors.length,
       recentErrorJobs: uniqueErrorJobs,
-      subjectsMissingToday: missingTodayRows,
-      subjectsMissingTomorrow: missingTomorrowRows,
       activeCorpusEmpty,
     },
     pendingWork: {

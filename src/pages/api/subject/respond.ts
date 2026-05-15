@@ -22,12 +22,12 @@
  */
 import type { APIRoute } from 'astro';
 import sql from '../../../lib/libDbPool.ts';
-import { getScheduledQuestion } from '../../../lib/libScheduler.ts';
 import {
   saveResponse,
   saveSessionSummary,
   saveSessionEvents,
   getResponseText,
+  getSubjectScheduledQuestion,
   enqueueSignalJob,
   SIGNAL_JOB_KIND,
 } from '../../../lib/libDb.ts';
@@ -77,7 +77,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   // subject, and is for today (in the subject's local TZ — calendar flip
   // happens at subject midnight, not server midnight).
   const today = localDateStr(new Date(), subject.iana_timezone);
-  const scheduled = await getScheduledQuestion(subject.subject_id, today);
+  const scheduled = await getSubjectScheduledQuestion(subject.subject_id, today);
 
   if (!scheduled || scheduled.question_id !== question_id) {
     return new Response(JSON.stringify({ error: 'invalid_question' }), {

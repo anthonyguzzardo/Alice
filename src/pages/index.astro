@@ -673,22 +673,18 @@
         // SESSIONS
         html += '<div class="section">Sessions</div>';
         html += row('Completed', String(h.sessions.count));
-        html += row('Tomorrow ready', h.tomorrow.questionReady ? 'yes' : 'no',
-          h.tomorrow.questionReady ? '' : 'warn');
 
         // ANOMALIES
         const a = h.anomalies;
-        const missingToday = (a.subjectsMissingToday || []) as Array<{ subject_id: number; username: string }>;
-        const missingTomorrow = (a.subjectsMissingTomorrow || []) as Array<{ subject_id: number; username: string }>;
         const anomalyCount = a.duplicateScheduledQuestions + a.sessionsMissingSummary + a.recentErrorCount
-          + missingToday.length + missingTomorrow.length + (a.activeCorpusEmpty ? 1 : 0);
+          + (a.activeCorpusEmpty ? 1 : 0);
         html += '<div class="section">Anomalies</div>';
         if (anomalyCount === 0) {
           html += '<div class="empty">none</div>';
         } else {
           if (a.activeCorpusEmpty) {
             html += row('Active corpus empty', 'critical', 'bad');
-            html += '<div class="empty" style="margin-top:0.4rem;">No active rows in <code>tb_question_corpus</code>. Scheduler will throw on next draw. Add corpus questions.</div>';
+            html += '<div class="empty" style="margin-top:0.4rem;">No active rows in <code>tb_question_corpus</code>. The next subject load will throw. Run <code>npm run corpus:refresh</code>.</div>';
           }
           if (a.recentErrorCount > 0) {
             html += row('Recent errors', String(a.recentErrorCount), 'bad');
@@ -697,18 +693,6 @@
                 a.recentErrorJobs.map((j: string) => `<span class="stage bad">${j}</span>`).join('') +
                 '</div>';
             }
-          }
-          if (missingToday.length > 0) {
-            html += row('Subjects missing today', String(missingToday.length), 'warn');
-            html += '<div class="stage-list">' +
-              missingToday.map(s => `<span class="stage warn">${s.username}</span>`).join('') +
-              '</div>';
-          }
-          if (missingTomorrow.length > 0) {
-            html += row('Subjects missing tomorrow', String(missingTomorrow.length), 'warn');
-            html += '<div class="stage-list">' +
-              missingTomorrow.map(s => `<span class="stage warn">${s.username}</span>`).join('') +
-              '</div>';
           }
           if (a.duplicateScheduledQuestions > 0) {
             html += row('Duplicate questions', String(a.duplicateScheduledQuestions), 'warn');
