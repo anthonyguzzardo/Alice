@@ -103,7 +103,7 @@ async function main() {
       const responseRows = await tx`SELECT response_id FROM tb_responses WHERE question_id = ${TODAY_OWNER_QID}` as Array<{ response_id: number }>;
       if (responseRows.length > 0) {
         const respIds = responseRows.map((r) => r.response_id);
-        const eRes = await tx`DELETE FROM tb_embeddings WHERE embedding_source_id = 1 AND source_id = ANY(${respIds})`;
+        const eRes = await tx`DELETE FROM tb_embeddings WHERE embedding_source_id = 1 AND source_record_id = ANY(${respIds})`;
         deletedChildren['tb_embeddings'] = eRes.count ?? 0;
       } else {
         deletedChildren['tb_embeddings'] = 0;

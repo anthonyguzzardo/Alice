@@ -65,6 +65,16 @@ When you fix a bug that previously had a rationalizing entry, rewrite the entry 
 
 - **Bit-identity claims must be backed by provenance rows.** A signal row without an `engine_provenance_id` (NULL = pre-2026-04-25 era) can be reproduced only by guessing which binary produced it from git history, which is not a guarantee. Rows written after 2026-04-25 by the worker pipeline always have provenance stamped — see `tb_engine_provenance` (binary SHA-256, CPU model, target_cpu_flag). Any analytical claim that "we re-ran the binary and got the same numbers" must cite the provenance row to be falsifiable. If you write a new signal save path that bypasses `libSignalWorker`, you must also call `stampEngineProvenance(questionId, getEngineProvenanceId())` after the saves complete.
 
+## Corpus & Question Design
+
+- **No meta or self-referential questions in the corpus.** A corpus row that asks the subject to evaluate Alice, comment on the journaling experience, or revisit prior responses turns the instrument on itself. CLAUDE.md's "Philosophy" section is explicit: Alice is an unbiased measurement instrument, not a product trying to grow engagement. Meta questions break that frame. They invite gamification (rate the experience), they violate the never-surface-responses rule (comparing to prior entries), and they elicit a different cognitive register (reviewing/critiquing) than the one the signal pipeline is calibrated for. Concrete bans, none of which belong in `tb_question_corpus` even if a contributor thought they were clever:
+   - "What question should Alice have asked you that it didn't?" (retired 2026-05-15, was corpus_id=30)
+   - "Go back and read your first response. What do you notice?" (retired 2026-05-15, was corpus_id=29)
+   - Anything referring to "Alice", "this journal", "your previous answer", "the system", or asking the subject to look back at their writing.
+   When approving corpus candidates (`approve-corpus.ts`), reject any line that fails this rule even if it's checked. The discipline lives at the operator's eye; there is no automated guard.
+
+- **Question design rules also exclude presupposed psychology and narrowing second clauses.** The user's `feedback_question_design` memory has the full rule: paragraph test, second clauses open never narrow, no presupposed psychology like "what are you protecting" or "what have you outgrown" in a way that assumes the answer exists. Corpus rows that pass operator review must clear this bar, not just the meta-question bar.
+
 ## Observatory
 
 - **Discovery badges: same-domain couplings capped at "provisional".** `libCouplingStability.ts` only analyzes emotion->behavior cross-domain pairs. Behavioral-only and semantic-only couplings pass through `pushCouplings()` in `synthesis.ts`, which hardcodes `strength: 'provisional'` because there is no stability data to promote them. If you see every same-domain coupling stuck at "provisional" regardless of sample size or correlation strength, this is why. Phase-two follow-up: extend the stability system to same-domain pairs. See INC-008 in `METHODS_PROVENANCE.md`.

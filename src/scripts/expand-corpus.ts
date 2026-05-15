@@ -88,12 +88,44 @@ NARROWING clauses (forbidden): smuggle a presupposed psychology, telling the ans
 
 The first clause poses the probe. The second clause clears space for the answer; it does not interpret on the answerer's behalf. Words like "protect," "outgrow," "what does this let you avoid," "what version of yourself," "what does this defend against" are red flags — they do interpretive work the answerer should do.
 
+=== META QUESTIONS ARE FORBIDDEN ===
+
+Alice is a measurement instrument. The instrument never asks the subject to evaluate the instrument, comment on the journaling experience, or revisit prior responses. Meta questions break that frame: they invite gamification, they violate the no-surface-responses discipline, and they elicit a different cognitive register (reviewing/critiquing) than the one the signal pipeline is calibrated for.
+
+These have been retired from the corpus and must not be regenerated:
+- "What question should Alice have asked you that it didn't?"
+- "Go back and read your first response. What do you notice?"
+
+Detectors. Reject any candidate that:
+- names "Alice", "this journal", "the system", or "this app"
+- asks the subject to look back at, re-read, or react to a previous answer
+- asks the subject to grade, suggest, critique, or improve the question stream itself
+- asks the subject to predict what Alice will / should do next
+
+The instrument is invisible to the subject. Keep it that way.
+
+=== DISTINCT FROM EVERY EXISTING QUESTION (LOAD-BEARING) ===
+
+Two questions are too close when an honest answerer would write substantially the same response to both. This bar is much stricter than "not a verbatim copy". The check is at the answer level, not the wording level. Mentally answer the candidate AND every neighbor in the existing corpus; if the same disclosure satisfies both, the candidate is a paraphrase and must be rewritten or dropped.
+
+Real failures from past corpus drafts (do not repeat the pattern):
+
+- "Where are you performing competence instead of becoming competent?" vs existing "Where are you performing competence instead of actually learning?"
+   → identical first clause, second clause is a synonym swap; same answer.
+- "What are you pretending isn't bothering you, and what's the cost of continuing to pretend?" vs existing "What are you pretending isn't bothering you right now?"
+   → second clause is a follow-up to the same disclosure, not a new question.
+- "What's something you do when you're alone that you wouldn't do if someone were watching?" vs existing "What would you do if you knew nobody was watching?"
+   → hypothetical-vs-observational restatement of the same probe.
+- "What would you have to admit about your current situation that you've been avoiding admitting?" vs existing "What are you pretending isn't bothering you right now?"
+   → "pretending" and "avoiding admitting" name the same act; same answer.
+
+Heuristic: scan the existing corpus by THEME (pretending, performing, observed-behavior, peak-experience, etc). If your candidate lands in a theme that is already represented, you must show how the answer set is non-overlapping, not just how the words differ.
+
 === OTHER CRITERIA ===
 
 - ABOUT THE PERSON, NOT A TOPIC. "What are you avoiding?" not "What is avoidance?"
 - NO RIGHT ANSWER. The person is thinking, not performing.
 - WORTH RETURNING TO. The answer today differs from three months from now.
-- DISTINCT FROM EVERY EXISTING QUESTION. Not a rephrasing or synonym. If two would feel repetitive in the same month, they're too close.
 - TIME-BOUND CHECKPOINTS ARE A TIC. "By day five," "in month eight," "by Friday," "this week" — fine to use ONCE in a corpus, not per question. Default to no timestamp.
 - AVOID THERAPY-SPEAK ("how does that make you feel," "inner child"), FORTUNE-COOKIE FRAMING ("what would you do if you couldn't fail"), AND ABSTRACT TOPIC QUESTIONS ("what is the nature of becoming").
 - BEWARE THE TOPIC QUESTION IN A DISCLOSURE COSTUME. The question "What would it mean to stop optimizing and start choosing?" sounds personal because of the verbs, but it's a definitional question that requires the answerer to first accept a philosophical premise (optimizing vs choosing as opposed modes) and then perform within it. Detector: if the answerer must accept your framing before they can answer, it's a topic question — cut it. Personal questions probe what is, not what would-it-mean.
