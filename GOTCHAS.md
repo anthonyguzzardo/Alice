@@ -19,7 +19,7 @@ When you fix a bug that previously had a rationalizing entry, rewrite the entry 
 
 ## Database
 
-- **Supabase is the only database. Never query localhost.** Production data lives on the Supabase pooler in us-west-2. The local Postgres instance (`postgres://localhost/alice`) still resolves on the operator's machine but is dead data — no longer seeded, migrated, or read from. `ALICE_PG_URL` in `.env` points at Supabase; a fresh shell will fall back to defaults and silently hit localhost. Before any `psql` or script run, source the env (`set -a; source .env; set +a`) or pass the URL explicitly. A "spot check" against localhost is not a spot check, it's a fiction. Discipline rule, not bug.
+- **Supabase is the only database.** Production data lives on the Supabase pooler in us-west-2. `ALICE_PG_URL` in `.env` points at it and is **required** — `libDbPool.ts` throws on load if the variable is unset, so a misconfigured shell fails immediately instead of silently writing to some default. No local Postgres exists or is expected. Before any `psql` or script run, source the env (`set -a; source .env; set +a`) or pass the URL explicitly. This used to be a discipline rule; it is now enforced at the code layer.
 
 - **JSONB auto-parse trap.** postgres.js auto-parses JSONB columns into JS objects on read. But signal functions and callers expect JSON *strings*. Four functions in `libDb.ts` have manual re-stringify logic: `getSessionEvents`, `getLatestWitnessState`, `getDynamicalSignals`, `getMotorSignals`. If you add a new function that reads a JSONB column and the caller passes it to `JSON.parse()` or to a Rust function expecting a string, you will get `[object Object]` or a silent double-parse. Always check whether the caller expects a string or an object.
 

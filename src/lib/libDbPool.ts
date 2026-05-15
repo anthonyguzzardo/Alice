@@ -4,14 +4,22 @@
  * Exports a tagged-template `sql` function from porsager/postgres.
  * All database access goes through this module.
  *
- * Connection string from ALICE_PG_URL env var.
- * Default: postgres://localhost/alice
+ * Connection string is read from `ALICE_PG_URL`. There is no fallback. The
+ * production database is Supabase (us-west-2); no local Postgres instance is
+ * supported or expected. If `ALICE_PG_URL` is unset, this module throws on
+ * load so a misconfigured shell fails loudly instead of silently hitting some
+ * default.
  */
 
 import 'dotenv/config';
 import postgres from 'postgres';
 
-const connectionString = process.env.ALICE_PG_URL || 'postgres://localhost/alice';
+const connectionString = process.env.ALICE_PG_URL;
+if (!connectionString) {
+  throw new Error(
+    'libDbPool: ALICE_PG_URL is not set. Source .env (`set -a; source .env; set +a`) before running, or export the variable directly. There is no localhost fallback.',
+  );
+}
 
 const sql = postgres(connectionString, {
   max: 5,

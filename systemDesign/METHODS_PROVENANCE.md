@@ -8,6 +8,131 @@ Newest first.
 
 ---
 
+## INC-027: Localhost Postgres banished (`ALICE_PG_URL` mandatory, no fallback)
+
+**Date:** 2026-05-14
+**Type:** Reproducibility hardening, not a correctness fix. Production data was always Supabase; this entry removes a class of "ran against the wrong DB" risk that the codebase previously held off via a written discipline rule.
+
+### What was wrong
+
+`src/lib/libDbPool.ts` defaulted to `postgres://localhost/alice` when `ALICE_PG_URL` was unset:
+
+```ts
+const connectionString = process.env.ALICE_PG_URL || 'postgres://localhost/alice';
+```
+
+CLAUDE.md and GOTCHAS.md both warned operators to source `.env` first or risk silently hitting localhost; the fallback existed because the original (pre-Supabase) deployment ran against a local Postgres on the operator's machine. After the 2026-04-18 migration to Supabase (us-west-2), the local instance was retired but never deleted: three databases (`alice`, `alice_migration_test`, `alice_schema_test`) still resolved on the operator's machine. A fresh shell that forgot the `set -a; source .env; set +a` invocation would silently connect to whichever of those instances had stale data.
+
+For methods reproducibility this is a soft hole: a "spot check" run from a misconfigured shell would produce numbers a reviewer cannot reproduce. The risk was managed by discipline (the GOTCHA was the second item in the file) rather than by code.
+
+### Discovery method
+
+Operator review during the linked-list question-flow refactor (INC-026, same date). The `psql` invocations used to inspect Supabase rows required an explicit `set -a; source .env; set +a` prefix every time. Asked the question: "if a reviewer pulls this repo and runs a script, where does it write?" The answer was "it depends on whether they sourced the env, and if they didn't, possibly to a database that has not existed since April 18."
+
+### Resolution
+
+`libDbPool.ts` no longer defaults. The variable is required:
+
+```ts
+const connectionString = process.env.ALICE_PG_URL;
+if (!connectionString) {
+  throw new Error('libDbPool: ALICE_PG_URL is not set. ... There is no localhost fallback.');
+}
+```
+
+Module load throws if the env is unset. Any unconfigured shell now fails immediately on the first import of `libDbPool` rather than silently writing to a stale local copy.
+
+Concurrently:
+
+- `dropdb alice`, `dropdb alice_migration_test`, `dropdb alice_schema_test` — the three local instances are deleted. `psql -lqt` confirms zero `alice*` databases on the operator machine.
+- Three `pg_dump … postgres://localhost/alice` entries in `.claude/settings.local.json` Bash allowlist removed; the agent harness can no longer pre-approve a localhost dump.
+- CLAUDE.md and GOTCHAS.md updated: the discipline rule ("source `.env` or risk silently hitting localhost") is replaced with a statement that the env var is mandatory at the code layer. The `tests/db/signalJobs.test.ts` sanity-check comment was updated to drop the now-obsolete reference to the localhost default.
+
+### What changed observable behavior
+
+- A misconfigured shell now throws on the first `libDbPool` import instead of writing to a local DB.
+- No production behavior change. Supabase was already the only writable target in any deployed environment.
+
+### What didn't change
+
+- `ALICE_PG_URL` still points at the Supabase pooler URL stored in `.env`. No connection-string format change.
+- Test suite still uses an ephemeral Postgres container set by `globalSetup`; tests/db/signalJobs.test.ts still sanity-checks that the URL contains `@host:port` (i.e., is not a Unix-socket-style local default).
+- Embedding service (`libEmbeddings.ts`, `localhost:8090`) is unaffected — TEI is intentionally local-only and is a separate concern from the DB.
+
+### Scope of impact
+
+Removes a soft reproducibility hole. A methods reviewer pulling the repo and running any script either has a working `ALICE_PG_URL` or sees an immediate error explaining the requirement; they cannot accidentally write to or read from a database that does not exist. The change is purely additive: nothing that was correct before is now incorrect.
+
+---
+
+## INC-026: Question scheduler retired in favor of just-in-time linked list
+
+**Date:** 2026-05-14
+**Type:** Architectural simplification with one minor methods-relevant consequence: the date stamped on `tb_questions.scheduled_for` is now always set at row-creation time in the subject's local timezone, never pre-planted ahead of the calendar day. Reviewers reasoning about cross-day signal trajectories should know that "scheduled_for" now means "the date this row was first served," not "the date a scheduler intended to serve it."
+
+### What was wrong
+
+The prior architecture documented in CLAUDE.md described "three planting paths layered on top of one shared scheduler":
+
+1. Nightly cron (`src/scripts/schedule-questions.ts`) pre-plants tomorrow's question for every active subject.
+2. On-demand self-heal in `/api/today` and `/api/subject/today` plants today's row if the cron missed it.
+3. Manual `npm run corpus:refresh` for corpus growth.
+
+The first layer never actually existed in deployment. The script was checked into the repo and referenced in docs, but no systemd timer, cron entry, or CI hook was ever wired to invoke it. The "self-heal" was always the actual mechanism: every row in `tb_questions` was created on the first page load of the day. The dashboard's `subjectsMissingToday` / `subjectsMissingTomorrow` anomalies were therefore warning operators about the absence of a cron that didn't exist.
+
+Separately, the round-robin scheduler (`src/lib/libScheduler.ts`) implemented a no-repeat window with a `REPEAT_BUFFER = 10` constant and an "oldest last-seen" fallback once the window collapsed. This was correct policy, but it was wrapped around a per-subject independent walk through a deterministic `ORDER BY corpus_question_id` corpus. The observable consequence: subjects onboarded close in time received the same opening sequence (corpus 1, 2, 3, ...). On 2026-05-14, three subjects (ash, alexandra, badger) all received `corpus_question_id = 1` as their first scheduler-served question because each had it as their lowest-id unseen row.
+
+### Discovery method
+
+Operator opened the dashboard at UTC 2026-05-15 00:00 (first minute of UTC's new day) and saw "Subjects missing today: 4" (owner, ash, alexandra, badger). Investigation showed:
+
+- All four subjects had a `tb_questions` row for `2026-05-14` (the prior UTC day, still "today" in their America/Chicago / America/Los_Angeles timezones).
+- No subject had a row for `2026-05-15` (UTC's "today" used by the health endpoint, which calls `localDateStr()` without a timezone arg → server-local UTC).
+- No cron timer was registered on Hetzner (`systemctl list-timers --all` produced nothing referencing the schedule script).
+- The "missing tomorrow" alarm was warning the same condition: nothing had pre-planted UTC tomorrow because nothing pre-plants anything, ever.
+
+The two-layer realization: the scheduler abstraction was overkill for what was actually a one-row-per-day-per-subject linked walk through a shared corpus, and the operator-visible alarm was firing on a "missing cron" that was never present.
+
+### Resolution
+
+Deleted:
+
+- `src/lib/libScheduler.ts` (round-robin policy module, ~190 lines).
+- `src/scripts/schedule-questions.ts` (unregistered cron entry, ~70 lines).
+- `subjectsMissingToday` / `subjectsMissingTomorrow` anomaly fields in `src/pages/api/health.ts` and matching UI rows in `src/pages/index.astro`.
+- `tomorrow.questionReady` field in the health response (the concept doesn't exist anymore).
+
+Replaced with `src/lib/libQuestionFlow.ts::getOrCreateTodayQuestion(subjectId)`. Single function, three branches:
+
+1. **Existing row for today (subject TZ)**: return it. If the subject has already responded, the returned object's `existing_response_text` is non-null, which the existing UI code path treats as the "you're done for today" state.
+2. **No row, unseen corpus rows remain**: pick the lowest `corpus_question_id` this subject has never been served, insert a `tb_questions` row with `scheduled_for = today_in_subject_tz`, return it.
+3. **No row, every corpus row served at least once**: pick the corpus row with the oldest `scheduled_for` for this subject (ties broken by lowest id), insert, return. This preserves the prior "exhaustion produces repeats, never empty days" guarantee.
+
+The "one question per day" rule is now enforced solely by `tb_questions.UNIQUE (subject_id, scheduled_for)`. Once today's row exists it persists; once it has a response, the same row keeps coming back via `existing_response_text`; at the subject's local midnight the date flips and the next page load creates the next row.
+
+### What changed observable behavior
+
+- The dashboard no longer shows "Subjects missing today" or "Subjects missing tomorrow." The concepts are gone because there is nothing pre-planted to be missing.
+- A subject who answers and reloads on the same calendar day sees the locked state, then sees a new question after their local midnight. Behavior on the prior architecture in steady-state was identical (because the cron didn't exist, self-heal handled both cases) — the new code just makes the mechanism explicit.
+- `tb_questions.scheduled_for` now always equals "the calendar date in the subject's TZ on which this row was first served." Previously it could in principle have been set to a forward date by the cron; in practice it never was, since the cron didn't run.
+- `corpus_question_id` selection in the unseen-pick branch is now `ORDER BY corpus_question_id ASC LIMIT 1`, instead of the prior round-robin walk-from-after-last-assignment. For a subject whose corpus history is non-trivial this can produce a different next-pick than the old policy would have. Three subjects whose 2026-05-14 row was already corpus #1 will receive corpus #2 next, then 3, then 4 — same as before, because the prior policy and the new policy happen to agree on dense unseen sequences.
+
+### What didn't change
+
+- `tb_question_corpus` schema, ordering, and content unchanged.
+- `tb_questions` row shape unchanged. `scheduled_for`, `corpus_question_id`, `question_source_id = 4`, and the encrypted `text_ciphertext` / `text_nonce` columns are still populated identically.
+- `tb_responses` linkage by `question_id` unchanged. Every signal pipeline and downstream join still keys off `question_id` and uses `scheduled_for` as the date label.
+- Calibration questions (`question_source_id = 3`, `scheduled_for = NULL`) and legacy bespoke questions (`question_source_id = 1`) are not affected — the new flow only creates `question_source_id = 4` corpus rows.
+- Owner journal (`/api/today`) and subject journal (`/api/subject/today`) flow through the same function. Owner is `OWNER_SUBJECT_ID = 1`, walks the corpus the same way every other subject does.
+
+### Scope of impact
+
+Methods reviewers reasoning about cross-day signal trajectories should treat `tb_questions.scheduled_for` as authoritative for "the day this question entered the subject's life," with the understanding that no row can exist in advance of the subject loading the journal. Days a subject did not load the journal have no row and no scheduled question — there is no "what would have been asked." This was de-facto true under the prior architecture (because the cron didn't exist) but is now also de-jure true.
+
+The overall question-corpus rotation invariant — every subject sees every corpus row exactly once before any repeat — is preserved with one caveat: the prior implementation's `REPEAT_BUFFER = 10` window is gone, replaced with "every active corpus row served at least once → fall back to oldest-served." For a corpus of 59 rows and a subject answering one per day, the old policy guaranteed at least 49 days between repeats; the new policy guarantees zero days only at the moment of exhaustion (the very next pick after row 59 is row 1 again, the longest-ago-seen). This is a relaxation worth noting; if it becomes a problem the operator can grow the corpus via `npm run corpus:refresh` to push exhaustion further out, which is the same lever as before.
+
+---
+
 ## INC-025: Signal-skip transparency (te_signal_skip_reason + tb_signal_skip_log)
 
 **Date:** 2026-05-02

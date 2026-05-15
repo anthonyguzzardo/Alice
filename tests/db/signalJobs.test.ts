@@ -30,10 +30,10 @@ const SOME_QUESTION_ID = 9001;
 const ANOTHER_QUESTION_ID = 9002;
 
 beforeAll(async () => {
-  // Sanity: we should be pointed at a test container, not the dev DB.
-  // The container's URL contains '@host:port'; the dev DB is on the
-  // default port via 'postgres://localhost/alice'. If something is
-  // misconfigured we want to fail loudly, not corrupt dev data.
+  // Sanity: we should be pointed at the test container, not Supabase or
+  // some other production target. globalSetup sets ALICE_PG_URL to the
+  // ephemeral Postgres container; if that didn't happen we want to fail
+  // loudly rather than write test fixtures into a real database.
   if (!process.env.ALICE_PG_URL?.includes('@')) {
     throw new Error(
       'tests/db expected ALICE_PG_URL to be set by globalSetup; got: ' +
