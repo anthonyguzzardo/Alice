@@ -1881,19 +1881,58 @@ export async function getCorpusQuestionById(id: number): Promise<CorpusQuestion 
   return (rows[0] as CorpusQuestion) ?? null;
 }
 
-/** Insert a new corpus question. Returns the new ID. Idempotent on text (ON CONFLICT DO NOTHING). */
+/**
+ * Insert a new corpus question. Returns the new ID, or null if the text was
+ * already in the corpus (ON CONFLICT DO NOTHING).
+ *
+ * Defensive backfill: after a successful insert, scan tb_questions for any
+ * rows with corpus_question_id IS NULL whose decrypted text equals the new
+ * corpus row's text, and link them. This is what the system needed during
+ * the original 2026-04-25 corpus seed and didn't have — owner's pre-existing
+ * seed rows kept NULL FKs, which made the dedupe in getOrCreateTodayQuestion
+ * blind to them and led to questions being re-served weeks later. The scan
+ * is bounded by the number of NULL-FK rows (small in practice) and is done
+ * in the same transaction as the insert so a partial state can never persist.
+ */
 export async function insertCorpusQuestion(input: {
   text: string;
   theme_tag?: string | null;
   added_by?: string;
 }): Promise<number | null> {
-  const [row] = await sql`
-    INSERT INTO tb_question_corpus (text, theme_tag, added_by)
-    VALUES (${input.text}, ${input.theme_tag ?? null}, ${input.added_by ?? 'owner'})
-    ON CONFLICT (text) DO NOTHING
-    RETURNING corpus_question_id
-  `;
-  return (row as { corpus_question_id: number })?.corpus_question_id ?? null;
+  return await sql.begin(async (tx) => {
+    const [row] = await tx`
+      INSERT INTO tb_question_corpus (text, theme_tag, added_by)
+      VALUES (${input.text}, ${input.theme_tag ?? null}, ${input.added_by ?? 'owner'})
+      ON CONFLICT (text) DO NOTHING
+      RETURNING corpus_question_id
+    `;
+    const newId = (row as { corpus_question_id: number } | undefined)?.corpus_question_id ?? null;
+    if (newId === null) return null;
+
+    const candidates = await tx`
+      SELECT question_id, text_ciphertext AS ct, text_nonce AS nonce
+      FROM tb_questions
+      WHERE corpus_question_id IS NULL
+    ` as Array<{ question_id: number; ct: string; nonce: string }>;
+
+    const matchedIds: number[] = [];
+    for (const c of candidates) {
+      if (decrypt(c.ct, c.nonce) === input.text) matchedIds.push(c.question_id);
+    }
+
+    if (matchedIds.length > 0) {
+      await tx`
+        UPDATE tb_questions
+           SET corpus_question_id = ${newId},
+               dttm_modified_utc = CURRENT_TIMESTAMP,
+               modified_by = 'insertCorpusQuestion-backfill'
+         WHERE question_id = ANY(${matchedIds})
+           AND corpus_question_id IS NULL
+      `;
+    }
+
+    return newId;
+  });
 }
 
 /** Soft-retire a corpus question. Returns true if the row was updated. */

@@ -427,8 +427,15 @@ CREATE INDEX IF NOT EXISTS ix_data_access_log_action
 --             2 = generated    (owner journal LLM-generated text)
 --             3 = calibration  (owner calibration prompt; scheduled_for IS NULL)
 --             4 = corpus       (subject corpus draw; corpus_question_id IS NOT NULL)
---           For source = 4 rows, corpus_question_id is the logical FK to
---           tb_question_corpus. For sources 1-3, corpus_question_id is NULL.
+--           corpus_question_id is the logical FK to tb_question_corpus and
+--           is set on every row whose text equals an active corpus row,
+--           regardless of source. Source=4 rows always have it set (corpus
+--           draw is its identity). Source=1/2/3 rows have it set when their
+--           text is also in the corpus (owner seeds were a wholesale match;
+--           see migration 041). This is what lets getOrCreateTodayQuestion
+--           dedupe across sources: a subject who answered "X" as a seed must
+--           not be re-served "X" as a corpus draw. NULL means "this text is
+--           not in (or has been retired from) the corpus."
 -- MUTABILITY: insert once, rarely updated (intervention fields may be set later)
 -- REFERENCED BY: tb_responses, tb_session_summaries, tb_session_events, tb_burst_sequences, tb_rburst_sequences
 -- FOOTER: yes

@@ -1,0 +1,61 @@
+-- ============================================================================
+-- Migration 041: Backfill corpus_question_id on historical seed rows.
+-- ============================================================================
+--
+-- Background. Migration 032 added tb_questions.corpus_question_id and the
+-- partial index ix_questions_subject_corpus_question_id. The intent at the
+-- time was: source=4 rows (subject corpus draws) carry the FK; source=1/2/3
+-- rows (owner seeds, generated, calibration) leave it NULL. That invariant
+-- was true on 2026-04-27 because the corpus and the owner's seed pool were
+-- separate populations.
+--
+-- They were not separate for long. The owner's 30-question seed pool was
+-- folded into tb_question_corpus during the corpus seed (corpus_question_id
+-- 1..30, dttm_created_utc 2026-04-25). Owner's tb_questions rows for those
+-- seeds (subject_id=1, source=1, scheduled_for 2026-04-12 .. 2026-05-10) kept
+-- corpus_question_id NULL. So did the small handful of subject-side rows
+-- on ash and badger that originated from a pre-unification seed loader.
+--
+-- getOrCreateTodayQuestion dedupes corpus draws by FK match
+-- (q.corpus_question_id = c.corpus_question_id). Rows with NULL FKs are
+-- invisible to that check. On 2026-05-15 the algorithm handed owner
+-- corpus_question_id=1 ("What are you pretending isn't bothering you right
+-- now?") — a question owner had already answered as a seed on 2026-04-12.
+-- Owner's reaction was justified: this is the bug the schema invariant was
+-- meant to prevent, and it failed because the invariant didn't survive the
+-- corpus seed adding identical texts.
+--
+-- Resolution. The invariant is now: corpus_question_id is set on EVERY
+-- tb_questions row whose text equals an active corpus row, regardless of
+-- question_source_id. Source=4 rows still always have it set (the corpus
+-- draw is the identity). Source=1/2/3 rows have it set whenever their text
+-- is also in the corpus. NULL means "this text is not in the corpus today."
+-- See the updated header on tb_questions in dbAlice_Tables.sql.
+--
+-- This migration does no schema work — column, index, and footer are all
+-- already in place from 032. The data fix is performed by the script
+-- src/scripts/fix-corpus-fk-collision.ts because tb_questions.text is
+-- AES-256-GCM ciphertext (migration 031); the equality match needs the
+-- application encryption key, which never reaches psql.
+--
+-- Run-once invocation (operator host):
+--   set -a && source .env && set +a
+--   npx tsx src/scripts/fix-corpus-fk-collision.ts
+--
+-- Outcome on 2026-05-15:
+--   - 28 historical rows backfilled (owner: 26 seeds, ash: 1, badger: 1).
+--   - Today's mis-served owner row (question_id=579, corpus_question_id=1)
+--     cascade-deleted across every logical-FK child table inside one
+--     sql.begin transaction (3 tb_interaction_events, 0 in every other
+--     dependent table — explicit zero-row deletes per project convention).
+--   - Owner's next /today load picks corpus_question_id=21 ("Where are you
+--     performing competence instead of actually learning?"), which owner
+--     has never been served in any source.
+--
+-- Re-running the script after this migration is a no-op: the UPDATE has
+-- WHERE corpus_question_id IS NULL, and the cascade-delete check refuses
+-- to touch rows with a response.
+
+-- This file intentionally contains no SQL. The backfill is app-side; the
+-- record exists so the migrations directory shows the chronology.
+SELECT 'migration 041: data backfill performed by src/scripts/fix-corpus-fk-collision.ts' AS note;

@@ -1,0 +1,75 @@
+-- ============================================================================
+-- Migration 042: Operator-curated paraphrase pairings + corpus retirements.
+-- ============================================================================
+--
+-- Follow-up to 041. The exact-text backfill in 041 caught 28 collisions but
+-- left two classes of latent repeats untouched:
+--
+--   1. Paraphrased seeds. A subject's seed text and the corpus row asked the
+--      same question in different words. Exact-string match is blind to this.
+--      Five of these were identified by reading every subject's seed history
+--      side by side with the active corpus:
+--
+--         subject_id=1 (owner)
+--           q=21 "Where are you performing competence instead of becoming
+--                 competent?"
+--             → corpus=21 "Where are you performing competence instead of
+--                 actually learning?"
+--           q=28 "Describe a recent decision you made on autopilot. If you
+--                 had paused and actually chosen, what would have been
+--                 different?"
+--             → corpus=28 "What would it mean to stop optimizing and start
+--                 choosing?"
+--         subject_id=16 (alexandra)
+--           q=510 "What are you pretending isn't bothering you, and what's
+--                 the cost of continuing to pretend?"
+--             → corpus= 1 "What are you pretending isn't bothering you right
+--                 now?"
+--           q=511 "If you couldn't work on anything you're currently working
+--                 on, what would fill the time? Describe what you'd reach
+--                 for first, and what you'd reach for after that stopped
+--                 working."
+--             → corpus= 2 "If you couldn't work on anything you're currently
+--                 working on, what would you do instead?"
+--         subject_id=17 (badger)
+--           q=539 (paraphrase of corpus=1) → corpus=1   (hygiene only;
+--                 corpus=1 already covered via badger q=442)
+--
+--   2. Corpus-internal duplicates. Three corpus rows ask the same question
+--      as another corpus row in different words; any subject who answered
+--      the canonical row would feel the duplicate, not just owner. These
+--      were soft-retired (is_retired = TRUE) so getOrCreateTodayQuestion no
+--      longer draws them. Existing subject rows that already drew them stay
+--      valid (the FK still resolves; only future picks are affected):
+--
+--         corpus=45 ("avoiding admitting")
+--           ≈ corpus= 1 ("pretending isn't bothering")
+--         corpus=53 ("completely present")
+--           ≈ corpus=11 ("most yourself") + corpus=36 ("most alive")
+--         corpus=58 ("alone, wouldn't do if someone watching")
+--           ≈ corpus= 9 ("if nobody was watching")
+--
+-- Owner's wrongly-served today row (q=580, corpus=21) was cascade-deleted
+-- in the same transaction across every logical-FK child table, since after
+-- pairing q=21 → corpus=21 the today slot was already counted as served.
+--
+-- Active corpus: 59 → 56 (post-retirement). Runway per subject after the fix:
+--   owner     : 25 unseen  (next pick = corpus_30)
+--   ash       : 55 unseen  (next pick = corpus_2)
+--   alexandra : 54 unseen  (next pick = corpus_3)
+--   badger    : 54 unseen  (next pick = corpus_3)
+--
+-- Run-once invocation (operator host):
+--   set -a && source .env && set +a
+--   npx tsx src/scripts/fix-paraphrase-collisions.ts
+--
+-- Re-running the script is a no-op: pair UPDATEs guard with
+-- `corpus_question_id IS DISTINCT FROM <id>`, retire UPDATEs guard with
+-- `is_retired = FALSE`, and the today-row delete refuses to touch a row
+-- with a response.
+
+-- This file intentionally contains no SQL. Both halves of the remediation
+-- (paraphrase pairings and corpus retirements) need application context
+-- (the encryption key for decrypted text comparison; an operator's eye
+-- for the dupe-vs-distinct call).
+SELECT 'migration 042: paraphrase pairings + corpus retirements via src/scripts/fix-paraphrase-collisions.ts' AS note;
