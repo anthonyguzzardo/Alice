@@ -1,0 +1,224 @@
+---
+/**
+ * SHOWCASE MOCKUP — visual-only clone of the daily journal interface.
+ *
+ * PORTFOLIO SURFACE. Public, unauthenticated, intentionally pass-through in
+ * middleware (it is not /subject/*, not /, not /observatory/*).
+ *
+ * HARD RULE: this file must never import libDb, read Astro.locals.subject,
+ * call any /api/* endpoint, or render any real question, response, or signal.
+ * It shows the *interface design* only:
+ *   - the "presence" warm-up and "deepening" fades that dim the room
+ *   - the borderless writing surface
+ *   - the question typography and submit affordance
+ * NONE of the keystroke instrumentation from the real page is present.
+ *
+ * The question below is a fabricated demo prompt. It is NOT drawn from the
+ * corpus and is NOT a real or future question. The done-state is canned.
+ *
+ * Styles are copied verbatim from src/pages/subject/index.astro. If the real
+ * page restyles, update this copy by hand.
+ */
+const DEMO_QUESTION = 'What did you change your mind about this week?';
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Alice — design preview</title>
+    <style is:global>
+      @import url('/fonts/styFonts.css');
+
+      @import "../../styles/styTokens.css";
+
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      html, body {
+        height: 100%;
+        background: var(--bg);
+        color: var(--text);
+        font-family: 'EB Garamond', Georgia, serif;
+      }
+
+      body {
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        padding: 6rem 2rem 2rem;
+        background-color: var(--bg);
+        transition: background-color 2.5s ease;
+        min-height: 100%;
+      }
+
+      body.pre-arrival { background-color: var(--bg-pre); }
+
+      .container { max-width: 960px; width: 100%; }
+
+      .date {
+        font-size: 11px;
+        color: var(--text-faint);
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        margin-bottom: 5rem;
+        transition: opacity 2s ease;
+      }
+      body.pre-arrival .date { opacity: 0.5; }
+      body.deepening-3 .date { opacity: 0.3; }
+
+      .question {
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-size: 1.95rem;
+        font-weight: var(--weight-display);
+        line-height: 1.7;
+        letter-spacing: 0.015em;
+        color: var(--text);
+        margin-bottom: 1.4rem;
+        font-style: italic;
+        transition: color 2.5s ease, opacity 3s ease;
+      }
+      body.pre-arrival .question { color: var(--text-pre); }
+      body.deepening-1 .question { opacity: 0.55; }
+      body.deepening-2 .question { opacity: 0.3; }
+      body.deepening-3 .question { opacity: 0.12; }
+
+      .response-area {
+        width: 100%;
+        min-height: 280px;
+        background: transparent;
+        border: none;
+        border-radius: 0;
+        color: var(--text);
+        font-family: 'EB Garamond', Georgia, serif;
+        font-size: 1.55rem;
+        line-height: 1.7;
+        letter-spacing: 0.005em;
+        padding: 0;
+        resize: none;
+        outline: none;
+        -webkit-appearance: none;
+        appearance: none;
+        caret-color: var(--text);
+        transition: caret-color 2s ease, color 2.5s ease;
+      }
+      .response-area:focus { outline: none; }
+      body.pre-arrival .response-area {
+        caret-color: var(--text-faint);
+        color: var(--text-pre);
+      }
+
+      .submit-row {
+        margin-top: 3.5rem;
+        --submit-presence: 0;
+        opacity: var(--submit-presence);
+        pointer-events: none;
+        transition: opacity 0.8s ease;
+      }
+      .submit-row.present { pointer-events: auto; }
+
+      .submit-btn {
+        background: none;
+        border: 2px solid var(--border);
+        border-radius: 3px;
+        color: color-mix(in oklab, var(--text-faint), var(--done-text) calc(var(--submit-presence, 0) * 100%));
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-size: 1.15rem;
+        font-style: italic;
+        font-weight: 500;
+        letter-spacing: 0.06em;
+        padding: 0.55rem 2.4rem;
+        cursor: pointer;
+        transition: color 0.4s ease, border-color 0.4s ease, opacity 0.4s ease;
+      }
+      .submit-btn:hover:not(:disabled) {
+        color: var(--text);
+        border-color: var(--border-focus);
+      }
+      .submit-btn:active:not(:disabled) { opacity: 0.7; }
+      .submit-btn:disabled { opacity: 0.3; cursor: default; }
+
+      .done-message {
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-size: 1.8rem;
+        font-weight: var(--weight-display);
+        font-style: italic;
+        line-height: 1.8;
+        color: var(--done-text);
+        margin-top: 1rem;
+      }
+
+      .preview-tag {
+        position: fixed;
+        bottom: 1.25rem;
+        right: 2rem;
+        font-size: 10px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--text-faint);
+        z-index: 10;
+      }
+      .preview-tag a { color: var(--text-muted); text-decoration: none; }
+      .preview-tag a:hover { color: var(--text); }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="date" id="date"></div>
+      <div class="question">{DEMO_QUESTION}</div>
+      <div id="input-area">
+        <textarea class="response-area" placeholder="" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>
+        <div class="submit-row" id="submit-row">
+          <button class="submit-btn" id="submit" disabled>done</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="preview-tag">design preview · <a href="/showcase">back</a></div>
+
+    <script>
+      // ── Visual ambiance only. No instrumentation, no network, no data. ──
+      document.body.classList.add('pre-arrival');
+      {
+        const presenceEvents = ['mousemove', 'scroll', 'touchstart', 'pointerdown', 'keydown'] as const;
+        function onPresence() {
+          document.body.classList.remove('pre-arrival');
+          for (const ev of presenceEvents) window.removeEventListener(ev, onPresence as EventListener);
+        }
+        for (const ev of presenceEvents) window.addEventListener(ev, onPresence as EventListener, { passive: true });
+      }
+      setTimeout(() => document.body.classList.add('deepening-1'), 30000);
+      setTimeout(() => document.body.classList.add('deepening-2'), 75000);
+      setTimeout(() => document.body.classList.add('deepening-3'), 150000);
+
+      const dateEl = document.getElementById('date')!;
+      dateEl.textContent = new Date().toLocaleDateString('en-US', {
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+      });
+
+      const textarea = document.querySelector('.response-area') as HTMLTextAreaElement;
+      const submitBtn = document.getElementById('submit') as HTMLButtonElement;
+      const submitRow = document.getElementById('submit-row')!;
+      const inputArea = document.getElementById('input-area')!;
+
+      // Submit affordance fades in with content length — same feel as the real page.
+      const START = 3, FULL = 250, MIN = 0.2;
+      textarea.addEventListener('input', () => {
+        const chars = textarea.value.trim().length;
+        let presence;
+        if (chars < START) presence = 0;
+        else if (chars >= FULL) presence = 1;
+        else {
+          const t = (chars - START) / (FULL - START);
+          presence = MIN + (1 - MIN) * Math.pow(t, 1.5);
+        }
+        submitRow.style.setProperty('--submit-presence', presence.toFixed(3));
+        submitRow.classList.toggle('present', presence > 0);
+        submitBtn.disabled = !textarea.value.trim();
+      });
+
+      submitBtn.addEventListener('click', () => {
+        inputArea.innerHTML = '<div class="done-message">Noted. Let it sit.</div>';
+      });
+    </script>
+  </body>
+</html>

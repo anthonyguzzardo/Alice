@@ -1,0 +1,107 @@
+---
+/**
+ * PUBLIC HUB — portfolio entry point for linking from a personal site.
+ *
+ * Public, unauthenticated, pass-through in middleware. Links to the existing
+ * public informational pages plus one design preview of the writing surface.
+ *
+ * HARD RULE: this page imports no libDb, reads no Astro.locals.subject, hits
+ * no /api/*, and renders no real questions, responses, or signals. The gated
+ * app (/, /subject, /observatory, login) is unchanged.
+ */
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Alice</title>
+    <style is:global>
+      @import url('/fonts/styFonts.css');
+      @import "../../styles/styTokens.css";
+
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      body {
+        font-family: 'EB Garamond', Georgia, serif;
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 4rem 2rem;
+      }
+
+      .wrap { max-width: 560px; width: 100%; }
+
+      h1 {
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-weight: var(--weight-display);
+        font-style: italic;
+        font-size: 2.2rem;
+        margin-bottom: 0.6rem;
+      }
+
+      .lead {
+        color: var(--text-muted);
+        font-size: 1.1rem;
+        line-height: 1.7;
+        margin-bottom: 3rem;
+        max-width: 460px;
+      }
+
+      .pieces { display: flex; flex-direction: column; gap: 1rem; }
+
+      .piece {
+        display: block;
+        text-decoration: none;
+        color: var(--text);
+        border: var(--border-width) solid var(--border);
+        border-radius: 6px;
+        padding: 1.1rem 1.4rem;
+        transition: border-color 0.3s ease, background 0.3s ease;
+      }
+      .piece:hover { border-color: var(--border-focus); background: var(--btn-hover); }
+
+      .piece-name {
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-style: italic;
+        font-size: 1.25rem;
+      }
+      .piece-desc { color: var(--text-faint); font-size: 0.95rem; margin-top: 0.25rem; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Alice</h1>
+      <p class="lead">
+        A personal daily writing instrument. One question per day. No
+        gamification, no dashboard — just depth.
+      </p>
+
+      <div class="pieces">
+        <a class="piece" href="/landing">
+          <div class="piece-name">Landing</div>
+          <div class="piece-desc">The opening.</div>
+        </a>
+        <a class="piece" href="/about">
+          <div class="piece-name">About</div>
+          <div class="piece-desc">Who built it and why.</div>
+        </a>
+        <a class="piece" href="/vision">
+          <div class="piece-name">Vision</div>
+          <div class="piece-desc">What Alice is and where it's going.</div>
+        </a>
+        <a class="piece" href="/research">
+          <div class="piece-name">Research</div>
+          <div class="piece-desc">The problem it solves.</div>
+        </a>
+        <a class="piece" href="/showcase/journal">
+          <div class="piece-name">The writing surface</div>
+          <div class="piece-desc">A preview of the daily interface.</div>
+        </a>
+      </div>
+    </div>
+  </body>
+</html>
