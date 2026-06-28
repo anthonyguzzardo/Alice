@@ -1,6 +1,6 @@
 ---
 /**
- * SHOWCASE MOCKUP — visual-only clone of the daily journal interface.
+ * SHOWCASE MOCKUP: visual-only clone of the daily journal interface.
  *
  * PORTFOLIO SURFACE. Public, unauthenticated, intentionally pass-through in
  * middleware (it is not /subject/*, not /, not /observatory/*).
@@ -26,7 +26,7 @@ const DEMO_QUESTION = 'What did you change your mind about this week?';
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Alice — design preview</title>
+    <title>Alice · design preview</title>
     <style is:global>
       @import url('/fonts/styFonts.css');
 
@@ -159,9 +159,34 @@ const DEMO_QUESTION = 'What did you change your mind about this week?';
       }
       .preview-tag a { color: var(--text-muted); text-decoration: none; }
       .preview-tag a:hover { color: var(--text); }
+
+      /* Persistent back control, top-left. Stays fully visible through the
+         deepening fades so there is always an obvious way out of the preview. */
+      .back-link {
+        position: fixed;
+        top: 1.75rem;
+        left: 2rem;
+        z-index: 20;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-style: italic;
+        font-size: 1rem;
+        letter-spacing: 0.04em;
+        color: var(--text-muted);
+        text-decoration: none;
+        border: var(--border-width) solid var(--border);
+        border-radius: 4px;
+        padding: 0.4rem 1rem;
+        background: var(--bg);
+        transition: color 0.3s ease, border-color 0.3s ease;
+      }
+      .back-link:hover { color: var(--text); border-color: var(--border-focus); }
     </style>
   </head>
   <body>
+    <a class="back-link" href="/showcase">&larr; back</a>
     <div class="container">
       <div class="date" id="date"></div>
       <div class="question">{DEMO_QUESTION}</div>
@@ -173,7 +198,7 @@ const DEMO_QUESTION = 'What did you change your mind about this week?';
       </div>
     </div>
 
-    <div class="preview-tag">design preview · <a href="/showcase">back</a></div>
+    <div class="preview-tag">design preview</div>
 
     <script>
       // ── Visual ambiance only. No instrumentation, no network, no data. ──
@@ -200,7 +225,7 @@ const DEMO_QUESTION = 'What did you change your mind about this week?';
       const submitRow = document.getElementById('submit-row')!;
       const inputArea = document.getElementById('input-area')!;
 
-      // Submit affordance fades in with content length — same feel as the real page.
+      // Submit affordance fades in with content length, same feel as the real page.
       const START = 3, FULL = 250, MIN = 0.2;
       textarea.addEventListener('input', () => {
         const chars = textarea.value.trim().length;

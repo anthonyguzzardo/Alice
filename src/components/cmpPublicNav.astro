@@ -3,6 +3,13 @@ interface Props {
   active?: string;
 }
 const { active = '' } = Astro.props;
+
+// Only the logged-in owner sees the app-surface links (Journal, Observatory,
+// Sandbox). These routes are already gated by middleware — a logged-out
+// visitor who clicks them just bounces to /login — but there is no reason to
+// advertise them on the public marketing pages. Read the subject the
+// middleware attached; show the footer row only for the owner.
+const isOwner = Astro.locals.subject?.is_owner === true;
 ---
 
 <div class="top-controls">
@@ -30,12 +37,16 @@ const { active = '' } = Astro.props;
           <a href="/avatar" class:list={[{ current: active === 'avatar' }]}>Avatar</a>
         </div>
       </div>
-      <div class="nav-divider"></div>
-      <div class="nav-footer">
-        <a href="/">Journal</a>
-        <a href="/observatory">Observatory</a>
-        <a href="/dev/signals">Sandbox</a>
-      </div>
+      {isOwner && (
+        <>
+          <div class="nav-divider"></div>
+          <div class="nav-footer">
+            <a href="/">Journal</a>
+            <a href="/observatory">Observatory</a>
+            <a href="/dev/signals">Sandbox</a>
+          </div>
+        </>
+      )}
     </div>
   </div>
   <button class="top-btn" id="public-theme-toggle" aria-label="Toggle theme"></button>
