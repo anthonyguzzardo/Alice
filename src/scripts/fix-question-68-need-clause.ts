@@ -15,7 +15,7 @@
  *   old: What's something you used to need that you don't anymore?
  *        Walk through how you noticed the need was gone.
  *   new: What's something you used to need that you don't anymore?
- *        Why did you stop needing it? Do you miss it?
+ *        Why did you stop needing it? What's it like without it?
  *
  * Fix shape (single `sql.begin`, so a failure leaves the DB untouched):
  *   1. Rewrite the corpus master text (tb_question_corpus #68, plaintext column).
@@ -37,7 +37,7 @@ import { encrypt } from '../lib/libCrypto.ts';
 
 const CORPUS_ID = 68;
 const NEW_TEXT =
-  "What's something you used to need that you don't anymore? Why did you stop needing it? Do you miss it?";
+  "What's something you used to need that you don't anymore? Why did you stop needing it? What's it like without it?";
 
 interface ServedRow {
   question_id: number;
